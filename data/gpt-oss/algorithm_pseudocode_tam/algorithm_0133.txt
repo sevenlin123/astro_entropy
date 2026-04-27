@@ -1,0 +1,70 @@
+// -------------------------------------------------------------------
+// 1. TRAINING PHASE
+// -------------------------------------------------------------------
+
+// 1.1 Load and prepare reference spectra
+REF_SPECTRA = load_reference_spectra()          // shape: (N_ref, N_wavelength)
+FILTER_CURVES = load_filter_curves()            // list of throughput arrays
+FILTER_NAMES   = get_filter_names()             // e.g., ["F090W", "F115W", …]
+
+// 1.2 Compute PCA on reference spectra
+N_PC = choose_number_of_components()           // e.g., 5‑10
+PCA_MODEL = PCA(n_components=N_PC, whiten=False)
+PC_MEAN      = PCA_MODEL.mean_                  // shape: (N_wavelength,)
+PC_COMPONENTS = PCA_MODEL.components_           // shape: (N_PC, N_wavelength)
+LATENT_REF = PCA_MODEL.transform(REF_SPECTRA)  // shape: (N_ref, N_PC)
+
+// 1.3 Augment latent space with Kernel‑Density Estimation (KDE)
+//     to create a continuous prior
+KDE_BANDWIDTH = 0.5
+N_AUGMENT = 5000                                // number of synthetic samples
+LATENT_AUG = KDE_SAMPLE(LATENT_REF, bandwidth=KDE_BANDWIDTH, n_samples=N_AUGMENT)
+
+// 1.4 Reconstruct synthetic spectra from augmented latent codes
+SPECTRA_AUG = PCA_MODEL.inverse_transform(LATENT_AUG)   // shape: (N_AUGMENT, N_wavelength)
+
+// 1.5 Generate synthetic photometry for each augmented spectrum
+PHOTOMETRY_AUG = []          // list of arrays
+for i in 0 .. N_AUGMENT-1:
+    spec = SPECTRA_AUG[i]
+    phots = []
+    for f in FILTER_CURVES:
+        // convolve spectrum with filter throughput
+        flux = integrate(spec * f.transmission / f.wavelength) / integrate(f.transmission / f.wavelength)
+        phots.append(flux)
+    // Add Gaussian noise (20 % relative uncertainty)
+    noisy_phots = [p + normal(0, 0.2*p) for p in phots]
+    PHOTOMETRY_AUG.append(noisy_phots)
+
+// 1.6 Assemble training matrix
+X_train = array(PHOTOMETRY_AUG)                 // shape: (N_AUGMENT, N_filters)
+Y_train = LATENT_AUG                           // shape: (N_AUGMENT, N_PC)
+
+// 1.7 Train an AutoML regressor (e.g., Gradient‑Boosted Trees)
+//     to map photometry → latent coefficients
+REGR_MODEL = AutoMLRegressor()
+REGR_MODEL.fit(X_train, Y_train)
+
+// 1.8 OPTIONAL: Train a classifier on latent space
+CLF_MODEL = AutoMLClassifier()
+CLF_MODEL.fit(Y_train, REF_LABELS)              // REF_LABELS from reference spectra
+
+// -------------------------------------------------------------------
+// 2. INFERENCE PHASE (for any new TNO)
+// -------------------------------------------------------------------
+
+// Input: OBS_PHOTOMETRY – array of observed photometric fluxes in the same filter set
+
+function RECONSTRUCT_SPECTRUM(OBS_PHOTOMETRY):
+
+    // 2.1 Predict posterior distribution of latent coefficients
+    //     (here we use point prediction; sampling could be added)
+    LATENT_PRED = REGR_MODEL.predict(OBS_PHOTOMETRY)       // shape: (N_PC,)
+
+    // 2.2 Reconstruct full spectrum via inverse PCA
+    SPECTRUM_RECON = PCA_MODEL.inverse_transform(LATENT_PRED)   // shape: (N_wavelength,)
+
+    // 2.3 OPTIONAL: classify taxonomy
+    TAXONOMY_PROBS = CLF_MODEL.predict_proba(LATENT_PRED)   // shape: (n_classes,)
+
+    return SPECTRUM_RECON, TAXONOMY_PROBS

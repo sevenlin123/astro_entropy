@@ -1,0 +1,98 @@
+INPUT:
+    SPECTRA_RAW      # array of N_obs reference spectra (flux vs λ)
+    FILTER_TRANSMISSIONS   # list of M filter throughput curves
+    PHOTOMETRY_NEW   # array of (M, ) observed photometry for a target object
+    BAND_ERRORS      # optional array of per‑band uncertainties (default 20%)
+    K_LATENT         # desired number of principal components (e.g. 5–10)
+
+OUTPUT:
+    SPECTRUM_RECON   # reconstructed high‑resolution spectrum
+    TAXON_PROBS      # probability vector over taxonomic classes
+    LATENT_MEAN, LATENT_COV   # posterior mean & covariance of latent coeffs
+
+--------------------------------------------------------------------
+STEP 1 – Build Prior (Latent Manifold)
+
+1.1  PRE‑PROCESS SPECTRA_RAW
+        • Normalize each spectrum (e.g. divide by solar spectrum, set continuum = 1).
+        • Interpolate to common wavelength grid λ_grid (length L).
+
+1.2  APPLY PCA
+        • Compute covariance matrix C = cov(SPECTRA_RAW).
+        • Extract top K_LATENT eigenvectors V (size L × K_LATENT) and eigenvalues λ_k.
+        • Project each spectrum to latent space:
+              z_i = Vᵀ · (spectrum_i - μ_s)
+          where μ_s is mean spectrum over training set.
+
+1.3  ESTIMATE PRIOR PDF in latent space
+        • Use non‑parametric Kernel Density Estimation (KDE) on {z_i}.
+        • Choose bandwidth h ≈ 0.5 (tunable).
+        • This yields a continuous density p(z).
+
+--------------------------------------------------------------------
+STEP 2 – Augment Training Set
+
+2.1  SAMPLE N_SYNTH synthetic latent vectors {z_synth} from KDE
+        • N_SYNTH ≫ N_obs (e.g. 10⁴) to populate intermediate regions.
+
+2.2  RECONSTRUCT SYNTHETIC SPECTRA
+        • s_synth = V · z_synth + μ_s            (inverse PCA)
+        • Ensure spectra are physically plausible (e.g. non‑negative).
+
+2.3  GENERATE NOISY PHOTOMETRY FOR EACH SYNTHETIC SPECTRUM
+        For each synthetic spectrum s_synth:
+            a. Convolve with FILTER_TRANSMISSIONS to obtain model flux f_model_j
+               for each filter j = 1…M.
+            b. Add Gaussian noise:
+                  f_obs_j = f_model_j * (1 + ε_j),
+                  ε_j ~ Normal(0, BAND_ERRORS_j).
+            c. Store pair (f_obs, z_synth).
+
+--------------------------------------------------------------------
+STEP 3 – Train Encoder (Photometry → Latent)
+
+3.1  BUILD TRAINING DATASET
+        • X_train = {f_obs}          (shape: N_SYNTH × M)
+        • Y_train = {z_synth}        (shape: N_SYNTH × K_LATENT)
+
+3.2  SELECT/ENROLL AutoML REGRESSOR
+        • Example: AutoGluon Tabular, which ensembles GBDTs, random forests,
+          and shallow neural nets.
+        • Train regressor R on (X_train, Y_train).
+        • Validate via internal cross‑validation (not part of final LOOCV).
+
+--------------------------------------------------------------------
+STEP 4 – Train Taxonomy Classifier (Latent → Class)
+
+4.1  ASSIGN CLASS LABELS TO ORIGINAL OBSERVATIONS
+        • Labels derived from known taxonomic groups (H₂O, CO₂, Organic, Methanol).
+
+4.2  PROJECT ORIGINAL SPECTRA INTO LATENT SPACE
+        • z_obs_i = Vᵀ · (spectrum_i - μ_s).
+
+4.3  TRAIN CLASSIFIER C
+        • Inputs: z_obs_i
+        • Outputs: class probabilities (softmax over 4 classes).
+        • Use AutoML classifier (ensemble of tree‑based and NN models).
+
+--------------------------------------------------------------------
+STEP 5 – Forward Inference on New Photometry
+
+5.1  STANDARDIZE NEW PHOTOMETRY
+        • If necessary, match scale used during training (e.g. subtract mean, divide by std).
+
+5.2  PREDICT LATENT COEFFICIENTS
+        • z_pred_mean, z_pred_cov = R.predict_with_uncertainty(PHOTOMETRY_NEW)
+        • If regressor supports uncertainty, obtain covariance matrix.
+
+5.3  RECONSTRUCT HIGH‑RESOLUTION SPECTRUM
+        • spectrum_pred = V · z_pred_mean + μ_s   (size L)
+
+5.4  CALCULATE TAXONOMY PROBABILITIES
+        • probs = C.predict_proba(z_pred_mean)
+
+5.5  RETURN RESULTS
+        • SPECTRUM_RECON ← spectrum_pred
+        • TAXON_PROBS ← probs
+        • LATENT_MEAN ← z_pred_mean
+        • LATENT_COV  ← z_pred_cov

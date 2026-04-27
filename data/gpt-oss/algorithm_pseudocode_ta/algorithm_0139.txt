@@ -1,0 +1,123 @@
+# ------------------------------------------------------------------
+# 1. TRAINING PHASE  (performed once)
+# ------------------------------------------------------------------
+
+INPUT:
+    SPECTRA  :  array of shape (N_spectra, N_wave)   # reflectance vs wavelength
+    WAVELENGTHS :  array of length N_wave             # common wavelength grid
+    N_PC       :  number of principal components to keep (≈5–10)
+
+OUTPUT:
+    μ         :  mean spectrum (length N_wave)
+    V         :  matrix of first N_PC eigenvectors (shape (N_wave, N_PC))
+    λ         :  eigenvalues (variance explained by each PC)
+    PC_Priors :  Gaussian priors for PC coefficients (zero‑mean, covariance diag(λ))
+
+ALGORITHM:
+    1.1  Subtract mean:
+        μ  ← mean(SPECTRA, axis=0)               # shape (N_wave,)
+        Xc ← SPECTRA – μ                         # centered data, shape (N_spectra,N_wave)
+
+    1.2  Compute covariance:
+        C  ← (Xcᵀ · Xc) / (N_spectra – 1)        # shape (N_wave,N_wave)
+
+    1.3  Eigendecomposition:
+        [eig_vals, eig_vecs] ← eigen_decompose(C)
+        Sort eigenvalues descending → λ[0] ≥ λ[1] … 
+        V ← eig_vecs[:,0:N_PC]                  # first N_PC eigenvectors
+
+    1.4  Store parameters:
+        PC_Priors.cov ← diag(λ[0:N_PC])          # prior covariance for PC coefficients
+        Save μ , V , λ , PC_Priors
+
+--------------------------------------------------------------------
+# 2. INFERENCE PHASE (per target)
+# --------------------------------------------------------------------
+
+INPUT:
+    FILTERS          : list of filter transmission curves
+                       Each element has wavelength array λ_f and throughput T_f(λ)
+    PHOTOMETRY       : vector of observed fluxes f_i (i=1…N_filters)
+    UNCERTAINTIES    : vector σ_i of 1‑σ errors on f_i
+
+OUTPUT:
+    COEFF_POST_MEAN  : posterior mean of PC coefficients (length N_PC)
+    COEFF_POST_COV   : posterior covariance of PC coefficients (shape (N_PC,N_PC))
+    SPEC_SAMPLES     : set of posterior predictive spectra (optional)
+    SPEC_CREDIBLE    : credible interval bounds per wavelength
+
+ALGORITHM:
+
+    2.1  Pre‑compute filter response matrices
+
+        For each filter i:
+            # Integrate mean spectrum and PCs over the filter bandpass
+            # Normalise by integral of throughput to obtain effective monochromatic flux
+            B_i   ← ∫ μ(λ) * T_i(λ) dλ   /  ∫ T_i(λ) dλ
+            A_i,j ← ∫ V_j(λ) * T_i(λ) dλ /  ∫ T_i(λ) dλ   for j=1..N_PC
+
+        Assemble:
+            b_vector  ← [B_1, …, B_Nf]          # shape (N_f,)
+            A_matrix  ← [A_i,j]                 # shape (N_f, N_PC)
+
+    2.2  Likelihood (Gaussian, independent filters)
+
+        Define noise covariance:
+            C_obs ← diag(σ_i²)                 # shape (N_f,N_f)
+
+        Predicted flux for coefficient vector c:
+            f_pred(c) = A_matrix · c + b_vector
+
+        Likelihood:
+            L(c) ∝ exp( -0.5 * (f_obs – f_pred(c))ᵀ · C_obs⁻¹ · (f_obs – f_pred(c)) )
+
+    2.3  Prior (from training)
+
+        Prior on c:
+            π(c) ∝ exp( -0.5 * cᵀ · PC_Priors.cov⁻¹ · c )
+
+    2.4  Posterior (linear Gaussian, analytic solution)
+
+        Compute:
+            K  ← A_matrixᵀ · C_obs⁻¹ · A_matrix + PC_Priors.cov⁻¹
+            μ_post ← K⁻¹ · ( A_matrixᵀ · C_obs⁻¹ · (f_obs – b_vector) )
+            Σ_post ← K⁻¹
+
+        Store:
+            COEFF_POST_MEAN  ← μ_post
+            COEFF_POST_COV   ← Σ_post
+
+    2.5  Posterior predictive spectra (optional)
+
+        For s = 1 … N_samples:
+            Draw c_s ~ N(μ_post , Σ_post)
+            spectrum_s = μ + V · c_s          # shape (N_wave,)
+            Append spectrum_s to SPEC_SAMPLES
+
+        If samples are not drawn, use MAP estimate:
+            spectrum_MAP = μ + V · μ_post
+
+    2.6  Credible intervals
+
+        For each wavelength λ_k:
+            Gather { spectrum_s(k) } across samples
+            Compute percentile bounds (e.g., 2.5%, 97.5%) → SPEC_CREDIBLE[k]
+
+--------------------------------------------------------------------
+# 3. OPTIONAL: Filter‑Information‑Gain Evaluation
+# --------------------------------------------------------------------
+
+    For a candidate filter set:
+        Repeat Step 2.1–2.3 assuming only that set.
+        Compute posterior covariance trace or determinant as an information metric.
+        Rank filter sets by smallest trace (most constrained PC coefficients).
+
+--------------------------------------------------------------------
+# 4. RETURN RESULTS
+# --------------------------------------------------------------------
+
+Output for each target:
+    - Posterior mean & covariance of PC coefficients
+    - Reconstructed spectrum (MAP or median of samples)
+    - Credible interval per wavelength
+    - Optional posterior samples for downstream tasks

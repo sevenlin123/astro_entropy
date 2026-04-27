@@ -1,0 +1,60 @@
+INPUT:  
+    - Spectral library {S_i}   # i = 1…N_spec, each S_i = [λ_k , f_k] (k = 1…N_λ)
+    - Filter set {T_j}          # j = 1…N_filt, each T_j = throughput(λ)
+    - Desired PCA dimension K   # e.g., 5–10
+    - KDE bandwidth h            # e.g., 0.5
+
+1.1  Normalize all spectra to common reference (e.g., unit area or reflectance at 1 μm).
+
+1.2  Perform Principal Component Analysis (PCA) on the matrix
+      X ∈ ℝ^(N_spec × N_λ)  →  obtain mean spectrum μ_S,
+      eigenvectors E ∈ ℝ^(N_λ × K),
+      and projection matrix P ∈ ℝ^(K × N_spec) such that
+          P_i = E^T · (S_i – μ_S).
+
+1.3  Treat the set of coefficient vectors {P_i} as samples of the latent
+      distribution.  Estimate the density via Kernel Density Estimation (KDE):
+          KDE(p) = (1/(N_spec·h^K)) Σ_i K(‖p – P_i‖/h),
+      where K is a multivariate Gaussian kernel.
+
+1.4  Draw M synthetic latent vectors {p_t} (t = 1…M) from the KDE:
+      p_t ← Sample(KDE).
+
+2.1  For each synthetic latent vector p_t:
+        a.  Reconstruct the synthetic spectrum:
+                S̃_t = μ_S + E · p_t      # (inverse PCA)
+        b.  Forward‑model photometry:
+                For each filter j:
+                    m_t,j = ∫ S̃_t(λ) · T_j(λ) dλ / ∫ T_j(λ) dλ
+        c.  Inject observational noise:
+                σ_m = 0.20 * m_t         # 20 % relative error
+                m_t,j ← Normal(m_t,j , σ_m)
+        d.  Store tuple (m_t , p_t)  # (noisy photometry, true latent)
+
+3.1  Encode Training Set:
+        Inputs   = {m_t}          # photometry vectors of length N_filt
+        Targets  = {p_t}          # latent coefficient vectors of length K
+        Train an AutoML regressor (ensemble of GBDTs / neural nets)
+        → Model R: m → ̂p   (predict mean + optional uncertainty)
+
+3.2  Classifier Training (optional but used for taxonomy):
+        Assign taxonomy labels L_i to the real spectra {S_i}.
+        Build training pairs (p_i , L_i)  # latent vectors & class
+        Train an AutoML classifier C: p → P(L|p)
+
+INPUT: New sparse photometry vector m_star (length N_filt)
+
+4.1  Predict latent posterior:
+        ̂p_star = R(m_star)          # point estimate of latent coeffs
+        Optionally obtain predictive variance σ_p from ensemble.
+
+4.2  Reconstruct spectrum:
+        Ŝ_star = μ_S + E · ̂p_star
+
+4.3  Taxonomy probabilities:
+        P_star = C(̂p_star)
+
+OUTPUT:
+        - Reconstructed spectrum Ŝ_star (full λ grid)
+        - Taxonomy probability vector P_star
+        - (Optional) Uncertainty estimates from σ_p and propagation through inverse PCA

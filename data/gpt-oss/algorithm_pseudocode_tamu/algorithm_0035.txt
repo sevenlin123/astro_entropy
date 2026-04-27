@@ -1,0 +1,93 @@
+INPUT:
+    S_obs   : list of observed spectra (wavelength × flux)          # N_ref ~ 51
+    F_thru  : transmission curves of chosen filters               # M bands
+    Phot    : sparse photometry of new target (vector length M)
+    K       : number of PCA components to retain                   # e.g., 5–10
+    h_kde   : KDE bandwidth                                      # e.g., 0.5
+    n_syn   : number of synthetic latent samples                 # e.g., 5000
+    σ_noise : relative photometric noise level (default 0.20)
+
+OUTPUT:
+    S_rec        : reconstructed high‑resolution spectrum
+    C_taxo       : probability vector over taxonomic classes
+    Cred_ints    : confidence intervals for spectral features
+
+-----------------------------------------------------------------------
+PREPROCESSING (Training Phase)
+-----------------------------------------------------------------------
+
+1.  # Compute PCA on reference spectra
+2.  [E, μ, Σ] ← PCA(S_obs, K)          # E: K eigenvectors, μ: mean spectrum,
+                                        # Σ: diagonal eigenvalues
+
+3.  # Project spectra onto PCA space
+4.  Z_ref ← (S_obs − μ) · E            # shape: (N_ref, K)
+
+5.  # Build prior via KDE on latent space
+6.  KDE_prior ← FitKDE(Z_ref, bandwidth=h_kde)
+
+7.  # Generate synthetic latent samples
+8.  Z_syn ← Sample(KDE_prior, n_syn)    # shape: (n_syn, K)
+
+9.  # Reconstruct synthetic spectra
+10. S_syn ← Z_syn · Eᵀ + μ             # shape: (n_syn, λ)
+
+11. # Forward model: compute synthetic photometry
+12. for i in 1…n_syn:
+13.     m[i] ← Convolve(S_syn[i], F_thru)      # integrate over each filter
+14.     m_noisy[i] ← m[i] · (1 + Normal(0, σ_noise))   # add Gaussian noise
+
+15. # Train encoder (photometry → latent coeffs)
+16. Encoder ← TrainAutoMLRegressor(X=m_noisy, y=Z_syn)
+
+17. # Train taxonomic classifier in latent space
+18. Labels ← TaxonomyLabels(S_obs)              # H2O, CO2, Organic, Methanol
+19. Classifier ← TrainAutoMLClassifier(X=Z_ref, y=Labels)
+
+-----------------------------------------------------------------------
+INFERENCE (New Target)
+-----------------------------------------------------------------------
+
+20. # Predict latent coefficients and their uncertainties
+21. μ_z_pred, Σ_z_pred ← Encoder.PredictWithUncertainty(Phot)
+
+22. # Optional: sample posterior via Gaussian copula
+23. samples_z ← GaussianCopulaSample(μ_z_pred, Σ_z_pred, n_samples)
+
+24. # Decode to spectra
+25. for each z in samples_z:
+26.     s ← z · Eᵀ + μ
+27.     Store(s)
+
+28. # Aggregate reconstructed spectra
+29. S_rec_mean ← mean(all stored spectra)
+30. Cred_ints  ← percentile(all stored spectra, [2.5, 97.5])   # 95% CI
+
+31. # Taxonomic probabilities
+32. C_taxo ← Classifier.PredictProbabilities(μ_z_pred)
+
+33. return S_rec_mean, C_taxo, Cred_ints
+
+PCA(data, K):
+    – Center data by subtracting mean spectrum μ
+    – Compute covariance matrix
+    – Perform eigen-decomposition
+    – Return first K eigenvectors E, mean μ, eigenvalues Σ
+
+Convolve(spectrum, filters):
+    – For each filter j:
+          m_j = ∫ spectrum(λ) * filter_j(λ) dλ / ∫ filter_j(λ) dλ
+    – Return vector m
+
+TrainAutoMLRegressor(X, y):
+    – Use AutoML library (e.g., AutoGluon) to search over models
+    – Return trained model capable of predicting mean & covariance
+
+TrainAutoMLClassifier(X, y):
+    – Same AutoML approach for classification
+    – Return trained model returning class probabilities
+
+GaussianCopulaSample(mean, cov, n):
+    – Transform mean & cov to standard normal via Cholesky
+    – Sample n draws from multivariate normal
+    – Apply inverse CDF (copula) to obtain samples in original space

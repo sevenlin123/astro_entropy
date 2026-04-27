@@ -1,0 +1,102 @@
+Inputs
+-------
+- S_ref[i][λ]        : Reference reflectance spectra (i = 1…N_spec, λ = 1…N_λ)
+- L_spec[i]          : Taxonomic label for each reference spectrum
+- R_f[j][λ]          : Instrument filter response curves (j = 1…N_filt)
+- K_pca              : Number of principal components to retain
+- h_kde              : Bandwidth for kernel density estimation
+- M_aug              : Number of synthetic latent vectors to generate
+- σ_noise            : Relative photometric noise (e.g. 0.20 for 20 %)
+- AutoML_settings    : Hyper‑parameters for AutoML regressor & classifier
+
+Outputs
+-------
+- Reconstructed high‑resolution spectrum S_rec[λ]
+- Taxonomic probability vector P_tax[class]
+- Optional: posterior samples {S_rec^(ℓ), P_tax^(ℓ)}
+
+--------------------------------------------------------------------
+STEP 1 – Build Latent Prior
+--------------------------------------------------------------------
+1.1 Center reference spectra:
+      μ_s = mean over i of S_ref[i]          # shape (N_λ,)
+      S_centered[i] = S_ref[i] - μ_s
+
+1.2 Perform PCA on S_centered:
+      U, Σ, Vt = svd(S_centered)            # U: eigenvectors (N_λ × N_λ)
+      PC_basis = U[:, 0:K_pca]              # shape (N_λ × K_pca)
+      PC_scores[i] = (S_ref[i] - μ_s) ⋅ PC_basis   # shape (N_spec × K_pca)
+
+1.3 Fit kernel density estimate (KDE) in latent space:
+      kde_model = KDE(PC_scores, bandwidth=h_kde)
+
+--------------------------------------------------------------------
+STEP 2 – Generate Augmented Training Set
+--------------------------------------------------------------------
+2.1 Draw synthetic latent vectors:
+      for m = 1 … M_aug:
+          z_m = sample_from(kde_model)      # shape (K_pca,)
+
+          # Inverse PCA to obtain synthetic spectrum
+          S_syn = μ_s + PC_basis ⋅ z_m       # shape (N_λ,)
+
+          # Forward‑model photometry through all filters
+          for j = 1 … N_filt:
+              r_j = ∫ S_syn(λ) * R_f[j](λ) dλ / ∫ R_f[j](λ) dλ
+              phot_j = r_j
+
+          # Inject Gaussian noise
+          for j = 1 … N_filt:
+              phot_noisy[j] = phot_j + Normal(0,
+                                               σ_noise * phot_j)
+
+          Store pair:
+              X_train[m] = phot_noisy            # length N_filt
+              Y_train[m] = z_m                   # length K_pca
+              C_train[m] = none                  # class label not needed here
+
+2.2 Optional: Append the original reference spectra as exact training points
+      (without noise) if desired for stability.
+
+--------------------------------------------------------------------
+STEP 3 – Train AutoML Models
+--------------------------------------------------------------------
+3.1 Regressor: photometry → latent coefficients
+      regressor = AutoML_Regression(X_train, Y_train, settings=AutoML_settings)
+
+3.2 Classifier: latent coefficients → taxonomic class
+      # Use original reference scores & labels
+      clf_X = PC_scores
+      clf_Y = L_spec
+      classifier = AutoML_Classifier(clf_X, clf_Y, settings=AutoML_settings)
+
+--------------------------------------------------------------------
+STEP 4 – Forward Inference on New Observation
+--------------------------------------------------------------------
+Input: New photometric vector m_obs[1…N_filt] (with measurement uncertainties)
+
+4.1 Predict latent coefficients:
+      z_pred = regressor.predict(m_obs)          # shape (K_pca,)
+
+4.2 Reconstruct high‑resolution spectrum:
+      S_rec = μ_s + PC_basis ⋅ z_pred            # shape (N_λ,)
+
+4.3 Classify taxonomic type:
+      P_tax = classifier.predict_proba(z_pred)   # vector of probabilities
+
+--------------------------------------------------------------------
+OPTIONAL STEP 5 – Posterior Sampling (Uncertainty Quantification)
+--------------------------------------------------------------------
+5.1 Use ensemble predictions of the regressor:
+      for ℓ = 1 … N_samples:
+          z_ℓ = regressor.sample(m_obs)          # draw from ensemble
+          S_ℓ = μ_s + PC_basis ⋅ z_ℓ
+          P_ℓ = classifier.predict_proba(z_ℓ)
+          Store (S_ℓ, P_ℓ)
+
+5.2 Report credible intervals on S_rec (e.g. 68 %, 95 %) and
+     variance of P_tax.
+
+--------------------------------------------------------------------
+END OF ALGORITHM
+--------------------------------------------------------------------

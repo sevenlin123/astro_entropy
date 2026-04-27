@@ -1,0 +1,88 @@
+pseudocode
+INPUT
+    S            // matrix of N_ref spectra (rows: objects, columns: λ‑bins)
+    T_filter[]   // array of filter throughput functions (R_i(λ))
+    K            // number of principal components to retain
+    h_KDE        // bandwidth parameter for KDE
+    M_samples    // number of synthetic latent vectors to generate
+    σ_noise      // relative photometric noise level (e.g. 0.20)
+    RegParams    // hyper‑parameters for the AutoML regressor
+    ClfParams    // hyper‑parameters for the AutoML classifier
+
+OUTPUT
+    Function RECONSTRUCT(m_obs) → (s_recon, tax_prob)
+
+--------------------------------------------------------------------
+STEP 0: PREPARATION
+--------------------------------------------------------------------
+1.1 Compute mean spectrum μ_S = mean(S)          // vector of length L
+1.2 Center spectra:  S_centered = S – μ_S
+
+--------------------------------------------------------------------
+STEP 1: BUILD LATENT MANIFOLD
+--------------------------------------------------------------------
+2.1 Apply PCA to S_centered
+        [V, C] = PCA(S_centered, K)     // V: L × K eigenvectors,
+                                        // C: N_ref × K principal‑component scores
+2.2 Store eigenbasis V and mean μ_S for later decoding
+
+--------------------------------------------------------------------
+STEP 2: AUGMENT MANIFOLD WITH KDE
+--------------------------------------------------------------------
+3.1 Fit multivariate KDE to latent scores C with bandwidth h_KDE
+        kde_model = KDE(C, bandwidth = h_KDE)
+
+3.2 Draw M_samples latent vectors
+        L_augmented = kde_model.sample(M_samples)   // shape: M_samples × K
+
+--------------------------------------------------------------------
+STEP 3: GENERATE SYNTHETIC PHOTOMETRY
+--------------------------------------------------------------------
+4.1 For each augmented latent vector l in L_augmented
+        4.1.1 Reconstruct full‑resolution spectrum
+                s_l = μ_S + V * l          // vector length L
+        4.1.2 For each filter i
+                m_i = ∫ s_l(λ) * T_filter[i](λ) dλ / ∫ T_filter[i](λ) dλ
+                    // numerical integration over wavelength grid
+        4.1.3 Collect photometry vector m_l = [m_1, …, m_F]
+        4.1.4 Add Gaussian noise
+                for each band j:
+                    σ_j = σ_noise * m_l[j]
+                    m_l[j] ← m_l[j] + Normal(0, σ_j)
+        4.1.5 Store training example (m_l, l)
+
+5. Assemble training set
+        TRAIN_DATA = { (m_l, l) }_{l ∈ L_augmented}
+
+--------------------------------------------------------------------
+STEP 4: TRAIN ENCODER (REGRESSOR)
+--------------------------------------------------------------------
+6.1 Use AutoML (e.g., AutoGluon) to train a regression model
+        R = AutoMLRegressor(TRAIN_DATA, RegParams)
+        // R maps photometry m → latent vector l
+
+--------------------------------------------------------------------
+STEP 5: TRAIN TAXONOMY CLASSIFIER
+--------------------------------------------------------------------
+7.1 For each original reference spectrum s_ref with known class label y
+        7.1.1 Compute its latent score c_ref = Vᵀ * (s_ref – μ_S)
+        7.1.2 Store (c_ref, y)
+7.2 Train a probabilistic classifier on { (c_ref, y) }
+        C = AutoMLClassifier(ClassData, ClfParams)
+
+--------------------------------------------------------------------
+STEP 6: INFERENCE FUNCTION
+--------------------------------------------------------------------
+Function RECONSTRUCT(m_obs):
+    // m_obs: observed photometry vector (length F)
+    1. Predict latent coefficients:
+            l_hat = R.predict(m_obs)              // point estimate
+    2. Decode to full spectrum:
+            s_recon = μ_S + V * l_hat              // vector length L
+    3. Classify taxonomy:
+            tax_prob = C.predict_proba(l_hat)      // probability distribution over classes
+    4. Return (s_recon, tax_prob)
+
+--------------------------------------------------------------------
+END OF ALGORITHM
+--------------------------------------------------------------------

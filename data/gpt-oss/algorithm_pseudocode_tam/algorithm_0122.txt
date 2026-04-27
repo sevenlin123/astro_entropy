@@ -1,0 +1,98 @@
+--------------------------------------------------------------------
+INPUTS
+--------------------------------------------------------------------
+REF_SPECTRA   :  N_ref × N_wave matrix of calibrated reference spectra  
+FILTER_CURVES  :  list of M filter transmission functions (λ → T(λ))  
+LABELS         :  taxonomy label for each REF_SPECTRA (optional for training)  
+K              :  desired number of PCA components (e.g., 5–10)  
+H_KDE          :  bandwidth parameter for Kernel‑Density Estimation (≈0.5)  
+N_SYNTH        :  number of synthetic latent samples to generate (e.g., 5 000)  
+NOISE_LEVEL    :  relative photometric noise added to synthetic photometry (≈0.20)  
+
+OUTPUTS
+--------------------------------------------------------------------
+ENCODER        :  model that maps photometry → latent coefficient vector  
+CLASSIFIER     :  model that maps latent vector → taxonomy probabilities  
+PCA_MEAN       :  mean spectrum (vector of length N_wave)  
+PCA_COMPONENTS :  K × N_wave matrix of eigenvectors  
+--------------------------------------------------------------------
+
+pseudo
+// 1.1 Center the reference spectra
+MEAN_SPEC ← mean(REF_SPECTRA, axis=0)          // shape: (N_wave)
+
+// 1.2 Perform PCA
+PC_MATRIX, PC_SCORES, _ ← PCA(REF_SPECTRA − MEAN_SPEC, n_components=K)
+// PC_MATRIX: K × N_wave, PC_SCORES: N_ref × K
+
+// 1.3 Convert to latent coordinates
+LATENT_REAL ← PC_SCORES                           // each row = latent vector for a real spectrum
+
+pseudo
+// 2.1 Fit a non‑parametric KDE on the real latent points
+KDE ← KernelDensity(LATENT_REAL, bandwidth=H_KDE)
+
+// 2.2 Draw synthetic latent vectors
+LATENT_SYNTH ← KDE.sample(N_SYNTH)                // shape: (N_SYNTH, K)
+
+// 2.3 Reconstruct synthetic spectra from latent vectors
+SYNTH_SPEC ← LATENT_SYNTH × PC_MATRIX             // matrix multiplication
+SYNTH_SPEC ← SYNTH_SPEC + MEAN_SPEC               // add back mean
+
+// 2.4 Forward‑model photometry for each synthetic spectrum
+for i in 1 … N_SYNTH:
+    PHOTOMETRY[i] ← integrate_over_filters(SYNTH_SPEC[i], FILTER_CURVES)
+    // integrate: weighted sum of spectrum × filter transmission / total filter transmission
+
+// 2.5 Inject realistic photometric noise
+PHOTOMETRY_NOISY ← PHOTOMETRY × (1 + normal(0, NOISE_LEVEL))
+
+pseudo
+TRAIN_DATA ← [(PHOTOMETRY_NOISY[j], LATENT_SYNTH[j]) for j in 1…N_SYNTH]
+
+// Choose an ensemble regressor (e.g., Gradient‑Boosted Trees)
+ENCODER ← AutoML_TrainRegressor(TRAIN_DATA)
+
+pseudo
+// 4.1 Assemble training labels for the original spectra
+REAL_LATENT ← LATENT_REAL
+REAL_LABELS ← LABELS
+
+// 4.2 Train a probabilistic classifier (e.g., RandomForest, GBDT)
+CLASSIFIER ← AutoML_TrainClassifier([(REAL_LATENT[i], REAL_LABELS[i]) for i in 1…N_ref])
+
+pseudo
+function RECONSTRUCT(ENCODER, CLASSIFIER, PCA_MEAN, PC_MATRIX,
+                      FILTER_CURVES, NEW_PHOTOMETRY,
+                      N_SAMPLES=100):
+    // 5.1 Predict latent distribution (point estimate or posterior sampling)
+    L_MEAN ← ENCODER.predict(NEW_PHOTOMETRY)        // shape: (K,)
+    // Optionally obtain variance/uncertainty from encoder if supported
+
+    // 5.2 Optional: draw N_SAMPLES latent samples around L_MEAN
+    L_SAMPLES ← sample_from_posterior(L_MEAN, N_SAMPLES)
+
+    // 5.3 Reconstruct spectra for each sample
+    SPEC_SAMPLES ← []
+    for l in L_SAMPLES:
+        spec ← l × PC_MATRIX + PCA_MEAN              // linear combination
+        SPEC_SAMPLES.append(spec)
+
+    // 5.4 Aggregate samples to obtain mean spectrum and confidence bounds
+    RECONSTRUCTED_SPECTRUM ← mean(SPEC_SAMPLES)
+    CONFIDENCE_BOUNDS ← percentile(SPEC_SAMPLES, [2.5, 97.5])
+
+    // 5.5 Predict taxonomy probabilities
+    TAXONOMY_PROBS ← CLASSIFIER.predict_proba(L_MEAN)
+
+    return RECONSTRUCTED_SPECTRUM, CONFIDENCE_BOUNDS, TAXONOMY_PROBS
+
+pseudo
+integrate_over_filters(spectrum, filter_curves):
+    for each filter f in filter_curves:
+        # Spectrum and filter are sampled at the same λ grid
+        throughput ← f.transmission
+        numerator ← sum(spectrum * throughput)
+        denominator ← sum(throughput)
+        phot_flux[f] ← numerator / denominator
+    return phot_flux  // vector of length M

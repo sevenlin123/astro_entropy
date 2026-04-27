@@ -1,0 +1,113 @@
+# ------------------------------------------------------------------
+# Data structures
+# ------------------------------------------------------------------
+OBJECT = struct {
+    id              : string
+    filters         : list of strings           # filter names
+    mag             : array[float]              # observed magnitudes
+    err             : array[float]              # magnitude errors
+}
+
+BASIS   = array[M][W]                          # M basis spectra sampled at W wavelengths
+FILTERS = map[string -> array[W]]             # filter transmission curves sampled at W
+
+# ------------------------------------------------------------------
+# Utility functions
+# ------------------------------------------------------------------
+function mag_to_flux(mag, err):
+    # convert magnitude to relative flux and error
+    flux = 10^(-0.4 * mag)
+    flux_err = 0.4 * ln(10) * flux * err
+    return flux, flux_err
+
+function integrate_over_filter(spectrum, filter_curve):
+    # numerical integration of spectrum * filter over wavelength
+    return sum(spectrum * filter_curve) / sum(filter_curve)
+
+function build_response_matrix(object_filters):
+    # response R[i][j] = integrated flux of basis j through filter i
+    R = zeros(len(object_filters), M)
+    for i, f_name in enumerate(object_filters):
+        filt = FILTERS[f_name]
+        for j in range(M):
+            R[i][j] = integrate_over_filter(BASIS[j], filt)
+    return R
+
+function log_likelihood(c, R, flux_obs, flux_err):
+    # model fluxes
+    flux_mod = R @ c
+    # Gaussian likelihood in flux space
+    chi2 = sum(((flux_obs - flux_mod)/flux_err)^2)
+    return -0.5 * chi2
+
+function log_prior(c, tau=1.0):
+    # simple Gaussian prior centered at zero, enforce positivity
+    if any(c < 0): return -inf
+    return -0.5 * sum((c/tau)^2)
+
+function metropolis_sampler(log_post, dim, n_samples, step_size):
+    # Random walk Metropolis–Hastings
+    samples = zeros(n_samples, dim)
+    x = zeros(dim)                          # start at origin
+    for k in range(n_samples):
+        proposal = x + step_size * normal(0,1,dim)
+        logA = log_post(proposal) - log_post(x)
+        if log(rand()) < logA:  # accept
+            x = proposal
+        samples[k] = x
+    return samples
+
+# ------------------------------------------------------------------
+# Main reconstruction routine
+# ------------------------------------------------------------------
+function reconstruct_spectra(objects, n_samples=5000, step_size=0.01):
+    results = []
+    for obj in objects:
+        # 1. Convert photometry to flux
+        flux, flux_err = mag_to_flux(obj.mag, obj.err)
+
+        # 2. Build response matrix for this object's filters
+        R = build_response_matrix(obj.filters)
+
+        # 3. Define posterior function
+        log_post = lambda c: log_likelihood(c,R,flux,flux_err) + log_prior(c)
+
+        # 4. Draw posterior samples
+        samples = metropolis_sampler(log_post, M, n_samples, step_size)
+
+        # 5. Compute posterior statistics
+        coeff_mean   = mean(samples, axis=0)
+        coeff_std    = std(samples, axis=0)
+        coeff_cov    = cov(samples, rowvar=False)
+
+        # 6. Classify
+        #    Each taxonomy class has a prototype vector p_k (length M)
+        class_probs = []
+        for p_k in CLASS_PROTOTYPES:
+            # distance metric (e.g., Mahalanobis)
+            d2 = (coeff_mean - p_k) @ inv(coeff_cov) @ (coeff_mean - p_k)
+            prob = exp(-0.5*d2)  # unnormalised
+            class_probs.append(prob)
+        class_probs = normalize(class_probs)
+
+        # 7. Store result
+        results.append({
+            'id'          : obj.id,
+            'coeff_mean'  : coeff_mean,
+            'coeff_std'   : coeff_std,
+            'class_prob'  : class_probs,
+            'samples'     : samples
+        })
+    return results
+
+# ------------------------------------------------------------------
+# Optional survey‑optimization helper
+# ------------------------------------------------------------------
+function expected_color_variance(filter_set, coeff_dist):
+    # coeff_dist: posterior samples of coefficients
+    R = build_response_matrix(filter_set)
+    flux_samples = R @ coeff_dist.T      # shape (len(filter_set), n_samples)
+    # compute colours (differences between adjacent filters)
+    colours = diff(flux_samples, axis=0)
+    var_colours = var(colours, axis=1)
+    return var_colours

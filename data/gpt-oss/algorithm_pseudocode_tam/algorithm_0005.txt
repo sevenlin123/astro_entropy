@@ -1,0 +1,78 @@
+pseudocode
+Input:
+    S_ref[1..N]          // reference spectra (wavelength λ, reflectance R)
+    f_i[1..M]            // list of photometric filter transmission curves
+    phot_obs[1..P]       // observed photometry for a target object
+
+Parameters:
+    K                    // number of principal components to retain
+    h_kde                 // KDE bandwidth
+    σ_noise               // relative photometric noise (e.g. 0.20)
+
+Output:
+    S_rec[λ]             // reconstructed high‑resolution spectrum
+    Taxon_prob[labels]   // posterior probability for each taxonomic class
+
+--------------------------------------------------------------------
+1. TRAINING PHASE
+--------------------------------------------------------------------
+
+1.1 Principal Component Analysis (PCA)
+    a. Normalize each reference spectrum to its mean reflectance.
+    b. Compute mean spectrum μ_S and covariance matrix C_S over {S_ref}.
+    c. Perform eigendecomposition of C_S → eigenvectors U[1..K], eigenvalues Λ.
+    d. Project each reference spectrum onto the first K eigenvectors:
+        z_real[n] = Uᵀ * (S_ref[n] – μ_S)      // latent coefficient vector
+
+1.2 Latent‑space density estimation (KDE)
+    a. Fit a multivariate KDE to {z_real[n]} with bandwidth h_kde.
+    b. Sample N_syn synthetic latent vectors {z_syn[m]} from the KDE.
+
+1.3 Synthetic spectrum reconstruction
+    For each z_syn[m]:
+        i. Reconstruct high‑resolution spectrum:
+            S_syn[m] = μ_S + U * z_syn[m]
+        ii. Convolve S_syn[m] with each filter f_i to get ideal photometry:
+            p_ideal[m,i] = ∫ S_syn[m](λ) * f_i(λ) dλ / ∫ f_i(λ) dλ
+        iii. Add Gaussian noise:
+            p_noisy[m,i] = p_ideal[m,i] * (1 + Normal(0, σ_noise))
+
+1.4 Train Encoder (photometry → latent)
+    a. Inputs: {p_noisy[m,i]} (size M per sample)
+    b. Targets: {z_syn[m]} (size K per sample)
+    c. Use an AutoML regressor (e.g., Gradient‑Boosted Trees + Neural Nets)
+       to learn mapping  φ_enc : ℝ^M → ℝ^K.
+    d. Store trained encoder model ENC.
+
+1.5 Train Taxonomy Classifier (latent → class)
+    a. Use latent vectors {z_real[n]} with known taxonomic labels.
+    b. Train AutoML classifier C_L to predict label probabilities:
+           p_class | z
+    c. Store trained classifier CLASSIFIER.
+
+--------------------------------------------------------------------
+2. INFERENCE PHASE (for a new target)
+--------------------------------------------------------------------
+
+2.1 Predict latent distribution
+    a. Input observed photometry phot_obs[1..P] into encoder:
+        z_hat = ENC(phot_obs)
+    b. Optionally, draw N_samples from encoder predictive distribution
+       to propagate uncertainty; denote samples {z_hat[s]}.
+
+2.2 Reconstruct spectrum(s)
+    For each z_hat[s]:
+        i. S_rec[s] = μ_S + U * z_hat[s]     // inverse PCA
+    If multiple samples, compute mean & confidence intervals.
+
+2.3 Taxonomic probabilities
+    a. Pass z_hat (or each z_hat[s]) into classifier:
+        p_tax = CLASSIFIER(z_hat)
+    b. Aggregate over samples if multiple draws (e.g., average).
+
+--------------------------------------------------------------------
+3. RETURN RESULTS
+--------------------------------------------------------------------
+Return:
+    - Mean reconstructed spectrum S_rec_mean[λ] (and optional CI).
+    - Taxon_prob[labels] = p_tax.

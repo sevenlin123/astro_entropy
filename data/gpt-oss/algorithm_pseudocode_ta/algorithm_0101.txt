@@ -1,0 +1,90 @@
+INPUT
+    S_train   –  matrix of N_spec training spectra (wavelength grid λ_m, m=1…M)
+    filt_resp –  list of filter response curves {R_i(λ)} for i=1…N_filt
+    phot_T    –  observed photometry of target T:  {f_i , σ_i}  (i=1…N_filt)
+
+PARAMETERS
+    K         –  number of principal components to retain (≈ 8–10)
+
+OUTPUT
+    μ_rec(λ)  –  reconstructed mean spectrum of target T
+    var_rec(λ) –  variance of reconstruction at each λ
+    samples   –  optional Monte‑Carlo draws from posterior (ĉ, μ_rec)
+
+--------------------------------------------------------------------
+STEP 0:  Pre‑processing of Training Spectra
+--------------------------------------------------------------------
+1.  For each spectrum s_j (j=1…N_spec):
+        •   Interpolate to common wavelength grid λ_m.
+        •   Normalize (e.g., divide by median flux) if desired.
+2.  Compute mean spectrum:
+        μ(λ_m) = (1/N_spec) Σ_{j=1}^{N_spec} s_j(λ_m)
+3.  Center spectra:
+        X_j(λ_m) = s_j(λ_m) – μ(λ_m)      // matrix X of size N_spec × M
+
+--------------------------------------------------------------------
+STEP 1: Principal Component Analysis
+--------------------------------------------------------------------
+4.  Compute covariance matrix C = (1/(N_spec-1)) Xᵀ X   // size M × M
+5.  Eigen‑decompose C → eigenvectors {e_k(λ)} and eigenvalues {λ_k}
+6.  Sort eigenpairs by decreasing λ_k.
+7.  Select first K eigenvectors → PCs:  PC_k(λ) = e_k(λ),  k=1…K
+8.  Project training spectra onto PCs:
+        for each j:
+            c_jk = ⟨X_j , PC_k⟩   // inner product over λ
+   Collect coefficient matrix C_coeff (N_spec × K)
+
+--------------------------------------------------------------------
+STEP 2: Build Linear Forward Model for Photometry
+--------------------------------------------------------------------
+9.  For each filter i and each component k:
+        A_{ik} =  ∫ PC_k(λ) · R_i(λ)  dλ   /   ∫ R_i(λ) dλ
+10. For each filter i:
+        b_i =  ∫ μ(λ) · R_i(λ)  dλ   /   ∫ R_i(λ) dλ
+   (All integrals evaluated numerically on λ grid.)
+
+   // Predicted photometry for coefficient vector c = (c₁,…,c_K)ᵀ :
+        f_pred(c)_i = b_i + Σ_{k=1}^K A_{ik} · c_k
+   // Thus, f_pred = b + A · c   (vector notation)
+
+--------------------------------------------------------------------
+STEP 3: Bayesian Inference in Coefficient Space
+--------------------------------------------------------------------
+11.  Prior on coefficients:
+        c ~ N(0 , Σ_prior)       // zero mean; covariance diag(λ_1,…,λ_K)
+12.  Weight matrix from measurement errors:
+        W = diag( 1/σ_1² , … , 1/σ_N_filt² )
+13.  Likelihood:
+        p(f_obs | c) ∝ exp( -½ (f_obs – f_pred(c))ᵀ W (f_obs – f_pred(c)) )
+14.  Posterior is also Gaussian:
+        Σ_post = ( Σ_prior⁻¹  +  Aᵀ W A )⁻¹
+        μ_post = Σ_post ( Aᵀ W f_obs + Σ_prior⁻¹ · 0 )
+   (since prior mean is zero.)
+
+15.  Draw posterior samples of coefficients:
+        For n = 1…N_draw:
+            c_n ~ N( μ_post , Σ_post )
+   (Optional; if only point estimate required, use μ_post.)
+
+--------------------------------------------------------------------
+STEP 4: Predictive Spectrum & Uncertainty
+--------------------------------------------------------------------
+16.  For any wavelength λ:
+        μ_rec(λ) = μ(λ) + Σ_{k=1}^K  μ_post_k · PC_k(λ)
+17.  Variance at λ:
+        var_rec(λ) = Σ_{k,j=1}^K  Σ_post_{kj} · PC_k(λ) · PC_j(λ)
+   // This gives the credible interval width at each λ.
+
+18.  If Monte‑Carlo samples were drawn:
+        For each draw n:
+            μ_n(λ) = μ(λ) + Σ_k c_{n,k} · PC_k(λ)
+        The ensemble {μ_n(λ)} automatically encodes full posterior spread.
+
+--------------------------------------------------------------------
+STEP 5: Return Results
+--------------------------------------------------------------------
+19.  Output:
+        •  Mean reconstructed spectrum μ_rec(λ)
+        •  Standard deviation √var_rec(λ)
+        •  Optional posterior samples {μ_n(λ)}
+        •  Posterior coefficient statistics (μ_post , Σ_post)

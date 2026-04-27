@@ -1,0 +1,55 @@
+for each filter f in 1 … N:
+    for each basis k in 1 … K:
+        # Integrate basis spectrum through the filter
+        F_fk = ∫ B[k](λ) * FilterResponse[f](λ) dλ
+        # Normalise by filter throughput
+        A[f][k] = F_fk / ∫ FilterResponse[f](λ) dλ
+
+for i in 1 … N:
+    f_obs[i]   = 10^( -0.4 * ( mag[i] - ZeroPoint[filter[i]] ) )
+    σ_f[i]     = ln(10)/2.5 * f_obs[i] * err_mag[i]      # propagate error
+
+# Vector of unknown coefficients (basis weights)
+c[1…K]          # to be inferred
+
+# Predicted fluxes in all bandpasses
+for i in 1 … N:
+    f_model[i] = Σ_{k=1}^{K} A[i][k] * c[k]
+
+# Data misfit term (χ²)
+chi2 = Σ_{i=1}^{N} ( (f_obs[i] - f_model[i])² / σ_f[i]² )
+
+# Prior term
+Δc    = c - μ_prior
+prior = Δcᵀ · C_prior⁻¹ · Δc
+
+# Negative log‑posterior (up to additive constant)
+neg_log_post(c) = 0.5 * (chi2 + prior)
+
+# Initialise c (e.g., zeros or prior mean)
+c_init = μ_prior
+
+# Minimise neg_log_post using an unconstrained optimiser
+c_MAP = Optimiser.minimise( neg_log_post, init=c_init,
+                            method='L-BFGS', 
+                            tolerance=1e-8 )
+
+# Compute Hessian H of neg_log_post at c_MAP
+H = Hessian( neg_log_post, evaluated_at=c_MAP )
+
+# Posterior covariance
+Cov_c = inverse(H)
+
+for λ in desired wavelength grid:
+    S_pred[λ] = Σ_{k=1}^{K} c_MAP[k] * B[k](λ)
+
+    # Uncertainty propagation
+    var_S[λ] = Σ_{k=1}^{K} Σ_{l=1}^{K}
+                 B[k](λ) * B[l](λ) * Cov_c[k][l]
+
+    σ_S[λ]   = sqrt( var_S[λ] )
+
+for i in 1 … N:
+    residual[i] = f_obs[i] - f_model[i]
+    if |residual[i]| > 3 * σ_f[i]:
+        flag_band(i) = TRUE     # potential outlier

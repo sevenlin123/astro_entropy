@@ -1,0 +1,82 @@
+INPUT:
+    – Observed photometry for each object i:
+          { (f_ij , σ_ij) }  for filters j = 1 … J
+    – Filter transmission curves S_j(λ)
+    – Spectral basis functions {B_k(λ)}  (k = 1 … K)
+    – Taxonomic class set C = {c = 1 … Kc}
+    – Prior parameters for each class c:
+          mean coefficient vector μ_c (size K)
+          covariance matrix Σ_c (size K×K)
+    – Number of MCMC iterations Niter, burn‑in length Nburn
+
+OUTPUT (per object i):
+    – Posterior samples of class label and spectral coefficients:
+          { (c^(t) , a^(t)) }  for t = Nburn+1 … Niter
+    – Posterior predictive reflectance spectrum:
+          R_pred(λ) = mean_t[ R(a^(t), c^(t))(λ) ]
+    – Classification probability:
+          P(c | data) = (#samples with label c) / (Niter−Nburn)
+
+--------------------------------------------------------------------
+PROCEDURE FOR ONE OBJECT
+--------------------------------------------------------------------
+1.  INITIALISE
+    a. Set current class c_cur ← random choice from C
+    b. Sample initial coefficient vector a_cur from N(μ_{c_cur}, Σ_{c_cur})
+
+2.  DEFINE FORWARD MODEL
+    For any coefficient vector a and class c:
+        a. Construct reflectance model:
+               R(λ | a, c) = Σ_{k=1}^{K} a_k * B_k(λ)      // spectral basis
+        b. For each filter j:
+               Compute synthetic flux:
+                   m_j(a, c) = [ ∫ R(λ | a, c) * S_j(λ) dλ ] /
+                               [ ∫ S_j(λ) dλ ]
+
+3.  DEFINE LIKELIHOOD
+    L(a, c) = Π_{j=1}^{J}  Normal( f_ij  |  m_j(a, c) , σ_ij^2 )
+
+4.  DEFINE PRIOR
+    P(a | c) = Normal( a | μ_c , Σ_c )
+    P(c)     = π_c  (class prior, e.g. uniform)
+
+5.  MCMC SAMPLING  (Metropolis–Hastings)
+    For t = 1 to Niter
+        a.  PROPOSE NEW STATE
+              • Draw candidate class c_prop from proposal q_c(· | c_cur)
+              • Draw candidate coefficients a_prop from proposal q_a(· | a_cur, c_prop)
+                 (e.g. Gaussian centered at a_cur with fixed covariance)
+
+        b.  COMPUTE WEIGHTS
+              w_cur   = L(a_cur, c_cur)   * P(a_cur | c_cur) * P(c_cur)
+              w_prop  = L(a_prop, c_prop) * P(a_prop | c_prop) * P(c_prop)
+
+        c.  ACCEPTANCE RATIO
+              α = min( 1 ,
+                       [ w_prop * q_c(c_cur | c_prop) * q_a(a_cur | a_prop, c_cur) ] /
+                       [ w_cur * q_c(c_prop | c_cur) * q_a(a_prop | a_cur, c_prop) ] )
+
+        d.  ACCEPT OR REJECT
+              Generate u ∼ Uniform(0,1)
+              IF u < α THEN
+                    c_cur ← c_prop
+                    a_cur ← a_prop
+              ENDIF
+
+        e.  STORE SAMPLE
+              If t > Nburn:
+                  append (c_cur, a_cur) to sample list
+
+6.  POST‑PROCESS
+    a.  Class probabilities:
+            For each class c:
+                P(c | data) = (count of samples with label c) /
+                              (Niter – Nburn)
+    b.  Predictive spectrum:
+            For λ over desired grid:
+                R_pred(λ) = (1/(Niter−Nburn)) *
+                            Σ_{t=Nburn+1}^{Niter} R(λ | a^(t), c^(t))
+
+7.  RETURN samples, P(c | data), R_pred(λ)
+--------------------------------------------------------------------
+END PROCEDURE

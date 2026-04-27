@@ -1,0 +1,106 @@
+INPUT:
+    S_train      // matrix of N_train spectra, shape (N_train, L_wavelengths)
+    P_filters    // set of photometric bandpasses {p1, p2, …, pM}
+    f_targets    // list of target objects
+        each target t has:
+            photometry Y_t   // vector of M measured magnitudes or fluxes
+            errors   σ_t     // vector of corresponding uncertainties
+OUTPUT:
+    For each target t:
+        posterior samples of latent coefficients θ_t
+        reconstructed spectra X̂_t(λ) with credible intervals
+
+--------------------------------------------------------------------
+# 1. Train Principal Component (PC) basis from spectra
+--------------------------------------------------------------------
+function TrainPCA(S_train, K):
+    μ = mean(S_train, axis=0)                       # mean spectrum
+    S_centered = S_train - μ
+    C = cov(S_centered, rowvar=False)               # covariance matrix
+    eig_vals, eig_vecs = eigh(C)                    # eigen-decomposition
+    sort indices by descending eig_vals
+    PC_basis = eig_vecs[:, sorted_indices[:K]]      # first K PCs
+    return μ, PC_basis
+
+# ------------------------------------------------------------------
+# 2. Construct linear photometric forward model
+#    For each filter p, pre-compute its response R_p(λ) (normalized).
+#    Convolve each basis spectrum and mean spectrum with all filters.
+--------------------------------------------------------------------
+function BuildPhotometricModel(μ, PC_basis, P_filters):
+    # Pre‑compute projected spectra into each filter
+    μ_proj = [∫ μ(λ) * R_p(λ) dλ  for p in P_filters]          # length M
+    PC_proj = []
+    for k in range(K):
+        pc_k = PC_basis[:, k]
+        proj_k = [∫ pc_k(λ) * R_p(λ) dλ  for p in P_filters]
+        PC_proj.append(proj_k)                                 # list of M vectors
+    return μ_proj, PC_proj    # μ_proj: vector[M], PC_proj: list[K][M]
+
+# ------------------------------------------------------------------
+# 3. Bayesian inference of latent coefficients for a single target
+#    Likelihood: Gaussian in photometry space.
+#    Prior: isotropic standard normal on θ (latent coefficients).
+#    Use MCMC (e.g., Hamiltonian Monte Carlo) to draw posterior samples.
+--------------------------------------------------------------------
+function InferLatentPosterior(Y, σ, μ_proj, PC_proj, n_samples, n_burn):
+    define log_likelihood(θ):
+        # Predict photometry via linear combination
+        Y_pred = μ_proj + sum_{k=1..K} θ_k * PC_proj[k]
+        return -0.5 * Σ_i ((Y[i]-Y_pred[i])^2 / σ[i]^2 + log(σ[i]^2))
+    define log_prior(θ):
+        return -0.5 * Σ_k θ_k^2     # standard normal prior
+    define log_posterior(θ) = log_likelihood(θ) + log_prior(θ)
+
+    # Initialize θ = zeros
+    θ_current = zeros(K)
+    samples = []
+    for i in range(n_samples + n_burn):
+        # Perform one HMC step (proposal, accept/reject)
+        θ_proposed = HMC_propose(θ_current, log_posterior)
+        if accept(θ_proposed, θ_current, log_posterior):
+            θ_current = θ_proposed
+        if i >= n_burn:
+            samples.append(θ_current.copy())
+    return samples    # array[n_samples, K]
+
+# ------------------------------------------------------------------
+# 4. Spectrum reconstruction and uncertainty estimation
+--------------------------------------------------------------------
+function ReconstructSpectrum(μ, PC_basis, θ_samples):
+    # For each sample, reconstruct full spectrum
+    spectra_samples = []
+    for θ in θ_samples:
+        X = μ + Σ_k θ_k * PC_basis[:, k]
+        spectra_samples.append(X)
+    spectra_samples = array(spectra_samples)  # shape [n_samples, L_wavelengths]
+    # Compute point estimate (posterior mean) and credible intervals
+    X_mean = mean(spectra_samples, axis=0)
+    X_lower = percentile(spectra_samples, 2.5, axis=0)
+    X_upper = percentile(spectra_samples, 97.5, axis=0)
+    return X_mean, X_lower, X_upper
+
+# ------------------------------------------------------------------
+# 5. Main driver
+--------------------------------------------------------------------
+procedure Main():
+    # Hyper‑parameters
+    K = choose_number_of_PCs()                # e.g., 8–10
+    n_samples = 2000
+    n_burn = 500
+
+    μ, PC_basis = TrainPCA(S_train, K)
+    μ_proj, PC_proj = BuildPhotometricModel(μ, PC_basis, P_filters)
+
+    for t in f_targets:
+        Y_t   = t.photometry
+        σ_t   = t.errors
+        θ_samples = InferLatentPosterior(Y_t, σ_t, μ_proj, PC_proj,
+                                         n_samples, n_burn)
+        X_mean, X_low, X_up = ReconstructSpectrum(μ, PC_basis, θ_samples)
+        t.spectrum_mean = X_mean
+        t.spectrum_low  = X_low
+        t.spectrum_high = X_up
+        # (Optional) flag outliers: e.g., low marginal likelihood or extreme θ)
+
+END procedure

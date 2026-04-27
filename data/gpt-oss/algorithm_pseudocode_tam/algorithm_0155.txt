@@ -1,0 +1,75 @@
+Inputs:
+    RefSpectra   –  N_ref × M array of reference TNO spectra (reflectance vs. λ)
+    FilterFuncs  –  F filter transmission curves
+    TaxLabels    –  taxonomy label for each reference spectrum (optional)
+
+Parameters:
+    K            –  number of principal components to retain
+    h_KDE        –  KDE bandwidth
+    N_aug        –  number of synthetic latent samples to generate
+    NoiseRel     –  relative photometric noise (e.g., 0.20 for 20%)
+
+Output:
+    Reconstructed spectrum for each new photometric observation
+    Taxonomic probability vector
+
+--------------------------------------------------------------------
+# 1. Build Prior: PCA Basis and KDE Augmentation
+--------------------------------------------------------------------
+1.1   // Center spectra
+      MeanSpec ← mean(RefSpectra, axis=0)          // 1 × M
+      SpecCentered ← RefSpectra – MeanSpec         // N_ref × M
+
+1.2   // PCA
+      [U, Σ, V] ← svd(SpecCentered, full_matrices=False)
+      V_K ← V[:K, :]                              // K × M (principal eigenvectors)
+      LatentsReal ← SpecCentered @ V_K.T           // N_ref × K
+
+1.3   // KDE on latent space
+      KDE ← fit_kde(LatentsReal, bandwidth=h_KDE) // multivariate KDE
+      LatentsAug ← sample_kde(KDE, N_aug)         // N_aug × K
+
+1.4   // Reconstruct augmented spectra
+      SpecAug ← LatentsAug @ V_K + MeanSpec       // N_aug × M
+
+--------------------------------------------------------------------
+# 2. Generate Synthetic Photometry (Forward Model)
+--------------------------------------------------------------------
+2.1   For each augmented spectrum s in SpecAug:
+          For each filter f in FilterFuncs:
+              // Integrate transmission-weighted reflectance
+              Flux_f ← ∫ s(λ) * f(λ) dλ   // numeric integration
+          Phot_raw ← [Flux_1 … Flux_F]
+          Phot_noisy ← Phot_raw * (1 + Normal(0, NoiseRel))  // add Gaussian noise
+
+2.2   Assemble training sets:
+          X_train ← matrix of Phot_noisy (N_aug × F)
+          Y_train  ← LatentsAug (N_aug × K)
+
+--------------------------------------------------------------------
+# 3. Train Encoder (Photometry → Latent)
+--------------------------------------------------------------------
+3.1   EncoderModel ← AutoMLRegressor()  // e.g., GBDT ensemble
+3.2   EncoderModel.fit(X_train, Y_train)
+
+--------------------------------------------------------------------
+# 4. Train Classifier (Latent → Taxonomy)
+--------------------------------------------------------------------
+4.1   ClassifierModel ← AutoMLClassifier()
+4.2   ClassifierModel.fit(LatentsReal, TaxLabels)   // train on real latents
+
+--------------------------------------------------------------------
+# 5. Inference Pipeline
+--------------------------------------------------------------------
+Function ReconstructSpectrum(Photometry_new):
+
+    # 5.1   Predict latent vector
+    Latent_pred ← EncoderModel.predict(Photometry_new)   // size K
+
+    # 5.2   Reconstruct high‑resolution spectrum
+    Spec_pred ← Latent_pred @ V_K + MeanSpec             // size M
+
+    # 5.3   Taxonomic probabilities
+    ProbTax ← ClassifierModel.predict_proba(Latent_pred)  // size n_classes
+
+    Return Spec_pred, ProbTax

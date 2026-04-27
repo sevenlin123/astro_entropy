@@ -1,0 +1,60 @@
+pseudocode
+INPUT:
+    - For each target object O:
+        - Photometry set P_O = {(λ_i, mag_i, err_i)}  // i = 1…N
+    - Reference basis spectrum library B = {b_k(λ)}      // k = 1…K
+    - Wavelength grid G = {λ_g} for reconstruction
+
+OUTPUT:
+    - Reconstructed spectrum R_O(λ_g) with mean μ_O(λ_g) and variance σ²_O(λ_g)
+    - Coefficient vector w_O
+    - Posterior predictive uncertainty
+
+--------------------------------------------------------------------
+FOR each object O do
+
+  1. Pre‑processing  
+     1.1 Convert observed magnitudes to relative fluxes:
+          f_i   ← 10^(−0.4 * mag_i)
+          σ_fi  ← f_i * ln(10)/2.5 * err_i
+     1.2 Standardize wavelengths (optional):
+          x_i ← log10(λ_i)
+
+  2. Build design matrix Φ  
+     2.1 For every basis spectrum b_k and wavelength λ_i:
+           Φ[i,k] = b_k(λ_i)          // value of basis spectrum at λ_i
+     2.2 Add optional polynomial or GP basis (see step 3)
+
+  3. Augment model with Gaussian Process (GP) component  
+     3.1 Choose kernel K(x,x') (e.g., squared‑exponential)
+     3.2 Form covariance matrix C_GP of size N×N:
+           C_GP[i,j] = K(x_i, x_j)
+     3.3 Total covariance:
+           C_total = diag(σ_fi²) + C_GP
+
+  4. Bayesian Linear Regression  
+     4.1 Prior on weights w:   w ~ N(0, α⁻¹ I_K)   // α is precision hyper‑parameter
+     4.2 Likelihood:  f_obs | w ∼ N(Φ w, C_total)
+     4.3 Compute posterior mean and covariance analytically:
+           S_post = (α I_K + Φᵀ C_total⁻¹ Φ)⁻¹
+           μ_w    = S_post Φᵀ C_total⁻¹ f_obs
+     4.4 Store w_O = μ_w
+
+  5. Predictive spectrum on grid G  
+     5.1 Construct basis vector for each λ_g:
+           φ_g[k] = b_k(λ_g)          // k = 1…K
+     5.2 Mean prediction:
+           μ_O(λ_g) = Σ_k w_O[k] * φ_g[k]
+     5.3 Uncertainty from weights:
+           var_w(λ_g) = φ_gᵀ S_post φ_g
+     5.4 Uncertainty from GP:
+           k_star = [K(log10(λ_g), x_1), …, K(log10(λ_g), x_N)]ᵀ
+           var_GP(λ_g) = K(log10(λ_g), log10(λ_g)) – k_starᵀ C_total⁻¹ k_star
+     5.5 Total variance:
+           σ²_O(λ_g) = var_w(λ_g) + var_GP(λ_g)
+
+  6. Store results  
+     6.1 R_O(λ_g) = μ_O(λ_g) ± sqrt(σ²_O(λ_g))
+     6.2 Save w_O, μ_O, σ²_O for downstream classification
+
+END FOR

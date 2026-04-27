@@ -1,0 +1,64 @@
+Inputs:
+    S_seed[1…N]      # high‑resolution reflectance spectra of N reference TNOs
+    filt_curves[]    # transmission curves of the photometric filters
+    h                # KDE bandwidth (≈0.5)
+    M                # number of synthetic latent samples to generate (e.g. 10 000)
+    K                # number of principal components to retain (4–10)
+    σ_noise          # relative reflectance uncertainty to inject (20%)
+
+Outputs:
+    For any new photometric vector m_new:
+        S_recon          # reconstructed high‑resolution spectrum
+        P_taxonomy       # probability vector over taxonomic classes
+
+--------------------------------------------------------------------
+PREPARATION PHASE
+--------------------------------------------------------------------
+
+1.  # Compute Principal Component Analysis (PCA) on seed spectra
+2.  [U, Λ, V] ← PCA(S_seed, keep = K)          # U: eigenvectors (principal components)
+3.  Z_real[i] ← Uᵀ · (S_seed[i] – μ)            # μ: mean spectrum of seed set
+4.  # Fit a non‑parametric Kernel Density Estimate (KDE) in latent space
+5.  KDE_model ← FitKDE(Z_real, bandwidth = h)
+
+--------------------------------------------------------------------
+DATA AUGMENTATION & SYNTHETIC PHOTOMETRY GENERATION
+--------------------------------------------------------------------
+
+6.  for t = 1 … M:
+7.      z_t ← SampleFrom(KDE_model)                  # synthetic latent vector
+8.      s_t ← U · z_t + μ                            # inverse PCA → full spectrum
+9.      m_t ← ConvolveWithFilters(s_t, filt_curves)   # ideal photometry
+10.     m_t_noisy ← m_t * (1 + Normal(0, σ_noise))    # inject 20 % Gaussian noise
+11.     Store pair (m_t_noisy , z_t)
+
+12.  X_train ← {m_t_noisy}
+13.  Y_train ← {z_t}                                 # latent coefficients as targets
+
+--------------------------------------------------------------------
+MODEL TRAINING
+--------------------------------------------------------------------
+
+14.  # Train an AutoML regressor to map photometry → latent space
+15.  regressor ← TrainAutoML(X_train, Y_train)
+
+16.  # Train a separate AutoML classifier on the latent coordinates
+17.  classifier ← TrainAutoML(Z_real, taxonomic_labels_of_S_seed)
+
+--------------------------------------------------------------------
+FORECAST / INFERENCE PHASE
+--------------------------------------------------------------------
+
+For each new photometric observation m_new:
+
+18.  # Predict latent mean and (optional) covariance
+19.  z_pred_mean ← regressor.PredictMean(m_new)
+20.  z_pred_cov   ← regressor.PredictCovariance(m_new)   # if the AutoML regressor supplies it
+
+21.  # Reconstruct the spectrum
+22.  S_recon ← U · z_pred_mean + μ
+
+23.  # Classify taxonomy
+24.  P_taxonomy ← classifier.PredictProbabilities(z_pred_mean)
+
+25.  Return S_recon, P_taxonomy

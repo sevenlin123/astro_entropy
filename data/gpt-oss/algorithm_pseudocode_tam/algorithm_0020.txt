@@ -1,0 +1,117 @@
+pseudocode
+Input:
+    SpecSet        ← {S_i[λ]}   // N_spec observed spectra, each sampled at λ_k
+    Filters        ← {T_j[λ]}   // M_filter throughput curves
+    TaxLabels      ← {y_i}      // taxonomy for each spectrum (optional)
+
+Parameters:
+    K              ← desired number of PCA components (e.g. 8–10)
+    h              ← KDE bandwidth (≈0.5)
+    M_aug          ← number of synthetic latent samples (e.g. 5000)
+
+--------------------------------------------------------------------
+1.1  Build Prior (PCA)
+
+    // Center spectra
+    μ_S   ← mean(S_i over i)          // vector of length N_λ
+    S_cen ← {S_i – μ_S}
+
+    // Perform PCA on centered spectra
+    [U, Σ, Vᵀ] ← SingularValueDecomposition(S_cen)   // U: N_spec×K, V: N_λ×K
+    PCs     ← V[:, 1:K]            // principal component basis (N_λ×K)
+    Scores  ← U[:, 1:K] * Σ[1:K]    // latent coefficients (N_spec×K)
+
+--------------------------------------------------------------------
+1.2  Augment Latent Manifold (KDE)
+
+    // Fit non‑parametric KDE to latent coefficients
+    KDE_model ← FitKDE(Scores, bandwidth = h)
+
+    // Sample synthetic latent vectors
+    Latent_syn ← Sample(KDE_model, M_aug)          // M_aug × K
+
+--------------------------------------------------------------------
+1.3  Generate Synthetic Spectra
+
+    // Reconstruct synthetic spectra from latent vectors
+    for m = 1 … M_aug
+        S_syn[m] ← μ_S + Latent_syn[m] · PCsᵀ     // λ-length vector
+    end for
+
+--------------------------------------------------------------------
+1.4  Forward‑Model Photometry
+
+    // Convolve each synthetic spectrum with all filters
+    for m = 1 … M_aug
+        for j = 1 … M_filter
+            // Ideal (noise‑free) band flux
+            F_ideal[m,j] ← ∑_λ (S_syn[m,λ] · T_j[λ]) Δλ
+            // Inject Gaussian noise (σ = 0.20 * F_ideal)
+            σ_noise ← 0.20 * F_ideal[m,j]
+            F_obs[m,j] ← Normal(F_ideal[m,j], σ_noise)
+        end for
+    end for
+
+    // Assemble training data for the encoder
+    X_enc   ← F_obs         // M_aug × M_filter
+    Y_enc   ← Latent_syn    // M_aug × K
+
+--------------------------------------------------------------------
+1.5  Train Encoder (photometry → latent)
+
+    EncoderModel ← AutoMLTrainRegressor(X_enc, Y_enc)
+    // AutoML selects/ensembles best regressor (e.g., GBDT)
+
+--------------------------------------------------------------------
+1.6  Train Classifier (latent → taxonomy)
+
+    // Use original seed spectra (not synthetic) for supervised labels
+    X_clf ← Scores              // N_spec × K
+    Y_clf ← TaxLabels           // N_spec × 1
+
+    ClassifierModel ← AutoMLTrainClassifier(X_clf, Y_clf)
+
+pseudocode
+Input:
+    PhotObs    ← {m_j}          // observed photometry in M_filter bands
+    CovPhot    ← {σ_j²}         // measurement variances
+
+Output:
+    SpectrumHat ← {R̂(λ)}       // reconstructed reflectance spectrum
+    TaxProb      ← {p(type)}   // taxonomy probability vector
+    UncSpec      ← {σ̂_R(λ)}   // optional per‑pixel uncertainty estimate
+
+Procedure:
+
+--------------------------------------------------------------------
+2.1  Encode Photometry → Latent
+
+    // Optionally repeat to approximate posterior spread
+    for s = 1 … N_sample
+        // Perturb photometry by its Gaussian uncertainty
+        m_perturbed[s] ← PhotObs + RandomNormal(0, sqrt(CovPhot))
+        // Predict latent coefficient vector
+        Latent_pred[s] ← EncoderModel.predict(m_perturbed[s])
+    end for
+
+    // Aggregate predictions
+    Latent_mean   ← mean(Latent_pred over s)
+    Latent_cov    ← covariance(Latent_pred over s)
+
+--------------------------------------------------------------------
+2.2  Decode Latent → Spectrum
+
+    SpectrumHat ← μ_S + Latent_mean · PCsᵀ
+
+    // Propagate latent covariance to spectral uncertainty
+    UncSpec ← sqrt(diag(PCs · Latent_cov · PCsᵀ))     // element‑wise std
+
+--------------------------------------------------------------------
+2.3  Classify Taxonomy
+
+    TaxProb ← ClassifierModel.predict_proba(Latent_mean)
+
+--------------------------------------------------------------------
+2.4  Return Results
+
+    return SpectrumHat, UncSpec, TaxProb

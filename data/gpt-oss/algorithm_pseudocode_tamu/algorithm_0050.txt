@@ -1,0 +1,107 @@
+pseudocode
+--------------------------------------------------------------------
+1.  TRAINING PHASE
+--------------------------------------------------------------------
+
+INPUT:
+    SPECTRA      : list of M high‑resolution reflectance spectra 
+                   (wavelength array λ, flux array f_M×N)
+    FILTER_SET   : list of L filter transmission curves T_l(λ)
+    K            : number of principal components to retain
+    H_KDE        : KDE bandwidth
+    N_AUG        : number of synthetic latent samples to generate
+    NOISE_SIGMA  : standard deviation of relative photometric noise
+    TAX_LABELS   : taxonomic label for each spectrum
+
+OUTPUT:
+    MODEL = {
+        pca_mean          : mean spectrum (length N)
+        pca_eigen          : K × N matrix of eigenvectors
+        encoder_regressor  : AutoML model  (photometry → K latent coeffs)
+        classifier         : AutoML model  (latent coeffs → taxonomy probs)
+        filter_response    : L × N matrix R  (R[l,i] = ∫T_l(λ)·pca_eigen[k,i] dλ )
+    }
+
+ALGORITHM:
+    1.1  PCA on observed spectra
+        - Stack spectra into matrix X_M×N
+        - Subtract mean: X_centered = X - mean(X)
+        - Compute covariance C = (X_centeredᵀ · X_centered) / (M-1)
+        - Eigen‑decompose C → eigenvalues λ_k, eigenvectors v_k
+        - Sort eigenvectors by descending λ_k
+        - Retain first K eigenvectors → pca_eigen (K×N)
+        - Compute pca_mean = mean(X)
+
+    1.2  Project observed spectra into latent space
+        - For each spectrum m:
+              z_m = (f_m − pca_mean) · pca_eigenᵀ        // K‑dim vector
+        - Store {z_m} (M×K)
+
+    1.3  KDE augmentation of latent space
+        - Fit Gaussian KDE to {z_m} with bandwidth H_KDE
+        - Sample N_AUG latent vectors {z'_s} from KDE
+        - For each z'_s:
+              f'_s = pca_mean + z'_s · pca_eigen           // synthesize spectrum
+        - Store {f'_s} and corresponding {z'_s}
+
+    1.4  Forward‑model synthetic photometry
+        - For each synthetic spectrum f'_s:
+              For each filter l = 1…L:
+                  m'_s[l] = ∫ f'_s(λ) · T_l(λ) dλ  /  ∫ T_l(λ) dλ
+              // m'_s is L‑dim reflectance vector
+              Add Gaussian noise:
+                  ε ~ Normal(0, NOISE_SIGMA * m'_s)
+                  m_noisy_s = m'_s + ε
+        - Assemble training set:
+              X_train = {m_noisy_s}             // L‑dim
+              Y_train = {z'_s}                  // K‑dim latent coeffs
+
+    1.5  Train encoder regressor
+        - Use AutoML (e.g., AutoGluon) to fit model:
+              encoder_regressor = AutoML.fit(X_train, Y_train)
+        - From training residuals, estimate prediction variance σ²_z for each of K dims.
+
+    1.6  Train taxonomy classifier
+        - Label each synthetic spectrum f'_s with TAX_LABELS (same as its source spectrum).
+        - Use same AutoML to fit:
+              classifier = AutoML.fit(Y_train, TAX_LABELS)
+
+    1.7  Compute filter response matrix for decoding
+        - For each filter l:
+              R[l,:] = ∫ pca_eigenᵀ · T_l(λ) dλ   // shape: L×K
+        - Store R (used later only for debugging, optional)
+
+--------------------------------------------------------------------
+2.  INFERENCE PHASE
+--------------------------------------------------------------------
+
+FUNCTION RECONSTRUCT(observed_photometry):
+    INPUT:
+        phot_obs : L‑dim vector of measured reflectances (or magnitudes)
+    OUTPUT:
+        spec_mean : reconstructed high‑res spectrum (length N)
+        spec_CI   : confidence interval envelope (e.g., 2.5% & 97.5%)
+        tax_probs : posterior probabilities over taxonomy classes
+
+    ALGORITHM:
+        2.1  Predict latent coefficients (point estimate)
+            z_hat = encoder_regressor.predict(phot_obs)   // shape K
+
+        2.2  Build posterior samples of latent coeffs
+            For s = 1 … N_SAMPLES (e.g., 1000):
+                Draw δ_z[s] ~ Normal(0, σ_z)          // σ_z from 1.5
+                z_sample[s] = z_hat + δ_z[s]
+                // Optional: enforce physical bounds by rejecting out‑of‑range samples
+
+        2.3  Decode to spectra
+            For each sample s:
+                spec_sample[s] = pca_mean + z_sample[s] · pca_eigen   // length N
+
+        2.4  Aggregate posterior statistics
+            spec_mean = mean(spec_sample over s)
+            spec_CI   = percentile(spec_sample, [2.5, 97.5]) over s
+
+        2.5  Taxonomy prediction
+            tax_probs = classifier.predict_proba(z_hat)   // shape (#classes)
+
+        RETURN (spec_mean, spec_CI, tax_probs)

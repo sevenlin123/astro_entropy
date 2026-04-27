@@ -1,0 +1,80 @@
+Inputs:
+    - Training spectra matrix S_train[n_spectra × n_wavelength]          # observed reflectance values
+    - Filter response curves {R_j(λ)} for j = 1…N_filters              # transmission vs wavelength
+    - Photometric measurements for a target object:
+        * Fluxes F_obs[j]   (j = 1…N_filters)
+        * Measurement errors σ_F[j]
+    - Number of principal components to retain, K (e.g. 8–10)
+
+Output:
+    - Posterior mean coefficients μ_c[1…K]
+    - Posterior covariance Σ_c[K×K]
+    - Reconstructed spectrum S_rec[n_wavelength]
+    - Spectral uncertainty map ΔS[n_wavelength]  (standard deviations)
+
+--------------------------------------------------------------------
+Step 0 – Pre‑processing (once per survey)
+
+1. Compute mean spectrum:
+       S_mean[λ] = (1 / n_spectra) * Σ_{i=1}^{n_spectra} S_train[i, λ]
+
+2. Center training spectra:
+       S_centered[i, λ] = S_train[i, λ] – S_mean[λ]
+
+3. Perform Principal Component Analysis (PCA) on S_centered:
+       - Compute covariance matrix C = (S_centeredᵀ · S_centered) / (n_spectra – 1)
+       - Eigen‑decompose C → eigenvalues λ_k, eigenvectors U_k[λ]   (k = 1…n_wavelength)
+       - Sort eigenvectors by decreasing λ_k
+       - Retain first K eigenvectors → matrix U_K[λ × K]
+       (U_K columns are orthonormal)
+
+4. Store U_K and S_mean for later use.
+
+--------------------------------------------------------------------
+Step 1 – Build the Forward Model Matrix for the Target Filters
+
+5. For each filter j = 1…N_filters:
+       a. Interpolate the j‑th filter response R_j(λ) onto the wavelength grid of the training spectra.
+       b. Compute the effective bandpass vector B_j[λ] = R_j(λ) / Σ_λ R_j(λ)   (normalized).
+
+6. Compute the photometry–coefficient coupling matrix A[K × N_filters]:
+       For each filter j:
+           For each component k = 1…K:
+               A[k, j] = Σ_λ U_K[λ, k] * B_j[λ]      # dot product of PC with filter bandpass
+
+   (Equivalently, A = U_Kᵀ · B, where B is the matrix of bandpasses B_j.)
+
+--------------------------------------------------------------------
+Step 2 – Bayesian Inference of the Coefficients
+
+7. Assemble observation vector f[N_filters]:
+       f[j] = F_obs[j]
+
+8. Observation noise covariance:
+       C_f = diag(σ_F[1]², …, σ_F[N_filters]²)
+
+9. Define prior on coefficients:
+       • Zero‑mean Gaussian: p(c) ∝ exp(–½ cᵀ Λ⁻¹ c)
+       • Prior covariance Λ = α * I_K   (α chosen so that prior width ≈ typical coefficient variance)
+
+10. Compute posterior covariance:
+        Σ_c = ( A · C_f⁻¹ · Aᵀ  +  Λ⁻¹ )⁻¹          # K × K
+
+11. Compute posterior mean:
+        μ_c = Σ_c · A · C_f⁻¹ · f                  # K × 1
+
+--------------------------------------------------------------------
+Step 3 – Spectrum Reconstruction and Uncertainty Propagation
+
+12. Reconstruct mean spectrum:
+        S_rec[λ] = S_mean[λ]  +  Σ_{k=1}^{K} μ_c[k] * U_K[λ, k]
+
+13. Propagate coefficient uncertainty to spectrum:
+        For each wavelength λ:
+            Var_S[λ] = U_K[λ, :] · Σ_c · U_K[λ, : ]ᵀ      # scalar variance
+            ΔS[λ]   = sqrt( Var_S[λ] )                    # standard deviation
+
+14. Return:
+        • μ_c, Σ_c
+        • S_rec[λ]
+        • ΔS[λ] (uncertainty envelope)

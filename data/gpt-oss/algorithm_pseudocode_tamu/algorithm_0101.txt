@@ -1,0 +1,106 @@
+INPUT:
+    S_spec_raw[1..N]          # N reference spectra (reflectance vs wavelength)
+    λ_grid[1..L]              # wavelength grid of spectra
+    F_band[1..B]              # transmission curves of B photometric filters
+    m_obs[1..M]               # M observed photometry measurements (for target object)
+    K_lat                    # desired latent dimensionality (≤10)
+    h_kde                     # KDE bandwidth (≈0.5)
+
+OUTPUT:
+    S_rec[1..L]              # reconstructed spectrum
+    Cov_S_rec[1..L]           # uncertainty envelope (confidence interval)
+    p_tax[1..C]               # posterior probabilities over C taxonomic classes
+
+--------------------------------------------------------------------
+STEP 1 – Build Latent Prior (PCA + KDE)
+--------------------------------------------------------------------
+1.1 Normalize each spectrum:
+        R_norm[i][l] = S_spec_raw[i][l] / mean(S_spec_raw[i])
+   (Optional: subtract mean spectrum before PCA.)
+
+1.2 Perform Principal Component Analysis on {R_norm[i]}:
+        Compute mean vector μ_R (length L).
+        Compute covariance matrix Σ_R = cov(R_norm - μ_R).
+        Obtain eigenvalues λ_eig[1..L] and eigenvectors V_PC[1..L].
+        Select top K_lat eigenvectors: V_K[1..L] = V_PC[:,1:K_lat].
+        Project spectra to latent space:
+            z_i[k] = (R_norm[i] – μ_R) · V_K[:,k]      for k=1..K_lat
+
+1.3 Estimate continuous density in latent space using KDE:
+        For each latent point z_i, add a Gaussian kernel N(z_i, h_kde² I).
+        The sum of kernels defines density p_Z(z).
+
+--------------------------------------------------------------------
+STEP 2 – Generate Synthetic Training Set
+--------------------------------------------------------------------
+2.1 Sample N_syn synthetic latent vectors from KDE:
+        For n = 1..N_syn:
+            Draw z_syn[n] ~ p_Z(z)     # e.g., accept‑reject or direct sampling
+
+2.2 Reconstruct synthetic spectra from latent vectors:
+        For each z_syn[n]:
+            R_syn[n] = μ_R + V_K · z_syn[n]   # inverse PCA
+            S_syn[n] = R_syn[n] * S_solar     # convert to reflectance if needed
+
+--------------------------------------------------------------------
+STEP 3 – Forward Model Photometry (Implicit Likelihood)
+--------------------------------------------------------------------
+3.1 For each synthetic spectrum S_syn[n]:
+        For each filter b=1..B:
+            m_sim[n][b] = ∫ S_syn[n](λ) * F_band[b](λ) dλ
+        # Add realistic Gaussian noise
+        For each filter b:
+            σ_b = 0.20 * m_sim[n][b]          # 20 % relative uncertainty
+            m_noisy[n][b] = m_sim[n][b] + Normal(0, σ_b)
+
+--------------------------------------------------------------------
+STEP 4 – Train Encoder (Photometry → Latent Coefficients)
+--------------------------------------------------------------------
+4.1 Assemble training pairs:
+        X_train = { m_noisy[n] | n=1..N_syn }      # shape (N_syn, B)
+        Y_train = { z_syn[n] | n=1..N_syn }        # shape (N_syn, K_lat)
+
+4.2 Train AutoML regressor (e.g., Gradient‑Boosted Trees ensemble):
+        Model_enc = AutoML_Regress(X_train, Y_train)
+        # The model learns mapping f_enc: ℝ^B → ℝ^K_lat
+
+--------------------------------------------------------------------
+STEP 5 – Train Taxonomy Classifier (Latent → Class)
+--------------------------------------------------------------------
+5.1 Label each seed spectrum S_spec_raw[i] with class c[i] (Water, CO₂, Organic, etc.)
+5.2 Compute latent vectors for labeled spectra:
+        z_lab[i] = (R_norm[i] – μ_R) · V_K
+5.3 Assemble classifier training data:
+        X_clf = { z_lab[i] | i=1..N }
+        Y_clf = { c[i] | i=1..N }
+5.4 Train AutoML classifier (e.g., Random Forest, XGBoost):
+        Model_clf = AutoML_Classify(X_clf, Y_clf)
+
+--------------------------------------------------------------------
+STEP 6 – Forward Inference on New Observation
+--------------------------------------------------------------------
+6.1 Preprocess observed photometry m_obs:
+        # Optionally normalize or scale to match training scale
+        m_proc = preprocess(m_obs)
+
+6.2 Predict latent coefficient vector:
+        z_pred = Model_enc(m_proc)          # shape (K_lat,)
+
+6.3 Generate posterior samples of latent vector:
+        # Using Gaussian Copula or bootstrap:
+        For s = 1..N_post:
+            z_sample[s] = sample_from_posterior(z_pred)   # respect KDE density
+6.4 Decode each sample to spectrum:
+        For s = 1..N_post:
+            R_sample[s] = μ_R + V_K · z_sample[s]
+            S_sample[s] = R_sample[s] * S_solar
+6.5 Aggregate samples to obtain mean and confidence intervals:
+        S_rec = mean_over_samples(S_sample[1..N_post], axis=0)
+        Cov_S_rec = stddev_over_samples(S_sample[1..N_post], axis=0)
+
+6.6 Classify taxonomy:
+        p_tax = Model_clf.predict_proba(z_pred)   # probabilities over classes
+
+--------------------------------------------------------------------
+RETURN:
+    S_rec, Cov_S_rec, p_tax

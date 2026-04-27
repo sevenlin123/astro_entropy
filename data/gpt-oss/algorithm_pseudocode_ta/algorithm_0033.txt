@@ -1,0 +1,74 @@
+Input:
+    S_train[1..N]     # training spectra (M wavelengths)
+    λ[1..M]           # wavelength grid of training spectra
+    F[1..L]           # filter transmission curves (λ)
+    p_obs[1..L]       # observed photometry for target TNO
+    σ_obs[1..L]       # measurement uncertainties
+
+Parameters:
+    K                 # number of retained principal components (default 8)
+
+Output:
+    μ_spectrum[1..M]  # posterior mean reconstructed spectrum
+    CI_lower[1..M]    # lower bound of 95% credible interval
+    CI_upper[1..M]    # upper bound of 95% credible interval
+
+1.1 Compute mean spectrum:
+        μ_mean[1..M] = (1/N) * Σ_{i=1}^{N} S_train[i]
+
+1.2 Center spectra:
+        X_centered[i][j] = S_train[i][j] – μ_mean[j]    for i=1..N, j=1..M
+
+1.3 Covariance matrix:
+        C = (1/(N-1)) * X_centered^T * X_centered      # M×M
+
+1.4 Eigen‑decomposition:
+        (λ_eig, V_eig) = eig(C)                         # λ_eig sorted descending
+
+1.5 Select first K eigenvectors:
+        U[1..M, 1..K] = V_eig[:, 1:K]                  # PCA basis
+
+1.6 Project training spectra onto basis (scores):
+        for i in 1..N:
+            c_scores[i][k] = Σ_{j=1}^{M} (S_train[i][j] – μ_mean[j]) * U[j][k]
+
+2.1 For any latent coefficient vector c[1..K]:
+        # Reconstruct full spectrum
+        S_recon[j] = μ_mean[j] + Σ_{k=1}^{K} c[k] * U[j][k]          for j=1..M
+
+        # Convolve with each filter to obtain model photometry
+        for ℓ in 1..L:
+            f_model[ℓ] = Σ_{j=1}^{M} S_recon[j] * F[ℓ][j] * Δλ[j]   # Δλ[j] spacing
+
+3.1 Define prior on c:
+        p_prior(c) = Normal(0_K , Σ_c)        # Σ_c diagonal with variances from c_scores
+
+3.2 Define likelihood:
+        p_likelihood(p_obs | c) =
+            Π_{ℓ=1}^{L} Normal(p_obs[ℓ] | f_model[ℓ], σ_obs[ℓ]^2)
+
+3.3 Construct posterior:
+        p_posterior(c | p_obs) ∝ p_likelihood(p_obs | c) * p_prior(c)
+
+3.4 Sample from posterior using MCMC:
+        Initialize c_0 randomly from prior
+        For t = 1 .. N_iter:
+            Propose c' using affine‑invariant sampler step
+            Compute f_model' via Step 2.1
+            Accept or reject c' based on Metropolis criterion
+            Store accepted c_t
+
+4.1 For each posterior sample c_t (t=1..N_samples):
+        Reconstruct spectrum S_t[j] = μ_mean[j] + Σ_{k=1}^{K} c_t[k] * U[j][k]
+        Store S_t
+
+4.2 Compute posterior statistics:
+        μ_spectrum[j] = (1/N_samples) * Σ_{t} S_t[j]
+        CI_lower[j]   = 2.5th percentile of {S_t[j]}
+        CI_upper[j]   = 97.5th percentile of {S_t[j]}
+
+5.1 For each candidate filter subset G ⊆ {1..L}:
+        Repeat Steps 3–4 with p_obs restricted to G
+        Evaluate reconstruction quality metrics (e.g., mean squared error,
+        credible‑interval coverage)
+        Rank subsets by metric to identify most informative filter combinations

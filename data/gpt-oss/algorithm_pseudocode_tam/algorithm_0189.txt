@@ -1,0 +1,12 @@
+z_real[i] = transpose(PC) · S_centered[i]    // i = 1…N
+
+for m = 1 … M:
+         z_synth[m] = draw_from_KDE(p(z))
+
+S_synth[m] = μ + PC · z_synth[m]
+
+R_f[m] = integrate( S_synth[m] * throughput_f ) / integrate( solar_spectrum * throughput_f )
+
+R_noisy[m][k] = R[m][k] + Normal(0, 0.20*R[m][k])
+
+regressor = AutoML.train_regressor(X_train, Y_train)

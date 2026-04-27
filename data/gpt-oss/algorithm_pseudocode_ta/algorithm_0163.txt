@@ -1,0 +1,12 @@
+text
+INPUT
+    S_train[Ns × Nw]            # Training spectra (reflectance vs wavelength)
+    filt[i][λ] (i = 1…Nf)       # Filter transmission curves
+    phot[i] (i = 1…Nf)          # Observed fluxes for target TNO
+    err[i] (i = 1…Nf)           # Observational 1‑σ errors
+
+PARAMETERS
+    K      # Number of principal components to retain (default 8–10)
+
+var_s(λ) = Σ_{k=1}^K Σ_post[k,k] · PC[k][λ]^2
+                + 2·Σ_{k<l} Σ_post[k,l] · PC[k][λ]·PC[l][λ]

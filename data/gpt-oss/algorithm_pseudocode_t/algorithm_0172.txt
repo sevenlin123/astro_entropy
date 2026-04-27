@@ -1,0 +1,56 @@
+Input:
+    - Photometric measurements M = { m_k } for k = 1 … K
+    - Measurement uncertainties σ = { σ_k }
+    - Filter transmission curves T_k(λ)  (continuous or tabulated)
+    - Wavelength grid Λ = { λ_j } for j = 1 … J
+    - Prior GP hyper‑parameters θ_prior  (mean μ0(λ), covariance kernel κ(λ,λ′))
+    - Number of posterior samples N_samp
+
+Output:
+    - Posterior samples { S^(n)(λ_j) } for n = 1 … N_samp
+    - Posterior mean spectrum ȞS(λ_j) = (1/N_samp) Σ_n S^(n)(λ_j)
+    - Posterior standard deviation  σ_S(λ_j)
+
+------------------------------------------------------------------
+Step 0 – Pre‑processing
+------------------------------------------------------------------
+1. For each filter k, numerically evaluate the forward model
+      f_k(S) = ∫ S(λ) * T_k(λ) dλ
+   Store the linear operator matrix A such that
+      f_k(S) ≈ Σ_j A_{kj} * S_j,
+   where S_j ≈ S(λ_j).
+
+------------------------------------------------------------------
+Step 1 – Set up prior
+------------------------------------------------------------------
+2. Build prior mean vector μ0_j = μ0(λ_j).
+3. Assemble prior covariance matrix K_{jj'} = κ(λ_j, λ_{j'}).
+   Optionally add small jitter εI for numerical stability.
+
+------------------------------------------------------------------
+Step 2 – Likelihood
+------------------------------------------------------------------
+4. Define likelihood function L(S):
+      L(S) = Π_k  N( m_k | A_k · S , σ_k^2 )
+   where A_k is the k‑th row of matrix A.
+
+------------------------------------------------------------------
+Step 3 – Posterior sampling (Hamiltonian Monte Carlo)
+------------------------------------------------------------------
+5. Initialize S^(0) = μ0 (or any feasible spectrum).
+6. For n = 1 to N_samp:
+       a. Sample momentum variable p ~ N(0, M)  (mass matrix M, e.g., diagonal).
+       b. Perform L leapfrog steps with step size ε to propose
+          (S', p') from Hamiltonian dynamics derived from
+          U(S) = –log L(S) – log N(S | μ0, K).
+       c. Accept/reject (S', p') via Metropolis criterion.
+       d. Store accepted spectrum S^(n).
+
+------------------------------------------------------------------
+Step 4 – Post‑processing
+------------------------------------------------------------------
+7. Compute posterior statistics:
+       ȞS_j   = (1/N_samp) Σ_n S_j^(n)
+       σ_S_j  = sqrt( (1/(N_samp–1)) Σ_n (S_j^(n) – ȞS_j)^2 )
+
+Return { S^(n) }, ȞS, σ_S.

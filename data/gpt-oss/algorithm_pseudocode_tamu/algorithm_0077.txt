@@ -1,0 +1,84 @@
+INPUT:
+    SPECTRA = {s_i(λ)}  // reference high‑resolution TNO spectra (i = 1..Nseed)
+    FILTERS = {F_j}      // transmission curves of available photometric bands
+    LABELS   = {ℓ_i}     // taxonomic labels for seed spectra
+    PHOTOMETRY_new = {m_k} // observed reflectance in J bands for new object
+
+PARAMETERS:
+    K          // number of principal components to retain (e.g., 8–10)
+    h_KDE      // bandwidth for Gaussian kernel density estimate (≈0.5)
+    σ_noise    // relative photometric noise level (e.g., 0.20)
+    N_samples  // number of synthetic latent samples to generate (e.g., 5000)
+
+------------------------------------------------------------
+1. **Latent Space Construction (Prior)**
+
+    a. Perform PCA on SPECTRA:
+        - Center spectra: s_centered = s_i – mean_spectrum
+        - Compute covariance matrix C
+        - Extract eigenvectors U (size M × K) and eigenvalues λ
+        - Project spectra onto PCs: z_i = Uᵀ · s_centered
+
+    b. Estimate probability density p(z) over latent space using KDE:
+        - For each z_i, place Gaussian kernel N(z_i, h_KDE²·I)
+        - p(z) = (1/Nseed) Σ_i N(z; z_i, h_KDE²·I)
+
+2. **Synthetic Training Data Generation**
+
+    For n = 1 … N_samples:
+        a. Sample latent vector zⁿ ~ p(z)   // draw from KDE
+        b. Reconstruct synthetic spectrum:
+               s_synⁿ = mean_spectrum + U · zⁿ
+        c. Forward model photometry:
+               m_synⁿ = { ∫ s_synⁿ(λ)·T_{F_j}(λ)dλ / ∫ T_{F_j}(λ)dλ }  for all j
+        d. Inject Gaussian noise:
+               m_noisyⁿ = m_synⁿ ⊙ (1 + ε_n),  where ε_n ~ N(0, σ_noise²)
+        e. Store pair (m_noisyⁿ , zⁿ)
+
+    Result: TRAIN_SET = { (m_noisyⁿ , zⁿ) }  // regression training data
+
+3. **Encoder Training (Photometry → Latent Coefficients)**
+
+    a. Use AutoML (e.g., AutoGluon) to train regressor R:
+           Input: photometry vector m_noisyⁿ
+           Output: latent vector zⁿ
+    b. Obtain R_mean(m) and optionally R_variance(m) for predictive mean & spread.
+
+4. **Classifier Training (Latent → Taxonomy)**
+
+    a. For each seed spectrum i:
+           Input: latent vector z_i
+           Label: ℓ_i
+    b. Train AutoML classifier C on {(z_i , ℓ_i)}.
+
+------------------------------------------------------------
+5. **Inference on New Observation**
+
+    a. Input observed photometry m_obs = PHOTOMETRY_new.
+
+    b. Encode:
+           z_pred_mean = R_mean(m_obs)
+           Optionally obtain covariance Σ_pred from R_variance or bootstrap.
+
+    c. Posterior Sampling of Latent Coefficients:
+           i.  Determine marginal distributions of each latent dimension from R outputs.
+           ii. Construct correlation matrix ρ from training set (Gaussian copula).
+           iii. Sample L latent draws {z_l} from multivariate normal with mean z_pred_mean,
+                covariance Σ_pred, then transform through copula to preserve ρ.
+
+    d. Decode to Spectra:
+           For each sampled z_l:
+               s_l = mean_spectrum + U · z_l
+           Aggregate samples to compute:
+               - Posterior mean spectrum μ_s(λ) = (1/L) Σ_l s_l(λ)
+               - Credible interval bounds (e.g., 2.5%, 97.5%) per λ
+
+    e. Classification:
+           - Compute class probabilities:
+                 p_class = C.predict_proba(z_pred_mean)
+           - Return most probable taxonomic label and probability vector.
+
+OUTPUT:
+    - Reconstructed spectrum μ_s(λ) with credible intervals.
+    - Posterior samples {s_l(λ)} if needed.
+    - Taxonomic probability distribution p_class.

@@ -1,0 +1,76 @@
+Input:
+    S_real[1..N]          // Reflectance spectra of N ≈ 50 high‑quality TNOs  
+    λ[1..L]               // Wavelength grid (high resolution)  
+    Filters[1..F]         // Instrument throughput curves  
+    σ_rel = 0.20          // Relative photometric noise to inject  
+
+Step 1.1  // Principal‑Component Basis (Prior)
+    Compute mean spectrum μ = mean(S_real, axis=1)
+    Center data: X = S_real - μ
+    Perform Singular‑Value Decomposition: X = U Σ Vᵀ
+    Select first K principal components (columns of V) → PC[1..K]
+    Store transformation matrices:  
+        Project :  p(S) = (S - μ) · PC           // K‑dimensional latent coords  
+        Reconstruct : R(z) = μ + z · PCᵀ       // back to high‑res spectrum  
+
+Step 1.2  // Latent Space Augmentation
+    Compute latent vectors Z_real = p(S_real)            // shape (N, K)
+    Estimate density with Kernel Density Estimation (bandwidth h≈0.5):  
+        KDE ← fit_KDE(Z_real, bandwidth=h)
+    Sample M synthetic latent vectors:  
+        Z_syn = sample(KDE, M)                          // shape (M, K)
+    Generate synthetic spectra:  
+        S_syn = R(Z_syn)                                // shape (M, L)
+
+Step 1.3  // Forward‑Model Photometry
+    For each spectrum in {S_real, S_syn}:
+        For each filter f in 1..F:
+            m_f = ∫ S(λ) * Filter_f(λ) dλ / ∫ Filter_f(λ) dλ   // reflectance in band
+        Add Gaussian noise: m_f_noisy = m_f * (1 + Normal(0, σ_rel))
+        Store tuple (m_noisy[1..F], p(S))  // input–output pair
+
+Result: Training set T = {(photometry, latent)} of size N+M
+
+Step 2.1  // Encoder (Photometry → Latent)
+    Use an AutoML framework (e.g., AutoGluon):
+        Train regressor R_enc on T to predict latent vector ẑ from photometry
+        Obtain probability distribution P(z | m) if AutoML supports probabilistic outputs
+        Save encoder model E
+
+Step 2.2  // Taxonomy Classifier (Latent → Class Probabilities)
+    Label each Z_real (and optionally Z_syn) with known taxonomy class C
+    Train classifier C_cls on {Z_real, C} using AutoML
+    Save classifier model C
+
+Input:
+    m_obs[1..F]        // New object’s measured photometry
+Output:
+    S_rec[1..L]        // Reconstructed high‑resolution spectrum
+    τ[1..4]            // Taxonomy class probability vector
+
+Procedure:
+    1. Predict latent distribution:
+           ẑ, var_z = E.predict_with_uncertainty(m_obs)   // e.g., mean & variance
+    2. Generate posterior spectrum samples:
+           For i = 1 to N_samples:
+                z_i ~ Normal(ẑ, var_z)                // draw latent sample
+                S_i = R(z_i)                           // inverse PCA
+    3. Aggregate samples:
+           S_rec = mean(S_i over i)                   // point estimate
+           S_err = std(S_i over i)                    // uncertainty band
+    4. Taxonomy prediction:
+           τ = C.predict_prob(ẑ)                      // class posterior
+    5. Return S_rec, S_err, τ
+
+If desired, impose a threshold on the likelihood of ẑ under the KDE density:
+    density = KDE.evaluate(ẑ)
+    If density < ε:
+        Flag object as a potential outlier (rare spectral type)
+
+fit_KDE(data, bandwidth)                     // non‑parametric density estimate
+sample(KDE, n)                               // draws latent vectors from KDE
+project(spectrum)                            // returns latent vector
+reconstruct(latent)                          // returns high‑res spectrum
+forward_photometry(spectrum, filters)        // computes band reflectances
+E.predict_with_uncertainty(x)                // AutoML encoder output + uncertainty
+C.predict_prob(latent)                       // taxonomy probabilities

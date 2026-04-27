@@ -1,0 +1,91 @@
+pseudocode
+INPUT: Reference spectra {S₁,…,S_N}  // each Sᵢ has M wavelength points
+OUTPUT: PCA basis E (size M×K), mean spectrum μ_S, prior density p(L)
+
+1.1 Center spectra:
+    μ_S ← mean(S₁,…,S_N)                           // vector length M
+    S_centeredᵢ ← Sᵢ – μ_S   for i = 1…N
+
+1.2 Compute PCA:
+    [U, Λ, V] ← eigendecompose(covariance(S_centered))
+    E ← first K columns of U                       // K chosen (≈5–10)
+    L_i ← Eᵀ · S_centeredᵢ   for i = 1…N              // latent coeffs, size K
+
+1.3 Build prior:
+    Fit Gaussian‑kernel KDE to {L_i} with bandwidth h ≈ 0.5
+    p(L) ← KDE(L)                                   // continuous density over ℝᴷ
+
+pseudocode
+INPUT: Prior density p(L), filter set {F_f} (effective throughput curves)
+OUTPUT: Synthetic training set {(m_j, L_j)} for j = 1…N_syn
+
+2.1 Sample latent vectors:
+    For j = 1…N_syn:
+        L_j ← draw from p(L)
+
+2.2 Reconstruct spectra:
+    S_j ← μ_S + E · L_j                // size M
+
+2.3 Compute noiseless photometry:
+    For each filter f:
+        m_true_j,f ← ∫ S_j(λ) · R_f(λ) dλ  /  ∫ R_f(λ) dλ
+        // R_f(λ) = throughput of filter f
+
+2.4 Add realistic noise:
+    For each filter f:
+        ε_f ← Normal(0, 0.2)            // 20 % relative uncertainty
+        m_j,f ← m_true_j,f · (1 + ε_f)
+
+2.5 Store pair:
+    (m_j, L_j)  for j = 1…N_syn
+
+pseudocode
+INPUT: Synthetic pairs {(m_j, L_j)}
+OUTPUT: Trained encoder model ℰ : m → L
+
+3.1 Select AutoML framework (e.g., AutoGluon, Gradient‑Boosted Trees, Neural Nets).
+3.2 Train ℰ on training set:
+    ℰ = train((m_j, L_j))
+
+pseudocode
+INPUT: Latent vectors {L_i} with known taxonomic labels
+OUTPUT: Trained classifier ℂ : L → label probabilities
+
+4.1 Train ℂ on {L_i} and labels (e.g., H₂O, CO₂, Organic, Methanol).
+
+pseudocode
+INPUT: Observed photometry m_obs with uncertainties σ_obs
+OUTPUT: Posterior samples of spectrum {S_k}, mean spectrum S_mean,
+        credible intervals per wavelength, taxonomy probs
+
+5.1 Encode photometry:
+    L_pred, Cov_L ← ℰ.predict_with_uncertainty(m_obs, σ_obs)
+    // returns mean latent vector and covariance (or predictive variances)
+
+5.2 Sample latent posterior:
+    For k = 1…N_draw:
+        // Option A: Gaussian posterior
+        L_k ← multivariate_normal(mean=L_pred, cov=Cov_L)
+
+        // Option B: Gaussian Copula (preserve inter‑component correlations)
+        //   5.2.1 Draw marginals from predictive distributions of each component
+        //   5.2.2 Transform to normal space
+        //   5.2.3 Apply correlation matrix ρ estimated from training data
+        //   5.2.4 Transform back to original marginal scales
+        //   5.2.5 Set L_k to the resulting vector
+
+5.3 Decode spectra:
+    For each sampled L_k:
+        S_k ← μ_S + E · L_k
+
+5.4 Aggregate posterior:
+    S_mean ← mean(S_1,…,S_N_draw)
+    For each wavelength λ:
+        CI_lower(λ), CI_upper(λ) ← percentile(S_1[λ],…,S_N_draw[λ], 2.5%, 97.5%)
+
+5.5 Classify (optional):
+    For each sample L_k:
+        p_label_k ← ℂ.predict_proba(L_k)
+    Taxonomy_probs ← average(p_label_1,…,p_label_N_draw)
+
+RETURN: S_mean, {CI_lower, CI_upper}, Taxonomy_probs

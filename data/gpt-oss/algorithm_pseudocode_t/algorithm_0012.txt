@@ -1,0 +1,74 @@
+INPUT:
+    S_lib   – matrix (N_spec × N_wave) of laboratory / archive spectra
+    F       – matrix (N_band × N_wave) of filter transmission curves
+    m_obs   – vector (N_band) of observed magnitudes for the target
+    σ_obs   – vector (N_band) of measurement uncertainties
+
+PARAMETERS:
+    N_comp  – number of principal components to retain (default = all)
+    λ0      – reference wavelength for magnitude zero‑point (optional)
+
+--------------------------------------------------------------------
+1.  PRE‑PROCESSING
+--------------------------------------------------------------------
+1.1  NORMALIZE_LIBRARY
+        For i = 1 … N_spec
+            S_lib[i,:] ← S_lib[i,:] / mean(S_lib[i,:])   # unit reflectance at λ0
+
+1.2  PCA_PRIOR
+        μ_prior ← mean(S_lib, axis=0)                # (1 × N_wave)
+        Σ_prior ← cov(S_lib, rowvar=False)          # (N_wave × N_wave)
+        Perform eigenvalue decomposition on Σ_prior
+        Keep first N_comp eigenvectors → E (N_wave × N_comp)
+        Project spectra onto basis:  B = (S_lib – μ_prior) @ E
+        Prior on coefficients:  μ_c = zeros(N_comp)
+                               Σ_c = diag(eigenvalues[0:N_comp])
+
+--------------------------------------------------------------------
+2.  FORWARD MODEL CONSTRUCTION
+--------------------------------------------------------------------
+2.1  DEFINE_RESPONSE_MATRIX
+        # For each band k, compute response to basis vector e_j
+        For k = 1 … N_band
+            For j = 1 … N_comp
+                A[k,j] = -2.5 * log10( ∑_λ (E[λ,j] * F[k,λ]) )
+        # Optional constant term:  b_k = -2.5 * log10( ∑_λ (μ_prior[λ] * F[k,λ]) )
+
+--------------------------------------------------------------------
+3.  POSTERIOR COMPUTATION
+--------------------------------------------------------------------
+3.1  WEIGHT_MATRIX
+        W = diag( 1 / σ_obs^2 )                      # (N_band × N_band)
+
+3.2  PRIOR INVERSE
+        Σ_c_inv = inverse(Σ_c)                       # (N_comp × N_comp)
+
+3.3  POSTERIOR MEAN
+        K = A.T @ W @ A + Σ_c_inv                    # (N_comp × N_comp)
+        K_inv = inverse(K)
+        μ_post = K_inv @ ( A.T @ W @ (m_obs - b) + Σ_c_inv @ μ_c )
+
+3.4  POSTERIOR COVARIANCE
+        Σ_post = K_inv
+
+--------------------------------------------------------------------
+4.  RECONSTRUCTED SPECTRUM
+--------------------------------------------------------------------
+4.1  COEFFICIENTS
+        c_est = μ_post                                 # (N_comp)
+
+4.2  FULL SPECTRUM
+        S_est = μ_prior + c_est @ E.T                  # (1 × N_wave)
+
+4.3  UNCERTAINTY (per wavelength)
+        For λ = 1 … N_wave
+            var_λ = E[λ,:] @ Σ_post @ E[λ,:].T
+            σ_S_est[λ] = sqrt(var_λ)
+
+--------------------------------------------------------------------
+5.  OUTPUT
+--------------------------------------------------------------------
+Return:
+    S_est          – reconstructed reflectance spectrum
+    σ_S_est        – 1σ uncertainty spectrum
+    χ²_fit         – chi‑square of fit: (m_obs - (A@c_est + b)).T @ W @ (same)

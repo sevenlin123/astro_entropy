@@ -1,0 +1,122 @@
+INPUT
+    OBS = list of (filter_name, mag, mag_err)   // sparse photometry
+    FLT = dictionary {filter_name : (λ, T(λ))}  // filter response curves
+    BASIS = list of functions {B_j(λ)}           // spectral basis (e.g. PCA modes)
+    PRIOR = {mean: μ_j, var: σ²_j}              // prior on coefficients
+    N_SAMPLES   // number of MCMC draws
+    BURNIN      // number of burn‑in iterations
+    PROPOSAL_SIGMA // width of proposal distribution
+
+OUTPUT
+    SPEC_RECON  // reconstructed spectrum on a λ grid
+    SPEC_ERR    // posterior uncertainties on SPEC_RECON
+    TAXONOMY    // assigned taxonomic class
+
+-----------------------------------------------------------------------
+1. PRE‑PROCESS OBSERVATIONS
+   ------------------------------------------------------------
+   For each entry (f, mag, err) in OBS:
+        flux_f   ← 10^(-0.4*(mag - ZP_f))            // ZP_f = zero point for filter f
+        flux_err ← 0.921 * flux_f * err             // propagate magnitude error
+        STORE (f, flux_f, flux_err)
+
+   Create arrays:
+        FOBS   = [flux_f]
+        SIG   = [flux_err]
+        FILTS = [f]
+
+-----------------------------------------------------------------------
+2. BUILD DESIGN MATRIX
+   ------------------------------------------------------------
+   Let K = len(BASIS)          // number of basis functions
+   Let M = len(FILTS)          // number of photometric points
+
+   For i = 1 … M:                      // loop over filters
+       For j = 1 … K:                  // loop over basis functions
+           numerator   ← ∫ B_j(λ) * FLT[FILTS[i]].T(λ) dλ
+           denominator ← ∫ FLT[FILTS[i]].T(λ) dλ
+           A[i,j] ← numerator / denominator
+
+-----------------------------------------------------------------------
+3. DEFINE MODEL FOR PREDICTED FLUX
+   ------------------------------------------------------------
+   Function PredictFlux(coeffs):
+        return A × coeffs                // vector of predicted fluxes in all filters
+
+-----------------------------------------------------------------------
+4. LOG‑LIKELIHOOD
+   ------------------------------------------------------------
+   Function LogLikelihood(coeffs):
+        pred = PredictFlux(coeffs)
+        χ²   = Σ_i ((FOBS[i] - pred[i]) / SIG[i])²
+        return -0.5 * χ²
+
+-----------------------------------------------------------------------
+5. LOG‑PRIOR (Gaussian)
+   ------------------------------------------------------------
+   Function LogPrior(coeffs):
+        diff = coeffs - PRIOR.mean
+        return -0.5 * Σ_j (diff[j]² / PRIOR.var[j])
+
+-----------------------------------------------------------------------
+6. LOG‑POSTERIOR
+   ------------------------------------------------------------
+   Function LogPosterior(coeffs):
+        return LogLikelihood(coeffs) + LogPrior(coeffs)
+
+-----------------------------------------------------------------------
+7. MONTE‑CARLO SAMPLING (Metropolis–Hastings)
+   ------------------------------------------------------------
+   Initialize:
+        coeff_current ← PRIOR.mean
+        LOG_POST_CURR ← LogPosterior(coeff_current)
+        SAMPLE_LIST   ← []
+
+   For t = 1 … N_SAMPLES:
+        coeff_prop ← coeff_current + Normal(0, PROPOSAL_SIGMA)   // vector proposal
+        LOG_POST_PROP = LogPosterior(coeff_prop)
+
+        α = min(1, exp(LOG_POST_PROP - LOG_POST_CURR))
+        u = Uniform(0,1)
+
+        If u < α:
+             coeff_current ← coeff_prop
+             LOG_POST_CURR ← LOG_POST_PROP
+
+        Append coeff_current to SAMPLE_LIST
+
+-----------------------------------------------------------------------
+8. POST‑PROCESS SAMPLING RESULTS
+   ------------------------------------------------------------
+   DISCARD first BURNIN samples from SAMPLE_LIST
+   Let COEFFS_POST = remaining samples
+
+   COEFF_MEAN  ← mean(COEFFS_POST, axis=0)
+   COEFF_STD   ← std (COEFFS_POST, axis=0)
+
+-----------------------------------------------------------------------
+9. RECONSTRUCT SPECTRUM
+   ------------------------------------------------------------
+   Choose a common wavelength grid Λ_grid
+   For each λ in Λ_grid:
+        SPEC_RECON(λ) = Σ_j COEFF_MEAN[j] * BASIS[j](λ)
+
+   Estimate spectrum uncertainty:
+        For each sample s in COEFFS_POST:
+             SPEC_s(λ) = Σ_j s[j] * BASIS[j](λ)
+        SPEC_ERR(λ) = std(SPEC_s(λ) over all s)
+
+-----------------------------------------------------------------------
+10. TAXONOMIC CLASSIFICATION
+    ------------------------------------------------------------
+    For each reference taxon t in TAXON_SET:
+         REF_COLORS[t] = integrate(BAND_T(*t))   // integrated flux in each band
+    OBS_COLORS = integrate(SPEC_RECON over each FILTER)
+
+    Compute distance d_t = || OBS_COLORS - REF_COLORS[t] ||₂
+    TAXONOMY ← argmin_t d_t           // nearest‑neighbour in color space
+
+-----------------------------------------------------------------------
+11. RETURN
+    ------------------------------------------------------------
+    Return SPEC_RECON, SPEC_ERR, TAXONOMY

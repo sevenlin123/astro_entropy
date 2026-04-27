@@ -1,0 +1,79 @@
+Input:  SpectralLibrary = {S_i(λ)}   // high‑resolution near‑IR spectra
+        N_PC          // number of principal components to retain (e.g., 8–10)
+
+PreprocessSpectra():
+    for each spectrum S_i in SpectralLibrary:
+        Resample S_i onto common wavelength grid λ_grid
+        Normalise S_i (e.g., divide by mean flux or integrate to unit area)
+        Store processed spectrum
+
+ComputeMeanAndZeroMean():
+    μ(λ) = mean over all processed spectra S_i(λ)
+    for each processed spectrum S_i:
+        Z_i(λ) = S_i(λ) - μ(λ)     // zero‑mean spectra
+    return {Z_i}, μ
+
+PerformPCA({Z_i}):
+    C = (1/(N−1)) * Σ_i [Z_i ⊗ Z_i]        // covariance matrix
+    EigenDecompose C → eigenvalues {σ_k²} and eigenvectors {V_k(λ)}
+    Sort components by decreasing σ_k²
+    Select first N_PC components
+    return μ(λ), {V_k(λ)}, {σ_k²}
+
+ProjectToLatentSpace({Z_i}, {V_k}):
+    for each zero‑mean spectrum Z_i:
+        z_i(k) = ⟨Z_i , V_k⟩          // inner product over λ_grid
+    return {z_i}
+
+FilterTransmission = {T_j(λ)}   // transmission curves for each filter j
+
+PredictSpectrum(z):
+    // Linear reconstruction in the PC space
+    S(λ) = μ(λ) + Σ_{k=1}^{N_PC} z(k) * V_k(λ)
+    return S(λ)
+
+PredictMagnitudes(z):
+    for each filter j:
+        m_pred(j) = −2.5 log10( ∫ S(λ) * T_j(λ) dλ / ∫ T_j(λ) dλ )
+    return m_pred
+
+ComputeJacobian():
+    for each filter j and component k:
+        J(j,k) = −2.5 / ln(10) * ∫ V_k(λ) * T_j(λ) dλ / ∫ T_j(λ) dλ
+    return J   // shape (N_filters × N_PC)
+
+Input:  Observed magnitudes m_obs(j) with uncertainties σ_obs(j)
+        Filter list {j}
+        Prior mean μ_z = 0
+        Prior covariance Σ_z = diag(σ_1²,…,σ_NPC²)
+        Jacobian J
+
+ConstructLikelihood():
+    // Gaussian likelihood in magnitude space
+    C_obs = diag(σ_obs²)            // observational covariance
+    L(z) ∝ exp[ −½ ( m_pred(z) − m_obs )ᵀ C_obs⁻¹ ( m_pred(z) − m_obs ) ]
+
+ComputePosterior():                // analytic solution due to linearity
+    // Posterior covariance
+    Σ_post = ( Jᵀ C_obs⁻¹ J + Σ_z⁻¹ )⁻¹
+    // Posterior mean
+    μ_post = Σ_post * ( Jᵀ C_obs⁻¹ * m_obs )
+
+SampleFromPosterior(N_samples):
+    Draw z_samp(i) ~ N( μ_post, Σ_post )   // i = 1…N_samples
+    return {z_samp}
+
+ReconstructSpectra({z_samp}):
+    for each sampled latent vector z:
+        S_sample = PredictSpectrum(z)      // step 2
+    Compute:
+        S_mean(λ)   = mean over all S_sample
+        S_low(λ), S_high(λ) = percentile bounds (e.g., 2.5% & 97.5%) over samples
+    return S_mean, S_low, S_high
+
+For each target object t in TargetList:
+    Load photometry m_t, σ_t
+    μ_post_t, Σ_post_t = ComputePosterior()
+    {z_samp_t} = SampleFromPosterior(N_samples)
+    {S_mean_t, S_low_t, S_high_t} = ReconstructSpectra({z_samp_t})
+    Store results for t

@@ -1,0 +1,84 @@
+Inputs:
+    - REF_SPECTRA[1..N]      # N high‑resolution reference spectra (reflectance vs λ)
+    - FILTER_CURVES[1..F]    # Effective throughput curves for F filters (e.g., JWST NIRCam)
+    - OBS_PHOTOMETRY[1..F]   # Measured photometry for a target TNO
+    - NUM_COMPONENTS K       # Desired latent dimensionality (default 5–10)
+    - KDE_BANDWIDTH h        # Bandwidth for kernel density estimation (default 0.5)
+    - SAMPLE_COUNT M         # Number of synthetic latent samples (e.g., 10 000)
+
+Outputs:
+    - REC_SPECTRUM[1..L]     # Reconstructed high‑resolution spectrum (L wavelength bins)
+    - TAXONOMY_PROBS[1..C]   # Probability vector over C taxonomic classes
+
+--------------------------------------------------------------------
+Step 0 – Pre‑processing
+--------------------------------------------------------------------
+1. Normalize each REF_SPECTRA[i] to unit mean or to reflectance relative to solar spectrum.
+2. Store the wavelength grid λ[1..L].
+
+--------------------------------------------------------------------
+Step 1 – Latent‑space construction (Prior)
+--------------------------------------------------------------------
+3. Perform Singular Value Decomposition on the data matrix S (N × L):
+        S = U Σ Vᵀ
+   Keep the first K right singular vectors (principal components):
+        PCs = V[:, 1..K]      # (K × L)
+
+4. Project reference spectra onto PCs to obtain latent coefficients:
+        Z_ref[i] = S[i] · PCsᵀ          # (N × K)
+
+5. Fit a non‑parametric Kernel Density Estimate (KDE) over {Z_ref[i]} with bandwidth h:
+        KDE_model = fit_KDE(Z_ref, bandwidth=h)
+
+6. Sample M synthetic latent vectors from the KDE:
+        Z_syn[j] = KDE_model.sample()   # (M × K)
+
+--------------------------------------------------------------------
+Step 2 – Synthetic training data generation (Forward model)
+--------------------------------------------------------------------
+For each j in 1..M:
+    7. Reconstruct synthetic spectrum:
+            S_syn[j] = Z_syn[j] · PCs   # (1 × L)
+
+    8. For each filter f in 1..F:
+            # Convolve with filter throughput:
+            PHOT_raw[f] = integrate( S_syn[j] * FILTER_CURVES[f] ) / integrate( FILTER_CURVES[f] )
+
+    9. Add Gaussian noise to simulate 20 % relative uncertainty:
+            PHOT_noisy[f] = PHOT_raw[f] * (1 + ε_f)
+            where ε_f ~ Normal(0, 0.20)
+
+    10. Store pair:
+            TRAIN_DATA.append( (PHOT_noisy, Z_syn[j]) )
+
+--------------------------------------------------------------------
+Step 3 – Train regressors and classifier (AutoML)
+--------------------------------------------------------------------
+11. Define an AutoML regression task:
+        Input: PHOT_noisy[1..F]
+        Output: Latent coefficients [1..K]
+    12. Run AutoML (e.g., AutoGluon) to produce an ensemble regressor R_pred
+        that minimizes mean squared error over TRAIN_DATA.
+
+13. Define an AutoML classification task:
+        Input: latent coefficients [1..K]  (using the true Z_syn[j])
+        Output: taxonomic label (4 classes: H₂O, CO₂, Organic, Methanol)
+    14. Train classifier C_pred on TRAIN_DATA (labels derived from nearest reference spectrum
+        in latent space or pre‑assigned taxonomy).
+
+--------------------------------------------------------------------
+Step 4 – Forward inference on new observation
+--------------------------------------------------------------------
+15. Predict latent coefficients for the target photometry:
+        Z_pred = R_pred.predict(OBS_PHOTOMETRY)
+
+16. Reconstruct spectrum from predicted latents:
+        REC_SPECTRUM = Z_pred · PCs     # (1 × L)
+
+17. Obtain taxonomic probabilities:
+        TAXONOMY_PROBS = C_pred.predict_proba( Z_pred )
+
+--------------------------------------------------------------------
+Return
+--------------------------------------------------------------------
+18. Return REC_SPECTRUM and TAXONOMY_PROBS

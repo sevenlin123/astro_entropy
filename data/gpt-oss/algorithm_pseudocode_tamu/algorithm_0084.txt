@@ -1,0 +1,92 @@
+INPUT
+  S_raw[i][λ]          # high‑resolution reflectance spectra of N_training objects
+  filt_trans[j][λ]     # throughput curves of B photometric filters
+  y_label[i]           # taxonomic class of each training spectrum
+  m_obs[b]             # measured photometry (B bands) of a new target
+  K                    # number of PCA components (e.g. 8–10)
+  h                    # KDE bandwidth (≈0.5)
+  M_samp               # number of synthetic samples to draw from KDE (e.g. 5000)
+  N_MC                 # number of Monte‑Carlo posterior draws (e.g. 100)
+
+OUTPUT
+  S_mean[λ]            # mean reconstructed spectrum
+  S_cred_int[λ]        # (e.g. 68 %) credible interval per wavelength
+  P_class[cat]         # posterior probability for each taxonomic class
+  z_samples[K]         # ensemble of latent coefficient samples
+
+--------------------------------------------------------------------
+STEP 1 – PCA Basis Construction
+--------------------------------------------------------------------
+1.1 Compute mean spectrum μ_S[λ] = (1/N) Σ_i S_raw[i][λ]
+1.2 Center spectra:  S_c[i][λ] = S_raw[i][λ] – μ_S[λ]
+1.3 Perform PCA on {S_c} → obtain eigenvectors V[λ][k] (k=1..K)  
+    (V is λ × K).  Retain the first K components.
+1.4 Project training spectra onto latent space:
+      z[i][k] = Σ_λ V[λ][k] * S_c[i][λ]
+   Store latent matrix Z (N × K) and labels Y.
+
+--------------------------------------------------------------------
+STEP 2 – Latent‑Space Density Estimation (KDE)
+--------------------------------------------------------------------
+2.1 Fit Gaussian KDE to rows of Z with bandwidth h.
+2.2 Draw M_samp synthetic latent vectors:
+      z_syn[m] ∼ KDE(Z)
+2.3 For each z_syn[m]:
+     2.3.1 Reconstruct synthetic spectrum:
+           S_syn[m][λ] = μ_S[λ] + Σ_k V[λ][k] * z_syn[m][k]
+     2.3.2 Compute ideal photometry:
+           m_syn[m][b] = ∫ S_syn[m][λ] * filt_trans[b][λ] dλ
+     2.3.3 Add Gaussian noise to mimic measurement errors:
+           σ_b = 0.20 * m_syn[m][b]          # 20 % relative uncertainty
+           m_noisy[m][b] = m_syn[m][b] + Normal(0, σ_b)
+   Store pairs (m_noisy[m], z_syn[m]) as training set for the encoder.
+
+--------------------------------------------------------------------
+STEP 3 – Encoder (Photometry → Latent Coefficients)
+--------------------------------------------------------------------
+3.1 Instantiate AutoML regressor (e.g. XGBoost ensemble).
+3.2 Train regressor R on {(m_noisy[m], z_syn[m])}:
+       For each latent dimension k:
+           Train a separate tree‑ensemble to predict z[k] from m.
+3.3 Obtain predictive mean μ_z[b][k] and predictive variance σ²_z[b][k]
+    for any input m (use ensemble variance or quantile regression).
+
+--------------------------------------------------------------------
+STEP 4 – Taxonomic Classifier (Latent → Class)
+--------------------------------------------------------------------
+4.1 Train AutoML classifier C on (Z, Y):
+       Input: z[i][k]
+       Output: probability vector over classes {H₂O, CO₂, ORGANIC, METHANOL}
+4.2 Save classifier C for inference.
+
+--------------------------------------------------------------------
+STEP 5 – Forward Inference for a New Target
+--------------------------------------------------------------------
+5.1 Encode photometry:
+       μ_z_pred[k], σ²_z_pred[k] = R.predict(m_obs)
+5.2 Generate N_MC latent samples using Gaussian Copula:
+       5.2.1 Construct correlation matrix ρ from training latent
+            covariances (COV_Z).  
+       5.2.2 Sample u ~ Uniform(0,1)^K
+       5.2.3 Convert to normal variates:  x = Φ⁻¹(u)   (Φ⁻¹ = inverse CDF)
+       5.2.4 Apply Cholesky decomposition L of ρ: y = L · x
+       5.2.5 Map back to latent space:
+             z_sample[k] = μ_z_pred[k] + sqrt(σ²_z_pred[k]) * y[k]
+5.3 Reconstruct spectra:
+       For each sample j=1..N_MC:
+           S_rec[j][λ] = μ_S[λ] + Σ_k V[λ][k] * z_sample[j][k]
+5.4 Compute statistics per wavelength:
+       S_mean[λ]  = mean_j S_rec[j][λ]
+       S_std[λ]   = std_j  S_rec[j][λ]
+       S_cred_int[λ] = [percentile(S_rec[:,λ],16),
+                        percentile(S_rec[:,λ],84)]   # 68 % CI
+5.5 Taxonomic probabilities:
+       For each sample j:
+           p_j = C.predict_proba(z_sample[j])
+       Average over samples:
+           P_class = (1/N_MC) Σ_j p_j
+5.6 Return S_mean, S_cred_int, P_class, z_samples.
+
+--------------------------------------------------------------------
+END OF ALGORITHM
+--------------------------------------------------------------------

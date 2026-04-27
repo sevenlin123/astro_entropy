@@ -1,0 +1,134 @@
+plaintext
+--------------------------------------------------------------------
+# 1. GLOBAL SETTINGS
+--------------------------------------------------------------------
+K       := number of retained PCA components      // e.g. 8–10
+h       := KDE bandwidth                           // e.g. 0.5
+L       := number of synthetic latent samples     // e.g. 5000
+σ_phot  := relative photometric noise level      // e.g. 0.20 (20 %)
+filters := list of instrument filter throughput curves
+solar   := solar spectrum sampled on same λ grid
+
+--------------------------------------------------------------------
+# 2. PREPROCESS OBSERVED SPECTRA
+--------------------------------------------------------------------
+Input:  ObsSpec[N][M]    // N spectra, M wavelength samples
+Output: MeanSpec[M], PCA_Evecs[M][K], LatentObs[N][K]
+
+Procedure PreprocessSpectra():
+    // 2.1 Center spectra
+    MeanSpec ← mean over axis 0 of ObsSpec
+    Centered ← ObsSpec – MeanSpec
+
+    // 2.2 Perform PCA
+    CovMat  ← (Centeredᵀ · Centered) / (N – 1)
+    [Evecs, Eval] ← eigendecomposition of CovMat
+    Sort Evecs by descending Eval
+    PCA_Evecs ← first K columns of Evecs      // shape M × K
+
+    // 2.3 Project onto latent space
+    LatentObs ← Centered · PCA_Evecs          // shape N × K
+
+    return MeanSpec, PCA_Evecs, LatentObs
+end Procedure
+
+--------------------------------------------------------------------
+# 3. GENERATE SYNTHETIC TRAINING DATA
+--------------------------------------------------------------------
+Procedure GenerateSyntheticData(MeanSpec, PCA_Evecs, LatentObs):
+    // 3.1 Fit KDE to observed latent points
+    KDE_Model ← KDE(LatentObs, bandwidth = h)
+
+    // 3.2 Sample synthetic latent vectors
+    LatentSyn ← sample_from(KDE_Model, size = L)   // shape L × K
+
+    // 3.3 Reconstruct synthetic spectra
+    SpecSyn ← LatentSyn · PCA_Evecsᵀ + MeanSpec    // shape L × M
+
+    // 3.4 Forward‑model photometry for each synthetic spectrum
+    PhotSyn ← zeros(L, len(filters))
+    for i in 1 … L:
+        for j in 1 … len(filters):
+            T_j  ← filters[j]                     // transmission vs λ
+            // Reflectance integral
+            R_ij ← ∫ SpecSyn[i]·T_j dλ / ∫ solar·T_j dλ
+            // Add Gaussian noise
+            ε    ← normal(mean = 0, std = σ_phot * R_ij)
+            PhotSyn[i,j] ← R_ij + ε
+        end for
+    end for
+
+    return LatentSyn, PhotSyn
+end Procedure
+
+--------------------------------------------------------------------
+# 4. TRAIN AUTOML REGRESSOR (PHOTOMETRY → LATENT)
+--------------------------------------------------------------------
+Procedure TrainRegressor(PhotSyn, LatentSyn):
+    Regressor ← AutoMLRegressor()      // e.g. AutoGluon with GBDT+NN
+    Regressor.fit(X = PhotSyn, y = LatentSyn)
+    return Regressor
+end Procedure
+
+--------------------------------------------------------------------
+# 5. TRAIN TAXONOMY CLASSIFIER (LATENT → TYPE PROBS)
+--------------------------------------------------------------------
+Procedure TrainClassifier(LatentObs, Labels):
+    Classifier ← AutoMLClassifier()    // e.g. AutoGluon
+    Classifier.fit(X = LatentObs, y = Labels)
+    return Classifier
+end Procedure
+
+--------------------------------------------------------------------
+# 6. INFERENCE ON NEW PHOTOMETRIC OBSERVATIONS
+--------------------------------------------------------------------
+Procedure InferSpectrum(NewPhot, Regressor, Classifier, MeanSpec, PCA_Evecs):
+    // 6.1 Predict latent coefficients
+    LatPred ← Regressor.predict(NewPhot)          // shape 1 × K
+
+    // 6.2 Reconstruct full spectrum
+    SpecPred ← LatPred · PCA_Evecsᵀ + MeanSpec     // shape 1 × M
+
+    // 6.3 Predict taxonomy probabilities
+    ProbTyp ← Classifier.predict_proba(LatPred)    // shape 1 × (#classes)
+
+    return SpecPred, ProbTyp
+end Procedure
+
+--------------------------------------------------------------------
+# 7. MAIN PIPELINE EXECUTION
+--------------------------------------------------------------------
+Procedure Main():
+    // 7.1 Load data
+    ObsSpec, Labels ← load_observed_spectra_and_labels()
+
+    // 7.2 Preprocess spectra to obtain PCA basis
+    MeanSpec, PCA_Evecs, LatentObs ← PreprocessSpectra(ObsSpec)
+
+    // 7.3 Generate synthetic training pairs
+    LatentSyn, PhotSyn ← GenerateSyntheticData(MeanSpec, PCA_Evecs, LatentObs)
+
+    // 7.4 Train regressor on synthetic pairs
+    Regressor ← TrainRegressor(PhotSyn, LatentSyn)
+
+    // 7.5 Train taxonomy classifier on observed latent vectors
+    Classifier ← TrainClassifier(LatentObs, Labels)
+
+    // 7.6 Store models and PCA objects for future inference
+    save_objects(MeanSpec, PCA_Evecs, Regressor, Classifier)
+end Procedure
+
+--------------------------------------------------------------------
+# 8. USER‑LEVEL INFERENCE
+--------------------------------------------------------------------
+Procedure UserInference(NewPhotometry):
+    // Load pretrained objects
+    MeanSpec, PCA_Evecs, Regressor, Classifier ← load_objects()
+
+    // Run inference
+    SpecRec, TaxProb ← InferSpectrum(NewPhotometry, Regressor,
+                                     Classifier, MeanSpec, PCA_Evecs)
+
+    // Return reconstructed spectrum and taxonomy probabilities
+    return SpecRec, TaxProb
+end Procedure

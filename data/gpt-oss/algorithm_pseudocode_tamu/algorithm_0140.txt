@@ -1,0 +1,85 @@
+INPUT
+    S_ref[1..N][1..M]      // Reference spectra (M wavelength bins)
+    R_f[1..F][1..M]        // Filter throughput curves (F filters)
+    m_obs[1..F]            // Observed photometry for new object
+    K                      // Desired number of principal components (e.g. 8)
+    h_kde = 0.5             // KDE bandwidth
+    N_synth = 5000          // Number of synthetic latent samples
+    n_copula = 1000         // Posterior samples for reconstruction
+    σ_noise = 0.20          // Relative noise level in simulated photometry
+
+OUTPUT
+    S_mean[1..M]           // Mean reconstructed spectrum
+    S_ci_low[1..M], S_ci_up[1..M]   // Credible‑interval bounds (e.g., 95%)
+
+--------------------------------------------------------------------
+STEP 1 – Pre‑processing
+--------------------------------------------------------------------
+1.1  For each spectrum s in S_ref:
+        • Interpolate / resample to common wavelength grid
+        • Normalize (e.g., divide by solar spectrum or median value)
+
+--------------------------------------------------------------------
+STEP 2 – Latent‑space definition (PCA)
+--------------------------------------------------------------------
+2.1  Compute mean spectrum µ = mean(S_ref, axis=1)
+2.2  Center spectra: S_centered = S_ref - µ
+2.3  Perform SVD:  S_centered = U * Σ * Vᵀ
+2.4  Retain first K columns of V → V_K  (M × K)
+2.5  Compute latent coefficients for each reference:
+        C_ref[i] = (S_ref[i] - µ) · V_K        // 1 × K row vector
+
+--------------------------------------------------------------------
+STEP 3 – Prior density (KDE) and synthetic sample generation
+--------------------------------------------------------------------
+3.1  Fit multivariate Gaussian KDE to {C_ref} with bandwidth h_kde
+3.2  Draw N_synth samples {C_syn[j]} from KDE
+3.3  For each C_syn[j]:
+        • Reconstruct spectrum: S_syn[j] = µ + C_syn[j] · V_Kᵀ
+
+--------------------------------------------------------------------
+STEP 4 – Forward photometry simulation (implicit likelihood)
+--------------------------------------------------------------------
+4.1  For each synthetic spectrum S_syn[j]:
+        For each filter f = 1..F:
+            • Compute noiseless flux:
+                  f_flux[f] = ∑_λ S_syn[j,λ] * R_f[f,λ] / ∑_λ R_f[f,λ]
+            • Add Gaussian noise:
+                  f_noisy[f] = f_flux[f] * (1 + Normal(0, σ_noise))
+        Store pair (photometry = f_noisy, latent = C_syn[j])
+
+--------------------------------------------------------------------
+STEP 5 – Train photometry → latent regressor (AutoML)
+--------------------------------------------------------------------
+5.1  Assemble training set T = {(photometry_i, latent_i)}   // size = N_synth
+5.2  Configure AutoML regressor (e.g., XGBoost ensemble):
+        • Input dimension = F
+        • Output dimension = K
+5.3  Train regressor on T, obtaining mapping f_map
+
+--------------------------------------------------------------------
+STEP 6 – Posterior sampling (Gaussian Copula)
+--------------------------------------------------------------------
+6.1  Apply f_map to observed photometry m_obs → obtain point estimate
+        μ_lat = f_map(m_obs)          // K‑dimensional vector
+6.2  Estimate covariance Σ_lat from regressor (e.g., from residuals
+        or by training a probabilistic version returning a full
+        covariance matrix).
+6.3  Construct Gaussian Copula:
+        • Marginal distributions: Gaussian(μ_lat[k], Σ_lat[k,k])  for k=1..K
+        • Correlation matrix: corr(Σ_lat)
+6.4  Sample n_copula latent vectors {L_samp[t]} from copula
+        (ensures correct inter‑component correlations).
+
+--------------------------------------------------------------------
+STEP 7 – Spectrum reconstruction
+--------------------------------------------------------------------
+7.1  For each sampled latent vector L_samp[t]:
+        • Decode: S_t = µ + L_samp[t] · V_Kᵀ
+7.2  Aggregate reconstructions:
+        • S_mean[λ] = mean_t S_t[λ]
+        • S_ci_low[λ], S_ci_up[λ] = percentile(S_t[λ], 2.5%, 97.5%)  // 95%
+
+--------------------------------------------------------------------
+RETURN
+    S_mean, S_ci_low, S_ci_up

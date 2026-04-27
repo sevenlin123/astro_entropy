@@ -1,0 +1,98 @@
+INPUT:
+    S_ref   – Reference spectra matrix (N_ref × M_wavelength)
+    C_ref   – Taxonomic class labels for S_ref (length N_ref)
+    F_filters – List of filter transmission curves (F_i(λ))
+    K_pca   – Desired number of principal components (e.g., 5–10)
+    h_kde   – KDE bandwidth (e.g., 0.5)
+    N_syn   – Number of synthetic latent samples (e.g., 5000)
+    σ_noise – Relative photometric noise level (e.g., 0.20)
+
+OUTPUT:
+    Trained regressor R (photometry → latent coefficients)
+    Trained classifier C (latent → taxonomy probabilities)
+    PCA model P (forward and inverse transforms)
+
+--------------------------------------------------------------------
+STEP 0: Pre‑processing
+--------------------------------------------------------------------
+1.1  Normalize each spectrum in S_ref to unit reflectance at reference wavelength.
+1.2  Optional: Resample all spectra onto common wavelength grid λ_grid.
+
+--------------------------------------------------------------------
+STEP 1: Latent Manifold Construction
+--------------------------------------------------------------------
+2.1  Perform Principal Component Analysis on S_ref:
+        [U, Σ, V] = PCA(S_ref, K=K_pca)
+    - U: Eigenvectors (K_pca × M_wavelength)
+    - Σ: Singular values
+    - V: Projection coefficients for each reference spectrum (N_ref × K_pca)
+
+2.2  Compute latent coefficient matrix Z_ref = V.
+
+--------------------------------------------------------------------
+STEP 2: Density Estimation & Synthetic Sampling
+--------------------------------------------------------------------
+3.1  Fit a Kernel Density Estimate to Z_ref:
+        KDE_model = KDE(Z_ref, bandwidth=h_kde)
+
+3.2  Sample synthetic latent vectors:
+        Z_syn = KDE_model.sample(N_syn)          # shape (N_syn × K_pca)
+
+3.3  Reconstruct synthetic spectra:
+        S_syn = Z_syn · U + μ_spectrum          # add mean spectrum if PCA centered
+
+--------------------------------------------------------------------
+STEP 3: Forward Photometry Simulation
+--------------------------------------------------------------------
+4.1  For each synthetic spectrum s in S_syn:
+        4.1.1  For each filter F_i:
+                m_i = ∫ s(λ) * F_i(λ) dλ / ∫ F_i(λ) dλ      # reflectance in filter i
+        4.1.2  Assemble photometry vector m_syn = [m_1, …, m_NF]
+        4.1.3  Perturb photometry:
+                m_syn_noisy = m_syn * (1 + ε),  ε ~ Normal(0, σ_noise)
+        4.1.4  Store pair (m_syn_noisy , Z_syn_row)
+
+4.2  Build training dataset:
+        X_train = {m_syn_noisy}          # shape (N_syn × NF)
+        Y_train = {Z_syn_row}            # shape (N_syn × K_pca)
+
+--------------------------------------------------------------------
+STEP 4: Train Photometry‑to‑Latent Regressor
+--------------------------------------------------------------------
+5.1  Choose an AutoML framework (e.g., AutoGluon).
+5.2  Configure regressor R with default search over GBDT, RandomForest, NN.
+5.3  Train R on (X_train, Y_train).
+5.4  Validate R on a hold‑out split; record RMSE in latent space.
+
+--------------------------------------------------------------------
+STEP 5: Train Latent‑to‑Taxonomy Classifier
+--------------------------------------------------------------------
+6.1  Map each reference latent vector z_j to its class label c_j from C_ref.
+6.2  Build training set:
+        X_cls = {z_j}                     # shape (N_ref × K_pca)
+        Y_cls = {c_j}                     # categorical labels
+6.3  Train classifier C (AutoML) on (X_cls, Y_cls).
+6.4  Validate C via cross‑validation; compute confusion matrix.
+
+--------------------------------------------------------------------
+STEP 6: Inference Pipeline (New Object)
+--------------------------------------------------------------------
+Given new photometric observation m_new (NF‑dimensional):
+
+7.1  Predict latent coefficients:
+        z_pred = R.predict(m_new)         # shape (K_pca)
+
+7.2  Reconstruct full spectrum:
+        s_rec = z_pred · U + μ_spectrum   # shape (M_wavelength)
+
+7.3  Estimate taxonomy probabilities:
+        p_tax = C.predict_proba(z_pred)   # vector over classes
+
+7.4  Return:
+        - Reconstructed spectrum s_rec
+        - Taxonomic probability distribution p_tax
+        - Optionally: Confidence intervals via Monte Carlo sampling
+          (draw multiple z from R's predictive distribution, repeat 7.2–7.3)
+
+--------------------------------------------------------------------
+END

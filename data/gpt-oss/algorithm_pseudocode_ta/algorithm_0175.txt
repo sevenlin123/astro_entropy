@@ -1,0 +1,72 @@
+Input:
+    – Training spectra S_i[λ_k],  i = 1 … N_tr, k = 1 … K_wl
+    – Filter transmission curves T_j[λ_k],  j = 1 … M_filt
+    – Observed photometry for target:  y_j ± σ_j,  j = 1 … M_filt
+
+Output:
+    – Posterior samples of latent coefficients {c_p}
+    – Posterior samples of full spectra S[λ_k]
+    – Predictive photometry and uncertainty bands
+
+--------------------------------------------------------------------
+1. Pre‑process training spectra
+   1.1 Compute mean spectrum μ[λ_k] = (1/N_tr) Σ_i S_i[λ_k]
+   1.2 Center each spectrum:  S'_i[λ_k] = S_i[λ_k] – μ[λ_k]
+
+2. Principal Component Analysis (PCA)
+   2.1 Assemble data matrix X (size N_tr × K_wl) from S'_i
+   2.2 Compute covariance C = (Xᵀ X) / (N_tr – 1)
+   2.3 Eigen‑decompose C → eigenvalues λ_p, eigenvectors v_p[λ_k]
+   2.4 Sort v_p by decreasing λ_p
+   2.5 Select P_pc components such that Σ_{p=1}^{P_pc} λ_p / Σ_all λ_p ≥ τ  
+       (τ ≈ 0.90 for 4–5 PCs, 0.99 for 8–10 PCs)
+
+3. Project training spectra onto PCs
+   3.1 For each i:
+          c_i[p] = Σ_k S'_i[λ_k] * v_p[λ_k]      (inner product)
+   3.2 Store coefficient matrix C_mat (size N_tr × P_pc)
+
+4. Build filter response projections
+   4.1 For each filter j and component p:
+          L[j][p] = Σ_k v_p[λ_k] * T_j[λ_k] * Δλ_k
+   4.2 For each filter j:
+          μ_f[j] = Σ_k μ[λ_k] * T_j[λ_k] * Δλ_k
+
+5. Define probabilistic model
+   – Prior on latent vector c:
+        p(c) = N(0 , Σ_prior) ,  Σ_prior = diag( Var(c_i[1]), … , Var(c_i[P_pc]) )
+   – Likelihood for photometry:
+        For each j:
+            f_pred[j](c) = μ_f[j] + Σ_p L[j][p] * c[p]
+        p(y | c) = Π_j  N( y_j | f_pred[j](c) , σ_j² )
+
+6. Compute analytic posterior (linear Gaussian)
+   6.1 Weight matrix W = diag( 1/σ_j² )
+   6.2 Design matrix A (size M_filt × P_pc):
+          A[j][p] = L[j][p]
+   6.3 Posterior covariance:
+          Σ_post = inverse( Aᵀ W A + Σ_prior⁻¹ )
+   6.4 Posterior mean:
+          μ_post = Σ_post * ( Aᵀ W y + Σ_prior⁻¹ * 0 )
+          // Prior mean is zero
+
+7. Draw posterior samples of latent coefficients
+   For s = 1 … N_samples:
+        c_s ~ N( μ_post , Σ_post )
+
+8. Reconstruct full spectra for each sample
+   For each s:
+        For each λ_k:
+            S_s[λ_k] = μ[λ_k] + Σ_p c_s[p] * v_p[λ_k]
+
+9. Compute predictive photometry and uncertainty
+   9.1 For each sample s:
+           y_s_pred[j] = μ_f[j] + Σ_p L[j][p] * c_s[p]
+   9.2 Estimate predictive mean and variance across samples:
+           μ_y[j] = mean_s( y_s_pred[j] )
+           σ_y[j] = std_s( y_s_pred[j] )
+
+Return:
+    • Posterior coefficient samples {c_s}
+    • Posterior spectrum samples {S_s[λ_k]}
+    • Predictive photometry μ_y[j] ± σ_y[j]

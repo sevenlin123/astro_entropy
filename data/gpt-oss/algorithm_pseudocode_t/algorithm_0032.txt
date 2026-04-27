@@ -1,0 +1,51 @@
+Input:
+    - Photometry measurements:  m[1…N]   // apparent magnitudes or fluxes
+    - Measurement uncertainties: σ[1…N]
+    - Filter transmission curves:  T_i(λ)  for i = 1…N
+    - Spectral library (basis spectra):  B_k(λ)  for k = 1…K
+
+Output:
+    - Posterior mean spectrum:      s_mean(λ)
+    - Posterior covariance on spectrum:  Cov_s(λ,λ′)
+
+Procedure:
+
+1. Pre‑processing
+   1.1 Convert magnitudes to linear flux units if necessary.
+   1.2 Normalise all filter responses T_i(λ) so that ∫T_i(λ)dλ = 1.
+   1.3 Sample each basis spectrum B_k(λ) on a common wavelength grid λ_grid.
+
+2. Construct design matrix X
+   For each filter i = 1 … N
+       For each basis k = 1 … K
+           X[i,k] ← ∫_λ_grid  B_k(λ) * T_i(λ)  dλ        // forward model matrix element
+
+3. Build observation covariance matrix C_obs
+   For i = 1 … N
+       C_obs[i,i] ← σ[i]^2
+   // Assume independent measurement errors → diagonal matrix.
+
+4. Specify prior on basis weights w
+   4.1 Choose prior precision parameter τ (e.g., τ = 1/σ_prior^2).
+   4.2 Prior covariance:  C_prior = (τ * I_K)^(-1)
+
+5. Compute posterior over weights w
+   5.1 Posterior covariance:
+        Σ_w = ( Xᵀ C_obs⁻¹ X + τ * I_K )⁻¹
+   5.2 Posterior mean:
+        μ_w = Σ_w  Xᵀ C_obs⁻¹  m
+
+6. Reconstruct mean spectrum
+   For each wavelength λ in λ_grid
+       s_mean(λ) = Σ_k  μ_w[k] * B_k(λ)
+
+7. Propagate weight covariance to spectrum covariance
+   7.1 For any pair of wavelengths λ_a, λ_b:
+        Cov_s(λ_a, λ_b) = Σ_k Σ_l  B_k(λ_a) * Σ_w[k,l] * B_l(λ_b)
+
+8. (Optional) Predict photometry in additional filters
+   For any new filter j:
+       m_pred[j] = Σ_k μ_w[k] * ∫ B_k(λ) * T_j(λ) dλ
+       σ_pred[j]² = Σ_k Σ_l  (∫ B_k T_j)(∫ B_l T_j) * Σ_w[k,l] + σ_noise²
+
+9. Return s_mean(λ) and Cov_s(λ,λ′).

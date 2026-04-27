@@ -1,0 +1,61 @@
+INPUT
+  - Training spectra {S_i(λ)}  i = 1 … N
+  - Filter transmission curves {F_k(λ)}  k = 1 … K
+  - Observed photometry for a target object: 
+      magnitudes {m_k}  k = 1 … M
+      measurement uncertainties {σ_k}
+  - Prior hyper‑parameters (e.g., covariance Σ_prior)
+
+PREPROCESSING
+  1. Resample all training spectra to a common wavelength grid {λ_j}  j = 1 … J.
+  2. Normalize each spectrum (e.g., median flux = 1).
+
+DIMENSIONALITY REDUCTION
+  3. Assemble data matrix X of size N × J where X[i,j] = S_i(λ_j).
+  4. Apply Principal Component Analysis (PCA) to X:
+       - Center X by subtracting mean spectrum μ_X.
+       - Compute eigenvectors of covariance matrix of X.
+       - Select first P eigenvectors {B_p(λ)}  p = 1 … P.
+  5. Project training spectra onto basis:
+       C[i,p] = ⟨S_i – μ_X , B_p⟩   for all i, p.
+
+FORWARD MODEL CALCULATION
+  6. For every basis vector B_p and every filter F_k:
+       I[p,k] = ∫ B_p(λ) * F_k(λ) dλ  /  ∫ F_k(λ) dλ
+     (numerical integration over the wavelength grid).
+
+TARGET OBJECT RECONSTRUCTION
+  7. Define latent coefficient vector a = [a_1 … a_P]ᵀ.
+  8. Forward model prediction for filter k:
+       μ_k(a) = Σ_{p=1}^{P}  a_p * I[p,k]
+  9. Assemble prediction vector μ(a) = [μ_1(a) … μ_M(a)]ᵀ.
+
+LIKELIHOOD AND PRIOR
+ 10. Likelihood of observing magnitudes {m_k} given a:
+       L(a) = Π_{k=1}^{M}  N(m_k | μ_k(a), σ_k²)
+ 11. Prior on coefficients (Gaussian):
+       π(a) = N(a | 0, Σ_prior)
+ 12. Unnormalized posterior:
+       p̃(a) = L(a) * π(a)
+
+POSTERIOR SAMPLING (Markov Chain Monte Carlo)
+ 13. Initialize a₀ (e.g., zero vector).
+ 14. For s = 1 … S (desired number of samples):
+        a_new ← propose a candidate (e.g., Gaussian random walk around a_{s-1}).
+        Compute acceptance ratio:
+              r = p̃(a_new) / p̃(a_{s-1})
+        Accept a_new with probability min(1, r); otherwise keep a_{s-1}.
+        Store accepted a_s.
+
+SPECTRUM ESTIMATION
+ 15. For each stored sample a_s:
+        Reconstruct spectrum:
+           S_s(λ_j) = μ_X(λ_j) + Σ_{p=1}^{P} a_{s,p} * B_p(λ_j)
+ 16. Compute posterior mean spectrum:
+        S_mean(λ_j) = (1/S) Σ_{s=1}^{S} S_s(λ_j)
+ 17. Compute credible intervals (e.g., 16th–84th percentiles) from {S_s}.
+
+OUTPUT
+  - Posterior mean spectrum S_mean(λ)
+  - Credible bands for the spectrum
+  - Posterior samples {a_s} if further analysis is needed

@@ -1,0 +1,62 @@
+Input
+  S            : Matrix of training spectra (Nspec × Nλ)
+  λ_grid       : Wavelength grid (Nλ)
+  Filters      : List of filter response functions {T_i(λ)} , i = 1 … Nf
+  Photometry   : Observed magnitudes/fluxes {m_i} for a new TNO
+  σ_phot      : Measurement uncertainties {σ_i}
+  k            : Number of principal components to retain (default 8–10)
+
+Output
+  s_rec(λ)     : Reconstructed full‑spectrum (Nλ)
+  cov_rec(λ)   : Spectral covariance matrix (Nλ × Nλ) or 95 % intervals
+
+--------------------------------------------------------------------
+1.  Train Principal‑Component Basis
+    --------------------------------------------------------------
+    1.1  μ = mean(S, axis=0)                      # mean spectrum
+    1.2  S_centered = S - μ                       # centre training data
+    1.3  Perform SVD:  S_centered = U Σ Vᵀ
+    1.4  W = V[:, 0:k]                            # first k PCs
+         # W has shape (Nλ × k), orthonormal columns
+
+2.  Pre‑compute Filter‑Projection Matrices
+    --------------------------------------------------------------
+    For each filter i = 1…Nf
+        denom_i = ∫ T_i(λ) dλ
+        # Project each PC onto the filter
+        A_i  = (∫ T_i(λ) · W dλ) / denom_i          # vector of length k
+        b_i  = (∫ T_i(λ) · μ dλ) / denom_i          # scalar bias
+    Assemble
+        A  = [A_1ᵀ; … ; A_Nfᵀ]    # shape (Nf × k)
+        b  = [b_1; … ; b_Nf]      # shape (Nf)
+
+3.  Bayesian Inference in Latent Space
+    --------------------------------------------------------------
+    # Observations: m_obs = Photometry
+    # Noise covariance: Σ_noise = diag(σ_phot²)  # shape (Nf × Nf)
+    # Prior on latent vector z:  z ~ N(0, I_k)   # zero mean, identity covariance
+
+    # Compute posterior covariance (analytical for linear-Gaussian model)
+    Σ_post = ( I_k + Aᵀ Σ_noise⁻¹ A )⁻¹          # shape (k × k)
+
+    # Compute posterior mean
+    μ_post = Σ_post ( Aᵀ Σ_noise⁻¹ (m_obs - b) )  # shape (k)
+
+4.  Reconstruct Full Spectrum
+    --------------------------------------------------------------
+    # Map latent mean back to spectral space
+    s_rec = μ + W μ_post                          # shape (Nλ)
+
+    # Spectral covariance
+    cov_rec = W Σ_post Wᵀ                         # shape (Nλ × Nλ)
+
+    # Optional: draw samples from posterior to construct 95 % confidence bands
+    For j = 1 … Nsamp
+        z_j  ~ N( μ_post , Σ_post )
+        s_j  = μ + W z_j
+    End
+    Compute percentile bands from {s_j}
+
+5.  Return
+    -----------------------------------------------
+    Output s_rec, cov_rec (or confidence bands)

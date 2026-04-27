@@ -1,0 +1,150 @@
+PROCEDURE RECONSTRUCT_ALL(object_list, template_library, filter_set):
+    # ---------- 1. Pre‑compute synthetic magnitudes ----------
+    PRECOMPUTE_MAGS(template_library, filter_set, SLOPE_GRID, SCALE_GRID) → mag_grid
+
+    # ---------- 2. Loop over all objects ----------
+    FOR EACH obj IN object_list:
+        m_obs   ← obj.magnitudes          # array of observed magnitudes
+        sigma   ← obj.errors              # array of photometric errors
+        N_filt  ← LENGTH(m_obs)
+
+        # ---------- 3. Define priors ----------
+        PRIOR_CLASS(c)  ← 1 / NUM_CLASSES            # uniform over templates
+        PRIOR_ALPHA(a)  ← UNIFORM(a_min, a_max)
+        PRIOR_SCALE(s)  ← UNIFORM(s_min, s_max)
+
+        # ---------- 4. Initialise sampler ----------
+        θ_current ← RANDOM_SAMPLE([class, alpha, scale])
+        L_current ← LIKELIHOOD(θ_current, m_obs, sigma, mag_grid)
+        P_current ← PRIOR_CLASS(θ_current.class) *
+                    PRIOR_ALPHA(θ_current.alpha) *
+                    PRIOR_SCALE(θ_current.scale)
+
+        samples ← EMPTY LIST
+        ACCEPTS ← 0
+
+        # ---------- 5. Metropolis–Hastings sampling ----------
+        FOR i = 1 TO N_ITER:
+            # propose new state
+            θ_prop ← PROPOSE(θ_current)
+
+            # compute likelihood and prior for proposed state
+            L_prop ← LIKELIHOOD(θ_prop, m_obs, sigma, mag_grid)
+            P_prop ← PRIOR_CLASS(θ_prop.class) *
+                      PRIOR_ALPHA(θ_prop.alpha) *
+                      PRIOR_SCALE(θ_prop.scale)
+
+            # acceptance probability
+            r ← (L_prop * P_prop) / (L_current * P_current)
+            u ← RANDOM_UNIF(0, 1)
+            IF u < MIN(1, r):
+                θ_current ← θ_prop
+                L_current  ← L_prop
+                P_current  ← P_prop
+                ACCEPTS   ← ACCEPTS + 1
+            END IF
+
+            APPEND(samples, θ_current)
+        END FOR
+
+        # ---------- 6. Post‑processing ----------
+        # discard burn‑in
+        samples ← samples[BURN_IN : ]
+
+        # class posterior probabilities
+        CLASS_PROB ← COUNTS_OVER_SAMPLES(samples, 'class') / LENGTH(samples)
+
+        # posterior‑predictive spectrum
+        λ_grid ← LINEAR_SPACE(λ_min, λ_max, N_λ)
+        SPEC_SUM ← ZERO_ARRAY(N_λ)
+        WEIGHT_SUM ← 0
+        FOR EACH θ IN samples:
+            # retrieve template spectrum for this class
+            R_template ← template_library[θ.class]
+            # apply slope and scale to spectrum
+            R_mod ← R_template * θ.scale * 10^(θ.alpha * (λ_grid - λ_ref))
+            SPEC_SUM ← SPEC_SUM + R_mod
+            WEIGHT_SUM ← WEIGHT_SUM + 1
+        END FOR
+        SPEC_POST ← SPEC_SUM / WEIGHT_SUM
+
+        # expected magnitudes from posterior predictive spectrum
+        m_pred_mean ← SYNTHETIC_MAGNITUDES(SPEC_POST, filter_set)
+
+        # chi‑square goodness‑of‑fit
+        χ2 ← SUM_over_f [ ((m_obs[f] - m_pred_mean[f]) / sigma[f])^2 ]
+        OUTLIER ← (χ2 > CHI2_THRESHOLD)
+
+        # ---------- 7. Store results ----------
+        obj.result ← {
+            class_probabilities : CLASS_PROB,
+            reconstructed_spectrum : SPEC_POST,
+            chi_square : χ2,
+            outlier_flag : OUTLIER
+        }
+    END FOR
+END PROCEDURE
+
+
+# ------------------------------------------------------------------
+# Helper Functions
+# ------------------------------------------------------------------
+
+FUNCTION PRECOMPUTE_MAGS(template_lib, filter_set, α_grid, s_grid):
+    mag_grid ← DICT()
+    FOR EACH class IN template_lib:
+        FOR EACH α IN α_grid:
+            FOR EACH s IN s_grid:
+                FOR EACH filt IN filter_set:
+                    mag ← SYNTHETIC_MAGNITUDE(
+                            template_lib[class], α, s, filt)
+                    mag_grid[(class, α, s)][filt] ← mag
+                END FOR
+            END FOR
+        END FOR
+    END FOR
+    RETURN mag_grid
+END FUNCTION
+
+
+FUNCTION LIKELIHOOD(θ, m_obs, sigma, mag_grid):
+    prod ← 1
+    FOR EACH f IN RANGE(LENGTH(m_obs)):
+        μ ← mag_grid[(θ.class, θ.alpha, θ.scale)][f]
+        prod ← prod * EXP( -0.5 * ((m_obs[f] - μ) / sigma[f])^2 )
+    END FOR
+    RETURN prod
+END FUNCTION
+
+
+FUNCTION PROPOSE(θ_current):
+    # propose new class with small probability of change
+    IF RAND() < P_CHANGE_CLASS:
+        class_new ← RANDOM_CHOICE(CLASSES_EXCLUDING(θ_current.class))
+    ELSE:
+        class_new ← θ_current.class
+    END IF
+    # propose new alpha, scale from Gaussian perturbations
+    alpha_new ← θ_current.alpha + NORMAL(0, σ_alpha)
+    scale_new ← θ_current.scale + NORMAL(0, σ_scale)
+    RETURN (class_new, alpha_new, scale_new)
+END FUNCTION
+
+
+FUNCTION SYNTHETIC_MAGNITUDE(template, α, s, filter):
+    # integrate (template * slope * scale) * filter response over wavelength
+    integrand ← template.spectrum * s * 10^(α * (λ - λ_ref)) * filter.response
+    flux ← INTEGRATE(integrand over λ)
+    mag ← -2.5 * LOG10(flux) + ZERO_POINT
+    RETURN mag
+END FUNCTION
+
+
+FUNCTION SYNTHETIC_MAGNITUDES(spectrum, filter_set):
+    mags ← ARRAY()
+    FOR EACH filt IN filter_set:
+        μ ← SYNTHETIC_MAGNITUDE(spectrum, α=0, s=1, filt)   # α and s already applied
+        APPEND(mags, μ)
+    END FOR
+    RETURN mags
+END FUNCTION

@@ -1,0 +1,97 @@
+--------------------------------------------------------------------
+Input
+--------------------------------------------------------------------
+S_ref   : high‑resolution reflectance spectra of N_ref TNOs
+F_cur   : list of effective throughput curves for the N_filt photometric bands
+K       : number of principal components to retain (≈ 4–10)
+h_kde   : bandwidth for kernel density estimation in latent space
+σ_noise : relative photometric noise to inject during training (e.g. 0.20)
+
+--------------------------------------------------------------------
+Output
+--------------------------------------------------------------------
+model   : object containing the trained latent representation,
+          encoder, and optional taxonomy classifier
+--------------------------------------------------------------------
+Procedure TRAIN_RECONSTRUCTOR(S_ref , F_cur , K , h_kde , σ_noise):
+
+1.  # ---------- 1.1 PCA – build latent manifold ----------
+    # Center spectra
+    μ_s   ← mean(S_ref)                      # 1×L vector (L = number of wavelength bins)
+    S_0   ← S_ref – μ_s                       # N_ref × L
+    # Compute K principal components
+    (U , λ ) ← eigendecompose(Cov(S_0))      # U: L×K matrix, λ: K×K diagonal
+    PCs   ← U[:, 1:K]                        # K eigenvectors
+    # Project training spectra into latent space
+    Z_ref ← S_0 · PCs                        # N_ref × K matrix
+
+2.  # ---------- 1.2 Prior – kernel density estimate ----------
+    kde_prior ← KDE(Z_ref , bandwidth = h_kde)
+
+3.  # ---------- 1.3 Augment latent samples ----------
+    N_aug ← 10 000                            # number of synthetic latent vectors
+    Z_syn ← sample(kde_prior , N_aug)         # N_aug × K
+
+4.  # ---------- 1.4 Re‑generate synthetic spectra ----------
+    S_syn ← Z_syn · PCsᵀ + μ_s                # N_aug × L
+
+5.  # ---------- 1.5 Forward model → synthetic photometry ----------
+    for each z in 1…N_aug:
+        for each filter f in 1…N_filt:
+            m_f[z] ← ∫ S_syn[z](λ) · F_cur[f](λ) dλ       # theoretical band flux
+    # Add Gaussian noise to mimic observations
+    M_syn ← m_f · (1 + normal(0 , σ_noise))
+
+6.  # ---------- 1.6 Train encoder: photometry → latent ----------
+    encoder ← AutoMLRegressor()              # e.g. ensemble of gradient‑boosted trees
+    encoder.train( X = M_syn , Y = Z_syn )
+
+7.  # ---------- 1.7 (Optional) Train taxonomy classifier ----------
+    # Taxonomy labels for the reference spectra are supplied externally
+    Y_lab ← taxonomy_labels(S_ref)          # N_ref vector
+    # Predict latent coefficients for synthetic photometry
+    Z_hat  ← encoder.predict(M_syn)          # N_aug × K
+    classifier ← AutoMLClassifier()
+    classifier.train( X = Z_hat , Y = Y_lab )
+
+8.  # ---------- 1.8 Package model ----------
+    model.PCs          ← PCs
+    model.mu_s         ← μ_s
+    model.encoder      ← encoder
+    model.classifier   ← classifier (if built)
+    model.kde_prior    ← kde_prior
+    model.sigma_noise  ← σ_noise
+    return model
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+Procedure INFER_SPECTRUM(model , m_obs):
+
+1.  # ---------- 2.1 Encode observed photometry ----------
+    ẑ_mean , ẑ_cov ← model.encoder.predict_with_uncertainty(m_obs)
+        # returns mean vector (K) and covariance (K×K) of latent posterior
+
+2.  # ---------- 2.2 Draw posterior samples ----------
+    N_samp ← 1 000
+    samples_z ← GaussianCopulaSample( mean = ẑ_mean ,
+                                      cov  = ẑ_cov ,
+                                      n    = N_samp )
+                                 # samples_z : N_samp × K
+
+3.  # ---------- 2.3 Decode to spectra ----------
+    samples_S ← []
+    for each z in samples_z:
+        s ← z · model.PCsᵀ + model.mu_s
+        samples_S.append(s)
+    # samples_S : N_samp × L
+
+4.  # ---------- 2.4 Construct summary statistics ----------
+    S_mean     ← mean(samples_S , axis=0)
+    S_ci_lower ← percentile(samples_S , 2.5  , axis=0)
+    S_ci_upper ← percentile(samples_S , 97.5 , axis=0)
+
+5.  # ---------- 2.5 Optional taxonomy prediction ----------
+    if model.classifier exists:
+        class_probs ← model.classifier.predict_proba(ẑ_mean)
+
+6.  return {S_mean , S_ci_lower , S_ci_upper , class_probs}
+--------------------------------------------------------------------

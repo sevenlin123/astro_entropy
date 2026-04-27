@@ -1,0 +1,108 @@
+Input:
+    - High‑resolution spectra {S_i}  i = 1…N   (reflectance vs λ)
+    - Filter response functions {T_f}(λ) for f = 1…F
+    - Desired number of principal components K  (K ≈ 5–10)
+
+Procedure:
+1.1 Mean‑centering  
+      μ_S ← mean(S_i) over i  
+      S'_i ← S_i – μ_S
+
+1.2 Principal Component Analysis (PCA)  
+      [U, Σ, V^T] ← SVD(S')  // U : eigenvectors (principal directions)
+      PC_vectors ← first K columns of U  
+      Eigenvalues  ← first K elements of Σ  
+
+1.3 Project spectra onto PCs  
+      For each i:  
+          c_i ← PC_vectors^T · S'_i          // latent coefficient vector (size K)
+
+1.4 Kernel Density Estimation (KDE) in latent space  
+      Bandwidth h ← 0.5 (default, tunable)  
+      KDE_model ← GaussianKDE({c_i}, bandwidth = h)
+
+1.5 Augment training set  
+      Draw M synthetic latent samples {ĉ_j}  j = 1…M from KDE_model  
+      For each ĉ_j:  
+          S̃_j ← PC_vectors · ĉ_j + μ_S              // inverse PCA → synthetic spectrum
+
+Input:
+    - Synthetic spectra {S̃_j}
+    - Filter responses {T_f}(λ)
+    - Photometric noise σ_rel = 0.20  (relative 20 % Gaussian noise)
+
+Procedure:
+2.1 Convolve synthetic spectra with filters  
+      For each j and each filter f:  
+          m_{j,f} ← ∫ S̃_j(λ) · T_f(λ) dλ / ∫ T_f(λ) dλ   // reflectance in band f
+
+2.2 Add Gaussian noise  
+      For each j, f:  
+          n_{j,f} ← Normal(0, σ_rel·m_{j,f})  
+          m'_{j,f} ← m_{j,f} + n_{j,f}               // noisy photometry
+
+2.3 Assemble training data  
+      Inputs  X ← {m'_{j,1…F}}          // F‑dimensional photometry vector  
+      Targets Y ← {ĉ_j}                 // K‑dimensional latent vector
+
+Input:
+    - Training set (X, Y)
+
+Procedure:
+3.1 Select AutoML regressor (e.g., AutoGluon, XGBoost ensemble).  
+3.2 Train model M_enc on (X → Y) with default AutoML pipeline.  
+3.3 Validate internal performance (cross‑validation) – *ignored in final algorithm*.
+
+Input:
+    - Latent vectors {c_i} with known taxonomic labels L_i
+
+Procedure:
+4.1 Train AutoML classifier M_cls on (c_i → L_i).
+
+Input:
+    - New observed photometry m_obs = {m_f}  (f = 1…F)
+    - Trained encoder M_enc
+    - Trained classifier M_cls
+    - PCA basis: PC_vectors, mean μ_S
+    - KDE covariance estimate Σ_KDE  (optional for uncertainty)
+
+Procedure:
+5.1 Predict latent coefficient mean  
+      ĉ_mean ← M_enc.predict(m_obs)        // size K
+
+5.2 Estimate latent posterior covariance  
+      // Option A: Use KDE covariance  
+      Σ_latent ← Σ_KDE  
+      // Option B: Estimate from regressor residuals (if available)
+
+5.3 Sample latent vectors (Monte Carlo)  
+      Draw S samples {ŝ_k} from MultivariateNormal(mean=ĉ_mean, cov=Σ_latent)  
+      // Typical S ≈ 500–1000
+
+5.4 Reconstruct spectra for each sample  
+      For each ŝ_k:  
+          Ŝ_k ← PC_vectors · ŝ_k + μ_S           // inverse PCA → spectrum
+
+5.5 Aggregate reconstructions  
+      For each wavelength λ:  
+          Spectrum_mean(λ)  ← mean_k Ŝ_k(λ)  
+          Spectrum_CI_low(λ)  ← percentile_k Ŝ_k(λ) at 2.5%  
+          Spectrum_CI_high(λ) ← percentile_k Ŝ_k(λ) at 97.5%
+
+5.6 Taxonomy probabilities  
+      For each ŝ_k:  
+          p_k ← M_cls.predict_proba(ŝ_k)           // vector of class probabilities  
+      Compute class posterior:
+          P_cls = mean_k p_k   // average over samples
+
+Output:
+    - Reconstructed spectrum (mean ± 95 % CI)
+    - Taxonomic probability distribution P_cls
+
+6.1 Identify samples with low probability in KDE or classifier:
+      For each ŝ_k:  
+          p_KDE ← KDE_model.evaluate(ŝ_k)  
+          If p_KDE < threshold OR class probability low:  
+              Flag as potential outlier
+
+6.2 Report flagged objects for follow‑up spectroscopy.

@@ -1,0 +1,113 @@
+--------------------------------------------------------------------
+1.  INITIAL SETUP
+--------------------------------------------------------------------
+INPUT:
+    S_ref[1..N_spec]          # Reference high‑resolution spectra (reflectance)
+    f[1..N_filt]              # Effective throughput curves of the chosen filters
+    L_labels[1..N_spec]       # Taxonomic labels for each reference spectrum
+    K                        # Number of PCA components to retain
+    h_KDE                     # KDE bandwidth
+    N_samples_gen             # Number of synthetic latent vectors to draw
+    σ_phot                    # Relative photometric noise (e.g. 0.20)
+
+OUTPUT:
+    Trained encoder E (photometry → latent coefficients)
+    Trained classifier C (latent coefficients → taxonomy probabilities)
+    PCA model P (forward + inverse transforms)
+
+
+--------------------------------------------------------------------
+2.  BUILD THE PRIOR (PCA + KDE)
+--------------------------------------------------------------------
+2.1  Standardise spectra
+        For each spectrum s in S_ref:
+            s_norm ← s / median(s)          # remove overall scale
+
+2.2  Fit PCA on the N_spec spectra
+        P ← PCA(N_components=K).fit(S_ref_norm)
+        # P.forward: S → coeffs (K‑dim)
+        # P.inverse : coeffs → S (full spectrum)
+
+2.3  Project reference spectra into latent space
+        coeff_ref[i] ← P.forward(S_ref_norm[i])   for i = 1 … N_spec
+
+2.4  Estimate continuous density with KDE
+        kde ← KernelDensity(bandwidth=h_KDE).fit(coeff_ref)
+
+--------------------------------------------------------------------
+3.  GENERATE SYNTHETIC TRAINING DATA
+--------------------------------------------------------------------
+3.1  Draw synthetic latent vectors
+        coeff_syn[j] ← kde.sample()   for j = 1 … N_samples_gen
+
+3.2  Convert synthetic latent vectors to spectra
+        S_syn[j] ← P.inverse(coeff_syn[j])
+
+3.3  Forward‑model photometry for each synthetic spectrum
+        For each j:
+            m_syn[j][k] ← integrate(S_syn[j] * f[k]) / integrate(f[k])
+            # m_syn[j] is a vector of length N_filt
+
+3.4  Inject Gaussian photometric noise
+        For each j,k:
+            n_jk ~ Normal(0, σ_phot * m_syn[j][k])
+            m_noisy[j][k] ← m_syn[j][k] + n_jk
+
+3.5  Assemble training set
+        X_train ← {m_noisy[j] | j=1…N_samples_gen}      # input photometry
+        Y_train ← {coeff_syn[j] | j=1…N_samples_gen}    # target latent coeffs
+        Z_train ← {L_labels[i] | i=1…N_spec}           # taxonomy labels for classifier
+
+--------------------------------------------------------------------
+4.  TRAIN MODELS
+--------------------------------------------------------------------
+4.1  Encoder – Photometry → Latent Coefficients
+        E ← AutoML_Regression(X_train, Y_train)
+        # AutoML may output an ensemble of GBDTs, neural nets, etc.
+        # The encoder returns a predictive distribution (mean ± std) for each coeff.
+
+4.2  Classifier – Latent Coefficients → Taxonomy Probabilities
+        C ← AutoML_Classification(Y_train, Z_train)
+        # Trained on the *real* reference coefficients (not synthetic)
+        # Outputs probability vector over taxonomic classes.
+
+--------------------------------------------------------------------
+5.  INFERENCE ON NEW OBSERVATIONS
+--------------------------------------------------------------------
+5.1  Input: m_obs[1..N_filt]   # observed photometry (with known uncertainties)
+5.2  Predict latent coefficients
+        coeff_pred, coeff_unc ← E.predict(m_obs)   # e.g., mean and std per coeff
+        # Optionally, draw M samples from the predictive multivariate normal:
+        coeff_samples[t] ∼ Normal(mean=coeff_pred, cov=diag(coeff_unc^2))
+
+5.3  Decode spectra
+        For each sample t (or use mean):
+            S_recon[t] ← P.inverse(coeff_samples[t])
+
+5.4  Taxonomy probabilities
+        prob_tax[t] ← C.predict_prob(coeff_samples[t])   # soft‑max over classes
+
+5.5  Posterior summarisation
+        # For uncertainty propagation, aggregate over samples:
+        S_mean  ← mean_{t}(S_recon[t])
+        S_std   ← std_{t}(S_recon[t])
+        prob_mean ← mean_{t}(prob_tax[t])
+        prob_cov  ← covariance_{t}(prob_tax[t])
+
+5.6  OUTPUT
+        Return:
+            - Reconstructed spectrum S_mean with uncertainty S_std
+            - Taxonomy probability vector prob_mean
+            - (Optional) Full posterior samples {S_recon[t], prob_tax[t]} for downstream analysis
+
+--------------------------------------------------------------------
+6.  OPTIONAL: OUTLIER/RARE TYPE DETECTION
+--------------------------------------------------------------------
+6.1  Identify points in latent space with low prior density:
+        For each coeff_sample:
+            density ← kde.evaluate(coeff_sample)
+            if density < τ_low:
+                flag as “intermediate/rare” spectrum candidate
+
+--------------------------------------------------------------------
+END

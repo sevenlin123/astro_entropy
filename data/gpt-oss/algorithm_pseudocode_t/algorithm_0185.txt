@@ -1,0 +1,71 @@
+Input:
+    - Photometric data:   { (m_i, σ_i) }  for i = 1 … N  (observed magnitudes and errors)
+    - Filter transmission curves:  { T_i(λ) }  for i = 1 … N
+    - Solar spectrum:      F_sun(λ)   (flux density of the Sun)
+    - Spectral basis set:  { B_j(λ) }  for j = 1 … K   (e.g., PCA components or training‑set templates)
+    - Optional prior parameters for coefficients {a_j}
+
+Output:
+    - Posterior samples { a^(s) }  (s = 1 … S) of coefficient vectors
+    - Reconstructed reflectance spectrum R(λ) with credible intervals
+
+Procedure:
+
+1. **Pre–processing**
+   1.1 Normalize each basis spectrum B_j(λ) to unit flux at a reference wavelength λ_ref.
+   1.2 Compute the instrumental response for each filter:
+        R_i(λ) = T_i(λ) · F_sun(λ)
+
+2. **Define the Forward Model**
+   For any coefficient vector a = (a_1,…,a_K):
+       2.1 Construct the reflectance:
+            R_a(λ) = Σ_{j=1}^K a_j · B_j(λ)
+       2.2 Compute the predicted flux in filter i:
+            F_pred_i(a) = ∫ R_a(λ) · R_i(λ) dλ
+          (numerical integration on a fine λ grid)
+       2.3 Convert to synthetic magnitude:
+            m_syn_i(a) = –2.5 log10(F_pred_i(a)) + ZP_i
+          where ZP_i is the zero‑point for filter i.
+
+3. **Likelihood Function**
+   For a given a, evaluate:
+        L(a) = Π_{i=1}^N  exp[ – (m_i – m_syn_i(a))² / (2 σ_i²) ]
+   (log‑likelihood can be used for numerical stability.)
+
+4. **Prior Distribution**
+   Choose a prior p(a):
+        • Simple choice: independent Gaussians: a_j ~ N(μ_j, τ_j²)
+        • Alternative: Dirichlet if coefficients are required to sum to one.
+   Compute log‑prior: log p(a).
+
+5. **Posterior Evaluation**
+   Define log‑posterior:
+        log p(a | data) = log L(a) + log p(a)
+
+6. **Sampling the Posterior**
+   6.1 Initialize a starting vector a⁰ (e.g., all zeros).
+   6.2 Run an MCMC sampler (Metropolis‑Hastings or Hamiltonian Monte Carlo):
+        for s = 1 to S:
+            a_candidate ← propose_new(a^{s‑1})   // e.g., Gaussian random walk
+            α ← min{ 1,
+                      exp( log p(a_candidate | data) – log p(a^{s‑1} | data) ) }
+            draw u ∼ Uniform(0,1)
+            if u < α:
+                a^s ← a_candidate
+            else:
+                a^s ← a^{s‑1}
+   6.3 Store { a^s } as posterior samples.
+
+7. **Reconstruct Spectrum and Uncertainties**
+   7.1 For each stored sample a^s, compute the corresponding reflectance R^s(λ):
+            R^s(λ) = Σ_{j=1}^K a^s_j · B_j(λ)
+   7.2 Estimate posterior mean spectrum:
+            R̄(λ) = (1/S) Σ_{s=1}^S R^s(λ)
+   7.3 Estimate credible intervals (e.g., 16th/84th percentiles) at each λ:
+            CI_lower(λ), CI_upper(λ) from the sorted { R^s(λ) }
+
+8. **Return Results**
+   Output the set of posterior samples { a^s }, the mean spectrum R̄(λ),
+   and the credible intervals [CI_lower(λ), CI_upper(λ)].
+
+End Algorithm

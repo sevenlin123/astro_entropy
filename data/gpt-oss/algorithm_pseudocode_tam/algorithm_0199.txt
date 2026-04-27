@@ -1,0 +1,170 @@
+Algorithm SpectralReconstruction
+
+Input:
+    SeedSpectra {S_i, i=1..N}   // high-res reflectance spectra
+    FilterSet {F_j, j=1..M}     // filter throughput curves
+    PhotometryNoiseLevel σ_noise (e.g., 0.20)
+    LatentDim K  // number of principal components to retain
+    KDE_bandwidth h
+
+Output:
+    TrainedEncoder  // maps photometry -> PCA coefficients
+    TrainedClassifier // maps PCA coefficients -> taxonomy probs
+    InferenceFunction(P_obs) -> {SampledSpectra, TaxonomyProbs}
+
+Procedure:
+
+1. //--- PCA Basis Construction ---
+2. Normalize each seed spectrum to unit flux or reflectance.
+3. Stack spectra into matrix X (size N x L, L = # wavelength bins).
+4. Compute mean spectrum μ_s.
+5. Center spectra: X_centered = X - μ_s.
+6. Perform Singular Value Decomposition: X_centered = U Σ V^T.
+7. Select top K singular vectors (columns of V): PCs = V(:, 1:K).
+8. Project each seed spectrum onto PCs: z_i = PCs^T * (S_i - μ_s).
+   Store latent vectors Z_real = {z_i}.
+
+9. //--- Manifold Augmentation with KDE ---
+10. Fit multivariate KDE to Z_real with bandwidth h.
+11. Sample M_aug synthetic latent vectors: {z'_k} ~ KDE.
+12. For each z'_k:
+      Reconstruct spectrum: S'_k = μ_s + PCs * z'_k.
+      Store SyntheticSpectra k.
+
+13. //--- Forward Photometry Simulation ---
+14. For each spectrum in SyntheticSpectra:
+      For each filter j:
+          Compute ideal reflectance: R_j = ∫ S(λ) * F_j(λ) dλ / ∫ F_j(λ) dλ.
+      Add Gaussian noise: m_j = R_j * (1 + Normal(0, σ_noise)).
+      Store synthetic photometry vector m_k.
+
+15. //--- Prepare Training Data for Encoder ---
+16. Input features X_enc = {m_k}   // shape (M_aug, M)
+17. Targets Y_enc = {z'_k}         // shape (M_aug, K)
+
+18. //--- Train Encoder (AutoML) ---
+19. Use AutoML framework (e.g., AutoGluon) to train regression model:
+      EncoderModel = AutoML_Train(X_enc, Y_enc)
+      // Ensemble of GBDTs, neural nets, etc.
+20. // Optionally calibrate predictive uncertainty:
+      Obtain predictive distribution or variance estimates.
+
+21. //--- Train Taxonomy Classifier (Optional) ---
+22. Label each synthetic spectrum with known taxonomy from seed labels.
+23. Train classifier on Y_enc (latent coords) -> taxonomy probabilities:
+      ClassifierModel = AutoML_Train_Classify(Y_enc, Labels)
+
+24. //--- Inference Function ---
+25. Function Infer(P_obs):
+        // P_obs: observed photometry vector (length M)
+        25.1 Predict latent distribution:
+              For ensemble members e in EncoderModel:
+                  z_pred_e = e.predict(P_obs)
+              // Aggregate predictions: mean z_mean, covariance Σ_z
+        25.2 Generate posterior samples:
+              For s=1..S_samples:
+                  Sample z_s ~ MultivariateNormal(z_mean, Σ_z)
+                  Reconstruct spectrum: S_s = μ_s + PCs * z_s
+              Return {S_s}
+        25.3 Taxonomy probabilities:
+              For each e in ClassifierModel:
+                  p_e = e.predict_proba(z_mean)   // or using z_s samples
+              Aggregate: p_tax = mean(p_e over ensemble)
+              Return p_tax
+
+End Algorithm
+
+text
+Inputs
+------
+- SeedSpectra  : {S_i(λ)}  i = 1 … N          // high‑resolution reflectance spectra
+- Filters      : {F_j(λ)}  j = 1 … M          // instrument throughput curves
+- NoiseLevel   : σ_rel  (e.g., 0.20 for 20 % R. 1/0)
+- K            : number of principal components retained
+- KDE_bw       : bandwidth for kernel density estimation
+
+Outputs
+-------
+- Encoder      : model P(z | m)  (photometry → latent coeff.)
+- Classifier   : model P(T | z)  (latent → taxonomy probs)
+- InferenceFun : function that, for any observed photometry m,
+                 returns posterior spectra samples and taxonomy
+                 probabilities
+
+--------------------------------------------------------------------
+Training Phase
+--------------------------------------------------------------------
+
+1. **PCA Basis Construction**
+   1.1 Normalize each seed spectrum S_i to unit mean reflectance.
+   1.2 Build data matrix X (N × L) where each row is S_i.
+   1.3 Compute mean spectrum μ_s and center: X_c = X – μ_s.
+   1.4 Perform SVD: X_c = U Σ Vᵀ.
+   1.5 Retain first K right‑singular vectors → PCs (L × K).
+   1.6 Project seeds into latent space: z_i = PCsᵀ (S_i – μ_s).
+        Store Z_real = {z_i}.
+
+2. **Manifold Augmentation (KDE)**
+   2.1 Fit multivariate KDE to Z_real using bandwidth KDE_bw.
+   2.2 Draw M_aug synthetic latent vectors {z′_k} ≈ KDE.
+   2.3 Reconstruct synthetic spectra:
+        S′_k = μ_s + PCs · z′_k          (for k = 1 … M_aug).
+
+3. **Synthetic Photometry Generation**
+   3.1 For each synthetic spectrum S′_k:
+        For each filter j:
+           R_j = (∫ S′_k(λ) F_j(λ) dλ) / (∫ F_j(λ) dλ)   // ideal reflectance
+        Assemble vector m_k = [R_1 … R_M].
+   3.2 Perturb photometry with Gaussian noise:
+        m_k ← m_k · (1 + N(0, σ_rel²))   // multiplicative noise
+
+4. **Prepare Encoder Training Set**
+   - Features X_enc = {m_k}   (size M_aug × M)
+   - Targets  Y_enc = {z′_k}  (size M_aug × K)
+
+5. **Train Encoder (AutoML)**
+   - Use AutoML (e.g., AutoGluon) to fit regression:
+        EncoderModel = AutoML_Train(X_enc , Y_enc)
+   - Ensemble contains GBDT, NN, etc.; returns predictive mean
+     and optional predictive variance per input.
+
+6. **Train Taxonomy Classifier (optional)**
+   - Assign taxonomy labels to each synthetic spectrum from seed labels.
+   - Train classifier on latent coords:
+        ClassifierModel = AutoML_Train_Classify(Z_real , Labels)
+
+--------------------------------------------------------------------
+Inference Phase
+--------------------------------------------------------------------
+
+Define function InferenceFun(P_obs):
+
+7. **Predict Latent Distribution**
+   - For each member e in EncoderModel ensemble:
+        ẑ_e = e.predict(P_obs)
+   - Aggregate predictions:
+        z_mean = mean(ẑ_e)
+        Σ_z   = covariance({ẑ_e})   // or use model‑provided uncertainties
+
+8. **Posterior Spectrum Sampling**
+   - Draw S_samples = {}
+   - For s = 1 … S_n (e.g., 100):
+        Sample z_s ~ Normal(z_mean, Σ_z)
+        Reconstruct spectrum:
+            S_s = μ_s + PCs · z_s
+        Append S_s to S_samples
+   - Return S_samples
+
+9. **Taxonomy Probability Estimation**
+   - For each member f in ClassifierModel ensemble:
+        p_f = f.predict_proba(z_mean)   // optionally use z_s samples
+   - Aggregate:
+        p_tax = mean(p_f over ensemble)
+   - Return p_tax
+
+--------------------------------------------------------------------
+Usage
+--------------------------------------------------------------------
+- Train once using Steps 1–6.
+- For every new photometric observation, call InferenceFun(P_obs)
+  to obtain a set of reconstructed spectra and taxonomy probabilities.

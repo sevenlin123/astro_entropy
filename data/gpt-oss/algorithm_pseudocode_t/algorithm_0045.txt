@@ -1,0 +1,70 @@
+INPUT:
+    For each TNO:
+        - Photometric catalog: {filter_name_i, magnitude_i, magnitude_error_i}
+    Constants:
+        - Filter effective wavelengths λ_i
+        - Flux conversion zero‑point ZP
+        - Priors: 
+            * Slope S ~ Normal(μ_S , σ_S)
+            * Reflectance offset R0 ~ Uniform(R_min , R_max)
+            * Optional higher‑order coefficients C_k ~ Normal(0 , σ_C)
+
+OUTPUT:
+    For each TNO:
+        - Posterior samples of spectral parameters {S, R0, C_1 … C_K}
+        - Reconstructed reflectance spectrum R(λ) with uncertainties
+
+ALGORITHM:
+
+FOR each TNO in catalog DO
+    1. Data preprocessing
+        1.1 FOR each filter i DO
+                flux[i]      ← 10^(-0.4*(magnitude[i] - ZP))
+                flux_err[i]  ← ln(10)/2.5 * flux[i] * magnitude_error[i]
+            END FOR
+        1.2 Store (λ_i , flux[i] , flux_err[i]) as observations O
+
+    2. Define spectral model
+        2.1 Let spectral basis B(λ;θ) = R0 + S·(λ – λ_ref) + Σ_{k=1}^K C_k·P_k(λ)
+              where λ_ref is a reference wavelength (e.g., median λ_i)
+              P_k(λ) are chosen basis polynomials (e.g., Legendre).
+        2.2 Parameter vector θ = [S, R0, C_1,…,C_K]
+
+    3. Define likelihood
+        3.1 For each observation (λ_i, flux[i], flux_err[i]) compute model flux:
+                model_flux[i] ← B(λ_i;θ)   // reflectance directly gives flux ratio
+        3.2 Likelihood L(θ | O) = Π_i Normal(flux[i] | model_flux[i], flux_err[i]^2)
+
+    4. Define priors
+        4.1 p(S)      = Normal(μ_S , σ_S)
+        4.2 p(R0)     = Uniform(R_min , R_max)
+        4.3 p(C_k)    = Normal(0 , σ_C)   for k = 1…K
+
+    5. Posterior sampling (Metropolis–Hastings)
+        5.1 Initialize θ^(0) by drawing from priors.
+        5.2 For t = 1 to N_iter do
+                a. Propose new θ* = θ^(t-1) + ε
+                   where ε ~ Normal(0 , proposal_cov)
+                b. Compute acceptance ratio:
+                        α = min(1,
+                                [L(θ*|O) * p(θ*)] / [L(θ^(t-1)|O) * p(θ^(t-1))])
+                c. Draw u ~ Uniform(0,1)
+                d. If u < α then θ^(t) = θ* else θ^(t) = θ^(t-1)
+            END FOR
+        5.3 Discard first N_burn iterations.
+        5.4 Store remaining samples as PosteriorSamples.
+
+    6. Construct spectral reconstructions
+        6.1 Define dense wavelength grid Λ_dense covering desired range.
+        6.2 FOR each posterior sample θ_j in PosteriorSamples DO
+                R_j(Λ_dense) ← B(Λ_dense ; θ_j)
+            END FOR
+        6.3 Compute summary statistics:
+                R_mean(λ)      = mean_j R_j(λ)
+                R_lower(λ)     = percentile_j(R_j(λ), 16)
+                R_upper(λ)     = percentile_j(R_j(λ), 84)
+
+    7. Store results for this TNO:
+        - PosteriorSamples
+        - R_mean, R_lower, R_upper as reconstructed spectrum
+END FOR

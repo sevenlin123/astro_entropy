@@ -1,0 +1,103 @@
+pseudo
+INPUT:
+    - Spectral library S_raw   // N_ref × N_wavelength matrix
+    - Filter set F             // M_filters transmission curves
+    - Photometric observations m_obs // K_observed points (may be < M_filters)
+
+OUTPUT:
+    - Reconstructed spectrum S_rec   // N_wavelength vector
+    - Uncertainty bounds on S_rec     // 95 % CI per wavelength
+    - Taxonomic probabilities P_tax   // vector of class probabilities
+
+--------------------------------------------------------------------
+1. PREPROCESSING
+--------------------------------------------------------------------
+1.1 Normalise all spectra to unit flux at reference wavelength λ_ref.
+1.2 Compute mean spectrum μ_S = mean(S_raw, axis=0).
+1.3 Zero‑centre spectra: Z = S_raw – μ_S.
+1.4 Perform Singular Value Decomposition:
+        [U, Σ, Vᵀ] = svd(Z, full_matrices=False)
+   Let K_pca be chosen (default 8 for full reconstruction, 4–5 for taxonomy).
+1.5 Project spectra into latent space:
+        C_real = Z · V[:, :K_pca]          // N_ref × K_pca matrix
+--------------------------------------------------------------------
+2. PRIOR ESTIMATION (KDE Augmentation)
+--------------------------------------------------------------------
+2.1 Fit Gaussian Kernel Density Estimator to C_real:
+        KDE = fit_kde(C_real, bandwidth=h)   // h ≈ 0.5
+2.2 Generate synthetic latent vectors:
+        N_syn = 5000
+        C_syn = sample(KDE, N_syn)           // N_syn × K_pca
+2.3 Reconstruct synthetic spectra:
+        Z_syn = C_syn · V[:, :K_pca]ᵀ
+        S_syn = Z_syn + μ_S
+--------------------------------------------------------------------
+3. FORWARD MODELING (Implicit Likelihood)
+--------------------------------------------------------------------
+3.1 For each synthetic spectrum s in S_syn:
+        a. Convolve s with each filter transmission f ∈ F:
+               R_f = integrate(s * f) / integrate(f * Solar)
+        b. Store reflectance vector r_s = [R_f1 … R_fM]
+3.2 Inject Gaussian noise to each r_s:
+        σ_rel = 0.20   // 20 % relative uncertainty
+        r_noisy = r_s + normal(0, σ_rel * r_s)
+3.3 Assemble training set:
+        X_train = r_noisy                // K_input (=M) × N_syn
+        Y_train = C_syn                  // K_pca × N_syn
+--------------------------------------------------------------------
+4. ENCODER TRAINING (AutoML Regresor)
+--------------------------------------------------------------------
+4.1 Initialise AutoML regressor pool (e.g., XGBoost, Random Forest, NN).
+4.2 For each candidate model:
+        Train on (X_train, Y_train) with cross‑validation.
+        Evaluate predictive mean‑squared error on validation folds.
+4.3 Select best model (lowest validation error) → REG.
+4.4 Optionally, ensemble the top‑N models into REG_ens.
+--------------------------------------------------------------------
+5. TAXONOMIC CLASSIFIER (Latent‑Space)
+--------------------------------------------------------------------
+5.1 Compute class‑conditional priors in latent space:
+        For each taxonomic label ℓ:
+            μ_ℓ = mean(C_real[labels==ℓ], axis=0)
+            Σ_ℓ = cov(C_real[labels==ℓ], axis=0)
+5.2 For each latent vector c:
+        Compute posterior class probabilities:
+            P_tax(c) ∝ prior(ℓ) * multivariate_normal_pdf(c | μ_ℓ, Σ_ℓ)
+5.3 Normalise P_tax(c) over all ℓ.
+--------------------------------------------------------------------
+6. INFERENCE (Forward Pass)
+--------------------------------------------------------------------
+6.1 Input photometry m_obs (K_obs ≤ M).
+6.2 If K_obs < M:
+        Pad missing filters with NaNs or impute with zero‑centred means.
+6.3 Predict latent coefficient distribution:
+        • Use REG to obtain point prediction c_hat = REG(m_obs)
+        • Estimate predictive covariance Σ_pred via:
+              • Bootstrap: resample REG predictions
+              • Or use model‑specific uncertainty estimates (e.g., XGBoost quantile)
+6.4 Sample L latent draws from multivariate Gaussian:
+        c_l ∼ N(c_hat, Σ_pred), l=1…L  (e.g., L=1000)
+6.5 Apply Gaussian Copula to preserve inter‑component correlations:
+        a. Transform each c_l to uniform U via empirical CDF per component.
+        b. Apply inverse Gaussian copula with estimated correlation matrix R.
+        c. Map back to latent space to obtain correlated samples {c_l}.
+--------------------------------------------------------------------
+7. DECODING (Spectrum Reconstruction)
+--------------------------------------------------------------------
+7.1 For each sampled latent vector c_l:
+        z_l = c_l · V[:, :K_pca]ᵀ
+        s_l = z_l + μ_S
+7.2 Aggregate samples:
+        • Point estimate S_rec = mean({s_l})
+        • 95 % CI per wavelength = percentile({s_l}, [2.5, 97.5])
+--------------------------------------------------------------------
+8. TAXONOMY OUTPUT
+--------------------------------------------------------------------
+8.1 For each c_l, compute class posterior P_tax(c_l).
+8.2 Aggregate taxonomic probabilities:
+        P_tax_final = mean({P_tax(c_l)}) across samples.
+--------------------------------------------------------------------
+RETURN:
+    - S_rec
+    - Confidence bounds
+    - P_tax_final

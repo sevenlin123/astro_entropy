@@ -1,0 +1,78 @@
+Inputs
+------
+- S_ref[1…N_ref][1…Nλ]            # Reference near‑IR spectra (reflectance)
+- T_filt[b][λ]                    # Effective throughput curves for b filters
+- m_new[b]                        # Measured photometry of new target
+- σ_rel = 0.20                     # Relative photometric noise for training augment
+- K = 10                           # Number of principal components to keep
+- h_KDE = 0.5                      # Bandwidth for KDE
+- M_aug = 5000                     # Number of synthetic training samples
+
+Outputs
+-------
+- S_hat[1…Nλ]                     # Reconstructed high‑resolution spectrum
+- P_class[C]                      # Posterical class probabilities (C classes)
+- (optional) LatentSampleSet      # Samples of latent coefficients for uncertainty
+
+--------------------------------------------------------------------
+STEP 1 – PRE‑PROCESSING OF REFERENCE SPECTRA
+--------------------------------------------------------------------
+1.1 Compute mean spectrum μ[λ] = (1/N_ref) Σ_i S_ref[i][λ]
+1.2 Center spectra:  X[i][λ] = S_ref[i][λ] – μ[λ]
+--------------------------------------------------------------------
+STEP 2 – PRINCIPAL COMPONENT ANALYSIS (PCA)
+--------------------------------------------------------------------
+2.1 Compute covariance matrix C = (1/(N_ref-1)) Xᵀ X
+2.2 Eigen‑decompose C → eigenvectors V[1…K][λ], eigenvalues λ_eig[1…K]
+    (kept K largest eigenvalues)
+2.3 Project reference spectra onto PCs:
+       L_real[i][k] = Σ_λ X[i][λ] * V[k][λ]   for k=1…K
+--------------------------------------------------------------------
+STEP 3 – GENERATIVE AUGMENTATION OF LATENT SPACE (KDE)
+--------------------------------------------------------------------
+3.1 Fit a multivariate kernel density estimate to {L_real[i]} with bandwidth h_KDE
+3.2 Sample M_aug latent vectors:
+       L_aug[j] ~ KDE   (j = 1…M_aug)
+3.3 For each sampled latent vector:
+        a. Reconstruct synthetic spectrum:
+              S_syn[j][λ] = μ[λ] + Σ_k L_aug[j][k] * V[k][λ]
+        b. Compute synthetic photometry:
+              For each filter b:
+                  F_b = ∫ S_syn[j][λ] * T_filt[b][λ] dλ
+                  m_syn[j][b] = F_b / ∫ T_filt[b][λ] dλ   # reflectance in band
+        c. Inject Gaussian noise:
+              m_noisy[j][b] = m_syn[j][b] + N(0, σ_rel * m_syn[j][b])
+--------------------------------------------------------------------
+STEP 4 – TRAIN AUTO‑ML REGRESSOR (PHOTOMETRY → LATENT)
+--------------------------------------------------------------------
+4.1 Input matrix X_train = {m_noisy[j][b]}   size (M_aug × B)
+4.2 Target matrix Y_train = {L_aug[j][k]}     size (M_aug × K)
+4.3 Train ensemble regressor R (e.g., GBDT + NN) to predict
+       L_pred = R(X_train → Y_train)
+   The regressor outputs mean coefficients and optionally variance.
+--------------------------------------------------------------------
+STEP 5 – TRAIN CLASSIFIER ON LATENT SPACE
+--------------------------------------------------------------------
+5.1 For each reference spectrum i:
+        label[i] = taxonomic class (e.g., H2O, CO2, Organic, Methanol)
+5.2 Train classifier C (AutoML) on {L_real[i]} → label[i]
+--------------------------------------------------------------------
+STEP 6 – INFERENCE FOR NEW OBJECT
+--------------------------------------------------------------------
+6.1 Input: m_new[b]
+6.2 Predict latent coefficients:
+        L_hat_mean = R.predict(m_new)
+        (Optional) Sample L_hat_samples from predicted posterior
+6.3 Reconstruct high‑resolution spectrum:
+        S_hat[λ] = μ[λ] + Σ_k L_hat_mean[k] * V[k][λ]
+6.4 Classify:
+        P_class = C.predict_proba(L_hat_mean)
+--------------------------------------------------------------------
+(Optional) UNCERTAINTY ESTIMATION
+--------------------------------------------------------------------
+If multiple latent samples L_hat_samples are drawn in Step 6.2,
+repeat Steps 6.3–6.4 for each sample and aggregate:
+    - Compute mean & 68 % CI for each spectral point.
+    - Compute class‑probability distribution by histogramming predicted labels.
+--------------------------------------------------------------------
+END

@@ -1,0 +1,96 @@
+INPUT
+    N_obs          # number of photometric observations
+    obs[i]         # i = 1 … N_obs
+        filt_id    # identifier of the filter used
+        mag        # measured apparent magnitude
+        err_mag    # 1‑sigma magnitude error
+    filt[j]        # j = 1 … N_filt
+        trans(λ)   # transmission curve of filter j
+        zeropoint  # photometric zero point (mag)
+    basis
+        mu(λ)      # mean reflectance spectrum (continuum)
+        v[1…K](λ)  # K orthogonal eigenspectra (principal components)
+    prior_variance[0…K]   # Gaussian prior variances for coefficients
+                            # coefficient 0 corresponds to the mean term
+
+OUTPUT
+    coeff[0…K]       # best‑fit coefficients (c0 … cK)
+    cov_coeff[K+1][K+1]  # posterior covariance matrix of coefficients
+    R_rec(λ)          # reconstructed reflectance spectrum
+    var_R(λ)          # variance of R_rec(λ) at each wavelength
+
+--------------------------------------------------------------------
+STEP 1 – Build the Forward Matrix
+--------------------------------------------------------------------
+for j = 1 to N_filt
+    # Pre‑compute filter integrals for the basis functions
+    M[j] = ∫ mu(λ)          * filt[j].trans(λ)   dλ
+    for k = 1 to K
+        B[k][j] = ∫ v[k](λ) * filt[j].trans(λ)   dλ
+    end for
+end for
+
+# Build the design matrix A (size N_obs × (K+1))
+for i = 1 to N_obs
+    j = obs[i].filt_id
+    A[i][0] = M[j]                 # column for the mean spectrum
+    for k = 1 to K
+        A[i][k] = B[k][j]           # columns for the eigenspectra
+    end for
+    # Convert magnitude to linear flux
+    f[i]      = 10^( -0.4 * (obs[i].mag - filt[j].zeropoint) )
+    sigma[i]  = ln(10)/2.5 * obs[i].err_mag * f[i]     # error propagation
+end for
+
+--------------------------------------------------------------------
+STEP 2 – Assemble Priors and Weights
+--------------------------------------------------------------------
+# Prior precision matrix (inverse covariance)
+Lambda = zeros(K+1, K+1)
+for k = 0 to K
+    Lambda[k][k] = 1.0 / prior_variance[k]
+end for
+
+# Weight matrix from measurement errors (diagonal)
+W = zeros(N_obs, N_obs)
+for i = 1 to N_obs
+    W[i][i] = 1.0 / (sigma[i]^2)
+end for
+
+--------------------------------------------------------------------
+STEP 3 – Solve for Coefficients (MAP Estimate)
+--------------------------------------------------------------------
+# Normal equation matrix
+Nmat = transpose(A) * W * A + Lambda
+
+# Right‑hand side vector
+rhs  = transpose(A) * W * f
+
+# Solve linear system Nmat * coeff = rhs
+coeff = solve_linear_system(Nmat, rhs)
+
+--------------------------------------------------------------------
+STEP 4 – Posterior Covariance of Coefficients
+--------------------------------------------------------------------
+cov_coeff = inverse(Nmat)
+
+--------------------------------------------------------------------
+STEP 5 – Reconstruct Reflectance Spectrum
+--------------------------------------------------------------------
+# For any desired wavelength array λ_grid
+for each λ in λ_grid
+    R_rec(λ) = mu(λ)
+    var_R(λ) = 0
+    for k = 0 to K
+        contribution = coeff[k] * v[k](λ)
+        R_rec(λ) += contribution
+        # propagate variance
+        for l = 0 to K
+            var_R(λ) += v[k](λ) * cov_coeff[k][l] * v[l](λ)
+        end for
+    end for
+end for
+
+--------------------------------------------------------------------
+RETURN
+    coeff, cov_coeff, R_rec(λ), var_R(λ)

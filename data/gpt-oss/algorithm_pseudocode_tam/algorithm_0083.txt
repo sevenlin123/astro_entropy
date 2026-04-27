@@ -1,0 +1,115 @@
+Input:
+    - Reference near‑IR spectra {S_i}  i = 1…N_ref      (each S_i is a vector of M wavelength bins)
+    - Filter throughput curves {T_f}   f = 1…F
+    - Observed photometry m_obs        (vector of L band measurements with uncertainties σ_m)
+
+Parameters:
+    - Number of principal components K   (typical 4–10)
+    - KDE bandwidth h                     (typical 0.5)
+    - Number of synthetic samples N_syn   (e.g. 5000)
+    - Noise level for training photometry η  (e.g. 0.20 for 20 % relative error)
+    - AutoML configuration                (e.g. Gradient‑Boosted Trees, default hyper‑params)
+
+Output:
+    - Reconstructed high‑resolution spectrum Ŝ  (vector of M bins)
+    - Posterior spectral uncertainty estimate  (optional, see step 8)
+    - Taxonomic probability vector P_taxo      (probabilities for each class)
+
+--------------------------------------------------------------------
+Step 0.  Pre‑processing of reference spectra
+--------------------------------------------------------------------
+1.  Compute mean spectrum μ_S = (1/N_ref) Σ S_i
+2.  Center each spectrum:  X_i = S_i – μ_S
+3.  Assemble data matrix X ∈ ℝ^(N_ref × M)  with rows X_i
+
+--------------------------------------------------------------------
+Step 1.  Principal Component Analysis (PCA)
+--------------------------------------------------------------------
+4.  Perform singular‑value decomposition on X:
+        X = U Σ Vᵀ
+5.  Take first K right‑singular vectors as eigenbasis:
+        V_K ∈ ℝ^(M × K)
+6.  Project reference spectra onto PCA space:
+        a_i = V_Kᵀ (S_i – μ_S)          # a_i ∈ ℝ^K
+
+--------------------------------------------------------------------
+Step 2.  Build a continuous prior via KDE
+--------------------------------------------------------------------
+7.  Fit a multivariate kernel density estimator (Gaussian kernels) to the set {a_i}
+        KDE(a; h)  with bandwidth h
+8.  Draw N_syn independent samples from KDE:
+        {a_syn[j]}  , j = 1…N_syn
+
+--------------------------------------------------------------------
+Step 3.  Generate synthetic spectra and photometry
+--------------------------------------------------------------------
+For each j = 1…N_syn:
+    9.  Reconstruct synthetic spectrum:
+            S_syn[j] = μ_S + V_K a_syn[j]
+   10.  For each filter f:
+            Compute ideal photometric response:
+                m_f_syn[j] = ∫ S_syn[j](λ) · T_f(λ) dλ
+   11.  Add Gaussian noise to each band:
+            m_f_syn_noisy[j] = m_f_syn[j] + ε_f
+            where ε_f ~ Normal(0, (η · m_f_syn[j])²)
+
+Store pairs (m_syn_noisy[j] , a_syn[j]) as the training set.
+
+--------------------------------------------------------------------
+Step 4.  Train AutoML regressor (Encoder)
+--------------------------------------------------------------------
+12.  Configure AutoML system (e.g. AutoGluon, GBRT)
+13.  Fit regression model R:  m → a
+        Input: vector of length L (photometry)
+        Output: vector of length K (latent coefficients)
+
+--------------------------------------------------------------------
+Step 5.  Train AutoML classifier (Taxonomy)
+--------------------------------------------------------------------
+14.  Assign each reference spectrum S_i a taxonomic label y_i
+15.  Train classification model C:  a → y
+        Input: latent vector a
+        Output: probability vector over classes
+
+--------------------------------------------------------------------
+Step 6.  Forward inference – single‑point prediction
+--------------------------------------------------------------------
+16.  Given observed photometry m_obs:
+        a_hat = R(m_obs)                       # predicted latent mean
+
+17.  Reconstruct high‑resolution spectrum:
+        Ŝ = μ_S + V_K a_hat
+
+18.  Compute taxonomic probabilities:
+        P_taxo = C(a_hat)
+
+--------------------------------------------------------------------
+Step 7.  Optional posterior sampling (uncertainty propagation)
+--------------------------------------------------------------------
+19.  (Optional) Monte‑Carlo sampling of photometric noise:
+        For n = 1 … N_MC:
+            m_n = m_obs + δm_n
+            δm_n ~ Normal(0, σ_m²)
+            a_n = R(m_n)
+            Ŝ_n = μ_S + V_K a_n
+        Estimate spectral uncertainty as:
+            σ_Ŝ(λ) = sqrt( (1/(N_MC-1)) Σ (Ŝ_n(λ) – mean(Ŝ))² )
+
+--------------------------------------------------------------------
+Step 8.  Return results
+--------------------------------------------------------------------
+Return Ŝ, (σ_Ŝ if computed), and P_taxo
+
+--------------------------------------------------------------------
+Notes
+--------------------------------------------------------------------
+•  All operations are vectorised; matrix multiplications dominate cost.
+•  The kernel density estimator may be implemented via scikit‑learn or
+    similar libraries; bandwidth h is tuned empirically.
+•  The AutoML frameworks automatically ensemble multiple learners
+    (GBRT, random forests, neural nets); use default settings for
+    reproducibility.
+•  The pipeline is agnostic to the number of photometric bands; the
+    encoder will learn the optimal mapping given the available filters.
+•  No validation or cross‑validation loops are included; the algorithm
+    assumes the training set is fixed and ready for deployment.

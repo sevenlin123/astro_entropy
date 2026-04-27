@@ -1,0 +1,50 @@
+FOR each spectrum S in Spectra:
+    Resample S onto a common wavelength grid λ (length L)
+    Normalize S (e.g., divide by its mean reflectance)
+END FOR
+
+Compute mean spectrum μ_S = (1/N) Σ S_i
+Center spectra: S'_i = S_i – μ_S
+Apply PCA to {S'_i} → eigenvectors U (L × K) and eigenvalues Λ
+Project spectra to latent space:
+    c_i = Uᵀ · S'_i        // c_i ∈ ℝ^K
+Store latent coefficients matrix C = [c_1 … c_N]ᵀ  // N × K
+
+Choose KDE bandwidth h (e.g., h = 0.5)
+Build KDE density p_C over latent space using rows of C
+Sample N_aug synthetic latent vectors {c̃_j} from KDE   // e.g., N_aug = 5000
+
+FOR each synthetic latent vector c̃ in {c̃_j}:
+    Reconstruct high‑res spectrum:
+        S̃ = μ_S + U · c̃          // S̃ ∈ ℝ^L
+    FOR each filter F_k:
+        Compute theoretical reflectance:
+            m̃_k = ∫ S̃(λ) · F_k(λ) dλ / ∫ F_k(λ) dλ
+    END FOR
+    Assemble synthetic photometry vector m̃ = [m̃_1 … m̃_M]
+    Inject Gaussian noise:
+        σ_k = 0.20 * m̃_k           // 20 % relative uncertainty
+        m̃_k_noisy = m̃_k + Normal(0, σ_k)
+    Store training pair (m̃_noisy , c̃)
+END FOR
+
+Define regressor R (e.g., ensemble of gradient‑boosted trees)
+Train R on the set {(m̃_noisy , c̃)} to predict latent vector:
+    minimize mean‑squared error between R(m̃_noisy) and c̃
+
+Assign class labels to the original spectra {S_i} (Water, CO₂, Organic, Methanol)
+Define classifier C (e.g., logistic regression or tree ensemble)
+Train C on {(c_i , label_i)} to output class probability vector
+
+INPUT: new photometric vector m ∈ ℝ^M
+
+// Encode to latent space
+ĉ = R(m)          // latent prediction (dimension K)
+
+// Decode to high‑resolution spectrum
+Spectrum_rec = μ_S + U · ĉ
+
+// Classify taxonomy
+Class_probs = C(ĉ)
+
+RETURN Spectrum_rec, Class_probs

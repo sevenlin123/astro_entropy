@@ -1,0 +1,78 @@
+INPUT:
+    S_train[1..N_spec][1..L]          # N_spec training spectra sampled at L wavelengths
+    F_obs[1..M]                      # M observed photometric fluxes
+    sigma_F[1..M]                    # Measurement uncertainties
+    Filter[j](lambda)                 # Throughput curves for each filter j
+    K                                 # Number of principal components to retain (e.g., 8–10)
+
+OUTPUT:
+    Spectrum_rec[1..L]                # Reconstructed spectral flux vector
+    Sigma_spec[1..L][1..L]            # Posterior covariance of reconstructed spectrum
+    Alpha_posterior_mean[1..K]
+    Alpha_posterior_cov[1..K][1..K]
+
+--------------------------------------------------------------------
+STEP 1 – Train Principal Component Basis
+--------------------------------------------------------------------
+1.1   Compute mean spectrum μ[1..L]:
+        μ[l] = (1/N_spec) * Σ_{n=1}^{N_spec} S_train[n,l]
+
+1.2   Center spectra:
+        S_centered[n,l] = S_train[n,l] - μ[l]      ∀ n,l
+
+1.3   Compute covariance matrix C[1..L][1..L]:
+        C = (1/(N_spec-1)) * Σ_{n=1}^{N_spec} S_centered[n,:]^T * S_centered[n,:]
+
+1.4   Perform eigen‑decomposition of C:
+        Eigenvalues λ_k and eigenvectors v_k[1..L], k = 1..L
+
+1.5   Sort eigenpairs by descending λ_k.
+
+1.6   Select first K eigenvectors → Principal Components PC[1..K][1..L]:
+        PC[i,l] = v_i[l]          ∀ i=1..K, l=1..L
+
+--------------------------------------------------------------------
+STEP 2 – Construct Forward Model Matrix
+--------------------------------------------------------------------
+# The forward model maps PC coefficients α[1..K] to expected photometric fluxes.
+# For each filter j, compute the response of every PC.
+
+2.1   For each filter j = 1..M:
+        For each component i = 1..K:
+              # Integrate PC[i] weighted by filter throughput
+              G[j,i] = ∫ PC[i,l] * Filter[j](λ_l) dλ   (discrete sum over l)
+        # Also compute contribution of mean spectrum
+        b[j] = ∫ μ[l] * Filter[j](λ_l) dλ
+
+# G is an M×K matrix, b is an M‑vector.
+
+--------------------------------------------------------------------
+STEP 3 – Bayesian Inference for PC Coefficients
+--------------------------------------------------------------------
+# Likelihood: F_obs ~ Normal(G * α + b, diag(sigma_F^2))
+# Prior: α ~ Normal(0, Σ_prior)  (Σ_prior often diagonal with λ_k variances)
+
+3.1   Define prior covariance:
+        Σ_prior[i,i] = λ_i   for i=1..K   (use eigenvalues as priors)
+
+3.2   Compute posterior covariance Σ_post:
+        Σ_post = inverse( G^T * W * G + Σ_prior^{-1} )
+        where W = diag(1/sigma_F[j]^2)
+
+3.3   Compute posterior mean α_hat:
+        α_hat = Σ_post * ( G^T * W * (F_obs - b) )
+
+--------------------------------------------------------------------
+STEP 4 – Reconstruct Spectrum and Uncertainty
+--------------------------------------------------------------------
+4.1   Reconstructed spectrum:
+        Spectrum_rec[l] = μ[l] + Σ_{i=1}^{K} α_hat[i] * PC[i,l]
+        ∀ l = 1..L
+
+4.2   Predictive covariance of spectrum:
+        Σ_spec = PC * Σ_post * PC^T
+        (PC is K×L matrix; result is L×L)
+
+--------------------------------------------------------------------
+RETURN:
+    Spectrum_rec, Σ_spec, α_hat, Σ_post

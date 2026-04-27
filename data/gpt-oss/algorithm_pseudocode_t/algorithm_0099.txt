@@ -1,0 +1,67 @@
+INPUT
+    • N_obs  : number of photometric observations
+    • λ_grid : wavelength grid covering all filter bandpasses
+    • {T_i(λ)}_{i=1..N_obs} : transmission curves for each filter
+    • {F_i, σ_i}_{i=1..N_obs} : measured fluxes and their 1‑σ errors
+    • {B_j(λ)}_{j=1..M}        : spectral basis functions (e.g. PCA modes)
+    • μ0, Λ                     : prior mean vector and precision matrix for coefficients a
+
+OUTPUT
+    • â      : posterior mean of coefficient vector (length M)
+    • C_a     : posterior covariance matrix of a (M×M)
+    • Ŝ(λ)   : reconstructed reflectance spectrum on λ_grid
+    • V_S(λ) : variance of Ŝ(λ) at each wavelength
+
+--------------------------------------------------------------------
+STEP 1 – Pre‑compute the design matrix A
+--------------------------------------------------------------------
+    For each observation i = 1 … N_obs
+        For each basis index j = 1 … M
+            A[i,j] ← ∫ B_j(λ) · T_i(λ) dλ          // numerical integration over λ_grid
+
+--------------------------------------------------------------------
+STEP 2 – Assemble data vectors and covariance
+--------------------------------------------------------------------
+    F_vec ← [F_1, F_2, …, F_N_obs]^T                // column vector of observed fluxes
+    Σ     ← diag([σ_1^2, σ_2^2, …, σ_N_obs^2])     // measurement‑error covariance
+
+--------------------------------------------------------------------
+STEP 3 – Compute posterior for coefficient vector a
+--------------------------------------------------------------------
+    // Precision matrices
+    P_data ← A^T · Σ^(-1) · A                      // information from data
+    P_prior← Λ                                      // prior precision
+
+    // Posterior precision
+    P_post ← P_data + P_prior
+
+    // Posterior mean
+    â ← P_post^(-1) · (A^T · Σ^(-1) · F_vec + Λ · μ0)
+
+    // Posterior covariance
+    C_a ← P_post^(-1)
+
+--------------------------------------------------------------------
+STEP 4 – Reconstruct the spectrum on λ_grid
+--------------------------------------------------------------------
+    For each wavelength λ_k in λ_grid
+        // Basis vector at λ_k
+        b_k ← [B_1(λ_k), B_2(λ_k), …, B_M(λ_k)]^T
+
+        // Mean spectrum value
+        Ŝ(λ_k) ← b_k^T · â
+
+        // Variance of spectrum value (propagate coefficient uncertainty)
+        V_S(λ_k) ← b_k^T · C_a · b_k
+
+--------------------------------------------------------------------
+STEP 5 – (Optional) Predict fluxes for new filters
+--------------------------------------------------------------------
+    For any new filter j with transmission T'_j(λ):
+        A'_j ← ∫ B(λ) · T'_j(λ) dλ                    // vector of length M
+        F_pred_j ← A'_j^T · â
+        σ_pred_j^2 ← A'_j^T · C_a · A'_j
+
+--------------------------------------------------------------------
+RETURN
+    â, C_a, Ŝ(λ_grid), V_S(λ_grid)

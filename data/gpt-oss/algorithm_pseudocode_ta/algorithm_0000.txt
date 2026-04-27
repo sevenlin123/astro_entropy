@@ -1,0 +1,127 @@
+INPUT:
+    - Training spectra {S_i(λ)}  i = 1 … N_train      (each S_i has M_wavelength points)
+    - Filter response curves {R_j(λ)} j = 1 … N_filter
+    - Photometric measurements for target TNO:
+        * Fluxes f_j   (j = 1 … N_filter)
+        * Uncertainties σ_j
+
+PARAMETERS:
+    - Number of principal components to keep: K
+    - MCMC settings: n_burn, n_iter, proposal_covariance Σ_prop
+    - Prior for latent coefficients: P_prior(a)  (Gaussian, see below)
+
+OUTPUT:
+    - Reconstructed spectrum S_rec(λ)  with credible‑interval bounds
+    - Posterior samples of latent coefficients {a^(t)}   (t = 1 … n_iter)
+
+--------------------------------------------------------------------
+STEP 1 – Build the Principal‑Component Latent Space
+--------------------------------------------------------------------
+1.1 Compute mean spectrum:
+        μ(λ) = (1/N_train) * Σ_i S_i(λ)
+
+1.2 Center spectra:
+        S'_i(λ) = S_i(λ) – μ(λ)
+
+1.3 Construct covariance matrix:
+        C = (1/(N_train-1)) * Σ_i S'_i * S'_iᵀ          // size M×M
+
+1.4 Eigen‑decompose C:
+        C v_k = λ_k v_k        for k = 1 … M
+        Sort eigenpairs (λ_k, v_k) descending by λ_k
+
+1.5 Select first K eigenvectors:
+        PC_k(λ) = v_k(λ)       for k = 1 … K
+
+1.6 Project training spectra onto PCs to obtain latent vectors:
+        a_i,k = ⟨S'_i , PC_k⟩         // dot product over wavelength grid
+        Form coefficient matrix A = [a_i,k]  (size N_train × K)
+
+1.7 Estimate prior distribution for a:
+        • Mean: μ_a = 0  (centered)
+        • Covariance: Σ_a = diag(λ_1 … λ_K)  (or empirical covariance of rows of A)
+
+--------------------------------------------------------------------
+STEP 2 – Define the Forward Photometry Model
+--------------------------------------------------------------------
+2.1 For any candidate latent vector a = (a_1 … a_K):
+        • Reconstruct spectrum:
+              S_a(λ) = μ(λ) + Σ_{k=1}^{K} a_k * PC_k(λ)
+
+        • Compute synthetic flux in filter j:
+              f̂_j(a) = ( ∫ S_a(λ) * R_j(λ) dλ ) /
+                        ( ∫ R_j(λ) dλ )
+          (numerical integration over wavelength grid)
+
+--------------------------------------------------------------------
+STEP 3 – Bayesian Inference of Latent Coefficients
+--------------------------------------------------------------------
+3.1 Likelihood (Gaussian photometric noise):
+        L(a) = Π_{j=1}^{N_filter}
+                exp[ -(f_j – f̂_j(a))² / (2 σ_j²) ] / sqrt(2π σ_j²)
+
+3.2 Prior probability:
+        P_prior(a) = exp[ -½ aᵀ Σ_a⁻¹ a ] / sqrt((2π)^K det(Σ_a))
+
+3.3 Target posterior:
+        p(a | data) ∝ L(a) * P_prior(a)
+
+--------------------------------------------------------------------
+STEP 4 – MCMC Sampling (Metropolis–Hastings)
+--------------------------------------------------------------------
+4.1 Initialize:
+        a_current = 0  (zero vector)
+        Compute f̂_j(a_current) → L_current
+        Compute P_prior(a_current) → prior_current
+        Set n_accept = 0
+
+4.2 Loop for t = 1 … (n_burn + n_iter):
+        a_proposal = a_current + η          // η ~ N(0, Σ_prop)
+        
+        # Forward model for proposal
+        compute f̂_j(a_proposal) → L_proposal
+        compute P_prior(a_proposal) → prior_proposal
+        
+        # Acceptance ratio
+        α = min(1,
+                (L_proposal * prior_proposal) /
+                (L_current * prior_current))
+        
+        # Draw u ~ Uniform(0,1)
+        if u < α:
+            a_current = a_proposal
+            L_current = L_proposal
+            prior_current = prior_proposal
+            n_accept += 1
+        
+        # Record sample after burn‑in
+        if t > n_burn:
+            store a_current as sample t' (t' = t - n_burn)
+
+4.3 Optionally adapt Σ_prop to achieve ≈25% acceptance rate.
+
+--------------------------------------------------------------------
+STEP 5 – Posterior Predictive Spectrum
+--------------------------------------------------------------------
+5.1 For each stored sample a^(t'):
+        S^(t')(λ) = μ(λ) + Σ_{k=1}^{K} a^(t')_k * PC_k(λ)
+
+5.2 Compute point‑wise statistics:
+        • Posterior mean spectrum:
+              S_mean(λ) = (1/n_iter) Σ_{t'} S^(t')(λ)
+        • Posterior standard deviation:
+              S_std(λ)  = sqrt( (1/n_iter) Σ_{t'} (S^(t')(λ) – S_mean(λ))² )
+
+5.3 Credible interval at desired level (e.g., 95%) can be derived by
+    sorting the {S^(t')(λ)} values at each λ and taking percentiles.
+
+--------------------------------------------------------------------
+STEP 6 – Return Results
+--------------------------------------------------------------------
+6.1 Output reconstructed spectrum S_mean(λ) and its uncertainty envelope
+    (e.g., S_mean ± 1.96 * S_std for 95% CI).
+
+6.2 Return posterior samples {a^(t')} for downstream analysis
+    (taxonomic classification, outlier detection, etc.).
+
+END

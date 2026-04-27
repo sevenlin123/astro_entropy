@@ -1,0 +1,95 @@
+pseudocode
+INPUT:  Spectral dataset {S_i}  (reflectance vs λ)  for i = 1…N_obs
+        Filter throughput curves {F_j(λ)}   j = 1…N_filt
+
+STEP 1.1  // Standardise spectra
+    For every S_i:
+        Interpolate onto common wavelength grid λ_ref
+        Normalise by continuum (e.g., divide by median reflectance)
+
+STEP 1.2  // PCA on spectra
+    [E, Λ] ← PCA(S_i)               // E : eigenvectors (K_pc ≤ 10)
+    For every S_i:
+        z_i ← Eᵀ · (S_i – mean_S)   // Project onto PCA basis → latent vector (length K_pc)
+
+STEP 1.3  // Density estimation in latent space (kernel density)
+    Choose KDE bandwidth h ≈ 0.5
+    kde_model ← KDE(z_i , kernel = gaussian , bandwidth = h)
+
+STEP 1.4  // Augment training set
+    N_aug ← 10⁴                                // number of synthetic latent samples
+    {z_syn} ← Sample(kde_model , N_aug)         // draw N_aug latent vectors
+
+pseudocode
+FOR each latent vector z in {z_syn}:
+    // Reconstruct full spectrum
+    S_full ← E · z + mean_S
+
+    // Convolve with filter responses
+    FOR each filter j:
+        m_j ← ∫ S_full(λ) · F_j(λ) dλ / ∫ F_j(λ) dλ      // theoretical reflectance in filter j
+
+    // Inject photometric noise (≈20 % relative uncertainty)
+    FOR each m_j:
+        σ_j ← 0.20 * m_j
+        m_j_noisy ← Normal(m_j , σ_j)
+
+    Store (m_noisy_vector , z)
+END FOR
+
+// The set {(m_noisy , z)} constitutes the training data for the encoder and classifier
+
+pseudocode
+TRAIN encoder_model ← AutoMLRegressor()   // e.g., ensemble of XGBoost + neural nets
+    INPUT:   noisy photometry vector m (length N_filt)
+    OUTPUT:  latent coefficient vector ẑ (length K_pc)
+
+    Loss:   minimize MSE(ẑ , z_true) over all synthetic samples
+
+pseudocode
+TRAIN classifier_model ← AutoMLClassifier()
+    INPUT:   latent coefficient vector z (from real spectra)
+    LABEL:   taxonomic class (H₂O, CO₂, Organic, Methanol)
+
+    // Train on real spectra only
+
+pseudocode
+INPUT:   observed photometry m_obs  (length N_filt)  with uncertainties σ_obs
+
+// 5.1  Encoder prediction
+z_mean ← encoder_model.predict(m_obs)
+
+// 5.2  Posterior sampling of latent variables
+    // 5.2.1  Estimate marginal posterior of each component
+    FOR k = 1 … K_pc:
+        posterior_k ← KDE_estimate(z_mean[k] ± σ_obs[k])   // simple Gaussian assumption
+
+    // 5.2.2  Build correlation matrix C from training latent distribution
+    C ← EmpiricalCorrelation({z_syn})
+
+    // 5.2.3  Gaussian Copula sampling
+    N_samp ← 1000
+    FOR s = 1 … N_samp:
+        u ← SampleUniform(0,1,K_pc)                     // uniform marginals
+        v ← Φ⁻¹(u)                                      // inverse normal CDF → standard normals
+        v_corr ← L * v                                   // L: Cholesky of C
+        z_samp[s] ← Φ(v_corr) * σ + μ                   // transform back to latents
+
+// 5.3  Spectrum reconstruction
+    FOR each sampled z_samp[s]:
+        S_samp[s] ← E · z_samp[s] + mean_S              // inverse PCA → full spectrum
+
+// 5.4  Taxonomy probabilities
+    taxonomy_probs ← classifier_model.predict_proba(z_mean)
+
+// 5.5  Output
+    RETURN {
+        S_recon_mean   : Mean(S_samp),
+        S_recon_CI     : CredibleInterval(S_samp),
+        TaxonomyProb   : taxonomy_probs,
+        LatentSampled  : z_samp
+    }
+
+pseudocode
+// Compute spectral diagnostics (slopes, band depths) from S_recon_mean
+// Flag outliers: if taxonomy_probs < threshold AND S_recon_CI lies outside training manifold

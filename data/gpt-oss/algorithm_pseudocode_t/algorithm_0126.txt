@@ -1,0 +1,31 @@
+Input: m[1..N], sigma[1..N], filterCurves[1..N][lambda_grid], basisFunctions[1..K][lambda_grid], zeroPoints[1..N]
+Output: posteriorSamples[c[1..K]]
+Algorithm:
+1. For each filter j=1..N:
+     Compute normalizing integral Nj = ∫ T_j(λ) λ dλ
+     For each basis k=1..K:
+         Compute A[j,k] = (∫ B_k(λ) T_j(λ) λ dλ) / Nj
+2. Convert observed magnitudes to flux units:
+     For each j:
+         f_obs[j] = 10^(-0.4 * (m[j] - zeroPoints[j]))
+3. Define linear forward model: f_pred = A * c
+4. Define likelihood function:
+     L(c) = exp( -0.5 * Σ_j ((f_obs[j] - f_pred[j]) / sigma[j])^2 )
+5. Define prior on c:
+     p(c) ∝ exp( -0.5 * c^T Λ^-1 c ), where Λ is prior covariance (e.g., τ^2 I)
+6. Posterior: p(c | data) ∝ L(c) * p(c)
+7. Choose inference method:
+     If using MAP:
+         Solve min_c 0.5 Σ_j ((f_obs[j] - A[j,:]*c)/sigma[j])^2 + 0.5 c^T Λ^-1 c
+     Else if using MCMC:
+         Initialize c_0
+         For iter = 1 to N_iter:
+             Propose c' = c_{iter-1} + ε, ε ~ N(0, Σ_prop)
+             Compute acceptance ratio α = min(1, p(c'|data)/p(c_{iter-1}|data))
+             With probability α accept c', else keep previous
+         Store samples
+8. Optional outlier detection:
+     For each filter j:
+         Compute standardized residual r_j_std = (f_obs[j] - f_pred[j]) / sigma[j]
+         If |r_j_std| > threshold, flag as outlier
+9. Return posteriorSamples or MAP estimate of c.

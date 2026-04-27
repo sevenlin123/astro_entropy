@@ -1,0 +1,46 @@
+INPUT:
+    N_objects            # number of TNOs to process
+    K_basis              # number of basis spectra (e.g., 10)
+    L_wavelengths        # number of wavelength points in final spectrum
+    M_filters            # number of photometric filters (≥ K_basis)
+    Photometry[N_objects][M_filters]   # observed magnitudes
+    Errors[N_objects][M_filters]       # photometric uncertainties
+    Filters[M_filters]                 # transmission curves
+    BasisSpectra[K_basis][L_wavelengths] # pre‑computed reflectances
+
+PRECOMPUTE:
+    # Integral of each basis spectrum through each filter
+    for j = 1 … K_basis:
+        for i = 1 … M_filters:
+            A[i,j] = ∫ BasisSpectra[j](λ) * Filters[i](λ) dλ
+    # Normalise columns of A if desired
+
+FOR each object n = 1 … N_objects:
+    # 1. Assemble data vector and weight matrix
+    m  = Photometry[n]          # shape (M_filters,)
+    σ  = Errors[n]              # shape (M_filters,)
+    W  = diag( 1/σ² )           # M_filters × M_filters
+
+    # 2. Solve weighted ridge‑regression for basis weights
+    λ_reg = λ_value             # regularisation parameter (set globally)
+    # Linear system: (AᵀWA + λI) w = AᵀW m
+    G     = Aᵀ * W * A + λ_reg * I_K   # K_basis × K_basis
+    rhs   = Aᵀ * W * m
+    w     = solve_linear_system(G, rhs)   # shape (K_basis,)
+
+    # 3. Compute covariance of weights
+    Cov_w = inverse(G)                    # K_basis × K_basis
+
+    # 4. Reconstruct spectral reflectance
+    #    Spectrum at each wavelength point:
+    S   = BasisSpectraᵀ * w               # shape (L_wavelengths,)
+    Cov_S = BasisSpectraᵀ * Cov_w * BasisSpectra   # L×L
+
+    # 5. Store results
+    Store w, Cov_w, S, Cov_S for object n
+
+OUTPUT:
+    For all objects:
+        - Posterior mean spectrum S (L_wavelengths)
+        - Uncertainty covariance Cov_S (L×L)
+        - Basis coefficients w (K_basis)

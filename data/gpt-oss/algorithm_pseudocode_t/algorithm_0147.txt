@@ -1,0 +1,95 @@
+Input:
+    - Photometric dataset P = { (obj_i, λ_j, m_ij, σ_ij) }  // sparse measurements
+      where λ_j = effective wavelength of filter j,
+            m_ij = apparent magnitude of object i in filter j,
+            σ_ij = photometric error.
+    - Reference spectral library S_ref = { s_k(λ) } for k=1…K
+      (high‑resolution reflectance spectra of calibration objects).
+    - Filter response curves R_j(λ) for all filters j.
+
+Output:
+    - Posterior spectrum estimate Ŝ_i(λ) for each object i.
+    - Weight vector w_i (coefficients on basis functions).
+    - Uncertainty estimates (posterior covariance).
+
+--------------------------------------------------------------------
+Preprocessing Step 1: Build Basis Set from Reference Library
+--------------------------------------------------------------------
+1.1   For each reference spectrum s_k(λ):
+          Evaluate it on a common wavelength grid Λ = {λ_1,…,λ_L}.
+          Store vector v_k = [s_k(λ_1), …, s_k(λ_L)]ᵀ.
+
+1.2   Compute mean spectrum μ = (1/K) Σ_k v_k.
+
+1.3   Center the library: V_c = [v_1-μ, …, v_K-μ]  (L × K matrix).
+
+1.4   Perform singular value decomposition (SVD):
+          V_c = U Σ Wᵀ
+        Take first N_b eigenvectors (columns of U) as basis B:
+          B = [b_1,…,b_Nb]  (L × N_b).
+
+1.5   Pre‑compute basis values at filter wavelengths:
+          For each filter j:
+              For each basis b_t:
+                  Compute response integral
+                      r_{jt} = ∫ b_t(λ) R_j(λ) dλ
+          Store matrix R_basis (J × N_b) with entries r_{jt}.
+
+--------------------------------------------------------------------
+Preprocessing Step 2: Convert Photometry to Flux Units
+--------------------------------------------------------------------
+2.1   For each measurement (i,j):
+          Convert magnitude m_ij to relative flux f_ij:
+              f_ij = 10^( -0.4 * (m_ij - ZP_j) )   // ZP_j = zero‑point
+          Propagate error:
+              σ_fij = (ln 10 / 2.5) * f_ij * σ_ij
+
+--------------------------------------------------------------------
+Bayesian Inference Step 3: Fit Weights for Each Object
+--------------------------------------------------------------------
+For each object i:
+
+3.1   Assemble measurement vector y_i = [f_i1, …, f_iJ]ᵀ
+       Assemble uncertainty vector σ_i = [σ_fi1, …, σ_fiJ]ᵀ
+
+3.2   Form design matrix X_i = diag(1/σ_i) * R_basis
+       (J × N_b) – each row j weighted by 1/σ_fij.
+
+3.3   Define prior on weights:
+          w_i ~ Normal(0, α⁻¹ I)      // α = prior precision
+
+3.4   Compute posterior mean and covariance:
+          Σ_post = (α I + X_iᵀ X_i)^(-1)
+          μ_post = Σ_post * (X_iᵀ y_i / σ_i²)
+
+   (If α unknown, set to small value or use empirical Bayes.)
+
+--------------------------------------------------------------------
+Reconstruction Step 4: Generate Spectrum and Uncertainty
+--------------------------------------------------------------------
+4.1   Posterior spectrum estimate:
+          Ŝ_i(λ) = μ + Σ_t μ_post(t) * b_t(λ)
+
+4.2   Posterior covariance on spectrum:
+          Cov_Si(λ, λ') = 
+                Σ_t Σ_u Σ_post(t,u) * b_t(λ) * b_u(λ')
+
+4.3   Optionally compute band‑averaged fluxes for any new filter:
+          f_i_new = Σ_t μ_post(t) * r_new,t
+          where r_new,t = ∫ b_t(λ) R_new(λ) dλ
+
+--------------------------------------------------------------------
+Taxonomy Assignment (Optional)
+--------------------------------------------------------------------
+5.1   For each reference spectrum k, compute its weight vector w_k
+       by projecting v_k onto basis B:
+           w_k = Bᵀ (v_k - μ)
+
+5.2   Compute distance between w_i (posterior mean) and each w_k
+       (e.g., Euclidean or Mahalanobis with Σ_post).
+
+5.3   Assign taxonomy label of nearest reference spectrum to object i.
+
+--------------------------------------------------------------------
+End Algorithm
+--------------------------------------------------------------------

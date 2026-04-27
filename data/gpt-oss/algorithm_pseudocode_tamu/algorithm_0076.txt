@@ -1,0 +1,107 @@
+INPUT:
+    spectra_data   // N×M matrix of high‑resolution reflectance spectra (N ≈ 50, M ≈ 400)
+    phot_filters   // list of filter transmission curves (F1 … FK, K = number of filters)
+    photometry_obs // vector of observed photometry for a new TNO (length = K)
+
+PARAMETERS:
+    n_components = 8        // dimensionality of latent space (choose 4–10)
+    kde_bandwidth = 0.5     // Gaussian kernel bandwidth for density estimation
+    n_augmented = 5000      // number of synthetic latent samples to generate
+    noise_level   = 0.20    // relative reflectance uncertainty (20%)
+
+ALGORITHM:
+
+--------------------------------------------------------------------
+STEP 1 – Build Latent Prior (PCA + KDE)
+--------------------------------------------------------------------
+1.1  // Center spectra
+       mean_spec ← mean(spectra_data, axis=0)
+       spec_centered ← spectra_data − mean_spec
+
+1.2  // Compute PCA
+       [U, S, Vt] ← svd(spec_centered)          // U: eigenvectors, Vt: components
+       PCs ← Vt[:n_components]                  // first n_components rows of Vt
+       latent_real ← spec_centered @ PCs.T      // project onto PC space (N×n_components)
+
+1.3  // Kernel density estimation in latent space
+       kde ← GaussianKDE(latent_real, bandwidth=kde_bandwidth)
+
+1.4  // Sample synthetic latent vectors
+       latent_aug ← kde.sample(n_augmented)      // n_augmented × n_components
+
+--------------------------------------------------------------------
+STEP 2 – Forward Modeling (Synthetic Photometry)
+--------------------------------------------------------------------
+2.1  For each synthetic latent vector l in latent_aug:
+         // Decode to full spectrum
+         spec_full ← mean_spec + l @ PCs          // M‑dimensional spectrum
+
+         // Convolve with each filter to obtain synthetic photometry
+         phot_syn ← []
+         For each filter f in phot_filters:
+             throughput ← f.transmission_curve
+             phot_value ← integrate( spec_full * throughput ) / integrate( throughput )
+             phot_syn.append( phot_value )
+
+         // Add realistic noise
+         phot_noise ← phot_syn * (1 + Normal(0, noise_level))
+         Store (phot_noise, l) as a training pair
+END FOR
+
+Result: training_set = { (phot_noise_i , latent_vector_i) }  for i=1..(n_augmented)
+
+--------------------------------------------------------------------
+STEP 3 – Train Encoder (Photometry → Latent)
+--------------------------------------------------------------------
+3.1  // Use an AutoML regressor (e.g., Gradient‑Boosted Trees)
+       encoder_model ← AutoML_Regressor()
+       encoder_model.fit( inputs = phot_noise_vectors,
+                          targets = latent_vectors )
+
+--------------------------------------------------------------------
+STEP 4 – Train Taxonomy Classifier (Latent → Class Probabilities)
+--------------------------------------------------------------------
+4.1  // Map each real spectrum to its latent coefficient
+       latent_labels ← latent_real              // N×n_components
+
+4.2  // Assign discrete taxonomic label to each real spectrum
+       class_labels ← [label_i for each real spectrum i]   // e.g., H2O, CO2, Organic, Methanol
+
+4.3  // Train a classifier on the latent space
+       classifier ← AutoML_Classifier()
+       classifier.fit( inputs = latent_labels,
+                       targets = class_labels )
+
+--------------------------------------------------------------------
+STEP 5 – Inference for New Observation
+--------------------------------------------------------------------
+5.1  // Encode observed photometry to latent coefficient(s)
+       latent_pred_mean ← encoder_model.predict(photometry_obs)
+
+5.2  // Estimate uncertainty on latent prediction
+       // (e.g., use Quantile Regression Forests or bootstrap the encoder)
+       latent_pred_cov ← encoder_model.uncertainty(photometry_obs)
+
+5.3  // Draw posterior samples in latent space
+       latent_samples ← GaussianCopulaSample(mean=latent_pred_mean,
+                                             cov=latent_pred_cov,
+                                             n_samples = 1000)
+
+5.4  // Decode each latent sample to a full spectrum
+       spectra_samples ← []
+       For each l in latent_samples:
+           spec ← mean_spec + l @ PCs
+           spectra_samples.append(spec)
+
+5.5  // Compute summary statistics for the reconstructed spectrum
+       spectrum_mean  ← mean(spectra_samples, axis=0)
+       spectrum_ci90  ← percentile(spectra_samples, [5, 95], axis=0)   // 90% CI
+       // Optional: derive slopes, absorption depths from spectrum_mean
+
+5.6  // Predict taxonomy probabilities
+       class_probabilities ← classifier.predict_proba(latent_pred_mean)
+
+OUTPUT:
+    spectrum_mean          // Reconstructed high‑resolution spectrum
+    spectrum_ci90          // Uncertainty bounds per wavelength
+    class_probabilities    // Probability vector over taxonomic classes

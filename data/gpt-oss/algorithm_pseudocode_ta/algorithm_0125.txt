@@ -1,0 +1,74 @@
+INPUT:
+    - Spectrum library S = { s_k(λ) | k = 1,…,K }   // high‑resolution reflectance spectra
+    - Filter set F = { f_j(λ) | j = 1,…,J }           // transmission curves
+    - Photometric data for target object:  
+          P = { (p_j, σ_j) | j ∈ observed filters }   // measured fluxes & errors
+
+PARAMETERS:
+    - Npc  : number of principal components to retain (e.g. 8–10)
+    - n_samples : number of Monte‑Carlo samples for Bayesian inference
+
+OUTPUT:
+    - Reconstructed spectrum Ŝ(λ)
+    - Posterior samples of PC coefficients {c^(n)}_{n=1}^{n_samples}
+    - Credible interval envelope for Ŝ(λ)
+
+--------------------------------------------------------------------
+STEP 0: PREPROCESS SPECTRA
+--------------------------------------------------------------------
+1. Normalize every spectrum s_k(λ) at a reference wavelength λ_ref (e.g. 1.2 μm).
+2. Resample all spectra onto a common wavelength grid {λ_m}_{m=1}^M.
+3. Store normalized spectra as matrix X (size K × M).
+
+--------------------------------------------------------------------
+STEP 1: PRINCIPAL COMPONENT ANALYSIS (PCA)
+--------------------------------------------------------------------
+4. Compute mean spectrum μ(λ) = (1/K) Σ_k X_k.
+5. Center data: Y = X – μ.
+6. Perform singular value decomposition (SVD):
+        Y = U Σ Vᵀ
+7. Extract first Npc right singular vectors (columns of V) → PC basis B (size Npc × M).
+   Each PC b_i(λ) corresponds to column i of V.
+8. Store eigenvalues Λ_i = (Σ_i)^2 / (K-1) for variance explanation.
+
+--------------------------------------------------------------------
+STEP 2: MODEL PHOTOMETRIC RESPONSE FOR GIVEN PC COEFFICIENTS
+--------------------------------------------------------------------
+9. Define forward model mapping PC coefficients c = (c_1,…,c_Npc) to synthetic photometry:
+        For each filter f_j:
+            Flux_j(c) = ∫ [ μ(λ) + Σ_{i=1}^{Npc} c_i * b_i(λ) ] * f_j(λ) dλ
+10. Pre‑compute integrals of PCs through each filter:
+        G_{ji} = ∫ b_i(λ) * f_j(λ) dλ      // size J × Npc
+    Then Flux_j(c) = m_j + Σ_i c_i * G_{ji}, where
+        m_j = ∫ μ(λ) * f_j(λ) dλ.
+
+--------------------------------------------------------------------
+STEP 3: BAYESIAN INFERENCE OF PC COEFFICIENTS
+--------------------------------------------------------------------
+11. Define likelihood assuming Gaussian photometric errors:
+        L(c) = Π_{j∈observed}  N(p_j | Flux_j(c), σ_j^2 )
+12. Adopt non‑informative prior on c (e.g. wide Gaussian or uniform).
+13. Use Markov Chain Monte Carlo (MCMC) to draw n_samples from posterior p(c|P):
+        Initialize chain at c_0 = 0 (zero coefficients).
+        For n = 1 … n_samples:
+            Propose c' = c_{n-1} + ε,  ε ~ N(0, Σ_proposal)
+            Compute acceptance ratio α = min(1, L(c')/L(c_{n-1}))
+            Accept with probability α; otherwise keep c_{n-1}.
+            Store accepted c^{(n)}.
+
+--------------------------------------------------------------------
+STEP 4: RECONSTRUCT SPECTRUM AND PROPAGATE UNCERTAINTY
+--------------------------------------------------------------------
+14. For each posterior sample c^{(n)}:
+        Ŝ^{(n)}(λ) = μ(λ) + Σ_{i=1}^{Npc} c_i^{(n)} * b_i(λ)
+15. Compute ensemble mean spectrum:
+        Ŝ_mean(λ) = (1/n_samples) Σ_n Ŝ^{(n)}(λ)
+16. Compute pointwise credible intervals (e.g., 2.5% and 97.5% percentiles) from {Ŝ^{(n)}(λ)}.
+
+--------------------------------------------------------------------
+STEP 5: OUTPUT
+--------------------------------------------------------------------
+17. Return:
+        - Ŝ_mean(λ)
+        - Upper/Lower credible bounds at each λ
+        - Posterior samples of c for downstream use (e.g., taxonomy).

@@ -1,0 +1,94 @@
+INPUT
+    – Photometric data for one target:
+          • Band identifiers k = 1 … K
+          • Observed fluxes f_k
+          • Flux uncertainties σ_k
+    – Filter transmission curves T_k(λ) for each band
+    – Reference spectral library:
+          • Spectra R_j(λ), j = 1 … J
+          • Each spectrum defined on a common wavelength grid
+
+OUTPUT
+    – Reconstructed spectrum Ŝ(λ)
+    – Posterior weight estimates w̄_j
+    – Goodness‑of‑fit statistic χ²
+    – Outlier flag (True/False)
+
+--------------------------------------------------------------------
+STEP 1 – Construct model matrix A
+--------------------------------------------------------------------
+FOR each band k = 1 … K
+      FOR each reference spectrum j = 1 … J
+            A_kj ← ∫ R_j(λ) · T_k(λ) dλ          // numeric integration
+      END
+END
+
+--------------------------------------------------------------------
+STEP 2 – Prepare data vectors
+--------------------------------------------------------------------
+f_vec ← [f_1, f_2, …, f_K]^T                    // observed flux vector
+C_mat ← diag([σ_1², σ_2², …, σ_K²])             // covariance matrix (assumed diagonal)
+
+--------------------------------------------------------------------
+STEP 3 – Define priors on weights
+--------------------------------------------------------------------
+    • w_j ≥ 0  for all j
+    • Σ_j w_j = 1
+    • Prior: Dirichlet(α_j)   (α_j can be set to 1 for uniform prior)
+
+--------------------------------------------------------------------
+STEP 4 – Bayesian inference via Metropolis–Hastings
+--------------------------------------------------------------------
+Initialize:
+    w_current ← [1/J, 1/J, …, 1/J]
+    n_burn   ← 10 000      // number of burn‑in iterations
+    n_sample ← 5 000       // number of samples to keep
+    samples  ← empty list
+
+FOR iter = 1 TO (n_burn + n_sample)
+    /* ---- propose new weights ----- */
+    ε ← Gaussian(0, σ_prop)   // small perturbation vector
+    w_proposed ← w_current + ε
+    /* project onto simplex (non‑negative, sum=1) */
+    w_proposed ← project_to_simplex(w_proposed)
+
+    /* ---- evaluate likelihood ----- */
+    r ← f_vec − A · w_proposed
+    L_proposed ← exp( −½ · rᵀ · C_mat⁻¹ · r )
+    r_current ← f_vec − A · w_current
+    L_current ← exp( −½ · r_currentᵀ · C_mat⁻¹ · r_current )
+
+    /* ---- evaluate prior ----- */
+    P_proposed ← DirichletPDF(w_proposed | α)
+    P_current  ← DirichletPDF(w_current  | α)
+
+    /* ---- acceptance test ----- */
+    acc_ratio ← (L_proposed * P_proposed) / (L_current * P_current)
+    u ← Uniform(0,1)
+    IF u < min(1, acc_ratio) THEN
+         w_current ← w_proposed
+    END IF
+
+    /* ---- store sample after burn‑in ----- */
+    IF iter > n_burn THEN
+         append(w_current, samples)
+    END IF
+END
+
+--------------------------------------------------------------------
+STEP 5 – Posterior summaries
+--------------------------------------------------------------------
+w_bar ← mean(samples, axis=0)                // posterior mean weights
+S_hat(λ) ← Σ_j w_bar_j · R_j(λ)              // reconstructed spectrum
+
+/* ---- compute final predicted fluxes and χ² ---- */
+f_pred ← A · w_bar
+residuals ← f_vec − f_pred
+chi_sq   ← residualsᵀ · C_mat⁻¹ · residuals
+
+/* ---- flag potential outlier ---- */
+outlier_flag ← (chi_sq > χ²_threshold)        // threshold set by user or by
+                                              // desired false‑positive rate
+
+--------------------------------------------------------------------
+RETURN S_hat, w_bar, chi_sq, outlier_flag

@@ -1,0 +1,103 @@
+INPUT:
+    RefSpectra[1..N]          // high‑resolution reference spectra (flux or reflectance)
+    Filters[1..F]             // effective throughput curves of available photometric filters
+    TaxLabels[1..N]           // taxonomy labels for RefSpectra (optional)
+
+PARAMETERS:
+    K            // number of principal components (e.g., 5–10)
+    M            // number of synthetic latent samples (e.g., 10,000)
+    h            // KDE bandwidth (≈0.5)
+    sigma_frac   // relative photometric noise (0.20)
+    Nsamples_pp  // number of posterior samples per new observation (e.g., 200)
+
+OUTPUT:
+    TrainedRegressor     // maps photometry → latent coefficients
+    TrainedClassifier    // maps latent coefficients → taxonomy probabilities
+    SpectrumReconstructor // function: photometry → full spectrum (± uncertainty)
+
+for i = 1 to N:
+    // Normalize each spectrum (e.g., divide by mean reflectance or
+    // integrate over a reference band)
+    RefSpectra_norm[i] ← normalize(RefSpectra[i])
+end for
+
+X ← matrix of size (N × L) where each row is RefSpectra_norm[i]
+[U, S, Vᵀ] ← singular_value_decomposition(X)      // U: left singular vectors,
+                                                    // S: singular values,
+                                                    // Vᵀ: right singular vectors
+μ_spec ← mean(X, axis=0)                            // spectral mean
+PC_basis ← Vᵀ[1:K, :]                               // first K right singular vectors (principal components)
+
+for i = 1 to N:
+    coeffs[i] ← (RefSpectra_norm[i] - μ_spec) · PC_basisᵀ   // 1 × K vector
+end for
+
+KDE_model ← fit_KDE(coeffs, bandwidth=h)              // non‑parametric density estimator
+for j = 1 to M:
+    z[j] ← sample_from(KDE_model)                     // synthetic latent vector (1 × K)
+end for
+
+for j = 1 to M:
+    // Reconstruct high‑resolution spectrum
+    s[j] ← μ_spec + PC_basis · z[j]ᵀ                  // 1 × L vector
+
+    // Forward model: convolve with filter throughputs
+    for f = 1 to F:
+        p_clean[f] ← ∫ s[j] · Filters[f] / ∫ Filters[f]
+    end for
+
+    // Inject Gaussian noise (relative uncertainty = sigma_frac)
+    for f = 1 to F:
+        noise_factor ← 1 + Normal(mean=0, stddev=sigma_frac)
+        p_noisy[f] ← p_clean[f] * noise_factor
+    end for
+
+    // Store training pair
+    TrainingData.add( (p_noisy, z[j]) )
+end for
+
+Regressor ← AutoML.train_regressor(
+                inputs = [pair.photometry for pair in TrainingData],
+                targets = [pair.latent for pair in TrainingData]
+            )
+
+if TaxLabels provided:
+    Classifier ← AutoML.train_classifier(
+                    features = coeffs,            // latent coordinates of real spectra
+                    labels   = TaxLabels
+                )
+end if
+
+function SpectrumReconstructor(ObservedPhotometry):
+    // 1. Predict latent coefficient distribution
+    latent_mean, latent_cov ← Regressor.predict_distribution(ObservedPhotometry)
+
+    // 2. OPTIONAL: draw posterior samples via Gaussian copula
+    latent_samples ← []
+    for s = 1 to Nsamples_pp:
+        // sample from multivariate normal with mean=latent_mean, cov=latent_cov
+        z_sample ← sample_multivariate_normal(latent_mean, latent_cov)
+        latent_samples.append(z_sample)
+    end for
+
+    // 3. Decode each sample to full spectrum
+    spectra ← []
+    for z in latent_samples:
+        spec ← μ_spec + PC_basis · zᵀ
+        spectra.append(spec)
+    end for
+
+    // 4. Return mean spectrum and empirical 95% credible band
+    mean_spectrum ← mean(spectra, axis=0)
+    lower_band    ← percentile(spectra, 2.5, axis=0)
+    upper_band    ← percentile(spectra, 97.5, axis=0)
+
+    // 5. OPTIONAL: taxonomy probabilities
+    if Classifier exists:
+        taxonomy_probs ← Classifier.predict( latent_mean )
+    else:
+        taxonomy_probs ← None
+    end if
+
+    return (mean_spectrum, lower_band, upper_band, taxonomy_probs)
+end function

@@ -1,0 +1,77 @@
+Input:  
+    - N_obs spectra S_i(λ)  i = 1…N_obs  (high‑resolution reflectance)
+    - Wavelength grid λ_j  j = 1…M  
+    - Filter set {F_k}  k = 1…K  (effective throughput curves)
+
+Output:  
+    - Trained encoder (regressor) R_enc
+    - Trained classifier C_cls
+    - PCA basis V = [v_1 … v_Kp]   (Kp principal components)
+    - Mean spectrum μ_S
+    - Covariance matrix Σ_lat (for Gaussian Copula)
+
+1.1.1  Center spectra:  S'_i = S_i – μ_S   (μ_S = mean over all spectra)
+1.1.2  Assemble data matrix X = [S'_1, S'_2, …, S'_Nobs]  (size M × N_obs)
+1.1.3  Compute covariance C = (1/(N_obs-1)) * X * Xᵀ
+1.1.4  Eigen‑decompose C → eigenvalues λ_l, eigenvectors v_l
+1.1.5  Select first Kp components that cumulatively explain ≥ 95 % variance
+1.1.6  Store V = [v_1 … v_Kp]   (M × Kp)
+
+For each spectrum S_i:
+    a_i = Vᵀ * (S_i – μ_S)          // Kp‑dimensional coefficient vector
+Collect coefficient set A = {a_1 … a_Nobs}
+
+Choose Gaussian kernel bandwidth h ≈ 0.5
+Compute KDE density p_lat(a) from A
+Sample N_syn synthetic latent vectors {a*_s}  s = 1…N_syn
+
+For each sampled a*_s:
+    S*_s = μ_S + V * a*_s            // Inverse PCA → full spectrum
+
+For each synthetic spectrum S*_s:
+    For each filter F_k:
+        m*_sk = ∫ S*_s(λ) * F_k(λ) dλ / ∫ S⊙(λ) * F_k(λ) dλ   // Reflectance
+    Add Gaussian noise σ_m = 0.20 * m*_s  (20 % relative)
+    m*_s_noisy = m*_s + N(0, σ_m²)
+Store pairs (m*_s_noisy , a*_s)
+
+Use AutoML framework (e.g., AutoGluon Tabular):
+    Input features: photometry vector m*_s_noisy   (length K)
+    Target outputs: latent vector a*_s             (length Kp)
+Train ensemble regressor R_enc
+
+Assign taxonomic labels to each synthetic spectrum S*_s
+Use AutoML to train classifier C_cls on latent inputs a*_s
+Output: probability distribution over classes per latent vector
+
+From training set of latent vectors A:
+    Estimate marginal distributions (e.g., empirical CDFs)
+    Compute correlation matrix Corr_lat of A
+Store (marginals, Corr_lat) for posterior sampling
+
+Input: New observation photometry vector m_new  (length K)
+Output: Posterior samples of reconstructed spectra {S_post}
+        Class probabilities P_class
+
+Procedure:
+2.1  Encoder prediction:
+        a_pred = R_enc.predict(m_new)              // Point estimate
+        // Optionally obtain predictive variance via ensemble spread
+
+2.2  Posterior sampling in latent space:
+        For n = 1…N_sample:
+            Sample u_n from multivariate normal N(0, Corr_lat)
+            Transform to latent sample a_n using Gaussian copula:
+                a_n = inverse_marginals(Φ(u_n))      // Φ = standard normal CDF
+            // Optionally apply small perturbation around a_pred
+
+2.3  Reconstruct spectra:
+        For each a_n:
+            S_n = μ_S + V * a_n                       // Inverse PCA
+            Append S_n to {S_post}
+
+2.4  Classification:
+        For each a_n:
+            p_cls_n = C_cls.predict_proba(a_n)
+        Average over samples to obtain final class probabilities:
+            P_class = (1/N_sample) * Σ_n p_cls_n

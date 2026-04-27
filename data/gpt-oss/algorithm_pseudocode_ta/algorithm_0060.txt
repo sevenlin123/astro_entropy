@@ -1,0 +1,47 @@
+text
+1.1  Compute mean spectrum μ(λ) = mean(S, axis=0).  
+1.2  Center spectra:  S_centered = S – μ.  
+1.3  Compute covariance C = (S_centered^T · S_centered) / (N_spec – 1).  
+1.4  Eigendecompose C → eigenvalues λ_eig, eigenvectors V.  
+1.5  Sort eigenvectors by decreasing eigenvalue.  
+1.6  Select first J eigenvectors:  PC = V[:, 0:J]  (shape (N_wave, J)).
+
+text
+2.1  For each filter k:
+        • Integrate mean spectrum:      m_k = ∫ μ(λ)·T_k(λ)dλ / ∫ T_k(λ)dλ.
+        • For each component j:
+              p_kj = ∫ PC_j(λ)·T_k(λ)dλ / ∫ T_k(λ)dλ.
+2.2  Assemble design matrix A (shape K×J):
+        A[k, j] = p_kj.
+2.3  Assemble mean photometry vector m (shape K):
+        m[k] = m_k.
+
+text
+3.1  Build observation vector y = y_i.  
+3.2  Build error covariance Σ = diag(σ_i²).  
+3.3  Compute precision matrices:
+        P_y = Σ⁻¹,
+        P_A = A^T · P_y · A.
+3.4  Prior precision:     P_Λ = Λ⁻¹.  
+3.5  Posterior precision: P_post = P_A + P_Λ.  
+3.6  Posterior mean:      μ_post = P_post⁻¹ · (A^T · P_y · (y – m)).  
+3.7  Posterior covariance: Σ_post = P_post⁻¹.
+
+text
+4.1  Expected spectrum:
+        ŝ(λ) = μ(λ) + PC(λ) · μ_post
+       (where PC(λ) is the vector of component values at wavelength λ).
+
+4.2  Predictive variance at each wavelength λ:
+        var_s(λ) = PC(λ)^T · Σ_post · PC(λ).
+
+4.3  Construct credible interval at desired confidence (e.g., ±2σ):
+        lower(λ) = ŝ(λ) – 2√var_s(λ),
+        upper(λ) = ŝ(λ) + 2√var_s(λ).
+
+text
+5.1  Draw N samples:  c^(ℓ) ~ N(μ_post, Σ_post)  for ℓ = 1 … N.  
+5.2  For each sample, reconstruct spectrum:
+        s^(ℓ)(λ) = μ(λ) + PC(λ) · c^(ℓ).  
+5.3  Use the ensemble {s^(ℓ)} to assess probability of belonging to known
+      taxonomic classes or to flag low‑probability intermediate models.

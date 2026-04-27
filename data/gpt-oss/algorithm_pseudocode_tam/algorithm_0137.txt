@@ -1,0 +1,96 @@
+INPUT:
+    - SPECTRA   : list of N_ref reference spectra (flux vs. wavelength)
+    - FILTERS   : list of M filter transmission curves
+    - LABELS    : taxonomic class label for each reference spectrum
+    - PHOTOMETRY_NEW : observed photometry vector (length L ≤ M) for a new object
+    - K         : number of principal components to retain (e.g. K = 8–10)
+    - BWD       : KDE bandwidth for latent space density (≈0.5)
+    - NSAMP     : number of synthetic latent samples to generate (e.g. 5×10⁴)
+    - NOISE_RMS : relative reflectance noise level to inject (≈0.20)
+
+OUTPUT:
+    - RECON_SPEC : reconstructed high‑resolution spectrum (vector of length Nλ)
+    - SPEC_CONF  : per‑wavelength confidence interval (optional)
+    - CLASS_PROBS: probability distribution over taxonomic classes
+
+--------------------------------------------------------------------
+STEP 1 – PRE‑PROCESSING OF REFERECE SPECTRA
+--------------------------------------------------------------------
+1.1  For each reference spectrum s in SPECTRA:
+        * Interpolate s onto a common wavelength grid λ_grid (length Nλ)
+        * Normalize or convert to reflectance (divide by solar spectrum if desired)
+        * Store normalized spectrum as array S_norm[i]  (i = 1…N_ref)
+
+--------------------------------------------------------------------
+STEP 2 – PRINCIPAL COMPONENT ANALYSIS (PCA)
+--------------------------------------------------------------------
+2.1  Assemble data matrix X_ref of shape (N_ref × Nλ) from S_norm
+2.2  Subtract column means to obtain centered matrix X_center
+2.3  Compute singular value decomposition: X_center = U Σ Vᵀ
+2.4  Retain first K right‑singular vectors → PC matrix W_K (shape Nλ × K)
+2.5  Store mean spectrum μ (length Nλ)
+
+--------------------------------------------------------------------
+STEP 3 – PROJECT REFERECE SPECTRA INTO LATENT SPACE
+--------------------------------------------------------------------
+3.1  For each i = 1 … N_ref:
+        a_latent[i] = (S_norm[i] − μ) ⋅ W_K          # dot product, length K
+3.2  Store vector a_latent[i] and corresponding LABELS[i]
+
+--------------------------------------------------------------------
+STEP 4 – ESTIMATE LATENT SPACE DENSITY BY KDE
+--------------------------------------------------------------------
+4.1  Apply multivariate kernel density estimator (Gaussian kernel) to {a_latent[i]}
+     with bandwidth BWD
+4.2  Sample NSAMP points from the KDE to obtain synthetic latent vectors
+     a_synth[j], j = 1 … NSAMP
+
+--------------------------------------------------------------------
+STEP 5 – GENERATE SYNTHETIC SPECTRA AND PHOTOMETRY
+--------------------------------------------------------------------
+5.1  For each synthetic latent vector a_synth[j]:
+        a.  Reconstruct spectrum:
+                S_synth[j] = μ + W_K ⋅ a_synth[j]      # inverse PCA
+        b.  Forward‑model photometry:
+                For each filter m = 1 … M:
+                    p_synth[j,m] = ∫ S_synth[j](λ) · T_m(λ) dλ
+                                / ∫ S_☉(λ) · T_m(λ) dλ   # reflectance form
+        c.  Inject Gaussian noise:
+                p_noisy[j,m] = p_synth[j,m] + Normal(0, NOISE_RMS × p_synth[j,m])
+5.2  Build training dataset:
+        X_train = {p_noisy[j,:]}      # L‑dimensional photometry
+        Y_latent = {a_synth[j]}       # K‑dimensional latent target
+        Y_label  = { corresponding taxonomic class }   # derived from nearest neighbor in latent space or known mapping
+
+--------------------------------------------------------------------
+STEP 6 – TRAIN AUTO‑ML REGRESSOR (Encoder)
+--------------------------------------------------------------------
+6.1  Initialize AutoML framework (e.g., AutoGluon)
+6.2  Configure regressor to predict K outputs (latent coefficients)
+6.3  Train regressor on (X_train → Y_latent)
+
+--------------------------------------------------------------------
+STEP 7 – TRAIN AUTO‑ML CLASSIFIER (Taxonomy)
+--------------------------------------------------------------------
+7.1  Initialize AutoML classifier
+7.2  Configure to predict discrete taxonomic class
+7.3  Train classifier on (Y_latent → Y_label)
+
+--------------------------------------------------------------------
+STEP 8 – INFERENCE ON NEW OBJECT
+--------------------------------------------------------------------
+8.1  Input PHOTOMETRY_NEW (length L)
+8.2  Predict latent coefficients:
+        a_pred = Encoder.predict(PHOTOMETRY_NEW)      # length K
+8.3  Reconstruct high‑resolution spectrum:
+        RECON_SPEC = μ + W_K ⋅ a_pred                  # length Nλ
+8.4  Compute classifier probabilities:
+        CLASS_PROBS = Classifier.predict_proba(a_pred) # vector over classes
+8.5  OPTIONAL – QUANTIFY UNCERTAINTY:
+        a_samples = Encoder.sample(posterior, n=Nsamp)   # e.g., bootstrap or MC sampling
+        RECON_SAMPLES = μ + W_K ⋅ a_samples             # generate many spectra
+        SPEC_CONF = percentile(RECON_SAMPLES, [16,84])  # 1σ envelope
+
+--------------------------------------------------------------------
+RETURN:
+    RECON_SPEC, SPEC_CONF (if computed), CLASS_PROBS

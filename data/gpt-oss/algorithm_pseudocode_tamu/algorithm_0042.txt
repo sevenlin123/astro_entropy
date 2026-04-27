@@ -1,0 +1,75 @@
+INPUT:
+    • Training spectra {S_i}   (i = 1 … N, each S_i ∈ ℝ^L  – L wavelength bins)
+    • Filter response curves {T_f}  (f = 1 … F  – number of photometric filters)
+    • Desired latent dimensionality K  (e.g. K = 5–10)
+    • KDE bandwidth h (e.g. h = 0.5)
+    • Number of synthetic samples M  (e.g. M = 10 000)
+
+OUTPUT (for any new photometric measurement m_obs ∈ ℝ^F):
+    • Reconstructed high‑resolution spectrum S_rec
+    • Classification probabilities p(type)
+    • (Optional) Posterior sample set {S_k} for uncertainty quantification
+
+--------------------------------------------------------------------
+STEP 0 – PRE‑PROCESS TRAINING SPECTRA
+--------------------------------------------------------------------
+1. Compute mean spectrum μ_S ← (1/N) Σ_i S_i
+2. Center spectra:  S'_i ← S_i – μ_S     for all i
+
+--------------------------------------------------------------------
+STEP 1 – DEFINE PRIOR IN LATENT SPACE
+--------------------------------------------------------------------
+3. Perform PCA on centered spectra {S'_i}:
+       • Eigen‑decompose covariance matrix C = (1/(N–1)) Σ_i S'_i S'_iᵀ
+       • Select first K eigenvectors U_K ∈ ℝ^{L×K}
+4. Project each centered spectrum onto PCs:
+       • Latent coefficient vector a_i = U_Kᵀ · S'_i          (a_i ∈ ℝ^K)
+5. Construct a probability density over latent space:
+       • Fit a Gaussian‑kernel KDE to {a_i} with bandwidth h
+           – KDE(a) = (1/M) Σ_{j=1}^M  exp(–||a – a_j||² / (2h²))
+6. Generate synthetic latent points:
+       • Draw M samples {ã_j} from the KDE density
+7. For each synthetic latent point ã_j:
+       a. Reconstruct a synthetic spectrum:
+              S_syn_j = μ_S + U_K · ã_j
+       b. Forward‑model photometry:
+              For each filter f:
+                  m_f,j = ∫ S_syn_j(λ) · T_f(λ) dλ    (numerical integration)
+       c. Inject realistic noise:
+              m_f,j ← m_f,j + Normal(0 , 0.2 · m_f,j)   // 20 % relative error
+       d. Store training pair (m_j , ã_j)
+
+Result: Training set 𝓣 = {(m_j , ã_j)}   (size M)
+
+--------------------------------------------------------------------
+STEP 2 – TRAIN ENCODER AND CLASSIFIER
+--------------------------------------------------------------------
+8. Encode the mapping m → a with an automated supervised learner:
+       • Use AutoML (e.g., AutoGluon) to train a regression model R_enc:
+             R_enc : ℝ^F → ℝ^K
+       • Loss: mean‑squared error between R_enc(m_j) and ã_j
+9. Build a taxonomy classifier in latent space:
+       • Assign each original spectrum S_i a taxonomic label y_i
+       • Train a second AutoML model R_cls:
+             R_cls : ℝ^K → {Probabilities over taxonomic types}
+       • Loss: categorical cross‑entropy
+
+--------------------------------------------------------------------
+STEP 3 – INFERENCE ON NEW PHOTOMETRY
+--------------------------------------------------------------------
+10. Input: observed photometry vector m_obs ∈ ℝ^F
+11. Predict latent coefficients:
+        a_pred = R_enc(m_obs)            // point estimate
+12. Decode to full spectrum:
+        S_rec = μ_S + U_K · a_pred
+13. (Optional) Uncertainty quantification:
+        a_sampled ← sample from predictive distribution of R_enc
+                     – e.g., draw N_samp latent vectors by adding Gaussian
+                       noise to a_pred (covariance estimated from training residuals)
+        For each a_sampled:
+            S_k = μ_S + U_K · a_sampled
+        Assemble {S_k} as posterior ensemble
+14. Classify taxonomy:
+        p_type = R_cls(a_pred)           // probability vector
+
+RETURN  S_rec , p_type , {S_k} (if requested)

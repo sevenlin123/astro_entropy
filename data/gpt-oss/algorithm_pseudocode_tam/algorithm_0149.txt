@@ -1,0 +1,47 @@
+INPUT:
+    - Photometric measurement vector m = [m1, m2, …, mF]
+        (mi = reflectance in filter i, with associated Gaussian noise σi)
+    - Pre‑trained PCA model:
+        * Eigenvectors U ∈ ℝ^{W × K}   (W = number of spectral bins,
+                                       K = number of retained components)
+        * Mean spectrum μS ∈ ℝ^W
+    - Trained encoder E (gradient‑boosted regressor, e.g., AutoGluon)
+    - Trained classifier C (probabilistic classifier in latent space)
+
+OUTPUT:
+    - Posterior predictive distribution p(S | m) ≈ N(Ŝ, Σ̂)
+        (Ŝ = mean reconstructed spectrum)
+    - Estimated spectral uncertainty Σ̂ (covariance matrix)
+    - Taxonomic class probabilities p(Class | m)
+
+PROCEDURE:
+
+1.  Encode photometry to latent coefficients
+    -------------------------------------------------
+    a.  Apply any required preprocessing to m (e.g., log‑transform, scaling).
+    b.  Predict latent coefficient vector θ̂ = E.predict(m)
+        (θ̂ ∈ ℝ^K)
+    c.  Optionally obtain predictive variance Var(θ̂) from the regressor
+        (e.g., by sampling ensemble outputs).
+
+2.  Reconstruct high‑resolution spectrum
+    ---------------------------------------
+    a.  Compute reconstructed spectrum:
+            Ŝ = μS + U · θ̂
+       (U · θ̂ is matrix–vector product giving deviation from mean)
+    b.  Estimate spectral covariance Σ̂ by propagating Var(θ̂):
+            Σ̂ = U · diag(Var(θ̂)) · Uᵀ
+       (If Var(θ̂) unavailable, set Σ̂ to a small isotropic value.)
+
+3.  Provide posterior distribution
+    --------------------------------
+    a.  Return p(S | m) ≈ N(Ŝ, Σ̂)
+        (Mean Ŝ and covariance Σ̂ describe the posterior.)
+
+4.  Classify taxonomic type
+    -------------------------
+    a.  Predict class probabilities:
+            p(Class | m) = C.predict_proba(θ̂)
+    b.  Return class probabilities along with reconstructed spectrum.
+
+END PROCEDURE

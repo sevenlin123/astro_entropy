@@ -1,0 +1,76 @@
+text
+INPUT
+  S_library[1…Ns]      # Near‑IR spectra (flux vs. wavelength λ)
+  λ_grid[1…L]          # Common wavelength grid (after resampling/normalization)
+  T_filters[1…K](λ)    # Transmission curves of K photometric filters
+  Phot_data          # { (f_k, σ_k) }  observed flux and error for each filter k
+  M                  # Number of principal components to retain (4–10)
+
+OUTPUT
+  Spectrum_mean(λ)    # Posterior‑mean reconstructed spectrum
+  Spectrum_CI(λ)      # Credible interval (e.g., 95%) per wavelength
+
+--------------------------------------------------------------------
+STEP 1: TRAINING – PCA ON THE SPECTRAL LIBRARY
+--------------------------------------------------------------------
+1.1  Build data matrix X (Ns × L) where X[i,j] = S_library[i](λ_grid[j]).
+1.2  Mean‑center: μ(λ) = mean_i X[i,:];   X_centered = X – μ.
+1.3  Compute covariance C = (X_centeredᵀ · X_centered) / (Ns – 1).
+1.4  Eigen‑decompose C → eigenvalues λ_m and eigenvectors U[:,m] (m = 1…L).
+1.5  Sort by decreasing λ_m; keep first M columns → U_M (L × M).
+1.6  Store eigenvalue variances σ_a²[m] = λ_m (m = 1…M).
+
+--------------------------------------------------------------------
+STEP 2: FORWARD MODEL (SPECTRUM FROM LATENT COEFFICIENTS)
+--------------------------------------------------------------------
+Define function ForwardModel(a[1…M]):
+  # a = latent coefficient vector
+  spectrum = μ(λ_grid)  +  Σ_{m=1}^{M} a[m] * U_M[:,m]
+  RETURN spectrum
+
+--------------------------------------------------------------------
+STEP 3: SYNTHETIC PHOTOMETRY FROM A GIVEN SPECTRUM
+--------------------------------------------------------------------
+Define function SyntheticPhotometry(spectrum):
+  FOR k = 1 … K:
+     f_model[k] = ∫ spectrum(λ) * T_filters[k](λ) dλ   # numerical integration
+  RETURN f_model[1…K]
+
+--------------------------------------------------------------------
+STEP 4: POSTERIOR SAMPLING OF LATENT COEFFICIENTS
+--------------------------------------------------------------------
+4.1  PRIOR over a:  a ~ Normal(0, diag(σ_a²))  (or uniform within ±3σ_a).
+4.2  DEFINE LOG-LIKELIHOOD(a):
+       spectrum = ForwardModel(a)
+       f_model  = SyntheticPhotometry(spectrum)
+       logL = –0.5 * Σ_{k=1}^{K} [(Phot_data.f_k – f_model[k]) / Phot_data.σ_k]²
+       RETURN logL
+
+4.3  Posterior log-density: logP(a) = logL(a) + logPrior(a).
+
+4.4  SAMPLE posterior using a Markov Chain Monte Carlo scheme:
+       * Initialize a_0 randomly from prior.
+       * For n = 1 … Nsamples:
+           propose a' = a_{n-1} + random_noise (e.g., Gaussian step).
+           accept with probability min(1, exp(logP(a') – logP(a_{n-1}))).
+           store accepted a_n.
+       * Discard burn‑in and thin if desired.
+
+--------------------------------------------------------------------
+STEP 5: RECONSTRUCT SPECTRA AND ESTIMATE UNCERTAINTIES
+--------------------------------------------------------------------
+5.1  For each sampled coefficient vector a_s:
+        spectrum_s = ForwardModel(a_s)
+        Store spectrum_s(λ_grid).
+5.2  Compute pointwise posterior mean:
+        Spectrum_mean(λ) = average over all stored spectra_s.
+5.3  Compute credible intervals:
+        For each λ:
+           collect {spectrum_s(λ)} over samples
+           Spectrum_CI_low(λ) = percentile(5%) of the collection
+           Spectrum_CI_high(λ)= percentile(95%) of the collection
+        Return Spectrum_CI = (Spectrum_CI_low, Spectrum_CI_high).
+
+--------------------------------------------------------------------
+RETURN
+  Spectrum_mean(λ), Spectrum_CI(λ)

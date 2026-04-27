@@ -1,0 +1,72 @@
+Inputs
+-------
+S          : Matrix of n_spectra × n_wave (training near‑IR spectra)
+F[j]       : Response function of photometric filter j  (j = 1 … M)
+y[i][j]    : Observed flux of target TNO i in filter j
+σ[i][j]    : Measurement uncertainty of y[i][j]
+K          : Number of principal components to retain
+α          : Convergence tolerance for optimization
+
+Outputs
+-------
+Ŝ[i]      : Reconstructed full spectrum of TNO i
+CovS[i]    : Uncertainty covariance matrix of Ŝ[i]
+
+Procedure
+---------
+1. **Pre‑processing of training spectra**
+   1.1. Compute mean spectrum μ  ←  mean(S, axis=0)
+   1.2. Centered spectra  C  ←  S – μ
+   1.3. Compute covariance matrix  Σ  ←  (Cᵀ · C) / (n_spectra – 1)
+   1.4. Eigen‑decompose Σ:
+        [U_all , λ_all] = eig(Σ)           // U_all : n_wave × n_wave
+   1.5. Sort eigenvalues λ_all descending; reorder U_all accordingly
+   1.6. Select first K eigenvectors:
+        U  ←  U_all[:, 1:K]                 // n_wave × K
+   1.7. Standardize principal component amplitudes:
+        // If eigenvalues are not used as variances, set prior variance σ² = 1
+        // otherwise use σ² = λ
+
+2. **Build photometric forward model for any latent vector z ∈ ℝᴷ**
+   For each filter j:
+     2.1. Compute constant term:
+          b_j  ←  ∑_{λ}  F[j](λ) · μ(λ) · Δλ
+     2.2. For each component k:
+          A_{jk} ←  ∑_{λ}  F[j](λ) · U(λ,k) · Δλ
+   The expected flux in filter j for latent vector z:
+          m_j(z) = b_j + Σ_{k=1}^{K} A_{jk} · z_k
+
+3. **Bayesian inference for target TNO i**
+   3.1. Define likelihood:
+         L_i(z) = Π_{j=1}^{M}
+                    N( y[i][j] | m_j(z) , σ[i][j]² )
+   3.2. Define prior on z:
+         p(z) = N( 0 , I_K )                // Standard normal prior
+         // (or use diagonal prior with λ_k if desired)
+   3.3. Posterior:
+         p_i(z | y[i]) ∝ L_i(z) · p(z)
+
+4. **Posterior approximation (MAP + Laplace)**
+   4.1. Initialize z^(0) ← 0
+   4.2. Repeat until convergence:
+         4.2.1. Evaluate negative log‑posterior:
+                 f(z) = –log L_i(z) – log p(z)
+         4.2.2. Compute gradient g = ∇f(z)
+         4.2.3. Compute Hessian H = ∇²f(z)
+         4.2.4. Update:
+                 z^(new) ← z^(old) – α · H⁻¹ · g
+         4.2.5. Check ‖z^(new) – z^(old)‖ < α → converged
+   4.3. Set ẑ  ←  converged solution (MAP)
+   4.4. Approximate posterior covariance:
+         Cov_z  ←  H⁻¹ evaluated at ẑ
+
+5. **Spectrum reconstruction and uncertainty propagation**
+   5.1. Reconstructed spectrum:
+         Ŝ[i]   ←  μ + U · ẑ
+   5.2. Spectrum uncertainty:
+         CovS[i] ←  U · Cov_z · Uᵀ
+
+6. **Return results**
+   6.1. Output Ŝ[i] and CovS[i] for all targets i.
+
+End of Algorithm

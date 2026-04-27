@@ -1,0 +1,78 @@
+# -------------------------------------------------------------
+# 1. TRAINING PHASE
+# -------------------------------------------------------------
+
+# 1.1 Load Reference Spectra
+S_ref ← list of high‑resolution reflectance spectra of TNOs  
+λ_ref ← associated wavelength grid  
+
+# 1.2 Principal Component Analysis (PCA) – Define Latent Space
+#    • Center spectra
+μ ← mean(S_ref, axis=0)                           # mean spectrum
+S_centered ← S_ref – μ
+#    • Compute covariance and eigen-decomposition
+Cov ← cov(S_centered)
+eig_vals, eig_vecs ← eig(Cov)
+#    • Sort eigen‑vectors by descending eigenvalue
+idx ← argsort(eig_vals, descending=True)
+V ← eig_vecs[:, idx[:K]]                         # first K eigen‑vectors
+#    • Project real spectra into latent space
+C_real ← (S_centered @ V)                       # shape: (N_spectra, K)
+
+# 1.3 Augment Latent Distribution – Kernel Density Estimate (KDE)
+bandwidth ← 0.5                                 # chosen from experimentation
+kde_model ← fit_KDE(C_real, bandwidth=bandwidth)   # non‑parametric density
+N_aug ← desired number of synthetic latent samples
+C_synth ← sample_from(kde_model, N_aug)            # shape: (N_aug, K)
+
+# 1.4 Generate Synthetic Spectra from Latent Samples
+S_synth ← μ + C_synth @ V.T                      # reconstruct full spectra
+
+# 1.5 Forward Model to Photometry
+for each S in S_synth:
+    for each filter f in FILTER_SET:
+        # Convolve with throughput curve T_f(λ)
+        P_f ← integrate( S * T_f ) / integrate( solar_spectrum * T_f )
+    P ← [P_f for all f]                          # photometry vector
+    # Store synthetic spectrum & its photometry
+    store(S, P)
+
+# 1.6 Inject Measurement Noise into Photometry
+σ_rel ← 0.20                                   # 20 % relative uncertainty
+for each stored pair (S, P):
+    ε ← normal(0, σ_rel, size=len(P))           # multiplicative noise
+    P_noisy ← P * (1 + ε)
+    replace P with P_noisy                       # noisy photometry
+
+# 1.7 Assemble Training Dataset
+X_train ← array of all noisy photometry vectors P_noisy   # shape (N_aug, n_filters)
+Y_train ← corresponding latent coefficient vectors C_synth   # shape (N_aug, K)
+
+# 1.8 Train Photometry→Latent Regression Model
+M_reg ← AutoML_Regression(X_train, Y_train)
+#    (AutoML automatically selects/ensembles GBDT, NN, etc.)
+
+# 1.9 Train Latent→Taxonomy Classifier
+labels ← taxonomic class for each real spectrum in S_ref
+M_cls ← AutoML_Classifier(C_real, labels)
+#    (trained on real latent vectors; optionally also on regressed ones)
+
+# -------------------------------------------------------------
+# 2. INFERENCE PHASE (Forward Reconstruction)
+# -------------------------------------------------------------
+
+# Input: observed photometry vector M_obs (length = n_filters)
+# Step 1: Predict latent coefficients
+C_pred ← M_reg.predict(M_obs)                     # point estimate
+#    Optionally, obtain predictive distribution (samples) for uncertainty
+
+# Step 2: Decode to full spectrum
+S_recon ← μ + C_pred @ V.T                        # high‑resolution spectrum
+
+# Step 3: Taxonomy Prediction
+taxo_probs ← M_cls.predict_proba(C_pred)          # probabilities over classes
+
+# Output:
+#   S_recon          – reconstructed reflectance spectrum
+#   taxo_probs       – taxonomic class probabilities
+#   (optional) C_pred_distribution – uncertainty in latent space

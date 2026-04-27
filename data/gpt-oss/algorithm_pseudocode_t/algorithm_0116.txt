@@ -1,0 +1,72 @@
+INPUT
+    N_objs          // number of TNOs
+    K_filters       // number of photometric filters
+    {m[n][k]}       // observed magnitude of object n in filter k
+    {σ[n][k]}       // measurement uncertainty of m[n][k]
+    B_j(λ)          // set of J basis spectra (from taxonomy)
+    R_k(λ)          // transmission curve of filter k
+    π_c             // prior probability of each taxonomy class c
+    μ_c[j], Σ_c[j]  // mean & covariance of coefficients for class c
+
+PRE‑PROCESSING
+    1. Construct design matrix A (K × J):
+        A[k][j] = ∫ B_j(λ) · R_k(λ) dλ      // projected basis onto filter k
+    2. Convert magnitudes to linear fluxes:
+        f_obs[n][k] = 10^(-0.4 * m[n][k])
+        err_f[n][k] = 0.921 * f_obs[n][k] * σ[n][k]   // error propagation
+
+INITIALIZATION
+    For each object n:
+        Randomly draw taxonomy label c[n] from categorical(π_c)
+        Draw coefficient vector α[n] ~ N(μ_c[n], Σ_c[n])
+
+MCMC SAMPLING (iterations = N_iter)
+    For it = 1 … N_iter:
+        FOR each object n = 1 … N_objs:
+
+            /* UPDATE TAXONOMY LABEL c[n] */
+            Compute predicted flux for each class:
+                For every class c':
+                    μ_pred = A · μ_c'                      // mean flux in filters
+                    cov_pred = A · Σ_c' · Aᵀ + diag(err_f[n]^2)
+                    log_lik_c' = log N(f_obs[n] | μ_pred, cov_pred)
+                    log_post_c' = log(π_c') + log_lik_c'
+            Normalize log_post_c' to obtain posterior probabilities P(c[n] = c')
+            Sample new label c[n] from this categorical distribution
+
+            /* UPDATE COEFFICIENT VECTOR α[n] GIVEN c[n] */
+            Let μ_prior = μ_c[n] , Σ_prior = Σ_c[n]
+            Let μ_lik  = Aᵀ · diag(1/err_f[n]^2) · f_obs[n]
+            Let Σ_lik  = Aᵀ · diag(1/err_f[n]^2) · A
+            Posterior precision: Σ_post⁻¹ = Σ_prior⁻¹ + Σ_lik
+            Posterior mean:       μ_post    = Σ_post · (Σ_prior⁻¹ · μ_prior + μ_lik)
+            Sample α[n] ~ N(μ_post, Σ_post)
+
+        END FOR
+
+        /* OPTIONAL: UPDATE HYPERPARAMETERS */
+        // (e.g., update μ_c and Σ_c using empirical Bayes or hierarchical prior)
+
+        /* STORE SAMPLES AFTER BURN‑IN */
+        If it > BurnIn:
+            Save current {c[n]}, {α[n]} for later averaging
+
+END FOR
+
+POST‑PROCESSING
+    For each stored sample s:
+        For each object n:
+            Reconstruct fluxes: f_rec_s[n] = A · α_s[n]
+            Convert to spectral reflectance:
+                For each wavelength λ:
+                    r_s[n][λ] = Σ_j α_s[n][j] · B_j(λ) / ReferenceFlux(λ)
+    For each object n:
+        Compute posterior mean spectrum:
+            r_mean[n][λ] = (1 / S) Σ_s r_s[n][λ]
+        Compute uncertainty:
+            r_std[n][λ] = sqrt((1 / S) Σ_s (r_s[n][λ] - r_mean[n][λ])^2)
+
+OUTPUT
+    r_mean[n][λ]     // reconstructed reflectance spectrum for each TNO
+    r_std[n][λ]      // associated uncertainty
+    c[n]             // most probable taxonomy class for each TNO

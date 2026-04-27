@@ -1,0 +1,157 @@
+# Core Reconstruction Pipeline – Pseudocode
+
+# ------------------------------------------------------------------
+# 1. PRE‑PROCESSING  (executed once – “Preparation Phase”)
+# ------------------------------------------------------------------
+
+function LoadTrainingSpectra():
+    # Input: Table of high‑resolution TNO spectra (wavelength vs reflectance)
+    # Output: Matrix S_raw[n_spec × n_wave]
+    S_raw = read_table("diSCo_TNO_spectra.csv")
+    return S_raw
+
+
+function NormalizeSpectra(S_raw):
+    # Remove solar spectrum (if needed), unit‑normalize, and clip noise
+    S_norm = (S_raw - mean(S_raw, axis=1)[:,None]) / std(S_raw, axis=1)[:,None]
+    return S_norm
+
+
+function ComputePCA(S_norm, K):
+    # Input: Normalized spectra, desired number of principal components K
+    # Output: PCA basis V[K × n_wave], mean spectrum μ[n_wave], explained variance σ2[K]
+    μ      = mean(S_norm, axis=0)
+    S_centered = S_norm - μ
+    U, Σ, Vt = svd(S_centered, full_matrices=False)   # U: coeffs, Σ: sigmas, Vt: basis
+    V      = Vt[:K, :]                                 # keep top K rows
+    σ2     = (Σ[:K] ** 2) / (S_norm.shape[0] - 1)
+    return V, μ, σ2
+
+
+function ProjectToLatent(S_norm, V, μ):
+    # Input: Normalized spectra, PCA basis, mean
+    # Output: Latent coordinates A[n_spec × K]
+    S_centered = S_norm - μ
+    A = dot(S_centered, V.T)          # each row = coefficients for one spectrum
+    return A
+
+
+function FitKDE(A, bandwidth):
+    # Input: Latent coordinates of training spectra, KDE bandwidth
+    # Output: KDE object capable of sampling
+    kde_obj = KDE_1D(A, bw=bandwidth)    # multivariate KDE
+    return kde_obj
+
+
+function SampleSyntheticLatent(kde_obj, N_samples):
+    # Input: KDE, desired number of synthetic latent vectors
+    # Output: Synthetic latent matrix A_syn[N_samples × K]
+    A_syn = kde_obj.sample(N_samples)
+    return A_syn
+
+
+function ForwardModelPhotometry(A, V, μ, filters, noise_level):
+    # Input: Latent vector(s), PCA basis & mean, list of filter transmission curves,
+    #        assumed fractional photometric noise
+    # Output: Synthetic photometry matrix M[n_samples × n_filters]
+    #
+    # 1. Reconstruct spectra from latent coords
+    S_rec = dot(A, V) + μ                  # shape: n_samples × n_wave
+    #
+    # 2. Convolve each spectrum with each filter response
+    M_clean = []
+    for f in filters:
+        R_f = integrate_over_wavelength(S_rec, f.transmission)   # scalar per spectrum
+        M_clean.append(R_f)
+    M_clean = stack(M_clean, axis=1)          # n_samples × n_filters
+    #
+    # 3. Add Gaussian noise (relative fractional uncertainty)
+    noise_std = noise_level * M_clean
+    M_noisy  = M_clean + normal(0, noise_std, size=M_clean.shape)
+    return M_noisy
+
+
+function TrainRegressor(M_train, A_train):
+    # Input: Training photometry (n_train × n_filters),
+    #        Target latent coordinates (n_train × K)
+    # Output: Trained AutoML regressor model
+    model = AutoML_Regressor()
+    model.fit(X=M_train, y=A_train)
+    return model
+
+
+function TrainClassifier(A_train, labels):
+    # Input: Latent coordinates, true taxonomic labels
+    # Output: Trained AutoML classifier
+    clf = AutoML_Classifier()
+    clf.fit(X=A_train, y=labels)
+    return clf
+
+
+# ------------------------------------------------------------------
+# 2. MODEL TRAINING  (executed once – “Training Phase”)
+# ------------------------------------------------------------------
+
+# 2.1 Load and prepare training data
+S_raw   = LoadTrainingSpectra()
+S_norm  = NormalizeSpectra(S_raw)
+
+# 2.2 Define latent space
+K = 8                                 # number of PCs to keep (user choice)
+V, mu, sigma2 = ComputePCA(S_norm, K)
+
+# 2.3 Project real spectra to latent space
+A_real = ProjectToLatent(S_norm, V, mu)              # n_real × K
+
+# 2.4 Build continuous prior via KDE
+bandwidth = 0.5                                   # user‑set smoothing parameter
+kde_obj   = FitKDE(A_real, bandwidth)
+
+# 2.5 Generate synthetic latent samples
+N_synth   = 5000
+A_synth   = SampleSyntheticLatent(kde_obj, N_synth)   # n_synth × K
+
+# 2.6 Assemble full training set (real + synthetic latent coords)
+A_train   = concatenate([A_real, A_synth], axis=0)    # n_total × K
+
+# 2.7 Forward‑model photometry for all latent vectors
+filters = load_filter_set("JWST_NIRCam_filters.json")   # list of Filter objects
+noise_level = 0.20                                 # 20 % relative error
+M_train   = ForwardModelPhotometry(A_train, V, mu, filters, noise_level)
+
+# 2.8 Train the encoder (photometry → latent)
+encoder = TrainRegressor(M_train, A_train)
+
+# 2.9 Train the classifier (latent → taxonomy)
+labels_real = load_taxonomy_labels("diSCo_TNO_labels.csv")   # n_real labels
+labels_train = concatenate([labels_real, repeat("unknown", N_synth)])
+classifier = TrainClassifier(A_train, labels_train)
+
+
+# ------------------------------------------------------------------
+# 3. FORWARD INFERENCE  (executed for every new object)
+# ------------------------------------------------------------------
+
+function InferSpectrumAndClass(M_new):
+    # Input: New observed photometry vector (n_filters)
+    # Output: Reconstructed high‑resolution spectrum, taxonomic probability vector
+
+    # 3.1 Predict latent coordinates (posterior mean)
+    A_pred = encoder.predict(M_new)                    # shape: K
+
+    # 3.2 Decode to full spectrum
+    S_recon = dot(A_pred, V) + mu                      # n_wave
+
+    # 3.3 Classify taxonomic type
+    prob_class = classifier.predict_proba(A_pred)       # dict label→probability
+
+    return S_recon, prob_class
+
+
+# Example usage
+M_observed = read_vector("new_TNO_photometry.csv")   # n_filters
+S_rec, tax_prob = InferSpectrumAndClass(M_observed)
+
+# ------------------------------------------------------------------
+# End of Core Reconstruction Algorithm
+# ------------------------------------------------------------------

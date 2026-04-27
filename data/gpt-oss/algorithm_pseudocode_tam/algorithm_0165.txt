@@ -1,0 +1,100 @@
+INPUT:
+    - Reference spectra set S_ref = {S_i}   // high‑resolution spectra of N ≈ 50 TNOs
+    - Photometry filter set F = {f_k}       // effective throughputs of JWST NIRCam filters
+    - Photometric uncertainty σ_phot = 0.20   // relative reflectance noise (20%)
+    - PCA dimensionality K   // choose 5–10 based on explained variance
+    - KDE bandwidth h (≈0.5)
+
+OUTPUT:
+    - For any new photometric vector m_new (length |F|):
+        • Posterior predictive distribution over spectra p(S | m_new)
+        • Mean reconstructed spectrum Ŝ
+        • Taxonomic probability vector P_tax
+        • Uncertainty estimates (e.g., credible intervals)
+
+--------------------------------------------------------------------
+STEP 0.  Pre‑process Reference Spectra
+--------------------------------------------------------------------
+    1. Convert each S_i to reflectance (divide by solar spectrum).
+    2. Resample all S_i onto a common wavelength grid λ_j (high‑resolution).
+
+--------------------------------------------------------------------
+STEP 1.  Build Latent Space (Prior)
+--------------------------------------------------------------------
+    3. Perform Principal Component Analysis (PCA) on {S_i}:
+           * Compute mean spectrum μ_S.
+           * Compute eigenvectors E = [e_1,…,e_K] and eigenvalues λ_1,…,λ_K.
+    4. Project each S_i into latent coefficient vector z_i ∈ ℝ^K:
+           z_i = Eᵀ · (S_i – μ_S).
+    5. Fit a Kernel Density Estimate (KDE) over {z_i} with bandwidth h:
+           KDE(z) = (1/M) Σ_{i=1..M} K_h(z – z_i),  M = N.
+    6. Sample M_aug synthetic latent vectors {z̃_j} from KDE:
+           For j = 1 … M_aug:
+               draw z̃_j ~ KDE
+           // M_aug >> N (e.g., 5000–10000) to enrich training set.
+
+--------------------------------------------------------------------
+STEP 2.  Generate Augmented Spectra
+--------------------------------------------------------------------
+    7. For each synthetic z̃_j:
+           Ŝ_j = μ_S + E · z̃_j     // inverse PCA → full spectrum
+           Store pair (Ŝ_j , z̃_j).
+
+--------------------------------------------------------------------
+STEP 3.  Simulate Photometry (Likelihood)
+--------------------------------------------------------------------
+    8. For each augmented spectrum Ŝ_j:
+           For each filter f_k:
+               compute theoretical band value m_jk =
+                   ∫ Ŝ_j(λ) · f_k(λ) dλ / ∫ f_k(λ) dλ   // reflectance in band k
+           Assemble photometry vector m̃_j = [m_j1,…,m_j|F|].
+    9. Add Gaussian noise to each band:
+           m̃_jk ← m̃_jk + 𝒩(0, σ_phot·m̃_jk).
+    10. Store training example (m̃_j , z̃_j).
+
+--------------------------------------------------------------------
+STEP 4.  Train Encoder (Photometry → Latent Coefficients)
+--------------------------------------------------------------------
+    11. Split augmented training set {(m̃_j , z̃_j)} into:
+            • Training subset (≈80%)
+            • Validation subset (≈20%) for early stopping.
+    12. Use AutoML (e.g., AutoGluon) to build an ensemble regressor:
+            • Input features: m̃_j
+            • Target: z̃_j
+            • Loss: mean squared error across all K dimensions
+            • Tune hyperparameters automatically (gradient‑boosted trees, neural nets, etc.).
+    13. Save trained encoder model Ê.
+
+--------------------------------------------------------------------
+STEP 5.  Train Taxonomy Classifier (Latent → Class)
+--------------------------------------------------------------------
+    14. Label each reference spectrum S_i with taxonomy label L_i
+            (e.g., H₂O, CO₂, Organic, Methanol).
+    15. Use the same latent coefficients {z_i} as features and L_i as target.
+    16. Train AutoML classifier Ĉ on {(z_i , L_i)}.
+    17. Save trained classifier Ĉ.
+
+--------------------------------------------------------------------
+STEP 6.  Inference on New Observation
+--------------------------------------------------------------------
+    Given new photometric vector m_new:
+
+    18. Encode:
+            z_pred = Ê.predict(m_new)         // point estimate of latent vector
+            Optionally, obtain predictive variance σ_z² via ensemble variance.
+
+    19. Decode (Posterior Reconstruction):
+            Ŝ_mean = μ_S + E · z_pred          // mean reconstructed spectrum
+            // For full posterior, sample multiple z draws from predictive distribution,
+            // decode each to obtain an ensemble of spectra.
+
+    20. Classify:
+            P_tax = Ĉ.predict_proba(z_pred)    // probability over taxonomic classes
+
+    21. Return:
+            • Ŝ_mean (and optionally credible intervals)
+            • P_tax
+            • Diagnostic diagnostics (e.g., residuals between m_new and forward‑modeled m̂)
+
+--------------------------------------------------------------------
+END

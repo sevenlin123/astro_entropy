@@ -1,0 +1,134 @@
+text
+--------------------------------------------------------------------
+INPUTS
+--------------------------------------------------------------------
+  * S_real      – Matrix (N_real × L) of observed high‑resolution
+                   reflectance spectra for N_real ≈ 50 TNOs  
+  * F_filters   – List of M filter response curves  
+  * phot_obs    – Array (M) of sparse photometric measurements  
+  * h_kde       – Bandwidth for kernel density estimation (≈ 0.5)  
+  * n_aug       – Number of synthetic latent samples to draw (e.g. 10 000)  
+  * noise_std   – Relative reflectance noise level (e.g. 0.20)
+
+--------------------------------------------------------------------
+OUTPUTS
+--------------------------------------------------------------------
+  * S_rec        – Reconstructed high‑resolution spectrum (L)  
+  * cov_rec      – Covariance matrix of S_rec (uncertainty estimate)  
+  * tax_prob     – Probability distribution over taxonomic classes  
+
+--------------------------------------------------------------------
+STEP 0 – PRE‑COMPUTATION (performed once for the whole training set)
+--------------------------------------------------------------------
+
+1.  // ---------- 1.1  PCA – Define latent space ----------
+    [mu_S,  PCs,  coeffs_real] = PCA_fit(S_real)
+    // mu_S : mean spectrum (1×L)
+    // PCs   : (L × K) principal component matrix
+    // coeffs_real : (N_real × K) latent coefficients
+
+2.  // ---------- 1.2  Kernel density estimation on latent space ----------
+    kde_prior = KDE_fit(coeffs_real, bandwidth = h_kde)
+    // kde_prior : density function over K‑dimensional space
+
+3.  // ---------- 1.3  Generate synthetic latent samples ----------
+    coeffs_aug = Sample_KDE(kde_prior, n_aug)         // (n_aug × K)
+
+4.  // ---------- 1.4  Construct synthetic spectra ----------
+    S_aug = Inverse_PCA(coeffs_aug, mu_S, PCs)        // (n_aug × L)
+
+5.  // ---------- 1.5  Forward model – synthesize photometry ----------
+    P_aug = Forward_Model(S_aug, F_filters)           // (n_aug × M)
+
+6.  // ---------- 1.6  Inject realistic photometric noise ----------
+    for i in 1 … n_aug:
+        for j in 1 … M:
+            ε  ~ Normal(0, noise_std * P_aug[i,j])
+            P_aug_noisy[i,j] = P_aug[i,j] + ε
+
+7.  // ---------- 1.7  Prepare training data ----------
+    X_train = P_aug_noisy          // features (photometry)
+    Y_train = coeffs_aug           // targets (latent coefficients)
+
+--------------------------------------------------------------------
+STEP 1 – TRAIN THE ENCODER (AutoML regressor)
+--------------------------------------------------------------------
+
+8.  encoder = AutoML_Train(X_train, Y_train)
+    // Returns a regressor that maps M photometric values → K latent coeffs
+
+--------------------------------------------------------------------
+STEP 2 – TAXONOMIC CLASSIFIER IN LATENT SPACE
+--------------------------------------------------------------------
+
+9.  // Train a second AutoML model that takes latent coeffs → class probs
+    classifier = AutoML_Train(coeffs_real, class_labels_real)
+
+--------------------------------------------------------------------
+STEP 3 – INFERENCE ON NEW OBSERVATION
+--------------------------------------------------------------------
+
+10. // 3.1  Predict posterior mean of latent coefficients
+     μ_latent = encoder.predict_mean(phot_obs)
+
+11. // 3.2  Estimate covariance of latent posterior (optional)
+     Σ_latent = encoder.predict_cov(phot_obs)
+     // If the regressor does not provide Σ, set to identity or approximate
+
+12. // 3.3  Draw N_post synthetic latent samples from the posterior
+     coeffs_post = GaussianCopula_Sample(μ_latent, Σ_latent, N_post)
+
+13. // 3.4  Decode each sampled latent vector to a full spectrum
+     for k in 1 … N_post:
+         S_post[k] = Inverse_PCA(coeffs_post[k], mu_S, PCs)
+
+14. // 3.5  Aggregate posterior samples
+     S_rec  = mean(S_post, axis=0)          // point estimate
+     cov_rec = cov(S_post, axis=0)          // uncertainty matrix
+
+15. // 3.6  Predict taxonomy probabilities
+     tax_prob = classifier.predict_proba(μ_latent)
+
+--------------------------------------------------------------------
+FUNCTION DEFINITIONS
+--------------------------------------------------------------------
+function PCA_fit(S):
+    // Center spectra
+    mu = mean(S, axis=0)
+    S_centered = S - mu
+    // Compute eigenvectors of covariance
+    U, λ, Vt = svd(S_centered, full_matrices=False)
+    PCs = Vt[:K].T          // choose K such that cumulative variance ≥ desired
+    coeffs = S_centered @ PCs
+    return mu, PCs, coeffs
+
+function Inverse_PCA(coeffs, mu, PCs):
+    return coeffs @ PCs.T + mu
+
+function Forward_Model(S, F_filters):
+    // For each filter j:
+    //   integrate S(λ) * T_j(λ) dλ / ∫ T_j(λ) dλ
+    // Return array of size M
+    ...
+
+function KDE_fit(data, bandwidth):
+    // Non‑parametric Gaussian kernel density over K‑dim space
+    ...
+
+function Sample_KDE(kde, n):
+    // Randomly sample n points from the KDE density
+    ...
+
+function GaussianCopula_Sample(mean_vec, cov_mat, n):
+    // 1. Draw multivariate normal samples z ~ N(0, cov_mat)
+    // 2. Convert to uniform via CDF
+    // 3. Apply inverse CDF of each marginal (here identical to normal)
+    // Return n samples in latent space
+    ...
+
+function AutoML_Train(X, Y):
+    // Use an AutoML library (e.g. AutoGluon) to search over:
+    //   - Gradient‑boosted trees
+    //   - Neural networks
+    //   - Ensembles
+    // Return trained model capable of predicting mean and optionally covariance

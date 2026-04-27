@@ -1,0 +1,73 @@
+# --------------------------
+# 1. TRAINING PHASE
+# --------------------------
+
+INPUT: 
+    S          # matrix of training spectra (N_spectra × N_wavelength)
+    λ          # wavelength array corresponding to S
+    Filters    # list of m filter definitions (response curves)
+
+PREPROCESS:
+    μ = mean(S, axis=0)                            # mean spectrum
+    S_centered = S - μ                            # de‑mean spectra
+
+COVARIANCE & PCA:
+    C   = (S_centered.T @ S_centered) / (N_spectra-1)  # covariance matrix
+    eig_vals, eig_vecs = eig(C)                       # eigen decomposition
+    sort eig_vecs by descending eig_vals
+    U_k = eig_vecs[:, :K]      # first K principal components
+
+PHOTOMETRIC MODEL MATRIX:
+    # For each filter, compute the convolution of each PC and the mean
+    # with the filter transmission to obtain model fluxes
+    A = zeros((m, K))                           # design matrix
+    for j in range(m):
+        R_j = Filters[j].response              # response curve
+        for k in range(K):
+            A[j, k] = integrate( U_k[k,:] * R_j ) / integrate(R_j)
+    # intercept term for the mean spectrum:
+    intercept = [integrate( μ * R_j ) / integrate(R_j) for j in range(m)]
+
+SAVE:
+    μ, U_k, A, intercept, K, λ
+
+
+# --------------------------
+# 2. RECONSTRUCTION PHASE
+# --------------------------
+
+INPUT:
+    y_obs          # observed photometric fluxes (length m)
+    σ_y            # observational uncertainties (length m)
+
+POSTERIOR ON PCA COEFFICIENTS θ:
+    # θ = (θ_1 … θ_K) are the PC weights
+    # Likelihood: y_obs = A θ + intercept + ε,  ε ~ N(0, diag(σ_y²))
+    # Prior: θ ~ N(0, τ² I)  (τ can be set e.g. to 1)
+
+    Σ_prior  = τ² * I_K
+    Λ        = diag(1/σ_y²)                      # precision of data
+    Σ_post   = inv( inv(Σ_prior) + A.T @ Λ @ A )
+    μ_post   = Σ_post @ (A.T @ Λ @ (y_obs - intercept))
+
+SAMPLE FROM POSTERIOR:
+    N_samples = 1000
+    θ_samples = multivariate_normal(mean=μ_post,
+                                    cov=Σ_post,
+                                    size=N_samples)
+
+RECONSTRUCT SPECTRA:
+    spectra_samples = []
+    for θ in θ_samples:
+        spec = μ + U_k @ θ                     # linear combination
+        spectra_samples.append(spec)
+
+ESTIMATE UNCERTAINTY:
+    mean_spectrum   = mean(spectra_samples, axis=0)
+    lower_ci        = percentile(spectra_samples, 2.5, axis=0)
+    upper_ci        = percentile(spectra_samples, 97.5, axis=0)
+
+OUTPUT:
+    λ               # wavelength grid
+    mean_spectrum
+    lower_ci, upper_ci   # 95% credible interval envelopes

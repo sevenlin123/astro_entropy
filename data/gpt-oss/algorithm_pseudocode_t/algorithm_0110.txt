@@ -1,0 +1,118 @@
+text
+# INPUT
+#   OBJ_LIST : list of objects
+#   For each object i:
+#       FILTERS[i]   = list of filter names {j}
+#       MAG[i][j]    = measured apparent magnitude in filter j
+#       ERR[i][j]    = measurement uncertainty in filter j
+
+# MODEL
+#   Reflectance spectrum R(λ) is represented by a parametric form
+#       R(λ) = a0 + a1 * λ        (linear reflectance in log space)
+#   Parameters θ = {a0, a1}
+#   Prior on θ: independent Gaussians
+#       a0 ~ Normal(0, σ0^2)
+#       a1 ~ Normal(0, σ1^2)
+
+# FUNCTIONS
+#   predict_mag(θ, j):
+#       Compute synthetic magnitude in filter j:
+#           m_pred = -2.5 * log10( ∫ R(λ;θ) * T_j(λ) dλ ) + ZP_j
+#       (where T_j(λ) is the transmission curve of filter j and
+#        ZP_j is the zero‑point; the integral can be pre‑tabulated.)
+
+#   log_likelihood(θ):
+#       ll = 0
+#       for each filter j:
+#           μ = predict_mag(θ, j)
+#           ll += -0.5 * ((MAG[i][j] - μ)/ERR[i][j])^2
+#       return ll
+
+# ALGORITHM
+for each object i in OBJ_LIST:
+
+    # 1. PRE‑PROCESSING
+    #    - Assemble data arrays
+    filter_ids   = FILTERS[i]
+    mags         = [MAG[i][j] for j in filter_ids]
+    errs         = [ERR[i][j] for j in filter_ids]
+
+    # 2. BAYESIAN INFERENCE (MCMC)
+    #    - Initialize chain
+    θ_current = {a0: 0.0, a1: 0.0}
+    ll_current = log_likelihood(θ_current)
+
+    #    - Storage for posterior samples
+    samples = []
+
+    #    - Metropolis–Hastings steps
+    for step in 1 .. N_MCMC:
+        # Propose new parameters from symmetric proposal
+        θ_proposed = {
+            a0: θ_current.a0 + Normal(0, step_size_a0),
+            a1: θ_current.a1 + Normal(0, step_size_a1)
+        }
+        ll_proposed = log_likelihood(θ_proposed)
+
+        # Acceptance probability
+        α = min(1, exp(ll_proposed - ll_current))
+        if Uniform(0,1) < α:
+            θ_current = θ_proposed
+            ll_current = ll_proposed
+
+        # Store sample after burn‑in and thinning
+        if step > BURN_IN and step % THIN == 0:
+            samples.append(θ_current)
+
+    # 3. POSTERIOR ANALYSIS
+    #    - Compute posterior mean and covariance of θ
+    θ_mean  = mean(samples)
+    θ_cov   = covariance(samples)
+
+    #    - Generate N_SAMPLES synthetic spectra
+    synthetic_mags = []
+    for s in 1 .. N_SAMPLES:
+        θ_s = samples[s]          # draw a posterior sample
+        mag_s = [predict_mag(θ_s, j) for j in filter_ids]
+        synthetic_mags.append(mag_s)
+
+    # 4. DERIVED PHYSICAL QUANTITIES
+    #    - Spectral slope (e.g., relative reflectance per 100 nm)
+    slopes = [ (m[filter_indices['r']] - m[filter_indices['g']]) /
+               (λ_r - λ_g)  for m in synthetic_mags ]
+
+    #    - Colour indices (g‑i, r‑J, etc.)
+    colours = {}
+    for (c1, c2) in colour_pairs:
+        colours[(c1,c2)] = [ m[filter_indices[c1]] - m[filter_indices[c2]]
+                            for m in synthetic_mags ]
+
+    # 5. TAXONOMY CLASSIFICATION
+    #    - Map derived quantities to class probability vector
+    #      (trained Gaussian Mixture on a reference set)
+    class_probs = []
+    for s in 1 .. N_SAMPLES:
+        feature_vector = [ slopes[s], colours[(g,i)][s], ... ]
+        probs = gaussian_mixture.predict_proba(feature_vector)
+        class_probs.append(probs)
+
+    #    - Aggregate over samples to obtain final class probability
+    final_class_prob = mean(class_probs, axis=0)
+
+    # 6. OUTLIER DETECTION
+    #    - Compute overall maximum likelihood of the object
+    ll_max = max([log_likelihood(θ) for θ in samples])
+    #    - Define threshold (e.g., 5σ below mean of training set)
+    is_outlier = (ll_max < OUTLIER_THRESHOLD)
+
+    # 7. OUTPUT
+    store_results(
+        object_id = i,
+        posterior_samples = samples,
+        posterior_mean   = θ_mean,
+        posterior_cov    = θ_cov,
+        slopes_mean      = mean(slopes),
+        colours_mean     = {k: mean(v) for k,v in colours.items()},
+        class_probability= final_class_prob,
+        outlier_flag     = is_outlier
+    )

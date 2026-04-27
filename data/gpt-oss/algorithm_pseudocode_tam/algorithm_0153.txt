@@ -1,0 +1,80 @@
+INPUT: 
+    - Spectral library L = {S_i}  (high‑resolution reflectance spectra, i = 1…N)
+    - Filter set F = {f_j}         (throughput curves, j = 1…M)
+    - Desired latent dimension K   (typically 4–10)
+    - KDE bandwidth h              (≈0.5)
+    - Noise level σ_noise          (20%)
+
+OUTPUT:
+    - Trained encoder E (photometry → latent coefficients)
+    - Reconstructed spectrum S_pred for any new photometric measurement m
+    - Optional taxonomy probabilities P_tax(m)
+
+--------------------------------------------------------------------
+STEP 1: Build Prior – PCA Basis
+--------------------------------------------------------------------
+1.1 Compute mean spectrum μ_S over L
+1.2 Center spectra: X_centered = {S_i – μ_S}
+1.3 Perform Singular Value Decomposition (SVD):
+        X_centered = U Σ V^T
+1.4 Select first K columns of V as principal component matrix P  (size: λ×K, λ = number of wavelength bins)
+1.5 Project each spectrum onto PCs to get latent vectors:
+        z_i = P^T · (S_i – μ_S)      // z_i ∈ ℝ^K
+
+--------------------------------------------------------------------
+STEP 2: Augment Latent Space – KDE Sampling
+--------------------------------------------------------------------
+2.1 Fit multivariate Kernel Density Estimate (KDE) to {z_i} with bandwidth h
+2.2 Generate M_aug synthetic latent vectors {z_syn} by sampling from KDE
+    (choose M_aug ≫ N, e.g., 10,000)
+
+--------------------------------------------------------------------
+STEP 3: Forward‑Model Synthetic Photometry
+--------------------------------------------------------------------
+For each latent vector z in {z_i} ∪ {z_syn}:
+    3.1 Reconstruct spectrum:
+            S_hat = μ_S + P · z       // inverse PCA
+    3.2 Convolve S_hat with each filter f_j to obtain noiseless magnitude/reflection m_j:
+            m_j = ∫ S_hat(λ) * f_j(λ) dλ / ∫ f_j(λ) dλ
+    3.3 Add Gaussian noise per band:
+            m_j_noisy = m_j + Normal(0, σ_noise·m_j)
+    3.4 Store pair (m_noisy, z)
+
+Result: Training dataset D = {(m_noisy, z)}
+
+--------------------------------------------------------------------
+STEP 4: Train Encoder (AutoML Regressor)
+--------------------------------------------------------------------
+4.1 Split D into training and internal validation sets
+4.2 Use AutoML framework (e.g., AutoGluon) to automatically:
+        - Search over regressor ensembles (GBDT, NN, etc.)
+        - Tune hyperparameters
+        - Optimize loss (e.g., mean squared error on latent space)
+4.3 Train best regressor E on full D
+4.4 Save model E and PCA matrix P, mean μ_S
+
+--------------------------------------------------------------------
+STEP 5: (Optional) Train Taxonomy Classifier
+--------------------------------------------------------------------
+5.1 Label each original spectrum S_i with taxonomy T_i
+5.2 For each labeled spectrum, obtain latent vector z_i
+5.3 Train AutoML classifier C on {(z_i, T_i)}
+5.4 Save classifier C
+
+--------------------------------------------------------------------
+STEP 6: Forward Inference – Spectrum Reconstruction
+--------------------------------------------------------------------
+Function RECONSTRUCT(m_observed):
+    Input: photometric measurements m_observed ∈ ℝ^M (one value per filter)
+    Output: Reconstructed spectrum S_pred ∈ ℝ^λ, optional taxonomy probs
+    
+    6.1 Predict latent vector: z_pred = E.predict(m_observed)
+    6.2 Reconstruct spectrum:
+            S_pred = μ_S + P · z_pred
+    6.3 (Optional) Taxonomy:
+            P_tax = C.predict_proba(z_pred)
+    6.4 Return S_pred, P_tax
+
+--------------------------------------------------------------------
+END OF ALGORITHM
+--------------------------------------------------------------------

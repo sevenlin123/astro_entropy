@@ -1,0 +1,84 @@
+pseudocode
+INPUT:
+    S_train[1..N]          // N training near‑IR spectra (wavelength grid λ)
+    Φ[1..M]                // M filter transmission curves (function of λ)
+    y_obj[1..m]            // m photometric measurements for an object
+    σ_obj[1..m]            // measurement uncertainties
+    K                      // number of principal components to keep
+
+OUTPUT:
+    μ_spec(λ)              // posterior mean spectrum
+    CI_spec(λ,α)           // α‑percent credible interval spectrum
+    coeff_samples[K]       // posterior samples of latent coefficients
+
+--------------------------------------------------------------------
+STEP 0: Preprocess training spectra
+--------------------------------------------------------------------
+FOR each spectrum s in S_train:
+    IF necessary:
+        interpolate to common wavelength grid λ_common
+        normalize (e.g., divide by integrated flux)
+END FOR
+
+S_mean ← average(S_train)                          // mean spectrum
+S_centered ← S_train – S_mean                      // subtract mean
+
+--------------------------------------------------------------------
+STEP 1: Build latent PC basis
+--------------------------------------------------------------------
+Compute covariance matrix C = (S_centeredᵀ · S_centered) / (N-1)
+Perform eigendecomposition:  C = U · Λ · Uᵀ
+Select first K eigenvectors:  P_K = U[:,1:K]        // PC basis (columns)
+Store corresponding eigenvalues λ[1:K]
+
+--------------------------------------------------------------------
+STEP 2: Project training spectra onto latent space
+--------------------------------------------------------------------
+FOR i = 1 … N:
+    c_i ← P_Kᵀ · (S_train[i] – S_mean)              // K‑dimensional coefficient vector
+END FOR
+Compute empirical prior:  μ_c = 0 (zero mean), Σ_c = diag(λ[1:K])
+
+--------------------------------------------------------------------
+STEP 3: Construct photometric forward model
+--------------------------------------------------------------------
+For each filter j = 1 … m:
+    // Expected flux through filter j for a generic coefficient vector c
+    f_j(c) = ∫ [S_mean(λ) + P_K(λ) · c] · Φ_j(λ) dλ
+    // Pre‑compute filter‑convolved basis vectors:
+    p_jk = ∫ P_Kk(λ) · Φ_j(λ) dλ     for k=1…K
+    // Pre‑compute mean flux contribution:
+    μ_fj = ∫ S_mean(λ) · Φ_j(λ) dλ
+END FOR
+
+Define linear mapping:  f(c) = μ_f + P_bar · c
+where μ_f[j] = μ_fj,   P_bar[j,k] = p_jk
+
+--------------------------------------------------------------------
+STEP 4: Bayesian inference on latent coefficients
+--------------------------------------------------------------------
+Likelihood for object photometry:
+    L(c | y_obj, σ_obj) =
+        Π_{j=1}^{m}  Normal( y_obj[j] | (P_bar·c)[j] + μ_f[j],  σ_obj[j]^2 )
+
+Prior on c:
+    π(c) = Normal( c | μ_c, Σ_c )
+
+Posterior:
+    p(c | y_obj) ∝ L(c | y_obj, σ_obj) · π(c)
+
+Use a sampling scheme (e.g., Hamiltonian Monte Carlo) to draw N_samp posterior
+samples {c^(s)}_{s=1}^{N_samp} from p(c | y_obj).
+
+--------------------------------------------------------------------
+STEP 5: Reconstruct full spectrum and uncertainties
+--------------------------------------------------------------------
+For each posterior sample s:
+    S_sample^(s)(λ) = S_mean(λ) + Σ_{k=1}^{K} c_k^(s) · P_Kk(λ)
+
+Posterior mean spectrum:
+    μ_spec(λ) = (1/N_samp) Σ_{s=1}^{N_samp} S_sample^(s)(λ)
+
+Credible interval at level α (e.g., 95 %):
+    For each λ:
+        CI_spec(λ,α) = percentile( {S_sample^(s)(λ)} , (1-α)/2 )  to  percentile( {S_sample^(s)(λ)} , 1-(1-α)/2 )

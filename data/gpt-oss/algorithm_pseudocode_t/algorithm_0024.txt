@@ -1,0 +1,77 @@
+pseudocode
+INPUT:
+    - P = { (obj_k, { (f_i, σ_i, λ_i) } ) }   // For each object k, a set of photometric points:
+        f_i  : observed flux density in filter i
+        σ_i  : measurement uncertainty in filter i
+        λ_i  : effective wavelength / filter transmission profile
+    - B = { b_j(λ) }  j = 1 … J              // Spectral basis functions (templates, PCs, etc.)
+    - R_i(λ)          // Transmission profile for filter i
+    - MCMC_PARAMS      // Settings for the Markov‑Chain sampler (num_steps, burn_in, thinning)
+
+OUTPUT:
+    - Posterior samples Θ_k = { (a_{k,1}, …, a_{k,J}, S_k) }  for each object k
+
+------------------------------------------------------------------
+PREPROCESSING
+------------------------------------------------------------------
+
+1. Convert magnitudes to flux densities if necessary.
+2. For each filter i:
+       * Integrate each basis function through the filter response:
+           C_{i,j} = ∫ b_j(λ) · R_i(λ) dλ      // Expected flux contribution per unit coefficient
+       * Store C_i = [C_{i,1}, …, C_{i,J}]
+   Result: a matrix C of size (N_filters × J).
+
+------------------------------------------------------------------
+MODEL DEFINITION
+------------------------------------------------------------------
+For a single object k:
+
+   Parameters:
+       a_{k,1 … J}   // Linear coefficients for basis functions
+       S_k           // Global scaling factor (albedo / distance / phase term)
+
+   Prior choices:
+       a_{k,j} ~ Normal(0, τ_a)                    // τ_a set to reflect expected spectral amplitude
+       S_k     ~ LogNormal(μ_S, σ_S)              // Positive scale
+
+   Likelihood for each observed point i:
+       μ_{k,i} = S_k · Σ_{j=1}^{J} (a_{k,j} · C_{i,j})   // Model flux in filter i
+       p(f_i | a, S) = Gaussian(f_i | μ_{k,i}, σ_i^2)
+
+   Posterior:
+       p(a_{k,1…J}, S_k | {f_i, σ_i}) ∝
+            [Π_i p(f_i | a, S)] · [Π_j p(a_{k,j})] · p(S_k)
+
+------------------------------------------------------------------
+SAMPLING PROCEDURE
+------------------------------------------------------------------
+
+FOR each object k in P DO
+    1. INITIALIZE:
+         • a_{k,j} ← 0  for all j
+         • S_k      ← 1
+    2. DEFINE target density π(a, S) = posterior as above.
+    3. RUN MCMC sampler (e.g., Metropolis–Hastings, HMC):
+         a. For step t = 1 … MCMC_PARAMS.num_steps
+               i. Propose new state (a', S') from proposal q((a',S')|(a,S)).
+              ii. Compute acceptance probability:
+                   α = min(1, π(a',S')·q((a,S)|(a',S')) /
+                           [π(a,S)·q((a',S')|(a,S))])
+             iii. Accept or reject:
+                   IF rand() < α THEN (a,S) ← (a',S')
+                iv. If t > MCMC_PARAMS.burn_in AND t mod MCMC_PARAMS.thinning == 0
+                        record current (a,S) as a sample.
+    4. STORE all recorded samples as Θ_k.
+
+END FOR
+
+------------------------------------------------------------------
+POST‑PROCESSING (optional, not part of core)
+------------------------------------------------------------------
+    - Compute posterior mean spectrum for each object:
+          ĥ_b(λ) = S̄_k · Σ_j (ȧ_{k,j} · b_j(λ))
+    - Compute derived quantities (e.g., taxonomic class probabilities) from posterior samples.
+
+------------------------------------------------------------------
+END ALGORITHM

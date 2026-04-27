@@ -1,0 +1,54 @@
+1.1  Normalize each spectrum S_j to unit area or zero mean if required.
+1.2  Interpolate all spectra onto a common wavelength grid λ = {λ_1,…,λ_L}.
+
+2.1  Compute mean spectrum μ_S = mean_j(S_j).
+2.2  Center spectra:  S'_j = S_j – μ_S.
+2.3  Perform SVD:  [U, Σ, V] = svd(S').
+2.4  Retain first K columns of U → P (principal components, shape L×K).
+2.5  Project spectra onto PCA space:  z_j = Pᵀ · S'_j   (shape K).
+
+3.1  Fit a multivariate Gaussian kernel density:
+        p(z) = (1/(N_spec*h_KDE^K)) * Σ_j exp( -||z - z_j||²/(2*h_KDE²) ).
+3.2  Sample N_syn synthetic latent vectors {z*_i} from p(z)   (N_syn ≫ N_spec, e.g., 5000).
+
+4.1  For each synthetic latent vector z*_i:
+        S*_i = μ_S + P · z*_i          (shape L).
+
+5.1  For each synthetic spectrum S*_i:
+        For each filter k:
+            m*_ik = ∫ S*_i(λ) · T_k(λ) dλ / ∫ S_⊙(λ) · T_k(λ) dλ
+        // m*_i is a vector of length M.
+5.2  Add Gaussian noise:
+        m*_i_noisy = m*_i + ε,   ε ~ N(0, σ_noise² * m*_i²).
+
+6.1  Create training dataset D_enc = {(m*_i_noisy, z*_i)} for i=1…N_syn.
+6.2  Use an AutoML regressor (e.g., Gradient‑Boosted Trees ensemble):
+        model_encoder = AutoML_Regressor(D_enc).
+
+7.1  For each real spectrum S_j, assign taxonomy label t_j ∈ {H₂O, CO₂, Organic, Methanol}.
+7.2  Create training dataset D_clf = {(z_j, t_j)} for j=1…N_spec.
+7.3  Use an AutoML classifier:
+        model_classifier = AutoML_Classifier(D_clf).
+
+8.1  Input observed photometry m_obs (length M).
+8.2  Predict latent coefficient distribution:
+        z_pred_samples = model_encoder.sample(m_obs, N_sample)   // N_sample e.g., 1000
+        // Each sample is a K‑dimensional vector.
+8.3  Sample posterior joint distribution via Gaussian Copula:
+        Estimate marginal CDFs from z_pred_samples.
+        Estimate correlation matrix Σ_z from z_pred_samples.
+        Draw N_post samples from multivariate normal with Σ_z,
+        transform back to original marginal scales → latent_posterior_samples.
+8.4  Decode each posterior sample to spectrum:
+        For each sample z_p:
+            S_p = μ_S + P · z_p
+8.5  Aggregate decoded spectra:
+        Spectrum_mean = mean_over_samples(S_p).
+        Spectrum_CI_low, Spectrum_CI_high = percentile(S_p, 2.5, 97.5) per wavelength bin.
+
+9.1  For each latent posterior sample z_p:
+        t_p = model_classifier.predict_proba(z_p)   // vector of class probabilities
+9.2  Average over all samples:
+        Taxonomy_prob = mean_over_samples(t_p).
+
+Return Spectrum_mean, Spectrum_CI, Taxonomy_prob.

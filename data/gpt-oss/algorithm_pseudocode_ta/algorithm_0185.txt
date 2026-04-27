@@ -1,0 +1,80 @@
+Input:
+    S_train[1…N]        # N high‑resolution near‑IR spectra (flux vs. λ)
+    λ_common            # Common wavelength grid (resampled)
+    f_filters[]         # List of filter transmission curves T_j(λ), j=1…J
+    K_varExp            # Desired variance‑explained threshold (e.g. 0.97)
+
+Steps:
+1.1   Align & normalize all spectra on λ_common:
+          For each spectrum s in S_train:
+              Interpolate s onto λ_common
+              Optionally divide by its mean flux to remove albedo scaling
+
+1.2   Compute mean spectrum μ(λ):
+          μ ← (1/N) * Σ_{i=1}^{N} S_train[i]
+
+1.3   Center spectra:
+          S_centered[i] ← S_train[i] – μ
+
+1.4   Perform Singular Value Decomposition (SVD):
+          [U, Σ, Vᵀ] ← svd(S_centered)          # V contains PCs (rows)
+          PCs[1…N] ← rows of Vᵀ
+
+1.5   Determine optimal number of components k:
+          For k from 1 to N:
+              varExplained(k) ← Σ_{m=1}^{k} Σ[m]^2 / Σ_{m=1}^{N} Σ[m]^2
+              If varExplained(k) ≥ K_varExp break
+          Set K ← k
+
+1.6   Store:
+          μ, PCs[1…K], λ_common
+
+Input:
+    PCs[1…K]           # Principal components (each a vector over λ_common)
+    f_filters[j]      # Transmission curve of filter j
+
+Steps:
+2.1   For each filter j = 1 … J:
+          For each component m = 1 … K:
+              R[j,m] ← ∫ T_j(λ) * PCs[m](λ) dλ        # numeric integration on λ_common
+
+2.2   Also compute baseline photometry of mean spectrum:
+          BasePhot[j] ← ∫ T_j(λ) * μ(λ) dλ
+
+Output:
+    Design matrix R(J×K), baseline vector BasePhot(J)
+
+Input:
+    Observed photometry y_obs[J]
+    Photometric covariance matrix C_y (J×J)   # usually diagonal, σ_j²
+    Design matrix R, baseline BasePhot
+    Prior on coefficients:  coeffs ~ N(0, σ_prior² I_K)   # σ_prior may be large
+
+Steps:
+3.1   Compute residual photometry:
+          d ← y_obs – BasePhot
+
+3.2   Compute posterior covariance:
+          A ← Rᵀ C_y^{-1} R + σ_prior^{-2} I_K
+          Cov_post ← A^{-1}
+
+3.3   Compute posterior mean:
+          Mean_post ← Cov_post * (Rᵀ C_y^{-1} d)
+
+3.4   Draw M samples from the posterior (optional for uncertainty):
+          For t = 1 … M:
+              coeffs_t ← draw_sample_normal(Mean_post, Cov_post)
+
+3.5   Reconstruct spectra for each sample:
+          For each t:
+              Spec_t(λ) ← μ(λ) + Σ_{m=1}^{K} coeffs_t[m] * PCs[m](λ)
+
+3.6   Estimate reconstructed spectrum statistics:
+          For each wavelength λ:
+              Recon_mean(λ)  ← mean_t[ Spec_t(λ) ]
+              Recon_credInt(λ) ← percentile_{2.5%,97.5%} of {Spec_t(λ)}
+
+Output:
+    Recon_mean(λ_common), Recon_credInt(λ_common)
+
+# Compare predicted photometry from reconstructed spectrum to observed y_obs

@@ -1,0 +1,112 @@
+--------------------------------------------------------------------
+Definitions
+--------------------------------------------------------------------
+S_reflectance[i][λ]      – Reference spectrum of TNO i (flux vs λ)
+F_filter[j][λ]           – Throughput curve of filter j
+m_obs[j]                 – Measured photometry of new object
+K                        – Number of retained PCA components (≈8–10)
+h_KDE                    – KDE bandwidth (≈0.5)
+M_aug                    – Number of synthetic samples for augmentation
+R_encoder                – Trained regressor (AutoML, e.g. XGBoost)
+C_mean, C_cov             – Mean and covariance of latent PCs
+V_k                       – PCA eigenvectors (columns)
+μ_S, Σ_S                  – Mean and covariance of reconstructed spectra
+--------------------------------------------------------------------
+Phase 1 – Prepare Prior (once, before any inference)
+--------------------------------------------------------------------
+1.  # Center spectra
+    S_centered[i] = S_reflectance[i] – mean_over_all_spectra
+
+2.  # PCA on centered spectra
+    [V_k, C_real[i]] = PCA(S_centered, n_components=K)
+
+3.  # Store PCA basis
+    Store V_k, μ_S = mean(S_reflectance), Σ_S = covariance(S_reflectance)
+
+4.  # Build density model on latent space
+    KDE_model = FitGaussianKDE(C_real, bandwidth=h_KDE)
+
+5.  # Generate synthetic latent samples
+    For s = 1 … M_aug:
+        C_aug[s] = KDE_model.sample()          # Sample K‑dim vector
+
+6.  # Reconstruct synthetic spectra from latent samples
+    For s = 1 … M_aug:
+        S_syn[s] = μ_S + V_k · C_aug[s]        # Linear reconstruction
+
+7.  # Forward‑model synthetic spectra to photometry
+    For s = 1 … M_aug:
+        For j = 1 … N_filters:
+            m_syn[s][j] = ∫ S_syn[s](λ) * F_filter[j](λ) dλ
+            # (numerical integration over wavelength grid)
+
+8.  # Inject realistic photometric noise (20 % relative)
+    For s = 1 … M_aug:
+        For j = 1 … N_filters:
+            σ = 0.20 * m_syn[s][j]
+            m_noisy[s][j] = m_syn[s][j] + Normal(0, σ)
+
+9.  # Assemble training set for encoder
+    X_train = { m_noisy[s] }                # Photometry vectors
+    Y_train = { C_aug[s] }                  # Corresponding latent PCs
+
+10. # Train AutoML regressor (encoder)
+    R_encoder = AutoML_Train(X_train, Y_train)
+
+11. # (Optional) Train AutoML classifier in latent space
+    Labels = taxonomic_class_of_each_reference_spectrum
+    C_classifier = AutoML_Train(C_real, Labels)
+
+--------------------------------------------------------------------
+Phase 2 – Forward Inference (per new observation)
+--------------------------------------------------------------------
+Input:  m_obs[1…N_filters]   (observed photometry)
+
+12. # Predict posterior mean of latent coefficients
+    C_pred_mean = R_encoder.predict(m_obs)
+
+13. # Estimate posterior covariance of latent coefficients
+    # Option 1: Use regressor uncertainty if available
+    # Option 2: Empirically approximate by perturbing input
+    # Here we use a simple jitter method:
+    ε = 0.01                            # small noise scale
+    For k = 1 … N_samples:
+        m_jitter[k] = m_obs + Normal(0, ε)
+        C_samples[k] = R_encoder.predict(m_jitter[k])
+    C_cov_est = covariance(C_samples)
+
+14. # Construct Gaussian copula (optional)
+    # Transform marginals to uniforms via empirical CDFs,
+    # couple with correlation matrix from C_cov_est,
+    # then invert to obtain joint draws in latent space.
+    # For simplicity, we directly sample multivariate normal:
+    C_draws = MultivariateNormal(mean=C_pred_mean, cov=C_cov_est).sample(N_draws)
+
+15. # Decode each draw to full spectrum
+    For d = 1 … N_draws:
+        S_draw[d] = μ_S + V_k · C_draws[d]
+
+16. # Compute mean and credible interval of reconstructed spectrum
+    S_mean = mean_over_draws(S_draw)
+    S_lower, S_upper = percentile(S_draw, 2.5, 97.5)
+
+17. # (Optional) Taxonomy probabilities
+    prob_taxa = Softmax( C_classifier.predict_proba(C_pred_mean) )
+
+Output:
+    - S_mean[λ]            : Expected reconstructed spectrum
+    - S_lower[λ], S_upper[λ] : 95 % credible bounds
+    - prob_taxa            : Taxonomic posterior probabilities
+--------------------------------------------------------------------
+Notes
+--------------------------------------------------------------------
+• All steps above assume wavelength grid and filter curves are pre‑loaded.
+• The KDE step provides a continuous, smooth prior over latent space, avoiding
+  over‑fitting to the small reference set.
+• Noise injection during training forces the encoder to learn a probabilistic
+  mapping rather than a deterministic one.
+• The Gaussian copula step (implemented here as a simple multivariate normal
+  sampler) preserves physical correlations among PCs and yields physically
+  plausible spectral realizations.
+• No validation, cross‑validation, or plotting is performed – only the
+  computational reconstruction pipeline is presented.

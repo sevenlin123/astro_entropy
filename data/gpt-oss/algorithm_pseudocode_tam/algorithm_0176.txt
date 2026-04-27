@@ -1,0 +1,81 @@
+INPUT
+    S_raw[1…N]      // High‑resolution reference spectra (vector of reflectances vs λ)
+    R_filters[1…J]  // Instrument filter throughput curves (function λ → transmission)
+    y[1…N]          // Optional taxonomic labels for each reference spectrum
+    K               // Number of principal components to retain
+    h               // KDE bandwidth
+    M               // Number of synthetic latent samples to generate
+
+OUTPUT
+    μ_s             // Mean reference spectrum
+    V[1…K]          // Principal‑component basis vectors (each a λ‑array)
+    Encoder E       // Trained regressor : photometry → latent coefficients
+    Classifier C    // Trained classifier : latent coefficients → taxonomy probabilities
+
+1  /* ---------- 1. Build the PCA prior ---------- */
+2  μ_s ← mean(S_raw)                                   // Element‑wise mean over spectra
+3  S_centered[i] ← S_raw[i] – μ_s   for i = 1 … N     // Center the data
+4  [U, Σ, V] ← SVD(S_centered)                         // Singular‑value decomposition
+5  V_pc ← first K columns of V                          // PCA eigenvectors
+6  for i = 1 … N:
+7      c_true[i] ← V_pcᵀ · S_centered[i]                // Project onto PCs (latent vector)
+
+8  /* ---------- 2. Augment latent space with KDE ---------- */
+9  kde_prior ← KDE( {c_true[1], …, c_true[N]} , bandwidth = h )
+10 M_synth ← sample(kde_prior, M)                        // Draw M synthetic latent vectors
+
+11 /* ---------- 3. Generate synthetic spectra ---------- */
+12 for k = 1 … M:
+13     S_synth[k] ← μ_s + V_pc · M_synth[k]             // Inverse PCA → full spectrum
+
+14 /* ---------- 4. Forward‑model photometry + noise ---------- */
+15 for k = 1 … M:
+16     for j = 1 … J:
+17         m_noisy[k][j] ← ∫ S_synth[k](λ) · R_filters[j](λ) dλ   // Filter integral
+18         σ ← 0.20 * m_noisy[k][j]                              // 20 % Gaussian noise
+19         m_noisy[k][j] ← m_noisy[k][j] + Normal(0, σ)
+
+20 /* ---------- 5. Train encoder (regressor) ---------- */
+21 X_enc ← m_noisy[1…M]                               // Photometry matrix (M × J)
+22 Y_enc ← M_synth_latent[1…M]                        // Latent matrix (M × K)
+23 Encoder E ← AutoML_Regression(X_enc → Y_enc)       // e.g., ensemble of GBDTs, NN
+
+24 /* ---------- 6. Train classifier (taxonomy) ---------- */
+25 X_clf ← c_true[1…N]                                 // Latent vectors of real spectra
+26 Y_clf ← y[1…N]                                      // Corresponding taxonomy labels
+27 Classifier C ← AutoML_Classification(X_clf → Y_clf)
+
+28 /* ---------- 7. Store results ---------- */
+29 Save μ_s, V_pc, Encoder E, Classifier C
+
+INPUT
+    m_obs[1…J]      // Observed photometry for a new object (in the same units as training)
+    μ_s, V_pc       // From training
+    Encoder E
+    Classifier C
+
+OUTPUT
+    S_rec[λ]        // Reconstructed high‑resolution spectrum
+    P_tax[classes]  // Taxonomy probability vector
+    (optional) cov_S   // Posterior covariance of the reconstructed spectrum
+
+1  /* ---------- 1. Map photometry to latent space ---------- */
+2  c_pred ← E.predict(m_obs)                           // Single point prediction
+   // If the AutoML library supplies predictive uncertainty,
+   // obtain a distribution:  c_samples ← E.sample_predictions(m_obs, N_samp)
+
+3  /* ---------- 2. Decode to full spectrum ---------- */
+4  S_rec ← μ_s + V_pc · c_pred
+
+5  /* ---------- 3. Taxonomy classification ---------- */
+6  P_tax ← C.predict_proba(c_pred)
+
+7  /* ---------- 4. (Optional) Quantify reconstruction uncertainty ---------- */
+8  if c_samples exists:
+9      for each s in c_samples:
+10          S_s ← μ_s + V_pc · s
+11      S_mean ← mean(S_s over all samples)
+12      cov_S ← covariance(S_s over all samples)
+13      return S_mean, cov_S, P_tax
+14 else:
+15      return S_rec, P_tax

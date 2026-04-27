@@ -1,0 +1,92 @@
+Input:
+    - For each TNO i:
+        * Observed apparent magnitudes m_i,f in filters f ∈ {B, V, R, I, J, H, K}
+        * Measurement uncertainties σ_i,f
+        * Filter transmission curves T_f(λ)
+        * Reference solar flux S(λ)
+    - Library of N_taxonomy classes:
+        * For each class k: template reflectance spectrum R_k(λ)  (or parametric model)
+        * Prior probability P(k) for class membership
+    - Optional: parametric spectral family for each class (slope α, absorption depth d, center λ_c)
+
+Output:
+    - Posterior probability P(k | data_i) for each class k
+    - Best‑fit spectral parameters θ_i (e.g., slope, absorption depth) and uncertainties
+    - Reconstructed spectrum Ŝ_i(λ) for each TNO
+
+Procedure:
+
+1.  **Flux conversion**
+    FOR each object i:
+        FOR each filter f:
+            * Convert magnitude to flux density:
+              F_i,f = F_0,f * 10^(−0.4 * m_i,f)
+            * Propagate uncertainty:
+              σ_F_i,f = ln(10)/2.5 * F_i,f * σ_i,f
+        END FOR
+    END FOR
+
+2.  **Model generation per class**
+    FOR each class k:
+        * If using template spectra:
+            - Compute synthetic fluxes in each filter:
+              S_k,f = ∫ R_k(λ) * T_f(λ) * S(λ) dλ   (normalised)
+        * If using parametric model:
+            - Define spectral function S_k(λ | θ_k)  (e.g., linear slope + gaussian absorption)
+            - Compute synthetic fluxes S_k,f(θ_k) via same integral
+    END FOR
+
+3.  **Likelihood computation**
+    FOR each object i:
+        FOR each class k:
+            IF template:
+                * Evaluate likelihood assuming Gaussian errors:
+                  L_k = Π_f  exp[ −(F_i,f − S_k,f)^2 / (2 * σ_F_i,f^2) ] / √(2πσ_F_i,f^2)
+            ELSE IF parametric:
+                * Explore parameter space θ_k (e.g., grid or MCMC):
+                    – For each θ_k sample:
+                        · Compute synthetic fluxes S_k,f(θ_k)
+                        · Compute likelihood L(θ_k) as above
+                    – Store posterior weight w(θ_k) ∝ L(θ_k) * P_prior(θ_k)
+                * Marginalise over θ_k to get class likelihood:
+                  L_k = Σ_{θ_k} w(θ_k)   (discrete)  or integrate analytically (continuous)
+        END FOR
+    END FOR
+
+4.  **Posterior class probabilities**
+    FOR each object i:
+        * Compute evidence:
+          Z_i = Σ_k L_k * P(k)
+        * For each class k:
+          P(k | data_i) = (L_k * P(k)) / Z_i
+    END FOR
+
+5.  **Spectral parameter estimation (per object & class)**
+    FOR each object i:
+        FOR each class k:
+            * If parametric:
+                – Compute posterior mean θ̂_k = Σ_{θ_k} θ_k * w(θ_k) / Σ w(θ_k)
+                – Compute posterior covariance Σ_k = Σ_{θ_k} (θ_k−θ̂_k)(θ_k−θ̂_k)^T * w(θ_k) / Σ w(θ_k)
+        END FOR
+    END FOR
+
+6.  **Reconstructed spectrum synthesis**
+    FOR each object i:
+        * Choose best class k* = argmax_k P(k | data_i)
+        * Adopt parameters θ̂_k* (if parametric) or use template R_k*(λ)
+        * Construct spectrum:
+            Ŝ_i(λ) = 
+                IF parametric:  S_k*(λ | θ̂_k*)
+                ELSE:           R_k*(λ)
+    END FOR
+
+7.  **Outlier detection (optional)**
+    FOR each object i:
+        * Compute χ²_i = Σ_f (F_i,f − Ŝ_i,f)^2 / σ_F_i,f^2
+        * If χ²_i > χ²_threshold → flag as outlier
+    END FOR
+
+Return:
+    - Posterior class probabilities P(k | data_i)
+    - Best‑fit spectral parameters θ̂_i for each object
+    - Reconstructed spectra Ŝ_i(λ)

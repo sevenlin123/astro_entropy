@@ -1,0 +1,30 @@
+Input:
+    S          – matrix of reference near‑IR spectra (N_spec × N_wave)
+    F          – list of photometric filters (each with transmission curve T_f(λ))
+    y_obj      – vector of observed fluxes for one TNO (N_filt)
+    σ_obj      – measurement uncertainties for y_obj (N_filt)
+    K          – number of principal components to retain
+
+2.1   μ_s = mean(S, axis=0)                     // mean spectrum
+2.2   S_centered = S - μ_s
+2.3   [U, Σ, Vt] = svd(S_centered, full_matrices=False)   // singular value decomposition
+2.4   PCs = Vt[:K, :]                           // first K right‑singular vectors (principal axes)
+2.5   λ_i = Σ[:K] / (N_spec-1)                  // explained variance per component
+
+3.1   Compute vector A_f (length K):
+        A_f[k] = ∫_λ λ * T_f(λ) * PCs[k, λ] dλ    // weighted integral over wavelength grid
+        // (optional: normalize by ∫ λ*T_f(λ)dλ if desired)
+
+4.1   W  = diag( 1/σ_obj² )                 // weight matrix
+4.2   M  = Aᵀ W A + I_K                    // precision matrix
+4.3   Σ_post = inverse(M)                   // posterior covariance
+4.4   μ_post = Σ_post * Aᵀ * W * y_obj      // posterior mean
+
+p(c | y_obj, σ_obj) = N( μ_post , Σ_post )
+
+5.1   c_samples ← draw L samples from N(μ_post, Σ_post)   // optional for Monte‑Carlo uncertainty
+5.2   For each sample c_sample:
+        spectrum_sample = μ_s + PCsᵀ @ c_sample
+
+5.3   Expected spectrum = μ_s + PCsᵀ @ μ_post
+5.4   Covariance of spectrum:  Cov_spectrum = PCsᵀ @ Σ_post @ PCs

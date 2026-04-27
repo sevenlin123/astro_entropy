@@ -1,0 +1,74 @@
+pseudo
+# ------------------------------------------------------------------
+# INPUT
+#   S_train[1…Ns][1…L]        : Training spectra (normalized,
+#                               common wavelength grid of length L)
+#   filt[k][1…L]              : Filter transmission curves for k = 1…K
+#   f_obs[k]                  : Observed broadband fluxes for the target
+#   sigma[k]                  : Measurement uncertainties
+#   Npc                        : Number of principal components to retain
+# ------------------------------------------------------------------
+
+# ---------------------------- 1. PCA on training spectra ----------------------------
+# 1.1 Center spectra
+mean_spec[1…L] = mean(S_train, axis=0)
+S_centered[n][l] = S_train[n][l] - mean_spec[l]      # for all n,l
+
+# 1.2 Covariance matrix
+C[l1][l2] = (1/(Ns-1)) * Σ_{n} S_centered[n][l1] * S_centered[n][l2]
+
+# 1.3 Eigen‑decomposition
+eig_vals, eig_vecs = eigen_decompose(C)   # eig_vecs columns are PCs
+
+# 1.4 Select leading Npc PCs
+PC[1…Npc][1…L] = eig_vecs[:, 1…Npc]
+lambda[i]     = eig_vals[1…Npc]           # eigenvalues
+
+# 1.5 Project training spectra onto PCs → coefficient matrix
+for n in 1…Ns:
+    for i in 1…Npc:
+        coeff[n][i] = Σ_{l} S_centered[n][l] * PC[i][l]   # dot product
+
+# 1.6 Estimate prior statistics for coefficients
+prior_mean[i]     = mean(coeff[:,i])          # usually ~0
+prior_cov[i][j]   = cov(coeff[:,i], coeff[:,j])  # Σ of coefficients
+
+# ----------------------- 2. Predict photometry from a coefficient vector -----
+# Define linear mapping from coefficient vector c to expected fluxes
+function predict_fluxes(c[1…Npc]):
+    spec_pred[l] = mean_spec[l] + Σ_{i} c[i] * PC[i][l]
+    for k in 1…K:
+        f_pred[k] = Σ_{l} spec_pred[l] * filt[k][l]   # discrete integral
+    return f_pred
+
+# ------------------------ 3. Bayesian inference for coefficients --------------
+# 3.1 Log‑posterior function
+function log_posterior(c[1…Npc]):
+    # Prior (multivariate normal)
+    diff = c - prior_mean
+    log_prior = -0.5 * diff.T * inv(prior_cov) * diff
+                 - 0.5 * Npc * log(2π) - 0.5 * log_det(prior_cov)
+
+    # Likelihood (independent Gaussian per filter)
+    f_pred = predict_fluxes(c)
+    log_likelihood = Σ_{k=1}^{K} [ -0.5*(f_obs[k]-f_pred[k])^2 / sigma[k]^2
+                                   - 0.5*log(2π*sigma[k]^2) ]
+
+    return log_prior + log_likelihood
+
+# 3.2 Sample posterior of coefficients
+initialize c = prior_mean
+run HMC or Metropolis‑Hastings to generate M samples {c^(m)} from
+p(c | f_obs, sigma) ∝ exp(log_posterior(c))
+
+# ------------------------- 4. Reconstruct full spectra ------------------------
+for m in 1…M:
+    spec_sample[m][l] = mean_spec[l] + Σ_{i} c^(m)[i] * PC[i][l]
+
+# 4.1 Compute summary statistics
+spec_mean[l]       = mean(spec_sample[:,l])
+spec_lower[l]      = percentile(spec_sample[:,l], 2.5)   # 95% CI lower
+spec_upper[l]      = percentile(spec_sample[:,l], 97.5)  # 95% CI upper
+
+# ------------------------------ 5. OUTPUT ------------------------------------
+return spec_mean, spec_lower, spec_upper

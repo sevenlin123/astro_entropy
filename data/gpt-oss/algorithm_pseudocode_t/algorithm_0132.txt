@@ -1,0 +1,106 @@
+Input:
+  N_obs: number of observations (filters)
+  m_obs[1..N_obs], sigma[1..N_obs]
+  Filters[1..N_obs] = {λ_min, λ_max, T(λ)} // filter transmission curve
+  Templates[1..K] = T_k(λ) // spectral basis functions
+  PriorParams for coefficients (e.g., mean mu_k, std dev tau_k)
+
+Procedure:
+  1. Precompute filter integrals for each template:
+     For k=1 to K:
+        For each filter j:
+           I_jk = ∫ T_k(λ) * Filter_j.transmission(λ) * λ dλ  // approximate via discretization
+
+  2. Define forward_model(coeffs):
+        For each filter j:
+           flux_j = Σ_{k} coeffs[k] * I_jk
+           mag_j = -2.5*log10(flux_j / flux_ref_j)  // flux_ref_j constant for zero-mag
+        Return mag_j array
+
+  3. Initialize coeffs_0 (e.g., zeros or random from prior)
+     Set current_state = coeffs_0
+     Evaluate log_likelihood_current = log_likelihood(current_state)
+     Store samples list
+
+  4. For iter = 1 to N_iter:
+        Propose coeffs_proposed = current_state + Normal(0, proposal_std)  // componentwise
+        Compute log_prior_proposed = Σ_k log P(coeffs_proposed[k])
+        Compute mag_proposed = forward_model(coeffs_proposed)
+        Compute log_likelihood_proposed = -0.5 * Σ_j ((m_obs[j]-mag_proposed[j])/sigma[j])^2
+        Compute log_accept_ratio = (log_likelihood_proposed + log_prior_proposed) -
+                                   (log_likelihood_current + log_prior_current)
+        If log_uniform(0,1) < log_accept_ratio:
+            current_state = coeffs_proposed
+            log_likelihood_current = log_likelihood_proposed
+            log_prior_current = log_prior_proposed
+        Append current_state to samples list
+
+  5. After burn-in discard initial samples
+  6. Compute posterior mean spectrum:
+        For each λ in wavelength grid:
+            spectrum_mean[λ] = Σ_k mean_coeffs[k] * Template_k(λ)
+  7. Compute uncertainty band via percentiles of samples
+
+Output:
+   Posterior samples of coefficients
+   Reconstructed spectrum mean ± uncertainty
+   Optionally outlier probability per observation:
+      For each filter j:
+         Compute predictive distribution of m_syn from posterior samples
+         Probability of |m_obs[j]-m_pred| > 3σ etc.
+
+I[j][k] = Σ_over_λ  S_k(λ) * T_j(λ) * Δλ          # Δλ = spacing in λ_grid
+
+forward_model(coeff):
+    for j = 1 … N:
+        F_syn[j] = Σ_k coeff[k] * I[j][k]
+        m_syn[j] = -2.5 * log10(F_syn[j] / F0_j)
+    return m_syn
+
+log_prior(coeff):
+    lp = 0
+    for k = 1 … K:
+        lp += log_gaussian(coeff[k]; μ_k, τ_k)
+    return lp
+
+log_likelihood(coeff):
+    ll = 0
+    for j = 1 … N:
+        ll -= 0.5 * ((m_obs[j] - m_syn[j]) / σ[j])^2
+    return ll
+
+for it = 1 … M_iterations:
+    # Propose new state
+    coeff_prop = coeff_curr + Normal_vector(0, s_proposal, size=K)
+
+    # Compute forward model
+    m_prop = forward_model(coeff_prop)
+
+    # Log‑prior and log‑likelihood
+    lp_prop = log_prior(coeff_prop)
+    ll_prop = log_likelihood(coeff_prop)
+
+    # Acceptance probability
+    log_alpha = (lp_prop + ll_prop) - (lp_curr + ll_curr)
+    if log_uniform(0,1) < log_alpha:
+        # Accept
+        coeff_curr = coeff_prop
+        lp_curr = lp_prop
+        ll_curr = ll_prop
+
+    # Store current state
+    samples[it] = coeff_curr
+
+coeff_mean = mean(samples, axis=0)
+coeff_std  = std(samples, axis=0)
+
+S_rec[λ] = Σ_k coeff_mean[k] * S_k(λ)
+
+S_lower[λ] = percentile( [Σ_k s[k]*S_k(λ) for each sample s] , 16 )
+S_upper[λ] = percentile( [Σ_k s[k]*S_k(λ) for each sample s] , 84 )
+
+# Predictive distribution of synthetic magnitude
+m_preds = [forward_model(s)[j] for s in samples]
+
+# Compute probability that observed magnitude lies far from prediction
+p_outlier[j] = fraction( |m_obs[j] - m_preds| > 3*σ[j] )

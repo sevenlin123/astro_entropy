@@ -1,0 +1,61 @@
+Input
+    M        : number of photometric filters (F)
+    J        : number of spectral basis functions (J)
+    λ[1..L]  : wavelength grid
+    R[f][k]  : transmission curve of filter f at wavelength k
+    S_j[k]   : j‑th spectral basis function evaluated at λ[k]
+    y[i][f]  : observed flux of object i in filter f
+    σ[i][f]  : uncertainty of y[i][f]
+    τ²       : prior variance for basis coefficients
+
+Pre‑processing ----------------------------------------------------
+1. Compute convolution kernels
+       K[f][j] = Σ_k S_j[k] · R[f][k] · Δλ_k          (for all f, j)
+   // K is the design matrix that maps basis coefficients to expected fluxes.
+
+2. Assemble design matrix for each object
+       A[i][f][j] = K[f][j]                          // identical for all objects
+
+Bayesian Model -----------------------------------------------------
+For each object i:
+    Parameters: c[i][1..J]  // basis coefficients
+
+    Prior      :  c[i][j]  ~ Normal(0, τ²)          for every j
+    Likelihood :  y[i][f]  ~ Normal( (A[i]·c[i])[f] , σ[i][f]² )
+                 // (A[i]·c[i])[f] = Σ_j K[f][j]·c[i][j]
+
+Posterior Sampling -----------------------------------------------
+3. Define log‑posterior for object i:
+       logp(c) = Σ_f  ( -(y[i][f] - (A[i]·c)[f])² / (2 σ[i][f]²)
+                       - log(σ[i][f] √(2π)) )
+                 - Σ_j  ( c[j]² / (2 τ²) + log(τ √(2π)) )
+
+4. Run Hamiltonian Monte Carlo (HMC) or other MCMC sampler
+       for N_iter iterations:
+           propose new c′ using leapfrog integrator
+           compute logp(c′) and logp(c_current)
+           accept/reject using Metropolis rule
+           store accepted c in chain
+
+Post‑Processing ----------------------------------------------
+5. For each retained sample of c:
+       compute predicted flux vector
+           y_pred[f] = Σ_j K[f][j] · c[j]
+       store y_pred
+
+6. Estimate posterior predictive spectrum:
+       For each filter f:
+           μ_yf   = mean of {y_pred[f]} over all samples
+           σ_yf   = std  of {y_pred[f]} over all samples
+
+7. Optional taxonomy assignment (nearest‑template):
+       For each sample spectrum s (normalized reflectance vs λ):
+           compute Euclidean distance to each template T_k
+           assign class k* with minimal distance
+       Tabulate class frequencies → class probabilities
+
+Output
+    Posterior samples of coefficients c[i][j]
+    Posterior predictive fluxes μ_yf ± σ_yf
+    Taxonomic class probabilities (if computed)
+    (Optional) Outlier score = –log_likelihood at MAP estimate

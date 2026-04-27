@@ -1,0 +1,87 @@
+pseudocode
+INPUT
+    S_raw[1…N]          // high‑resolution reflectance spectra (λ‑grid)
+    F_curve[1…J]        // throughput curves of J photometric filters
+    h_KDE = 0.5         // bandwidth for KDE
+    K                   // number of principal components to retain (e.g. 8–10)
+    M_aug = 5000        // number of synthetic latent samples
+    N_sample = 1000     // posterior samples for inference
+
+OUTPUT
+    meanSpectrum[λ]       // posterior mean spectrum
+    credInt[λ][α,β]       // α–β credible interval per λ
+    taxProb[Class]        // posterior probability for each taxonomy class
+
+--------------------------------------------------------------------
+STEP 1 – Principal‑Component Prior Construction
+--------------------------------------------------------------------
+1.1  Normalize S_raw to common scale (e.g. unit mean reflectance).
+1.2  Compute covariance matrix C = cov(S_raw).
+1.3  Perform eigendecomposition: C = U Σ Uᵀ.
+1.4  Select first K columns of U → PC_basis[λ][k].
+1.5  Project each spectrum onto PCs:
+        z[i][k] = PC_basisᵀ · (S_raw[i] – μ_S)      // μ_S is mean spectrum
+1.6  Store latent coefficient matrix Z[N][K].
+
+--------------------------------------------------------------------
+STEP 2 – Continuous Latent Manifold Generation
+--------------------------------------------------------------------
+2.1  Fit multivariate kernel density estimator (Gaussian kernel) to Z
+      with bandwidth h_KDE.  Denote this density as p_Z(z).
+2.2  Sample M_aug latent vectors:
+        for m = 1 … M_aug:
+            z_syn[m] ~ p_Z(z)
+            // optional: reject samples far outside training convex hull
+2.3  For each z_syn[m], reconstruct synthetic spectrum:
+        S_syn[m] = μ_S + PC_basis · z_syn[m]
+2.4  For each S_syn[m], compute noiseless synthetic photometry:
+        for j = 1 … J:
+            m_syn_noiseless[m][j] = ∫ S_syn[m](λ) · F_curve[j](λ) dλ / ∫ F_curve[j](λ) dλ
+   // (reflectance integration; assume flat solar spectrum)
+2.5  Add Gaussian noise to simulate measurement uncertainties:
+        σ_noise = 0.20 * m_syn_noiseless[m][j]      // 20 % relative error
+        m_syn[m][j] = Normal(mean = m_syn_noiseless[m][j], sd = σ_noise)
+2.6  Create training set for encoder:
+        TrainPairs = { (m_syn[m], z_syn[m])  for m = 1…M_aug }
+
+--------------------------------------------------------------------
+STEP 3 – Encoder (Photometry → Latent) Training
+--------------------------------------------------------------------
+3.1  Use AutoML framework (e.g., AutoGluon) to train a regression model
+      Renc:   m → z_pred (K‑dim vector)
+      - Enable uncertainty estimation (e.g., QuantileRegression, ensembles,
+        or bootstrap resampling) to obtain posterior covariance Σ_z.
+3.2  Save trained encoder Renc and its uncertainty model.
+
+--------------------------------------------------------------------
+STEP 4 – Classifier (Latent → Taxonomy) Training
+--------------------------------------------------------------------
+4.1  Gather true taxonomy labels L[i] for the original N spectra.
+4.2  Train a second AutoML classifier
+      Cclass: z → Prob(Class) using labels L[i].
+4.3  Save trained classifier Cclass.
+
+--------------------------------------------------------------------
+STEP 5 – Inference for New Observation
+--------------------------------------------------------------------
+5.1  Receive observed sparse photometry vector m_obs[J] and its uncertainties.
+5.2  Apply encoder to obtain:
+        z_mean = Renc.predict(m_obs)               // point estimate
+        Σ_z   = Renc.predict_uncertainty(m_obs)    // covariance matrix
+5.3  Construct joint posterior over latent coefficients:
+        // Gaussian copula to preserve dependencies
+        Z_samples[n] = draw_from_multivariate_normal(z_mean, Σ_z)
+        for n = 1 … N_sample:
+            z_n = GaussianCopulaSample(Z_samples[n])
+5.4  For each z_n, reconstruct full spectrum:
+        S_n[λ] = μ_S + PC_basis · z_n
+5.5  Aggregate ensemble {S_n} to compute:
+        meanSpectrum[λ]   = average_n( S_n[λ] )
+        credInt[λ][0.025,0.975] = 2.5th & 97.5th percentiles of {S_n[λ]}
+5.6  Taxonomy posterior:
+        taxProb[class] = average_n( Cclass.predict_proba(z_n)[class] )
+
+--------------------------------------------------------------------
+STEP 6 – Return Results
+--------------------------------------------------------------------
+Return meanSpectrum, credInt, taxProb.

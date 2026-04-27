@@ -1,0 +1,107 @@
+#----------------------------------------------
+# 1. PREPROCESSING – BUILD BASIS FROM TRAINING SPECTRA
+#----------------------------------------------
+
+INPUT: 
+    TRAIN_SPECTRA = {S_j(λ)}   # j = 1 … M (discretized spectra)
+    FILTER_CURVES = {T_i(λ)}   # i = 1 … N_filters (discrete transmission)
+    BAND_ZEROPOINTS = {zp_i}   # zero‑point fluxes for each filter
+
+CONSTANTS:
+    Δλ                               # wavelength grid spacing
+    PRIOR_MEAN   = 0.0
+    PRIOR_VAR    = σ_prior²          # scalar variance or vector per basis
+
+PROCEDURE BuildBasis():
+    # Assemble basis matrix Φ (size L × M, L = number of wavelength bins)
+    Φ ← zero_matrix(L, M)
+    FOR j FROM 1 TO M:
+        Φ[:, j] ← S_j(λ)              # discretized spectrum
+
+    # Compute design matrix A (size N_filters × M)
+    A ← zero_matrix(N_filters, M)
+    FOR i FROM 1 TO N_filters:
+        FOR j FROM 1 TO M:
+            # Integral over wavelength: ∫ Φ_j(λ) * T_i(λ) dλ
+            A[i, j] ← Σ_over_λ ( Φ[λ, j] * T_i(λ) ) * Δλ
+
+    RETURN Φ, A
+END PROCEDURE
+
+
+#----------------------------------------------
+# 2. OBJECT‑LEVEL RECONSTRUCTION
+#----------------------------------------------
+
+INPUT:
+    OBS_MAGNITUDES = {m_i}          # observed magnitudes in subset of filters
+    OBS_ERRORS    = {σ_i}           # magnitude uncertainties
+    FILTER_INDICES = {i}            # indices of filters actually observed
+
+PROCEDURE ReconstructSpectrum(OBS_MAGNITUDES, OBS_ERRORS, FILTER_INDICES):
+    # 2.1 Convert magnitudes to observed fluxes
+    f_obs ← empty_array(length(FILTER_INDICES))
+    σ_f   ← empty_array(length(FILTER_INDICES))
+    FOR k FROM 1 TO length(FILTER_INDICES):
+        i ← FILTER_INDICES[k]
+        f_obs[k] ← 10^( -0.4 * (OBS_MAGNITUDES[i] - BAND_ZEROPOINTS[i]) )
+        σ_f[k]   ← f_obs[k] * ln(10)/2.5 * OBS_ERRORS[i]   # propagate error
+
+    # 2.2 Extract corresponding rows of A and noise covariance
+    A_sub      ← A[FILTER_INDICES, :]                    # shape (n_obs × M)
+    Σ_noise    ← diag( σ_f^2 )                           # (n_obs × n_obs)
+
+    # 2.3 Prior covariance (diagonal assumption)
+    Σ_prior    ← diag( PRIOR_VAR * ones(M) )             # (M × M)
+
+    # 2.4 Posterior parameters (Gaussian conjugate update)
+    # Compute K = A_subᵀ Σ_noise⁻¹ A_sub + Σ_prior⁻¹
+    K_inv_part ← inverse( Σ_noise )                     # cheap if diagonal
+    K ← transpose(A_sub) @ K_inv_part @ A_sub + inverse(Σ_prior)
+    μ_post ← inverse(K) @ transpose(A_sub) @ K_inv_part @ f_obs
+    Σ_post ← inverse(K)
+
+    # 2.5 Draw samples from posterior (optional, for uncertainty)
+    SAMPLE_COUNT ← 100
+    spectra_samples ← empty_matrix(L, SAMPLE_COUNT)
+    FOR s FROM 1 TO SAMPLE_COUNT:
+        α_s ← sample_from_normal( μ_post, Σ_post )     # coefficient vector
+        spectra_samples[:, s] ← Φ @ α_s                # reconstruct spectrum
+
+    # 2.6 Compute point estimate and confidence bands
+    S_estimate ← Φ @ μ_post                              # posterior mean spectrum
+    S_lower    ← quantile(spectra_samples, 0.025, axis=1)
+    S_upper    ← quantile(spectra_samples, 0.975, axis=1)
+
+    # 2.7 Goodness‑of‑fit (chi‑square)
+    χ² ← Σ_over_k ( (f_obs[k] - (A_sub @ μ_post)[k])^2 / σ_f[k]^2 )
+    DOF ← length(f_obs) - M
+    p_value ← chi2_survival_function(χ², DOF)
+
+    RETURN {
+        'spectral_mean'   : S_estimate,
+        'confidence_low' : S_lower,
+        'confidence_high': S_upper,
+        'chi_square'     : χ²,
+        'p_value'        : p_value
+    }
+END PROCEDURE
+
+
+#----------------------------------------------
+# 3. MAIN LOOP OVER ALL TARGET OBJECTS
+#----------------------------------------------
+
+PROCEDURE Main():
+    Φ, A ← BuildBasis()
+
+    FOR each object O in OBJECT_LIST:
+        OBS_MAGNITUDES   ← O.magnitudes
+        OBS_ERRORS       ← O.errors
+        FILTER_INDICES   ← O.observed_filter_indices
+
+        RESULT ← ReconstructSpectrum(OBS_MAGNITUDES, OBS_ERRORS, FILTER_INDICES)
+
+        STORE RESULT for O
+    END FOR
+END PROCEDURE

@@ -1,0 +1,64 @@
+Inputs:
+    N            – number of template spectra
+    M            – number of photometric filters
+    S[i][λ]      – reflectance spectrum of template i   (i = 1 … N)
+    R[j][λ]      – transmission curve of filter j      (j = 1 … M)
+    m[j]         – observed apparent magnitude in filter j
+    err[j]       – magnitude error in filter j
+    f0[j]        – flux zero‑point for filter j
+    τ            – prior scale parameter  (default: 1e6 → weak prior)
+
+Outputs:
+    ŵ[i]         – posterior mean weight of template i
+    CovW[i,k]     – posterior covariance of weights
+    Srec[λ]       – reconstructed reflectance spectrum
+    VarS[λ]       – variance of reconstructed spectrum (optional)
+
+--------------------------------------------------------------------
+Step 1 – Pre–compute filter integrals
+
+For each filter j = 1 … M:
+    For each template i = 1 … N:
+        A[j,i] = ∫_λ  S[i][λ] * R[j][λ] dλ          // numerical integration
+    // Normalise if desired:
+    //   A[j,i] = A[j,i] / ∫_λ R[j][λ] dλ
+
+--------------------------------------------------------------------
+Step 2 – Convert magnitudes to fluxes
+
+For each filter j = 1 … M:
+    f[j]           = f0[j] * 10^( -0.4 * m[j] )
+    σf[j]          = f[j] * ln(10)/2.5 * err[j]    // error propagation
+
+Σ = diag( σf[1]^2 , … , σf[M]^2 )                    // noise covariance
+
+--------------------------------------------------------------------
+Step 3 – Set prior on weights
+
+Λ = τ^2 * I_N                                         // N×N identity matrix
+
+--------------------------------------------------------------------
+Step 4 – Bayesian linear inference
+
+B   = Aᵀ · Σ⁻¹ · A + Λ⁻¹
+g   = Aᵀ · Σ⁻¹ · f
+ŵ  = B⁻¹ · g                                          // posterior mean
+
+CovW = B⁻¹                                               // posterior covariance
+
+--------------------------------------------------------------------
+Step 5 – Reconstruct spectrum
+
+For each wavelength λ:
+    Srec[λ] = Σ_{i=1}^{N}  ŵ[i] * S[i][λ]
+
+--------------------------------------------------------------------
+Optional Step 6 – Uncertainty on reconstructed spectrum
+
+For each wavelength λ:
+    VarS[λ] = Σ_{i=1}^{N} Σ_{k=1}^{N}
+              S[i][λ] * CovW[i,k] * S[k][λ]
+
+--------------------------------------------------------------------
+Return:
+    ŵ[i], CovW[i,k], Srec[λ], (VarS[λ] if requested)

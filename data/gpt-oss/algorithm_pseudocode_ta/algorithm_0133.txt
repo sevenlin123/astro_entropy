@@ -1,0 +1,105 @@
+Inputs:
+    S[1..N]       – Reference spectra (λ_i, F_λ)  (i = 1..N)
+    R[1..N]       – Corresponding error vectors for spectra
+    F[1..M]       – Photometric filter transmission curves (λ, T(λ))
+    P_new         – New TNO photometry vector (p_j, σ_pj)   (j = 1..K)
+    K             – Number of available photometric bands
+    L             – Desired number of principal components
+    N_samples     – Number of posterior samples to draw
+
+Outputs:
+    Posterior samples of principal‑component coefficients {a_l}
+    Reconstructed spectra {S_recon[λ]}  (mean, credible intervals)
+
+--------------------------------------------------------------------
+Step 0: Pre‑processing of reference spectra
+--------------------------------------------------------------------
+for each spectrum i:
+    Interpolate S[i] onto common wavelength grid λ_common
+    Normalize spectrum (e.g., divide by median flux)
+    Store normalized flux vector f[i]
+
+Compute mean spectrum μ = (1/N) Σ_i f[i]
+Center all spectra: c[i] = f[i] – μ
+
+--------------------------------------------------------------------
+Step 1: Principal Component Analysis (PCA)
+--------------------------------------------------------------------
+Compute covariance matrix C = (1/(N-1)) Σ_i c[i] c[i]^T
+Perform eigenvalue decomposition of C:
+    Eigenpairs (v_l, λ_l) sorted by decreasing λ_l
+Select first L eigenvectors v[1..L]
+Define projection operator:
+    For any centered spectrum x, its PC coefficients:
+        a(x) = [v_1^T x, … , v_L^T x]   (length L)
+
+Store transformation matrices:
+    V = [v_1 … v_L]   (λ_common × L)
+    V_T = V^T
+
+--------------------------------------------------------------------
+Step 2: Build photometric forward model
+--------------------------------------------------------------------
+For each filter j:
+    Compute filter vector t_j(λ) = T_j(λ) * λ  (accounting for photon count)
+    Project filter into PC space:
+        m_j = t_j^T * V        (vector length L)
+    Compute zero‑point offset:
+        z_j = t_j^T * μ
+
+The modeled photometric flux for coefficient vector a is:
+    p_model(j) = z_j + m_j · a          (dot product)
+
+--------------------------------------------------------------------
+Step 3: Define Bayesian inference problem
+--------------------------------------------------------------------
+Prior for PC coefficients:
+    a ~ Normal(0, Σ_prior)            (Σ_prior diagonal with variances = λ_l)
+
+Likelihood for observed photometry:
+    p_observed ~ Normal(p_model(a), diag(σ_p^2))
+
+Posterior:
+    π(a | P_new) ∝ exp( -0.5 * [(p_observed – (z + M a))^T Σ_σ^{-1} (p_observed – (z + M a))] )
+                   * exp( -0.5 * a^T Σ_prior^{-1} a )
+
+where:
+    z   = [z_1 … z_K]^T
+    M   = [m_1 … m_K]^T   (K × L matrix)
+    Σ_σ = diag(σ_p1^2 … σ_pK^2)
+
+--------------------------------------------------------------------
+Step 4: Sample posterior distribution
+--------------------------------------------------------------------
+Initialize a_0 = zeros(L)
+for s = 1 to N_samples:
+    Propose a' = a_{s-1} + ε   where ε ~ Normal(0, σ_prop^2 I)
+    Compute log‑posterior logπ(a') and logπ(a_{s-1})
+    Accept with probability min(1, exp(logπ(a') – logπ(a_{s-1})))
+    If accepted: a_s = a'
+    else: a_s = a_{s-1}
+
+Collect {a_s} as posterior samples.
+
+--------------------------------------------------------------------
+Step 5: Reconstruct spectra from sampled coefficients
+--------------------------------------------------------------------
+for each sample a_s:
+    Reconstruct centered spectrum: c_s = V * a_s
+    Full spectrum: f_s = μ + c_s
+    Convert to flux units if needed
+Store all f_s
+
+--------------------------------------------------------------------
+Step 6: Compute summary statistics
+--------------------------------------------------------------------
+Mean reconstructed spectrum:
+    μ_recon(λ) = (1/N_samples) Σ_s f_s(λ)
+
+Credible intervals:
+    For each λ, compute percentile bounds (e.g., 2.5th, 97.5th) of {f_s(λ)}
+
+Return:
+    Posterior coefficient samples {a_s}
+    Mean spectrum μ_recon
+    Credible‑interval bands

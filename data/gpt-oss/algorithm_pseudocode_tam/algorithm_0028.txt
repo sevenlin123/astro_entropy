@@ -1,0 +1,35 @@
+1. Load reference spectra S_ref (N_ref x M_wavelengths).
+2. Compute PCA on S_ref → eigenvectors U (M x K), mean μ_S.
+   Store K (e.g., 5 or 10) and U, μ_S.
+3. Project S_ref onto PCs → coefficients C_ref (N_ref x K).
+4. Fit KDE on C_ref with bandwidth h → density p_C.
+5. Sample N_aug latent vectors C_aug ~ p_C (e.g., 5000).
+6. Reconstruct spectra S_aug = U * diag(1/???) * (C_aug + μ_S?)? ...
+...
+``
+
+
+
+Ok. Need produce algorithm in pseudocode focusing core computational method. Steps: training phase PCA, KDE, generating synthetic spectra, generating synthetic photometry with noise, train encoder regressor mapping photometry to latent coeffs, optionally classifier. inference: given new photometry, predict latent, inverse PCA to get spectrum. Also probability distribution via Bayesian sampling maybe. Let's craft algorithm.
+
+Return structured steps.assistantfinal**Probabilistic Spectral Reconstruction Algorithm**
+
+---
+
+### 1. Pre‑Processing & Latent Space Construction
+
+---
+
+### 2. Synthetic Training Set Generation
+
+---
+
+### 3. Encoder – Photometry → Latent Coefficients
+
+---
+
+### 4. Forward Inference (Reconstruction)
+
+---
+
+### 5. Spectral Feature Extraction (optional)

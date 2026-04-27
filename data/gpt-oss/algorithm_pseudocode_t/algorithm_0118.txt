@@ -1,0 +1,113 @@
+INPUTS
+    M_i       : array of observed apparent magnitudes (i = 1…N_bands)
+    σ_i       : array of photometric uncertainties (i = 1…N_bands)
+    T_i(λ)    : transmission curve of band i  (function)
+    F_sun(λ)  : solar spectral flux density  (function)
+    S_k(λ)    : library basis spectra (k = 1…N_basis)
+    d_r       : heliocentric distance of the object
+    d_o       : observer–object distance
+    β         : phase coefficient (optional)
+
+PARAMETERS
+    σ_prior   : standard deviation of Gaussian prior on coefficients a_k
+    n_iter    : number of MCMC iterations
+    n_walkers : number of MCMC walkers
+
+OUTPUTS
+    â        : posterior mean of coefficients a_k
+    a_cov     : posterior covariance matrix
+    slope     : spectral slope (400–900 nm)
+    colors    : derived color indices between all band pairs
+    outliers  : list of indices i flagged as outliers
+
+--------------------------------------------------------------------
+STEP 0 – Pre‑processing
+--------------------------------------------------------------------
+FOR each band i DO
+    NORMALISE T_i(λ) so that ∫ T_i(λ)dλ = 1
+END FOR
+
+--------------------------------------------------------------------
+STEP 1 – Define forward model
+--------------------------------------------------------------------
+# Reflectance spectrum as linear combination of basis spectra
+R(λ; a)  = Σ_{k=1}^{N_basis} a_k · S_k(λ)
+
+# Flux of object in band i
+F_obj,i(a) = ∫ R(λ; a) · F_sun(λ) · T_i(λ) dλ / ∫ F_sun(λ) · T_i(λ) dλ
+
+# Apparent magnitude in band i
+m_pred,i(a) = -2.5·log10[ (d_o² / d_r²) · F_obj,i(a) ] + ZP_i
+#   ZP_i : zero‑point for band i (constant, absorbed into calibration)
+
+--------------------------------------------------------------------
+STEP 2 – Construct posterior density
+--------------------------------------------------------------------
+Define prior:
+    p(a) = Π_{k=1}^{N_basis} Normal(a_k | 0 , σ_prior²)
+
+Define likelihood for all bands:
+    L(a) = Π_{i=1}^{N_bands}
+            Normal( M_i | m_pred,i(a) , σ_i² )
+
+Posterior:
+    p(a | M) ∝ p(a) · L(a)
+
+--------------------------------------------------------------------
+STEP 3 – Sample posterior (affine‑invariant MCMC)
+--------------------------------------------------------------------
+INITIALISE walker positions {a^{(w)}_0} randomly from prior
+FOR iter = 1 … n_iter DO
+    FOR each walker w DO
+        Propose new state a' using ensemble sampler step
+        Compute Δlog p = log p(a' | M) – log p(a^{(w)}_{iter-1} | M)
+        Accept with probability min(1, exp(Δlog p))
+        Store accepted a^{(w)}_iter
+    END FOR
+END FOR
+
+Collect all accepted samples into chain {a_s}  (s = 1 … n_iter·n_walkers)
+
+--------------------------------------------------------------------
+STEP 4 – Compute posterior summaries
+--------------------------------------------------------------------
+Compute posterior mean:
+    â = mean_{s}( a_s )
+Compute posterior covariance:
+    a_cov = cov_{s}( a_s )
+
+--------------------------------------------------------------------
+STEP 5 – Derive physical quantities
+--------------------------------------------------------------------
+For each sample a_s:
+    1. Interpolate R_s(λ) = Σ a_s,k S_k(λ)
+    2. Compute spectral slope S_s:
+          S_s = (R_s(λ=900 nm) – R_s(λ=400 nm)) / (900 – 400)
+    3. For every band pair (p,q):
+          colour_s(p,q) = m_pred,p(a_s) – m_pred,q(a_s)
+
+After loop:
+    slope_mean  = mean_{s}(S_s)
+    slope_ci    = percentile(S_s, [16,84])   # 68% interval
+    For each pair (p,q):
+        color_mean(p,q) = mean_{s}(colour_s(p,q))
+        color_ci(p,q)   = percentile(colour_s(p,q), [16,84])
+
+--------------------------------------------------------------------
+STEP 6 – Outlier detection (posterior predictive check)
+--------------------------------------------------------------------
+FOR each band i DO
+    Compute predictive distribution of magnitude:
+        P_i(m) = { m_pred,i(a_s)  for all samples s }
+    Compute predictive mean μ_i = mean(P_i)
+    Compute predictive std σ_i^pred = std(P_i)
+    IF |M_i – μ_i| > k · σ_i^pred (k = 3) THEN
+        flag i as outlier
+    END IF
+END FOR
+outliers = list of flagged band indices
+
+--------------------------------------------------------------------
+RETURN
+    â, a_cov, slope_mean, slope_ci,
+    color_mean, color_ci, outliers

@@ -1,0 +1,95 @@
+INPUT
+    N_objects          # number of TNOs
+    F_obs[o][j]        # observed flux (or magnitude) of object o in filter j
+    σ[o][j]            # measurement uncertainty of F_obs[o][j]
+    T[j](λ)            # transmission curve of filter j
+    R_k(λ)             # k reference spectra (k = 1 … K)
+    M                  # number of MCMC iterations per object
+    S                   # number of burn‑in steps
+    Δt                  # MCMC step size (hyper‑parameter)
+
+OUTPUT
+    w_mean[o][k]       # posterior mean weight for reference spectrum k for object o
+    w_cov[o][k,l]      # posterior covariance between weights k and l
+    χ²[o]              # chi‑square statistic for best‑fit model
+    class_score[o]     # distance to nearest taxonomic class
+    outlier_flag[o]    # Boolean flag indicating outlier status
+
+--------------------------------------------------------------------
+PRECOMPUTATION
+--------------------------------------------------------------------
+For every filter j and reference spectrum k:
+    Compute the model flux of spectrum k through filter j:
+        F_kj = ∫ R_k(λ) * T[j](λ) dλ   /   ∫ T[j](λ) dλ
+Store these values in a table F_ref[k][j].
+
+--------------------------------------------------------------------
+FOR EACH OBJECT o (o = 1 … N_objects):
+--------------------------------------------------------------------
+    # 1. Define the forward model: weighted sum of reference spectra
+    #    Model flux in filter j is:
+    #        F_mod[j] = Σ_k w_k * F_ref[k][j]
+    #    with constraints w_k ≥ 0 and Σ_k w_k = 1
+
+    # 2. Initialize MCMC
+    Set initial weights w = uniform(1/K, ..., 1/K)
+    Normalize w so that Σ_k w_k = 1
+    Set current log‑likelihood ℓ_current = LogLikelihood(w, F_obs[o], σ[o])
+
+    # 3. MCMC loop
+    FOR iter = 1 TO M:
+        # 3a. Propose new weights
+        Generate proposal Δw from normal(0, Δt)
+        w_prop = w + Δw
+        # enforce non‑negativity
+        IF any(w_prop < 0): CONTINUE
+        # renormalize
+        w_prop = w_prop / Σ_k w_prop
+        # 3b. Compute proposed log‑likelihood
+        ℓ_prop = LogLikelihood(w_prop, F_obs[o], σ[o])
+        # 3c. Acceptance test
+        α = min(1, exp(ℓ_prop - ℓ_current))
+        Draw u ~ Uniform(0,1)
+        IF u < α:
+            w = w_prop
+            ℓ_current = ℓ_prop
+        ENDIF
+        # 3d. Store samples after burn‑in
+        IF iter > S:
+            Record w in sample list S_list
+        ENDIF
+    ENDFOR
+
+    # 4. Posterior statistics
+    Compute w_mean[o] = mean(S_list)
+    Compute w_cov[o]  = covariance(S_list)
+
+    # 5. Best‑fit model and χ²
+    Using w_mean[o], compute model fluxes F_fit[j] = Σ_k w_mean[o][k] * F_ref[k][j]
+    χ²[o] = Σ_j ((F_obs[o][j] - F_fit[j]) / σ[o][j])²
+    n_dof = (#filters) – 1    # one constraint Σw = 1
+    χ²_red[o] = χ²[o] / n_dof
+
+    # 6. Taxonomic classification
+    For each taxonomic class c:
+        Compute template spectrum S_c(λ) (pre‑computed)
+        Compute template fluxes F_c[j] = Σ_k β_c[k] * F_ref[k][j]
+        where β_c are class‑specific weights (obtained from training set)
+        Compute distance D_c = Σ_j ((F_fit[j] – F_c[j]) / σ[o][j])²
+    class_score[o] = argmin_c(D_c)   # index of closest class
+
+    # 7. Outlier detection
+    IF χ²_red[o] > χ²_threshold OR class_score[o] == “unknown”:
+        outlier_flag[o] = True
+    ELSE
+        outlier_flag[o] = False
+    ENDIF
+ENDFOR
+
+--------------------------------------------------------------------
+FUNCTION LogLikelihood(w, F_obs, σ):
+    # Computes log-likelihood under Gaussian errors
+    F_mod = Σ_k w_k * F_ref[k][j]  for all j
+    ll = –0.5 * Σ_j ((F_obs[j] – F_mod[j]) / σ[j])²
+    RETURN ll
+END FUNCTION

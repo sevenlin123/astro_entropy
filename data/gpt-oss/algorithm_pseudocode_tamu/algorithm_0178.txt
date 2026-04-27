@@ -1,0 +1,133 @@
+Inputs
+-------
+S_ref[1..N]          // Reference spectra (reflectance vs wavelength)
+λ_grid[1..P]         // Common wavelength grid
+Filters[1..M]        // Instrument filter transmission curves
+h_KDE                // KDE bandwidth (≈0.5)
+K                    // Number of PCA components (5–10)
+N_aug                // Number of synthetic latent samples (≈10 000)
+σ_phot              // Relative photometric noise level (0.20)
+
+Outputs
+-------
+S_rec[λ]             // Posterior mean reconstructed spectrum
+CredInt[λ]           // Credible interval (e.g., 68% CI) per wavelength
+ClassProb            // Probability vector over taxonomic classes
+
+--------------------------------------------------------------------
+Step 1 – Prepare reference spectra
+--------------------------------------------------------------------
+for i = 1 to N:
+    // Normalise / centre spectra if required
+    S_ref[i] ← preprocess(S_ref[i])
+
+// Build data matrix
+X ← stack_rows(S_ref[1..N])          // X shape = N × P
+
+--------------------------------------------------------------------
+Step 2 – Principal Component Analysis
+--------------------------------------------------------------------
+μ_spectra ← mean(X, axis=0)          // P‑dimensional mean spectrum
+X_centered ← X – μ_spectra
+
+// Compute covariance and eigen‑decomposition
+COV ← cov(X_centered)               // P × P
+eig_vals, eig_vecs ← eig(COV)
+U ← eig_vecs[:, 1:K]                 // P × K principal‑component matrix
+Λ ← diag(eig_vals[1:K])              // K × K diagonal of eigenvalues
+
+// Project reference spectra onto latent space
+for i = 1 to N:
+    coeff[i] ← Uᵀ · (S_ref[i] – μ_spectra)   // K‑dimensional vector
+
+--------------------------------------------------------------------
+Step 3 – KDE Augmentation of Latent Coefficients
+--------------------------------------------------------------------
+coeff_matrix ← stack_rows(coeff[1..N])     // N × K
+
+// Gaussian KDE with bandwidth h_KDE
+kde ← fit_gaussian_kde(coeff_matrix, bandwidth=h_KDE)
+
+// Draw synthetic latent samples
+for j = 1 to N_aug:
+    coeff_syn[j] ← kde.sample()           // K‑dimensional synthetic coefficient
+
+// Reconstruct synthetic spectra
+for j = 1 to N_aug:
+    S_syn[j] ← μ_spectra + U · coeff_syn[j]   // P‑dimensional spectrum
+
+--------------------------------------------------------------------
+Step 4 – Forward‑modeling Photometry (Implicit Likelihood)
+--------------------------------------------------------------------
+for j = 1 to N_aug:
+    // Convolve synthetic spectrum with each filter
+    for m = 1 to M:
+        numerator   ← integral( S_syn[j](λ) * Filters[m](λ) dλ )
+        denominator ← integral( Filters[m](λ) dλ )
+        m_clean[m]  ← numerator / denominator
+    // Inject Gaussian noise
+    for m = 1 to M:
+        ε[m]        ← random_normal(0, σ_phot * m_clean[m])
+        m_noisy[m]  ← m_clean[m] + ε[m]
+    Photometry[j] ← m_noisy                      // M‑dimensional vector
+
+// Training set: (Photometry[j], coeff_syn[j]) for j=1..N_aug
+
+--------------------------------------------------------------------
+Step 5 – Train AutoML Regressor (Encoder)
+--------------------------------------------------------------------
+regressor ← AutoML_Train(
+                inputs  = Photometry[1..N_aug],
+                targets = coeff_syn[1..N_aug]
+            )
+    // AutoML selects best ensemble (GBDT, NN, etc.)
+    // Output a mapping: m → C_pred
+
+--------------------------------------------------------------------
+Step 6 – Train AutoML Classifier (Taxonomy)
+--------------------------------------------------------------------
+// Labels are inherited from the nearest real reference spectrum
+for j = 1 to N_aug:
+    label_syn[j] ← assign_taxonomy_from_nearest_real(coeff_syn[j])
+
+classifier ← AutoML_Train(
+                inputs  = coeff_syn[1..N_aug],
+                targets = label_syn[1..N_aug]
+             )
+    // Output mapping: C → class probabilities
+
+--------------------------------------------------------------------
+Step 7 – Inference on New Observation
+--------------------------------------------------------------------
+Input: m_obs[1..M]  // Observed photometry for a new TNO
+
+// Encode to latent space
+C_mean ← regressor.predict(m_obs)           // Point estimate
+
+// Estimate posterior covariance (optional)
+// 1. Use residuals from training: Σ_resid = cov(regressor.predict_errors)
+// 2. Or fit Gaussian Copula to residuals
+Σ_posterior ← Σ_resid
+
+// Posterior sampling via Gaussian Copula
+N_samp ← 1000
+for s = 1 to N_samp:
+    Z ← random_normal_vector(K, mean=0, cov=Σ_posterior)   // Standard normal
+    C_sample[s] ← C_mean + Z                               // K‑dimensional draw
+
+    // Decode to spectrum
+    S_sample[s] ← μ_spectra + U · C_sample[s]               // P‑dimensional
+
+// Aggregate samples
+for p = 1 to P:
+    S_values[p] ← [ S_sample[1][p], … , S_sample[N_samp][p] ]
+    S_rec[p]     ← mean(S_values[p])
+    CredInt[p]   ← percentile_interval(S_values[p], 16, 84) // 68% CI
+
+// Classification
+ClassProb ← classifier.predict_proba(C_mean)
+
+--------------------------------------------------------------------
+Return:
+--------------------------------------------------------------------
+S_rec, CredInt, ClassProb

@@ -1,0 +1,108 @@
+pseudocode
+# ------------------------------------------------------------------
+# 1. DATA PREPARATION
+# ------------------------------------------------------------------
+
+Input:  S_raw[1..N]          # High‑resolution spectra (λ × flux)
+        F_eff[j]              # Filter throughput curves (j = 1..J)
+
+# 1.1 Normalise spectra to reflectance (divide by solar spectrum)
+for i in 1..N:
+    R[i] = S_raw[i] / SolarSpectrum
+
+# 1.2 Interpolate all spectra onto a common wavelength grid λ_grid
+for i in 1..N:
+    R_int[i] = interpolate(R[i], λ_grid)
+
+# ------------------------------------------------------------------
+# 2. LATENT SPACE (PRIOR) CONSTRUCTION
+# ------------------------------------------------------------------
+
+# 2.1 Principal Component Analysis on all normalised spectra
+PC, eigvals, mean_spec = PCA(R_int, n_components = K)     # K ≈ 5–10
+# 2.2 Project each spectrum onto PCA basis
+C[i] = PC^T * (R_int[i] - mean_spec)      # Latent coefficient vector (size K)
+
+# 2.3 Kernel Density Estimation over latent space
+kde_model = KDE(C[1..N], bandwidth = h)   # h ≈ 0.5
+
+# ------------------------------------------------------------------
+# 3. SIMULATION‑BASED TRAINING SET CREATION
+# ------------------------------------------------------------------
+
+# 3.1 Draw M synthetic latent samples from KDE
+for m in 1..M:
+    C_sim[m] = sample(kde_model)
+
+# 3.2 Reconstruct synthetic spectra via inverse PCA
+for m in 1..M:
+    R_sim[m] = mean_spec + PC * C_sim[m]
+
+# 3.3 Forward‑model synthetic photometry for each synthetic spectrum
+for m in 1..M:
+    for j in 1..J:
+        p_sim[m][j] = integrate( R_sim[m] * F_eff[j] )   # Convolution
+
+# 3.4 Add Gaussian noise (σ = 20% of reflectance) to photometry
+for m in 1..M:
+    for j in 1..J:
+        noise = Normal(0, 0.2 * p_sim[m][j])
+        p_noisy[m][j] = p_sim[m][j] + noise
+
+# 3.5 Training dataset: pairs (p_noisy, C_sim)
+train_X = p_noisy            # Shape (M, J)
+train_y = C_sim              # Shape (M, K)
+
+# ------------------------------------------------------------------
+# 4. ENCODER LEARNING (PHOTOMETRY → LATENT COEFFICIENTS)
+# ------------------------------------------------------------------
+
+# 4.1 AutoML regressor (ensemble of GBDTs & NN)
+encoder = AutoMLRegressor()
+encoder.fit(train_X, train_y)   # Train on synthetic noisy photometry
+
+# ------------------------------------------------------------------
+# 5. TAXONOMY CLASSIFIER (LATENT → TYPE PROBABILITY)
+# ------------------------------------------------------------------
+
+# 5.1 Build classifier on latent coefficients of real spectra
+class_labels = [label_i for i in 1..N]          # e.g., H2O, CO2, Organic, Methanol
+classifier = AutoMLClassifier()
+classifier.fit(C[1..N], class_labels)
+
+# ------------------------------------------------------------------
+# 6. INFERENCE FOR NEW OBJECT
+# ------------------------------------------------------------------
+
+Input:  p_obs[1..J]          # Observed photometry for a new object
+        σ_obs[1..J]          # Measurement uncertainties
+
+# 6.1 Predict latent mean and covariance from encoder
+μ_latent, Σ_latent = encoder.predict_with_uncertainty(p_obs, σ_obs)
+
+# 6.2 Sample posterior latent vectors using Gaussian Copula
+samples_latent = []
+for s in 1..S:
+    z = multivariate_normal(mean=μ_latent, cov=Σ_latent).sample()
+    samples_latent.append(z)
+
+# 6.3 Decode each sampled latent vector to a full spectrum
+samples_spec = []
+for c in samples_latent:
+    spec = mean_spec + PC * c
+    samples_spec.append(spec)
+
+# 6.4 Construct posterior credible interval for each wavelength bin
+for λ in λ_grid:
+    values = [spec[λ] for spec in samples_spec]
+    lower[λ] = percentile(values, 2.5)
+    median[λ] = percentile(values, 50)
+    upper[λ] = percentile(values, 97.5)
+
+# 6.5 Predict taxonomic probabilities
+tax_prob = classifier.predict_proba(μ_latent)
+
+# Output:
+#   - Median reconstructed spectrum (median[λ])
+#   - 95% credible band (lower[λ], upper[λ])
+#   - Taxonomy probability vector (tax_prob)

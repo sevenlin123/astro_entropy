@@ -1,0 +1,82 @@
+Inputs:
+    S_ref[1..N_spec][1..M_wave]   // reference spectra (reflectance vs wavelength)
+    R_filter[1..N_filt][1..M_wave]  // filter response curves
+    m_obs[1..N_filt]              // observed photometry (reflectance) for a new target
+    K_lat                            // desired number of PCA components (default 8)
+    h_bandwidth                       // KDE bandwidth (default 0.5)
+    noise_level = 0.20                // 20 % relative Gaussian noise
+
+Outputs:
+    S_rec[1..M_wave]                 // reconstructed spectrum
+    P_type[1..N_types]               // taxonomic probabilities
+
+--------------------------------------------------------------------
+1. BUILD PRIOR (latent manifold)
+
+   a. PCA on reference spectra
+        - Center spectra:  S_cent = S_ref – mean(S_ref)
+        - Compute covariance matrix C = (S_cent^T * S_cent) / (N_spec-1)
+        - Eigendecompose C → eigenvalues λ[1..M_wave], eigenvectors U[1..M_wave]
+        - Select first K_lat eigenvectors U_k = U[:,1:K_lat]
+        - Project reference spectra to latent space:
+              z_real[i] = U_k^T * (S_ref[i] – mean(S_ref))   // i = 1..N_spec
+
+   b. Estimate density in latent space with KDE
+        - For each dimension d = 1..K_lat:
+              compute bandwidth h_d = h_bandwidth
+        - Define KDE function p_KDE(z) proportional to Σ_i exp(-||z−z_real[i]||²/(2*h²))
+
+   c. Generate synthetic latent points
+        - Sample Z_syn[1..N_syn][1..K_lat] from p_KDE (e.g., rejection sampling or grid + interpolation)
+        - For each synthetic point z_j:
+              construct synthetic spectrum:
+                  S_syn[j] = mean(S_ref) + U_k * z_j
+              store (z_j, S_syn[j])
+
+--------------------------------------------------------------------
+2. CREATE TRAINING DATA (photometry ↔ latent)
+
+   a. Forward‑model synthetic photometry for each synthetic spectrum
+        For each j in 1..N_syn:
+            For each filter f in 1..N_filt:
+                m_syn[j,f] = ∫ S_syn[j](λ) * R_filter[f](λ) dλ   // numerical integration
+            Add Gaussian noise:
+                σ_f = noise_level * m_syn[j,f]
+                m_syn_noisy[j,f] ~ Normal(m_syn[j,f], σ_f)
+
+   b. Assemble training matrix X_train = {m_syn_noisy[j,:]}   // shape N_syn × N_filt
+        Target matrix Y_train = {z_syn[j,:]}                  // shape N_syn × K_lat
+
+--------------------------------------------------------------------
+3. TRAIN ENCODER MODEL (photometry → latent)
+
+   a. Instantiate AutoML regressor ensemble (e.g., Gradient‑Boosted Trees + NN)
+   b. Fit model:
+          model_enc.fit(X_train, Y_train)
+
+   c. Optional: Train separate AutoML classifier in latent space
+          For each real reference spectrum i:
+              label[i] = taxonomic class
+          model_cls.fit(Z_syn, label_syn)   // use synthetic labels if desired
+
+--------------------------------------------------------------------
+4. INFERENCE FOR NEW OBSERVATION
+
+   a. Predict latent coefficients
+        z_pred = model_enc.predict(m_obs)          // vector length K_lat
+
+   b. Generate reconstructed spectrum
+        S_rec = mean(S_ref) + U_k * z_pred          // linear combination
+
+   c. (Optional) Sample posterior latent distribution
+        - Draw N_sample latent points {z_samp} from KDE conditioned on m_obs
+          e.g., using importance weighting: w_j = L(m_obs|S_syn[j]) from step 2a
+          resample z_samp with weights w_j
+        - Decode each to spectrum and compute statistics (mean, CI)
+
+   d. Taxonomy probabilities
+        P_type = model_cls.predict_proba(z_pred)
+
+--------------------------------------------------------------------
+5. OUTPUT RESULTS
+    Return S_rec, P_type (and posterior statistics if sampled).

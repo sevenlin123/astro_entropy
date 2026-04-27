@@ -1,0 +1,105 @@
+Input
+    N_objects                      // number of TNOs
+    F_obj[i][j]                    // observed flux (or magnitude) of object i in filter j
+    σ_obj[i][j]                    // measurement uncertainty of F_obj[i][j]
+    R_filter[j][λ]                 // transmission curve of filter j as function of wavelength λ
+    S_comp[k][λ]                   // spectral library of k end‑member components (units: reflectance)
+    PriorParams                    // hyper‑parameters for coefficient priors
+
+Output
+    PosteriorSamples[i][k]         // samples of component coefficients for each object
+    PosteriorMeans[i][k]           // posterior mean coefficients
+    DerivedTaxonomy[i]             // taxonomy class for each object
+    OutlierFlag[i]                 // flag if object is an outlier
+
+// ------------------------------------------------------------------
+// 1. Pre–processing: Convert photometry to relative reflectance
+// ------------------------------------------------------------------
+For each object i:
+    For each filter j:
+        SolarFlux_j = integrate( SolarSpectrum[λ] * R_filter[j][λ] dλ )
+        RefObj_ij   = (F_obj[i][j] / SolarFlux_j)          // relative reflectance
+
+// ------------------------------------------------------------------
+// 2. Construct filter‑integrated component matrix
+// ------------------------------------------------------------------
+For each component k:
+    For each filter j:
+        ComponentProj[k][j] = integrate( S_comp[k][λ] * R_filter[j][λ] dλ ) 
+        // Units: expected reflectance of pure component k in filter j
+
+// ------------------------------------------------------------------
+// 3. Bayesian forward model
+// ------------------------------------------------------------------
+Define function PredictReflectance(c_vector):
+    // c_vector: [c1, c2, …, cK]  (K components)
+    For each filter j:
+        Pred_ref_j = Σ_k (c_vector[k] * ComponentProj[k][j])
+    Return Pred_ref_j for all j
+
+Define function LogLikelihood(i, c_vector):
+    Pred = PredictReflectance(c_vector)
+    LL = 0
+    For each filter j:
+        LL += -0.5 * ((RefObj_ij[i][j] - Pred[j])^2 / σ_obj[i][j]^2 + log(σ_obj[i][j]^2))
+    Return LL
+
+Define function LogPrior(c_vector):
+    // Example: Dirichlet prior over non‑negative coefficients
+    α = PriorParams.DirichletAlpha
+    LP = log(Beta(α)) + Σ_k ( (α-1)*log(c_vector[k]) )
+    Return LP
+
+Define function LogPosterior(i, c_vector):
+    return LogLikelihood(i, c_vector) + LogPrior(c_vector)
+
+// ------------------------------------------------------------------
+// 4. MCMC Sampling (Metropolis–Hastings)
+// ------------------------------------------------------------------
+Set M = number_of_iterations
+Set B = burn_in
+For each object i:
+    Initialize c_current ← uniform_random_vector(K)  // e.g., sample from Dirichlet(1,…,1)
+    Store samples[i] ← empty list
+    For t = 1 to M:
+        // Propose new coefficients
+        c_proposed ← c_current + Normal(0, step_size[K])   // add Gaussian noise
+        // Project onto simplex to enforce positivity & sum=1
+        c_proposed ← normalize_to_simplex(c_proposed)
+
+        // Compute log posterior values
+        logpost_current ← LogPosterior(i, c_current)
+        logpost_proposed← LogPosterior(i, c_proposed)
+
+        // Acceptance probability
+        α_accept = min(1, exp(logpost_proposed - logpost_current))
+
+        // Draw uniform random u ∈ [0,1]
+        If u < α_accept:
+            c_current ← c_proposed
+
+        // Store after burn‑in
+        If t > B:
+            Append c_current to samples[i]
+
+    // Posterior summaries
+    PosteriorMeans[i] = mean(samples[i])  // element‑wise mean over samples
+
+// ------------------------------------------------------------------
+// 5. Taxonomy Classification
+// ------------------------------------------------------------------
+Compute distance matrix D between PosteriorMeans of all objects (e.g., Euclidean)
+Apply clustering algorithm (e.g., k‑means with pre‑defined k_classes)
+Assign DerivedTaxonomy[i] ← cluster label of object i
+
+// ------------------------------------------------------------------
+// 6. Outlier Detection
+// ------------------------------------------------------------------
+For each object i:
+    Compute Mahalanobis distance d_i between PosteriorMeans[i] and global mean of all
+    If d_i > threshold_outlier:
+        OutlierFlag[i] ← True
+    Else:
+        OutlierFlag[i] ← False
+
+Return PosteriorSamples, PosteriorMeans, DerivedTaxonomy, OutlierFlag

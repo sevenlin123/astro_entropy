@@ -1,0 +1,92 @@
+text
+# ------------------------------------------------------------
+# INPUT
+#   TrainSpectra[j][λ]      : N_train spectra (flux vs λ)
+#   Filters[k][λ]           : M filter transmission curves
+#   ObservedMag[k]          : M measured magnitudes for one target
+#   ObsErrMag[k]            : M magnitude uncertainties
+#   K                       : number of principal components to retain
+#   ZP[k]                   : zero‑points for each filter (flux units)
+# ------------------------------------------------------------
+
+# 1. Prepare the training set
+# ---------------------------------------------
+for each spectrum j:
+    interpolate TrainSpectra[j] onto common wavelength grid λ_grid
+normalize all spectra to same total flux (e.g., unit integral)
+
+Compute mean spectrum µ[λ] = average_j TrainSpectra[j][λ]
+Center spectra: X[j][λ] = TrainSpectra[j][λ] - µ[λ]
+
+# 2. Principal‑Component Analysis (PCA)
+# ---------------------------------------------
+Perform Singular Value Decomposition on X:
+    X = U Σ V^T
+PC[i][λ] = V[i]              # i = 1…K, orthonormal PCs
+SingularVals[i] = Σ[i,i]
+Choose K largest components
+
+# 3. Projection of training spectra onto PCs
+# ---------------------------------------------
+for each spectrum j:
+    for i = 1 … K:
+        coeff[j][i] = dot_product( X[j], PC[i] )   # scalar projection
+
+# 4. Prior on coefficients
+# ---------------------------------------------
+Assume Gaussian prior for coefficients:
+    mean_prior[i]  = 0
+    var_prior[i]   = variance( coeff[:,i] )   # empirical variance
+Prior density: P(c) = Π_i N( c_i | 0 , var_prior[i] )
+
+# 5. Forward model for photometry
+# ---------------------------------------------
+# Pre‑compute projected PC fluxes in each filter
+for k = 1 … M:
+    Flux_mu[k]   = integrate( µ[λ] * Filters[k][λ] ) / integrate(Filters[k])
+    for i = 1 … K:
+        PC_flux[i][k] = integrate( PC[i][λ] * Filters[k][λ] ) / integrate(Filters[k])
+
+# Convert observed magnitudes to fluxes (and errors)
+for k = 1 … M:
+    Flux_obs[k]  = ZP[k] * 10^(-ObservedMag[k]/2.5)
+    Flux_err[k]  = Flux_obs[k] * ln(10)/2.5 * ObsErrMag[k]
+
+# 6. Likelihood function (Gaussian)
+# ---------------------------------------------
+Define log‑likelihood for a coefficient vector c:
+    logL(c) = -0.5 * Σ_k [ (Flux_obs[k] - Flux_mu[k] - Σ_i c_i*PC_flux[i][k])^2
+                           / Flux_err[k]^2 ]
+
+# 7. Posterior sampling
+# ---------------------------------------------
+Posterior density: logP(c) = logL(c) + logPrior(c)
+
+Use an MCMC sampler (e.g., HMC, Metropolis–Hastings) to draw N_samples
+samples from p(c | data).
+
+# 8. Spectrum reconstruction
+# ---------------------------------------------
+for each sample s in 1 … N_samples:
+    for each λ in λ_grid:
+        S_rec[s][λ] = µ[λ] + Σ_i c_s[i] * PC[i][λ]
+
+# 9. Summary statistics
+# ---------------------------------------------
+For each λ:
+    MedianFlux[λ]     = median_s( S_rec[s][λ] )
+    LowerCI[λ]        = percentile_s( S_rec[s][λ], 2.5 )
+    UpperCI[λ]        = percentile_s( S_rec[s][λ], 97.5 )
+
+# 10. Outlier detection (optional)
+# ---------------------------------------------
+Compute posterior predictive probability:
+    P_pred = average_s( product_k Normal( Flux_obs[k] | Flux_mu[k]+Σ_i c_s[i]*PC_flux[i][k] , Flux_err[k]) )
+If P_pred < threshold (e.g., 0.01) flag target as potential outlier.
+
+# 11. OUTPUT
+# ---------------------------------------------
+Return:
+    - MedianFlux[λ]  (reconstructed spectrum)
+    - Credible interval [LowerCI[λ], UpperCI[λ]]
+    - Outlier flag

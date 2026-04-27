@@ -1,0 +1,68 @@
+Input:
+    photometry          // list of measured fluxes f[i] for filters i = 1…N
+    errors              // corresponding measurement uncertainties σ[i]
+    filters[i][λ]       // transmission curve for filter i over wavelength λ
+    basis_spectra[k][λ] // set of K template spectra (or basis vectors) over λ
+    priors              // prior distributions for coefficients a[k]
+
+Output:
+    posterior_samples   // MCMC samples of coefficient vector a
+    mean_spectrum[λ]    // posterior‑mean reflectance spectrum
+    taxon_probabilities // probability of belonging to each taxonomic class
+
+Procedure:
+
+1. Pre‑compute filter integrals
+   For each filter i and basis k:
+        I[i][k] = ∫ basis_spectra[k][λ] * filters[i][λ] dλ
+   // I[i][k] is the predicted flux contribution of basis k in filter i
+
+2. Define forward model
+   For any coefficient vector a[1…K]:
+        f_model[i] = Σ_k a[k] * I[i][k]          // predicted flux in filter i
+
+3. Define likelihood function L(a)
+   L(a) = Π_i exp( -0.5 * ((f[i] – f_model[i]) / σ[i])² )
+   // Gaussian likelihood assuming independent errors
+
+4. Define prior P(a)
+   P(a) = Π_k prior_distribution(a[k])          // e.g., normal(0, σ_prior)
+
+5. Define unnormalised posterior
+   Posterior(a) = L(a) * P(a)
+
+6. Initialise MCMC
+   a_current ← random draw from priors
+   samples ← empty list
+
+7. MCMC loop (for m = 1 … M):
+      a_proposal ← a_current + random perturbation   // e.g. Gaussian step
+      ratio = Posterior(a_proposal) / Posterior(a_current)
+      α = min(1, ratio)
+      u ← uniform(0,1)
+      If u < α:
+           a_current ← a_proposal
+      EndIf
+      Append a_current to samples
+   EndLoop
+
+8. Post‑processing of samples
+   - Discard first B samples as burn‑in
+   - thin if necessary
+   - posterior_samples ← remaining samples
+
+9. Compute posterior‑mean spectrum
+   mean_spectrum[λ] = (1 / N_samples) * Σ_{s∈posterior_samples}
+                        Σ_k a_s[k] * basis_spectra[k][λ]
+
+10. Taxonomic classification
+    For each taxon t in taxonomic_library:
+         template[t][λ]   // reference spectrum for taxon t
+         χ²_t = Σ_λ (mean_spectrum[λ] – template[t][λ])² / variance[λ]
+    Convert χ² values to class probabilities (e.g., via softmax or
+    Bayesian evidence comparison).
+
+11. Return
+    posterior_samples
+    mean_spectrum
+    taxon_probabilities

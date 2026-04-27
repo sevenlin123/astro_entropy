@@ -1,0 +1,114 @@
+Input:
+    P_real          # matrix of N_real observed reflectance spectra  
+                     # (rows = spectra, columns = wavelength bins)
+    T_real          # corresponding taxonomic labels for training spectra
+    λ_grid          # wavelength array of spectra
+    Filters         # list of instrument filter transmission curves
+    h_kde           # KDE bandwidth (default ≈ 0.5)
+    K               # number of retained PCA components (≈ 5–10)
+    N_aug           # number of synthetic latent samples (e.g., 5000)
+
+Output:
+    For any new photometric vector m_obs:
+        posterior_samples   # ensemble of reconstructed spectra
+        taxonomy_probs      # probability vector over taxonomic classes
+
+--------------------------------------------------------------------
+1.  PRE‑TRAINING PHASE
+--------------------------------------------------------------------
+
+1.1  PCA TRANSFORMATION
+    - Center P_real by subtracting column means.
+    - Compute covariance matrix C = cov(P_real).
+    - Eigen-decompose C → eigenvalues λ_i and eigenvectors v_i.
+    - Select top K eigenvectors → V_K  (matrix of size [nλ × K]).
+    - Project training spectra onto PCA basis:
+        Z_real = (P_real_centered) · V_K           # shape [N_real × K]
+
+1.2  LATENT SPACE DENSITY ESTIMATION (KDE)
+    - Fit a multivariate Gaussian KDE to {Z_real} with bandwidth h_kde.
+    - Define KDE density p_Z(z).
+
+1.3  SYNTHETIC LATENT SAMPLE GENERATION
+    - Sample N_aug latent vectors {z_j} ~ KDE(p_Z).
+    - For each z_j, reconstruct a synthetic high‑res spectrum:
+        s_j = (z_j · V_Kᵀ) + mean_spectrum
+      (mean_spectrum is the column‑wise mean of P_real).
+
+1.4  FORWARD MODELING OF PHOTOMETRY
+    For each synthetic spectrum s_j:
+        For each filter f ∈ Filters:
+            - Convolve s_j with transmission curve T_f to obtain
+              expected reflectance m_{j,f}:
+                m_{j,f} = ∫ s_j(λ) · T_f(λ) dλ / ∫ T_f(λ) dλ
+        - Collect vector m_j = [m_{j,1}, …, m_{j,F}].
+
+    - Add Gaussian noise to emulate observational uncertainty:
+        m_j_noisy = m_j + N(0, σ_rel²·m_j²),
+        where σ_rel = 0.20 (20 % relative uncertainty).
+
+    - Store pairs (m_j_noisy, z_j).
+
+1.5  TRAINING THE ENCODER (Photometry → Latent Coefficients)
+    - Use an AutoML regressor (e.g., ensemble of XGBoost, NN, etc.).
+    - Input features: m_j_noisy (length F).
+    - Target outputs: z_j (length K).
+    - Train to minimize MSE or appropriate probabilistic loss.
+
+1.6  TRAINING THE CLASSIFIER (Latent → Taxonomy)
+    - Use same AutoML framework.
+    - Input: Z_real (training latent vectors).
+    - Target: T_real (categorical labels).
+    - Train to output probability vector over classes.
+
+--------------------------------------------------------------------
+2. INFERENCE PHASE (for a new object)
+--------------------------------------------------------------------
+
+Given observed photometry m_obs = [m_obs,1,…,m_obs,F]:
+
+2.1  PRE‑PROCESSESED INPUT
+    - Center m_obs by subtracting the mean of training photometry
+      (computed during training).
+    - (Optional) Apply any required scaling.
+
+2.2  PREDICT LATENT DISTRIBUTION
+    - Pass m_obs through trained encoder → mean latent vector μ_z
+      and (if model provides) covariance Σ_z or predictive variances.
+    - If encoder outputs point estimate only:
+        * Use Monte Carlo dropout or ensemble variance to approximate
+          uncertainty → construct approximate Gaussian q(z|m_obs)
+          = N(μ_z, Σ_z).
+
+2.3  POSTERIOR SAMPLING WITH GAUSSIAN COPULA
+    - From q(z|m_obs), sample S ≥ 1000 latent vectors {z*}:
+        * Draw independent normals u_k ~ N(0,1), k=1..K.
+        * Transform via Cholesky of Σ_z → z*_k = μ_z + L·u_k.
+    - Optional: enforce physical bounds by clipping z* to KDE support.
+
+2.4  RECONSTRUCT HIGH‑RESPECTRA
+    For each sampled latent vector z*:
+        - Reconstruct spectrum:
+              s* = (z* · V_Kᵀ) + mean_spectrum
+        - Store s* as one posterior sample.
+
+2.5  TAXONOMIC PROBABILITIES
+    - Pass μ_z (or full ensemble mean) through trained classifier
+      → obtain probability vector p_taxo over classes.
+
+--------------------------------------------------------------------
+3. OUTPUT
+--------------------------------------------------------------------
+
+Return:
+    - posterior_samples = {s*}   # ensemble of reconstructed spectra
+    - taxonomy_probs = p_taxo   # class probabilities
+
+Optionally:
+    - Compute per‑wavelength confidence intervals from posterior_samples.
+    - Compute spectral diagnostics (slope, absorption depths) per sample
+      and derive credible intervals.
+
+--------------------------------------------------------------------
+END OF ALGORITHM
+--------------------------------------------------------------------

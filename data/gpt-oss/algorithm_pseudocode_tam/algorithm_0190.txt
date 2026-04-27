@@ -1,0 +1,96 @@
+text
+--------------------------------------------------------------------
+# STEP 0 – GLOBAL DEFINITIONS
+--------------------------------------------------------------------
+DATASET_SPECTRA      ← load_reference_spectra()        # (N_spec × N_wave)
+FILTER_SET           ← load_filter_transmissions()    # list of bandpasses
+REL_PHOT_ERR         ← 0.20                           # 20 % relative noise
+K_PCA                ← 8  # number of principal components to keep
+K_DECODE             ← 5  # optional lower‑dimensional sub‑space for stable regression
+N_SYNTH              ← 5000                            # synthetic training points
+BANDWIDTH_KDE        ← 0.5
+SEED_TAXON_LABELS    ← load_taxonomy_labels()          # (N_spec, label)
+
+--------------------------------------------------------------------
+# STEP 1 – PREPARE PRIOR (PCA & KDE Augmentation)
+--------------------------------------------------------------------
+# 1.1 Center spectra
+MEAN_SPEC            ← mean(DATASET_SPECTRA, axis=0)  # (N_wave)
+SPEC_CENTERED        ← DATASET_SPECTRA – MEAN_SPEC
+
+# 1.2 Perform PCA
+EIGVALS, EIGVECS     ← eig(SPEC_CENTEREDᵀ · SPEC_CENTERED)   # eigen‑decomposition
+SORTED_IDX           ← argsort(EIGVALS)[::-1]                # descending order
+EIGVECS_SORTED       ← EIGVECS[:, SORTED_IDX]
+TOP_EIGVECS          ← EIGVECS_SORTED[:, :K_PCA]             # (N_wave × K_PCA)
+
+# 1.3 Project training spectra onto latent space
+Z_TRUTH              ← SPEC_CENTERED · TOP_EIGVECS           # (N_spec × K_PCA)
+
+# 1.4 Fit non‑parametric KDE to latent coefficients
+KDE_MODEL            ← fit_kernel_density(Z_TRUTH, bandwidth=BANDWIDTH_KDE)
+
+# 1.5 Sample synthetic latent vectors
+Z_SYNTHE            ← KDE_MODEL.sample(N_SYNTH)             # (N_SYNTH × K_PCA)
+
+--------------------------------------------------------------------
+# STEP 2 – GENERATE SYNTHETIC PHOTOMETRY (LIKELIHOOD DATA)
+--------------------------------------------------------------------
+FOR i IN 1 … N_SYNTH:
+    # 2.1 Decode synthetic spectrum
+    SPEC_SYNTH[i]   ← MEAN_SPEC + Z_SYNTHE[i] · TOP_EIGVECSᵀ    # (N_wave)
+
+    # 2.2 Forward‑model photometry through all filters
+    PHOT_SYNTH[i]   ← convolve_with_filters(SPEC_SYNTH[i], FILTER_SET)
+                     # (N_filters)
+
+    # 2.3 Inject Gaussian measurement noise
+    SIGMA_SYNTH[i]  ← REL_PHOT_ERR * PHOT_SYNTH[i]               # (N_filters)
+    PHOT_NOISE[i]   ← PHOT_SYNTH[i] + Normal(0, SIGMA_SYNTH[i])
+END FOR
+
+# Assemble training set for the encoder
+X_TRAIN            ← PHOT_NOISE                 # (N_SYNTH × N_filters)
+Y_TRAIN_LATENT    ← Z_SYNTHE                    # (N_SYNTH × K_PCA)
+
+--------------------------------------------------------------------
+# STEP 3 – TRAIN ENCODER (PHOTOMETRY → LATENT COEFFICIENTS)
+--------------------------------------------------------------------
+ENCODER_MODEL      ← AutoML_Regression()
+ENCODER_MODEL.fit(X_TRAIN, Y_TRAIN_LATENT)
+
+--------------------------------------------------------------------
+# STEP 4 – TRAIN CLASSIFIER (LATENT COEFFICIENTS → TAXONOMIC LABELS)
+--------------------------------------------------------------------
+CLASSIFIER_MODEL   ← AutoML_Classifier()
+CLASSIFIER_MODEL.fit(Y_TRUTH, SEED_TAXON_LABELS)
+#   Y_TRUTH = Z_TRUTH (same latent vectors as in STEP 1.3)
+
+--------------------------------------------------------------------
+# STEP 5 – FORWARD INFERENCE ON NEW OBJECTS
+--------------------------------------------------------------------
+FUNCTION reconstruct_spectrum(PHOTOMETRY_OBS):
+    # 5.1 Encode photometry to latent space
+    LATENT_MEAN, LATENT_COV ← ENCODER_MODEL.predict_distribution(
+                                  PHOTOMETRY_OBS)
+
+    # 5.2 Draw N_SAMPLE samples from posterior latent distribution
+    N_SAMPLE ← 100
+    LATENT_SAMPLES ← sample_multivariate_gaussian(
+                         mean=LATENT_MEAN, cov=LATENT_COV,
+                         n=N_SAMPLE)                     # (N_SAMPLE × K_PCA)
+
+    # 5.3 Decode each sampled latent vector to full spectrum
+    FOR j IN 1 … N_SAMPLE:
+        SPEC_RECON[j] ← MEAN_SPEC + LATENT_SAMPLES[j] · TOP_EIGVECSᵀ
+    END FOR
+
+    # 5.4 Aggregate reconstruction (mean + uncertainty)
+    SPEC_MEAN       ← mean(SPEC_RECON, axis=0)          # (N_wave)
+    SPEC_STDDEV     ← std(SPEC_RECON, axis=0)           # (N_wave)
+
+    # 5.5 Taxonomic classification
+    TAX_PROBABILITIES ← CLASSIFIER_MODEL.predict_proba(LATENT_MEAN)
+
+    RETURN (SPEC_MEAN, SPEC_STDDEV, TAX_PROBABILITIES)
+END FUNCTION

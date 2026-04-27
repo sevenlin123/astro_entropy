@@ -1,0 +1,64 @@
+INPUT:  Real spectra set S_real = {S_i | i = 1 … N}   // reflectance vectors, λ = [λ_1 … λ_M]
+        Filter throughput curves T_f = {T_f | f = 1 … F}
+        Desired latent dimensionality K (e.g., 5–10)
+        KDE bandwidth h (≈ 0.5)
+        Number of synthetic samples S_num (e.g., 5×10⁴)
+        Noise level σ_noise (e.g., 0.20)
+
+OUTPUT: 
+    - PCA basis U (M × K)
+    - PCA means μ_s (1 × M)
+    - KDE density function p_latent(·)  // over K‑dimensional space
+    - Trained encoder model E  // maps photometry → latent coefficient distribution
+    - Trained classifier C  // maps latent coefficients → taxonomy probabilities
+
+U, μ_s, λ_var = PCA(S_real, K)          // U: eigenvectors, μ_s: mean spectrum, λ_var: explained variance
+
+Z_real = [(S_i – μ_s) · U] for each S_i     // shape: N × K
+
+p_latent = KDE(Z_real, kernel='gaussian', bandwidth=h)
+
+Z_syn = sample_from_KDE(p_latent, size=S_num)      // shape: S_num × K
+
+S_syn = μ_s + Z_syn · Uᵀ                         // shape: S_num × M
+
+for each synthetic spectrum s in S_syn:
+    for each filter f:
+        m_f = ∫ s(λ) * T_f(λ) dλ / ∫ T_f(λ) dλ    // simulated reflectance in filter f
+    add Gaussian noise: m_f_noisy = m_f * (1 + Normal(0, σ_noise))
+collect photometry vectors M_syn  // shape: S_num × F
+
+E = AutoML_Regression(train_inputs=M_syn,
+                      train_targets=Z_syn,
+                      output_distribution='GaussianCopula')   // returns mean μ_z and covariance Σ_z
+
+C = AutoML_Classifier(train_features=Z_real,
+                      train_labels=taxonomy_labels_for_S_real)
+
+INPUT: Observation photometry vector m_obs (F elements)
+       Estimated photometric uncertainties σ_m  // optional
+
+OUTPUT:
+    - Posterior samples of latent coefficients {z_k}
+    - Reconstructed spectra {s_k}
+    - Taxonomy probability vector p_tax
+    - Credible interval bounds per wavelength
+
+μ_z, Σ_z = E.predict(m_obs)     // mean and covariance of latent posterior
+
+for k = 1 … N_samples:
+    z_k ~ MultivariateNormal(μ_z, Σ_z)   // ensure consistency with physical correlations
+
+for each z_k:
+    s_k = μ_s + z_k · Uᵀ                // high‑resolution spectrum
+collect {s_k}
+
+p_tax = C.predict_mean(μ_z)            // classifier evaluated at posterior mean
+
+For each wavelength λ_j:
+    collect {s_k[j]} over all samples
+    compute percentiles (e.g., 2.5%, 97.5%) → CI_lower[j], CI_upper[j]
+
+- Derive spectral diagnostics (slope, absorption depth) from each s_k
+- Estimate uncertainties on diagnostics via spread of sampled values
+- Flag outliers if any s_k lies outside physically plausible region

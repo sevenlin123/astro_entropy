@@ -1,0 +1,60 @@
+# 1. Build the Spectral Prior
+1.1 Load high‑resolution reference spectra {S_ref[i]}  i = 1 … N_ref  (N_ref ≈ 50)
+1.2 Perform PCA on {S_ref} → eigenvectors E[0…K-1], mean spectrum μ_S
+      - choose K = 5 (captures >90 % variance for taxonomy)  
+1.3 Project each reference spectrum to latent space:
+        α_ref[i] = Eᵀ · (S_ref[i] – μ_S)          # K‑dimensional coefficient vector
+1.4 Estimate continuous latent density with Kernel Density Estimation (KDE):
+        - bandwidth h = 0.5 (empirically stable)
+        - fit KDE on {α_ref}
+1.5 Draw M synthetic latent samples:
+        α_syn[j] ∼ KDE ,   j = 1 … M   (M ≈ 5 000)
+1.6 Reconstruct synthetic spectra from latent samples:
+        S_syn[j] = μ_S + E · α_syn[j]               # high‑resolution spectrum
+
+# 2. Simulate Photometric Likelihood
+2.1 For each synthetic spectrum S_syn[j]:
+        FOR each filter f in instrument filter list:
+            - compute reflectance R_f = ∫ S_syn[j]·T_f dλ / ∫ T_f dλ
+              where T_f is the filter transmission curve
+        -> vector m_syn[j] = {R_f for all f}
+2.2 Inject Gaussian photometric noise:
+        σ_f = 0.20 · R_f          # 20 % relative uncertainty
+        m_noisy[j][f] = m_syn[j][f] + Normal(0, σ_f)
+
+# 3. Train Encoder (Photometry → Latent)
+3.1 Assemble training set:
+        X_train = {m_noisy[j]}     # input: noisy photometry vectors
+        Y_train = {α_syn[j]}       # target: latent coefficients
+3.2 Use AutoML (e.g., AutoGluon) to fit an ensemble regressor:
+        model_enc = AutoML_Regression(X_train, Y_train)
+        # Model outputs mean and optional variance for each latent dimension
+
+# 4. Train Classifier (Latent → Taxonomy)
+4.1 Label each reference spectrum with its taxonomy label L_ref[i]
+4.2 Map labels to latent space:
+        α_label[l] = mean(α_ref for all spectra with label l)
+4.3 Train a probabilistic classifier in latent space:
+        X_cls = {α_ref[i]}
+        y_cls = {L_ref[i]}
+        model_clf = AutoML_Classifier(X_cls, y_cls)
+
+# 5. Inference on New Photometry
+5.1 Input: observed photometry vector m_obs
+5.2 Encode to latent space:
+        α_pred = model_enc.predict(m_obs)            # gives mean latent vector
+        (optionally) Σ_pred = model_enc.predict_variance(m_obs)
+5.3 Decode to full spectrum:
+        S_recon = μ_S + E · α_pred
+5.4 Classify taxonomy:
+        p_tax = model_clf.predict_proba(α_pred)      # probabilities over classes
+5.5 Output:
+        - Reconstructed spectrum S_recon
+        - Taxonomy probability distribution p_tax
+        - (optional) Uncertainty estimate from Σ_pred
+
+# 6. Optional: Posterior Sampling (Monte Carlo)
+6.1 For n = 1 … N_samples:
+        α_sample ~ Normal(α_pred, Σ_pred)
+        S_sample[n] = μ_S + E · α_sample
+6.2 Compute statistics (mean, credible intervals) over {S_sample}

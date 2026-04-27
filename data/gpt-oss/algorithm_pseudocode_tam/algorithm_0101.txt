@@ -1,0 +1,73 @@
+Input:
+    S_ref[1..N] – Reference near‑IR spectra (wavelength λ_i, reflectance R_i)
+    F_j[1..M]   – Effective throughput curves of M photometric filters
+    K           – Number of principal components to retain (e.g., 8–10)
+    h           – KDE bandwidth (≈0.5)
+
+Procedure:
+1.1 Interpolate all S_ref onto a common wavelength grid {λ_1,…,λ_L}.
+1.2 For each spectrum s_k:
+        Compute mean-normalised spectrum  r_k(λ) = s_k(λ) / mean(s_k)
+1.3 Assemble data matrix X ∈ ℝ^{N×L} whose rows are r_k(λ).
+
+1.4 Compute PCA of X:
+        • μ_s  = mean(X, axis=0)          (mean spectrum)
+        • C    = covariance(X)
+        • eig, vecs = eigendecompose(C)
+        • V_K  = first K eigenvectors (columns of vecs)
+        • σ²_K = corresponding eigenvalues
+
+1.5 Project reference spectra into latent space:
+        • α_k = (r_k − μ_s) · V_K          (row vector of length K)
+        Store latent coefficient matrix A ∈ ℝ^{N×K}.
+
+2.1 Fit a multivariate KDE to A:
+        KDE_A = KDE(A, bandwidth=h)
+
+2.2 Draw a large number of synthetic latent vectors:
+        A_syn = KDE_A.sample(N_syn)     (N_syn ≫ N, e.g., 5000)
+
+For each synthetic latent vector a in A_syn:
+    3.1 Reconstruct full spectrum:
+            r_syn(λ) = μ_s + V_K · aᵀ              // shape (L,)
+    3.2 Compute noiseless photometry:
+            m_syn[j] = ∫ r_syn(λ) · F_j(λ) dλ      // j = 1…M
+    3.3 Add Gaussian noise (σ = 0.2 × m_syn):
+            m_noisy[j] = m_syn[j] + N(0, σ²)
+    3.4 Store training pair (m_noisy, a).
+
+4.1 Choose an AutoML regression framework (e.g., AutoGluon, H2O‑AutoML).
+4.2 Fit the regressor:
+        encoder_model = AutoML_Regressor.fit(
+                           X = {m_noisy^(i)},
+                           y = {a^(i)})
+
+5.1 Label each reference spectrum with its taxonomy class C_k ∈ {H2O, CO₂, Organic, Methanol}.
+5.2 Train a probabilistic classifier on latent coordinates:
+        classifier_model = AutoML_Classifier.fit(
+                               X = {α_k},
+                               y = {C_k})
+
+Input:
+    m_new[1..M] – Observed photometry of a new TNO (with measurement uncertainties)
+
+Procedure:
+6.1 Encode photometry:
+        a_pred = encoder_model.predict(m_new)
+        // Optionally, obtain predictive distribution (e.g., bootstrap, quantile regression)
+
+6.2 Decode to full spectrum:
+        r_rec(λ) = μ_s + V_K · a_predᵀ
+
+6.3 Classify taxonomy:
+        prob_cls = classifier_model.predict_proba(a_pred)
+
+Output:
+    r_rec(λ)          – Reconstructed reflectance spectrum
+    prob_cls          – Probability vector over taxonomic classes
+
+If the encoder outputs predictive uncertainty or you use Monte‑Carlo sampling:
+    7.1 Sample n_latent vectors {a_samp} from encoder predictive distribution.
+    7.2 For each a_samp, decode to r_samp(λ).
+    7.3 Compute mean and credible intervals of {r_samp(λ)} across samples.
+    7.4 Similarly, aggregate class probabilities over samples for calibrated taxonomy.

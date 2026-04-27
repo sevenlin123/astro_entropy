@@ -1,0 +1,71 @@
+Inputs:
+    S = {s_i(λ)}_i=1..N   // Training set of N high‑resolution near‑IR spectra
+    F = {f_j}              // Set of photometric filters used for target object
+    y = {y_k}              // Measured photometry in each filter f_k
+    σ_y = {σ_k}            // Measurement uncertainties for y_k
+    K                    // Desired number of principal components (e.g., 4–10)
+
+Outputs:
+    μ_spectra(λ)          // Posterior mean of reconstructed spectrum
+    Σ_spectra(λ, λ')     // Posterior covariance of reconstructed spectrum
+    coeff_samples        // Posterior samples of PCA coefficient vector α
+
+Procedure:
+
+1. **Pre‑processing of Training Spectra**
+   1.1 Align all spectra s_i(λ) onto a common wavelength grid {λ_t}.
+   1.2 Compute the mean spectrum:
+        μ̄(λ) = (1/N) * Σ_{i=1}^{N} s_i(λ).
+   1.3 Center spectra:
+        x_i(λ) = s_i(λ) – μ̄(λ).
+
+2. **Principal Component Analysis (PCA)**
+   2.1 Assemble data matrix X ∈ ℝ^{N×T} where T is number of wavelength points:
+        X[i, t] = x_i(λ_t).
+   2.2 Compute covariance matrix C = (1/(N–1)) * Xᵀ X.
+   2.3 Perform eigendecomposition:
+        C v_j = λ_j v_j,  j = 1…T.
+   2.4 Sort eigenpairs by decreasing eigenvalue λ_j.
+   2.5 Select first K eigenvectors:
+        V_K = [v_1 … v_K] ∈ ℝ^{T×K}.
+   2.6 Store eigenvalues λ_1,…,λ_K for later error modeling.
+
+3. **Forward Photometric Model**
+   3.1 For each filter f_k, pre‑compute filter response R_k(λ) on same grid.
+   3.2 Define linear mapping from coefficient vector α ∈ ℝ^K to synthetic photometry:
+        h_k(α) = ∫ [ μ̄(λ) + Σ_{j=1}^{K} α_j v_j(λ) ] R_k(λ) dλ
+                 / ∫ R_k(λ) dλ       // Normalized to bandpass.
+   3.3 Implement h(α) = [h_1(α), …, h_M(α)] where M = |F|.
+
+4. **Bayesian Inference of Coefficients**
+   4.1 Assume Gaussian prior for coefficients:
+        p(α) = N(0, Λ) ,  Λ = diag(λ_1,…,λ_K).
+   4.2 Define Gaussian likelihood for observed photometry:
+        p(y | α) = Π_{k=1}^{M}
+                   N( y_k | h_k(α), σ_k^2 ).
+   4.3 The unnormalized posterior:
+        p(α | y) ∝ p(y | α) p(α).
+   4.4 Sample from posterior using e.g., Metropolis–Hastings or Hamiltonian Monte Carlo:
+        Initialize α^(0) = 0.
+        For n = 1 to N_samples:
+            Propose α' ~ q(· | α^(n-1)).
+            Compute acceptance ratio:
+                r = [p(y | α') p(α')] / [p(y | α^(n-1)) p(α^(n-1))].
+            Accept α^(n)=α' with probability min(1,r); else α^(n)=α^(n-1).
+   4.5 Store all accepted samples {α^(n)} as coeff_samples.
+
+5. **Spectral Reconstruction and Uncertainty Propagation**
+   5.1 For each posterior sample α^(n):
+        s^(n)(λ) = μ̄(λ) + Σ_{j=1}^{K} α_j^(n) v_j(λ).
+   5.2 Compute posterior mean spectrum:
+        μ_spectra(λ) = (1/N_samples) Σ_{n=1}^{N_samples} s^(n)(λ).
+   5.3 Compute posterior covariance:
+        Σ_spectra(λ, λ') =
+           (1/(N_samples–1)) Σ_{n=1}^{N_samples}
+           [s^(n)(λ) – μ_spectra(λ)] [s^(n)(λ') – μ_spectra(λ')] .
+   5.4 Optionally report credible intervals per wavelength from sample distribution.
+
+6. **Output Results**
+   6.1 Return μ_spectra(λ), Σ_spectra(λ, λ'), coeff_samples.
+
+End Algorithm

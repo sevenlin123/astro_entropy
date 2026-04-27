@@ -1,0 +1,96 @@
+# ------------------------------------------------------------------
+# 1. PREPARATION (training phase)
+# ------------------------------------------------------------------
+
+1.1 Load reference spectra
+    - Input: list of N_obs high‑resolution reflectance spectra {S_i(λ)}.
+    - Ensure spectra are sampled on a common wavelength grid λ = [λ_1 … λ_M].
+
+1.2 Compute principal component basis
+    - Center spectra: Ȳ(λ) = mean_i S_i(λ).
+    - Perform Singular Value Decomposition (SVD) on centered matrix → eigenvectors {e_k(λ)}.
+    - Choose number of components K (e.g., K = 8–10 for reconstruction accuracy).
+    - Project each spectrum onto eigenbasis:
+          a_i(k) = ⟨S_i – Ȳ, e_k⟩ ,   k = 1…K
+      store coefficient vector a_i ∈ ℝ^K.
+
+1.3 Estimate latent density (KDE)
+    - Fit multivariate Gaussian kernel density to coefficient set {a_i}.
+    - Bandwidth h ≈ 0.5 (tuned empirically).
+    - Sample N_aug synthetic coefficient vectors {a'_j} from KDE.
+
+1.4 Generate synthetic spectra from augmented coefficients
+    - For each a'_j:
+          S'_j(λ) = Ȳ(λ) + Σ_{k=1}^{K} a'_j(k) * e_k(λ).
+
+1.5 Forward‑model synthetic photometry
+    - For each instrument filter f ∈ {f_1 … f_F}:
+        * Obtain throughput curve T_f(λ).
+        * Compute ideal reflectance in filter:
+              r'_j(f) = ∫ S'_j(λ) · T_f(λ) dλ / ∫ T_f(λ) dλ .
+    - Assemble clean photometry vector m'_j = [r'_j(f_1) … r'_j(f_F)].
+
+1.6 Add realistic noise to synthetic photometry
+    - For each filter f:
+          σ_f = 0.20 * r'_j(f)          # 20 % relative uncertainty
+          draw ε_f ~ Normal(0, σ_f²)
+          m_j(f) = r'_j(f) + ε_f
+    - Store noisy photometry vector m_j.
+
+1.7 Prepare training sets
+    - Feature matrix X = {m_j}   (size N_aug × F).
+    - Target matrix Y_latent = {a'_j}   (size N_aug × K).
+    - Target matrix Y_taxonomy = labels of closest real spectrum to a'_j
+          (optional: use nearest neighbor in latent space).
+
+1.8 Train encoders and classifier
+    - Encoder: AutoML regressor R (e.g., ensemble of GBDTs) trained to map X → Y_latent.
+    - Classifier: AutoML classifier C (e.g., ensemble of GBDTs) trained to map Y_latent → taxonomy labels.
+
+# ------------------------------------------------------------------
+# 2. INFERENCE (online phase)
+# ------------------------------------------------------------------
+
+Given a new observed photometry vector m_obs (F bands):
+
+2.1 Encode photometry to latent distribution
+    - Use trained encoder R to obtain predictive mean μ_latent and predictive variance Σ_latent
+      (many AutoML frameworks return mean & variance or can be approximated via ensemble spread).
+
+2.2 Sample posterior of latent coefficients
+    - Draw N_samp samples {a_s} from multivariate normal N(μ_latent, Σ_latent).
+    - Optionally impose Gaussian Copula to preserve correlations:
+          a_s = copula_transform(μ_latent, Σ_latent, N_samp).
+
+2.3 Decode samples to spectra
+    For each a_s:
+          S_s(λ) = Ȳ(λ) + Σ_{k=1}^{K} a_s(k) * e_k(λ)
+    - Store ensemble of spectra {S_s}.
+
+2.4 Construct posterior predictive spectrum
+    - Mean spectrum: ȦS(λ) = average over {S_s}(λ).
+    - Credible interval at each λ: 5th & 95th percentiles of {S_s}(λ).
+
+2.5 Taxonomy prediction
+    - Pass μ_latent (or each a_s) through classifier C to obtain class probabilities p_cls.
+    - Report class with highest probability and its uncertainty.
+
+2.6 Output
+    - Posterior mean spectrum ȦS(λ) with credible intervals.
+    - Taxonomy probabilities p_cls.
+    - Optionally, derived physical quantities (slope, absorption depth) computed from ȦS.
+
+# ------------------------------------------------------------------
+# 3. OPTIONAL: Adaptive Filter Selection (survey optimization)
+# ------------------------------------------------------------------
+
+For a candidate filter set F_test:
+
+3.1 For each real spectrum S_i:
+      • Forward‑model photometry m_i(F_test) via convolution.
+      • Repeat steps 2.1–2.5 to obtain reconstruction error E_i.
+
+3.2 Aggregate errors over all spectra:
+      • Compute mean error, percentile metrics, etc.
+
+3.3 Rank filter sets by reconstruction performance or classification accuracy.

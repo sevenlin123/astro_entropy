@@ -1,0 +1,79 @@
+text
+--------------------------------------------------------------------
+INPUT
+--------------------------------------------------------------------
+  Photometry:   { (filter_k , mag_k , err_k) }   for k = 1..N_f
+  Solar spectrum: S(λ)
+  Filter transmissions: T_k(λ)   for k = 1..N_f
+  Spectral basis set: { B_j(λ) }   for j = 1..N_b   (e.g. PCs or templates)
+  Zero‑points:     ZP_k          for k = 1..N_f
+  Prior mean & cov. for coefficients: μ_c , Σ_c
+  MCMC parameters: n_walkers, n_steps, burn_in
+
+OUTPUT
+--------------------------------------------------------------------
+  Posterior samples of coefficient vector c
+  Reconstructed spectra R(λ) = Σ_j c_j B_j(λ)
+  Derived statistics (median, credible interval)
+--------------------------------------------------------------------
+PROCEDURE
+--------------------------------------------------------------------
+
+1. Pre‑computation
+------------------
+  For each filter k and each basis j:
+    Ikj = ∫_λ  B_j(λ) * S(λ) * T_k(λ) * λ  dλ      # weighted integral
+  For each filter k:
+    Ik0 = ∫_λ  S(λ) * T_k(λ) * λ  dλ              # solar reference integral
+
+  Store Ikj and Ik0 for fast evaluation of magnitudes.
+
+2. Define forward model (predicted magnitudes)
+---------------------------------------------
+  Given a coefficient vector c = (c_1 … c_Nb):
+    For each filter k:
+      Fk(c) = Σ_j c_j * Ikj                      # flux from basis
+      mk(c) = -2.5 * log10(Fk(c) / Ik0) + ZP_k   # predicted mag
+    Return vector m_pred(c) = { mk(c) }.
+
+3. Likelihood function
+----------------------
+  L(c) = Π_k  N( mag_k | mk(c), err_k )
+        = exp( -0.5 * Σ_k [ (mag_k - mk(c))^2 / err_k^2 ] ).
+
+4. Prior on coefficients
+------------------------
+  Prior(c) = N( c | μ_c, Σ_c )         # multivariate normal
+  (Optionally augment with an albedo prior if needed.)
+
+5. Posterior
+------------
+  Posterior(c) ∝ L(c) * Prior(c)
+
+6. MCMC Sampling
+-----------------
+  Initialize n_walkers random draws from Prior(c).
+  For step = 1 … n_steps:
+    For each walker w:
+      Propose new coeff vector c' by chosen proposal (e.g. affine‑invariant stretch).
+      Compute m_pred(c'), L(c'), Prior(c').
+      Compute posterior ratio r = [L(c') * Prior(c')] / [L(c_w) * Prior(c_w)].
+      Accept c' with probability min(1, r); otherwise keep c_w.
+    Store all accepted c_w after burn_in.
+  End loop.
+
+7. Post‑processing
+------------------
+  From stored samples {c^(s)}:
+    Spectrum samples: R^(s)(λ) = Σ_j c_j^(s) B_j(λ).
+    Median spectrum:   R_med(λ) = median_s R^(s)(λ).
+    Credible intervals: CI_low(λ), CI_high(λ) from percentiles.
+  Optional taxonomy:
+    Project each R^(s)(λ) onto predefined taxonomic PCs.
+    Cluster the projected points; assign most probable class.
+
+8. Return
+---------
+  - Sampled coefficient distributions
+  - Reconstructed spectrum with uncertainties
+  - Taxonomic class probabilities (if computed)

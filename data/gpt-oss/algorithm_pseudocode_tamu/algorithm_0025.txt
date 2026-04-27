@@ -1,0 +1,167 @@
+# ------------------------------------------------------------------
+# 1. Load Reference Spectra
+# ------------------------------------------------------------------
+function load_reference_spectra(path):
+    # Load all high‑resolution reflectance spectra (e.g., FITS or CSV).
+    # Each spectrum is a vector S_i = [R_λ1, R_λ2, …, R_λN].
+    spectra = read_file(path)
+    return spectra          # shape: (N_spectra, N_wavelengths)
+
+# ------------------------------------------------------------------
+# 2. Pre‑process Spectra
+# ------------------------------------------------------------------
+function pre_process(spectra):
+    # Normalize spectra (e.g., divide by flux at a chosen reference λ).
+    norm_spectra = spectra / spectra[:, ref_index]
+    # Optionally interpolate onto a common wavelength grid if needed.
+    return norm_spectra
+
+# ------------------------------------------------------------------
+# 3. Principal Component Analysis (PCA) – Define Latent Space
+# ------------------------------------------------------------------
+function build_pca(norm_spectra, n_components):
+    pca_obj = PCA(n_components=n_components)
+    coeffs   = pca_obj.fit_transform(norm_spectra)    # latent coordinates
+    basis    = pca_obj.components_                  # eigenvectors
+    mean_s   = pca_obj.mean_                         # mean spectrum
+    return coeffs, basis, mean_s, pca_obj
+
+# ------------------------------------------------------------------
+# 4. Kernel Density Estimation (KDE) – Augment Latent Manifold
+# ------------------------------------------------------------------
+function generate_kde_samples(coeffs, n_aug, bandwidth):
+    kde_obj = KernelDensity(kernel='gaussian', bandwidth=bandwidth)
+    kde_obj.fit(coeffs)
+    # Draw n_aug samples from the estimated density
+    aug_coeffs = kde_obj.sample(n_aug)                # shape: (n_aug, n_components)
+    return aug_coeffs
+
+# ------------------------------------------------------------------
+# 5. Forward Model – Compute Synthetic Photometry
+# ------------------------------------------------------------------
+function forward_photometry(full_spectra, filter_curves, noise_frac):
+    # full_spectra: shape (N_samples, N_wavelengths)
+    # filter_curves: dict {filter_name: transmission_vector}
+    photometry = {}
+    for name, trans in filter_curves.items():
+        # Convolve spectrum with filter transmission
+        flux = sum(full_spectra * trans) / sum(trans)
+        # Convert to reflectance or magnitude as desired
+        photometry[name] = flux
+    # Add Gaussian noise with fractional uncertainty
+    noisy_phot = {}
+    for name, val in photometry.items():
+        sigma = noise_frac * val
+        noisy_phot[name] = randn() * sigma + val
+    return noisy_phot           # dict of noisy photometric values
+
+# ------------------------------------------------------------------
+# 6. Build Synthetic Training Set
+# ------------------------------------------------------------------
+function build_training_set(aug_coeffs, basis, mean_s, filter_curves,
+                            noise_frac, pca_obj):
+    # Decode augmented latent vectors to full spectra
+    aug_spectra = basis.T @ aug_coeffs.T + mean_s[:, None]      # shape: (N_wav, n_aug)
+    aug_spectra = aug_spectra.T                                 # (n_aug, N_wav)
+    # Generate noisy photometry for each synthetic spectrum
+    training_phot = []
+    training_lat  = []
+    for i in range(len(aug_spectra)):
+        phot = forward_photometry(aug_spectra[i:i+1], filter_curves, noise_frac)
+        # Flatten photometry dict to vector
+        phot_vec = np.array([phot[f] for f in sorted(filter_curves.keys())])
+        training_phot.append(phot_vec)
+        training_lat.append(aug_coeffs[i])
+    return np.vstack(training_phot), np.vstack(training_lat)   # shapes: (n_aug, n_filters), (n_aug, n_comp)
+
+# ------------------------------------------------------------------
+# 7. Train AutoML Regressor (Encoder)
+# ------------------------------------------------------------------
+function train_encoder(train_phot, train_lat):
+    # Example using Gradient Boosted Trees (XGBoost)
+    regressor = XGBRegressor()
+    regressor.fit(train_phot, train_lat)      # multi‑output regression
+    return regressor
+
+# ------------------------------------------------------------------
+# 8. Train Latent‑Space Classifier (Optional)
+# ------------------------------------------------------------------
+function train_classifier(train_lat, labels):
+    clf = RandomForestClassifier()
+    clf.fit(train_lat, labels)
+    return clf
+
+# ------------------------------------------------------------------
+# 9. Inference – Reconstruct Spectrum from New Photometry
+# ------------------------------------------------------------------
+function reconstruct_spectrum(new_phot_dict, filter_keys,
+                              regressor, basis, mean_s, n_samples=100):
+    # Assemble photometry vector
+    new_phot_vec = np.array([new_phot_dict[f] for f in filter_keys])
+
+    # Predict mean and (optionally) covariance of latent coefficients
+    lat_mean = regressor.predict(new_phot_vec.reshape(1,-1))  # shape (1, n_comp)
+
+    # If regressor outputs predictive variance, assemble covariance matrix;
+    # otherwise assume isotropic Gaussian with small variance.
+    cov = np.eye(lat_mean.shape[1]) * var_scale          # var_scale tuned empirically
+
+    # Sample latent vectors from multivariate normal (Gaussian Copula style)
+    lat_samples = multivariate_normal(mean=lat_mean.flatten(),
+                                      cov=cov,
+                                      size=n_samples)      # shape (n_samples, n_comp)
+
+    # Decode each sampled latent vector to full spectrum
+    recon_spectra = basis.T @ lat_samples.T + mean_s[:, None]   # (N_wav, n_samples)
+    recon_spectra = recon_spectra.T                             # (n_samples, N_wav)
+
+    # Return ensemble of spectra (posterior samples)
+    return recon_spectra
+
+# ------------------------------------------------------------------
+# 10. Optional Taxonomy Prediction
+# ------------------------------------------------------------------
+function predict_taxonomy(lat_mean, classifier):
+    probs = classifier.predict_proba(lat_mean)            # shape (1, n_classes)
+    return probs
+
+# ------------------------------------------------------------------
+# MAIN WORKFLOW
+# ------------------------------------------------------------------
+# 1. Load & preprocess
+spectra_raw = load_reference_spectra('diSCo_TNO_spectra.fits')
+norm_spectra = pre_process(spectra_raw)
+
+# 2. PCA
+coeffs, basis, mean_s, pca_obj = build_pca(norm_spectra, n_components=8)
+
+# 3. KDE augmentation
+aug_coeffs = generate_kde_samples(coeffs, n_aug=5000, bandwidth=0.5)
+
+# 4. Synthetic training data
+filter_curves = load_filter_transmissions('JWST_NIRCam_filters.json')
+train_phot, train_lat = build_training_set(aug_coeffs, basis, mean_s,
+                                           filter_curves, noise_frac=0.20,
+                                           pca_obj=pca_obj)
+
+# 5. Train encoder
+encoder = train_encoder(train_phot, train_lat)
+
+# 6. Train classifier (if desired)
+labels = load_labels('diSCo_TNO_labels.txt')     # e.g., H2O, CO2, Organic, Methanol
+classifier = train_classifier(train_lat, labels)
+
+# 7. Inference for a new target
+new_phot = {'F090W': 0.85, 'F115W': 0.78, 'F410M': 0.35, 'F460M': 0.32}
+filter_keys = ['F090W', 'F115W', 'F410M', 'F460M']
+
+posterior_spectra = reconstruct_spectrum(new_phot, filter_keys,
+                                         encoder, basis, mean_s,
+                                         n_samples=200)
+
+taxonomy_probs = predict_taxonomy(encoder.predict(np.array([new_phot[k] for k in filter_keys]).reshape(1,-1)),
+                                  classifier)
+
+# Output:
+# - posterior_spectra: array of shape (200, N_wavelengths) – posterior samples
+# - taxonomy_probs: array of shape (1, n_classes) – class probabilities

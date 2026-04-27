@@ -1,0 +1,109 @@
+INPUT:
+    - Observed magnitudes M_obs[1..N_bands]   // sparse photometry
+    - Observation uncertainties σ_obs[1..N_bands]
+    - Filter transmission curves T_i(λ)      // for each band i
+    - Reference solar spectrum S_ref(λ)
+    - Wavelength grid λ[1..N_λ]              // e.g., 0.4–2.5 μm
+    - Prior specifications:
+        * Slope prior: p_slope ∝ exp(-|slope|/σ_slope)
+        * Curvature prior: p_curv ∝ exp(-|curv|/σ_curv)
+        * Absolute magnitude prior: p_H ∝ exp(-(H-H0)^2/(2σ_H^2))
+    - MCMC settings:
+        * Number of walkers W
+        * Steps per walker K
+        * Burn‑in B
+
+OUTPUT:
+    - Posterior samples of spectral parameters {slope, curvature, H}
+    - Reconstructed spectral reflectance R(λ) = S_ref(λ) * (1 + f_slope*(λ-λ0)+f_curv*[(λ-λ0)^2])
+    - Posterior predictive magnitudes M_pred[i] for each band
+    - Classification probabilities (optional)
+
+--------------------------------------------------------------------
+STEP 1: PREPROCESS OBSERVATIONS
+--------------------------------------------------------------------
+1.1 For each band i:
+        Normalize observed magnitude:
+            m_norm[i] = M_obs[i] - 5*log10(r_i * Δ_i)   // r, Δ = heliocentric and geocentric distances
+        Compute weight w_i = 1 / σ_obs[i]^2
+
+--------------------------------------------------------------------
+STEP 2: DEFINE PARAMETERIZED REFLECTANCE MODEL
+--------------------------------------------------------------------
+2.1 Choose functional form:
+        R(λ) = S_ref(λ) * [1 + a1*(λ-λ0) + a2*(λ-λ0)^2]
+    where a1 = slope, a2 = curvature
+2.2 Include absolute magnitude H as a free scaling factor:
+        Flux(λ) = 10^(-0.4*H) * R(λ)
+
+--------------------------------------------------------------------
+STEP 3: COMPUTE MODEL MAGNITUDES FOR A GIVEN PARAMETER SET
+--------------------------------------------------------------------
+FUNCTION ModelMagnitudes(a1, a2, H):
+    For each band i:
+        3.1 Compute synthetic flux:
+                F_i = ∫ Flux(λ) * T_i(λ) dλ
+        3.2 Convert to magnitude:
+                m_mod[i] = -2.5*log10(F_i) + ZP_i   // ZP_i is band zero‑point
+    RETURN m_mod
+
+--------------------------------------------------------------------
+STEP 4: LOG‑LIKELIHOOD AND PRIOR EVALUATION
+--------------------------------------------------------------------
+FUNCTION LogPosterior(a1, a2, H):
+    m_mod = ModelMagnitudes(a1, a2, H)
+    logL = Σ_i w_i * [-(m_norm[i]-m_mod[i])^2]          // Gaussian likelihood
+    logP_slope = -|a1| / σ_slope
+    logP_curv  = -|a2| / σ_curv
+    logP_H     = -(H-H0)^2 / (2*σ_H^2)
+    RETURN logL + logP_slope + logP_curv + logP_H
+
+--------------------------------------------------------------------
+STEP 5: INITIALIZE MCMC SAMPLER
+--------------------------------------------------------------------
+5.1 Draw W initial walkers randomly from prior distributions
+5.2 For each walker j, store state θ_j = (a1_j, a2_j, H_j)
+
+--------------------------------------------------------------------
+STEP 6: RUN MCMC (e.g., Affine‑Invariant Ensemble Sampler)
+--------------------------------------------------------------------
+FOR step = 1 TO K:
+    FOR each walker j:
+        Propose new state θ' by affine‑invariant move (or other proposal)
+        Compute logPost' = LogPosterior(θ')
+        Accept with probability min(1, exp(logPost' - logPost_current))
+        If accepted: θ_j ← θ', logPost_current ← logPost'
+    END FOR
+END FOR
+
+--------------------------------------------------------------------
+STEP 7: DISCARD BURN‑IN AND RESAMPLE
+--------------------------------------------------------------------
+7.1 Discard first B steps of each walker
+7.2 Concatenate remaining samples into posterior sample set
+7.3 Optionally thin samples to reduce autocorrelation
+
+--------------------------------------------------------------------
+STEP 8: POST‑PROCESS POSTERIOR
+--------------------------------------------------------------------
+8.1 For each posterior sample k:
+        Compute reconstructed spectrum R_k(λ) using a1_k, a2_k
+        Compute posterior predictive magnitudes M_pred_k[i] = ModelMagnitudes(a1_k,a2_k,H_k)
+8.2 Derive summary statistics:
+        • Median and credible intervals for a1, a2, H
+        • Median spectrum and spectral uncertainty envelope
+        • Posterior predictive distribution for any desired band
+
+--------------------------------------------------------------------
+STEP 9: OPTIONAL TAXONOMY CLASSIFICATION
+--------------------------------------------------------------------
+9.1 Define taxonomy classes via spectral templates or decision boundaries
+9.2 For each posterior sample, classify R_k(λ) using chosen rule
+9.3 Aggregate class assignments to obtain classification probabilities
+
+--------------------------------------------------------------------
+RETURN:
+    - Posterior samples of spectral parameters
+    - Reconstructed spectra and uncertainties
+    - Posterior predictive magnitudes
+    - Classification probabilities (if computed)

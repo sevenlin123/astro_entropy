@@ -1,0 +1,66 @@
+text
+Inputs
+-------
+- N_T targets
+- For each target t:
+    * Photometric measurements {f_t,i, σ_t,i}  i = 1 … N_F(t)
+    * Filter response functions {R_t,i(λ)}   i = 1 … N_F(t)
+- Basis spectra {B_j(λ)} j = 1 … N_B (e.g., linear combinations of standard TNO templates)
+
+Outputs
+-------
+- Posterior samples {c_t,k} for each target t (k = 1 … K draws)
+- Reconstructed spectra S_t(λ) = Σ_j c_t,j * B_j(λ)
+- Taxonomic class probabilities P_t(C | data)
+
+Algorithm
+---------
+FOR each target t = 1 TO N_T DO
+
+    1. Pre‑processing
+       a. Normalize all photometric points to a common reference band.
+       b. Store measured flux vector  f_t  = [f_t,1 … f_t,N_F].
+       c. Store error vector     σ_t  = [σ_t,1 … σ_t,N_F].
+       d. Construct integrated basis vectors:
+              B_t,j  = ∫ B_j(λ) * R_t,i(λ) dλ   for all filters i.
+          (Result is an N_F × N_B matrix.)
+
+    2. Define Model
+       a. Spectrum coefficients vector  c_t = [c_t,1 … c_t,N_B].
+       b. Predicted flux vector  μ_t(c_t) = B_t * c_t.
+       c. Gaussian likelihood:
+              L(f_t | c_t) ∝ exp[ -½ Σ_i ((f_t,i – μ_t,i)/σ_t,i)^2 ].
+
+    3. Prior Specification
+       a. Independent Gaussian priors on coefficients:
+              p(c_t,j) ∝ exp[ -½ (c_t,j / τ_j)^2 ] .
+          (τ_j are hyper‑parameters set to encode physical bounds.)
+
+    4. Posterior Sampling (MCMC)
+       a. Initialize c_t^(0) = 0  (or any reasonable guess).
+       b. For iteration k = 1 TO K DO
+             i. Propose new coefficients c'_t = c_t^(k-1) + ε,
+                where ε ~ N(0, Σ_prop) (proposal covariance Σ_prop).
+            ii. Compute μ_t(c'_t) and likelihood L'.
+           iii. Compute acceptance probability:
+                  α = min(1,  [L' * p(c'_t)] / [L * p(c_t^(k-1))] ).
+            iv. Draw u ~ Uniform(0,1).
+             v. If u < α then accept: c_t^(k) = c'_t, else reject: c_t^(k) = c_t^(k-1).
+           vi. Record c_t^(k).
+
+    5. Spectral Reconstruction
+       a. After discarding burn‑in and thinning, obtain posterior samples {c_t,k}.
+       b. For each λ in desired wavelength grid:
+              S_t(λ) = mean_k [ Σ_j c_t,k,j * B_j(λ) ].
+          Compute credible intervals from percentile ranges of samples.
+
+    6. Taxonomic Classification (optional)
+       a. For each taxonomic class C define prototype coefficient vector p_C.
+       b. Compute distance d_C(k) = || c_t,k – p_C ||.
+       c. Convert distances to class probabilities:
+              P_t(C) = Σ_k exp(-d_C(k)^2 / (2σ_cls^2))  / Σ_{C'} Σ_k exp(-d_{C'}(k)^2 / (2σ_cls^2)).
+       d. Store P_t(C) as taxonomic posterior.
+
+END FOR
+
+Return {c_t,k}, {S_t(λ)}, and {P_t(C)} for all targets.

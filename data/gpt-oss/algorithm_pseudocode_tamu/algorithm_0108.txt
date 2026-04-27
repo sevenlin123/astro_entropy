@@ -1,0 +1,127 @@
+// ----------------------------------------------------------
+// 1. TRAINING PHASE
+// ----------------------------------------------------------
+
+INPUT:
+    S_real[1..N]            // Real spectra (reflectance vs λ)
+    FilterCurves[j][λ]      // Transmission curves of J photometric filters
+    K                        // Number of principal components to keep
+    N_aug                    // Number of synthetic latent samples to generate
+    h_KDE                     // Bandwidth for KDE
+
+OUTPUT:
+    PCA_mean, PCA_evecs      // Mean spectrum and eigenvectors
+    KDE_model                // KDE density on latent space
+    Regressor                // AutoML regressor f(m) → z
+    Classifier              // AutoML classifier g(z) → taxonomy probs
+
+PROCEDURE:
+
+1.1 Normalize each real spectrum S_real[i] (e.g., divide by mean reflectance).
+1.2 Stack spectra into matrix M [N × L] (L = number of wavelength bins).
+
+1.3 Perform Principal Component Analysis:
+        - Compute mean spectrum μ_S = mean(M).
+        - Center: M_center = M – μ_S.
+        - Compute covariance C = (M_centerᵀ * M_center) / (N‑1).
+        - Eigen-decompose C → eigenvalues λ_k, eigenvectors v_k.
+        - Select first K eigenvectors → V_K [L × K].
+        - Project each spectrum to latent space:
+              z_real[i] = V_Kᵀ * (S_real[i] – μ_S)   // size K
+
+1.4 Build KDE on latent vectors {z_real[i]}:
+        KDE_model = KernelDensityEstimate({z_real[i]}, bandwidth=h_KDE).
+
+1.5 Generate synthetic latent samples:
+        For s = 1 … N_aug:
+              z_synth[s] = SampleFrom(KDE_model)
+              // Decode to synthetic spectrum:
+              S_synth[s] = μ_S + V_K * z_synth[s]
+              // Forward‑model photometry:
+              m_synth[s] = ForwardModel(S_synth[s], FilterCurves)
+              // Add Gaussian noise (20% relative):
+              m_noisy[s] = m_synth[s] * (1 + Normal(0,0.2))
+              Store pair (m_noisy[s], z_synth[s])
+
+1.6 Prepare training set D:
+        For i = 1 … N:
+              m_real[i] = ForwardModel(S_real[i], FilterCurves)
+              Store pair (m_real[i], z_real[i])
+        D = { (m_real[i], z_real[i]) } ∪ { (m_noisy[s], z_synth[s]) }
+
+1.7 Train AutoML regressor:
+        Regressor = AutoMLTrain(D, target_dim=K)
+        // Regressor outputs predicted mean latent vector.
+
+1.8 Train AutoML classifier on latent space:
+        Labels = taxonomy labels for each S_real[i]
+        Classifier = AutoMLTrain( {z_real[i]} , Labels )
+
+// ----------------------------------------------------------
+// 2. INFERENCE PHASE
+// ----------------------------------------------------------
+
+INPUT:
+    m_obs[j]          // Observed sparse photometry of new object
+    Regressor
+    Classifier
+    PCA_mean μ_S
+    PCA_evecs V_K
+    KDE_model
+    N_sample          // Number of posterior samples to draw
+
+OUTPUT:
+    SpectrumMean[L]      // Expected reconstructed spectrum
+    SpectrumCI[L]        // Confidence interval (e.g., 95%) per λ
+    TaxonomyProb[Types]  // Probabilities over taxonomic classes
+
+PROCEDURE:
+
+2.1 Predict latent vector:
+        z_hat = Regressor.predict(m_obs)          // size K
+
+2.2 Estimate covariance of latent prediction:
+        // Option A: use regressor’s internal uncertainty if available
+        // Option B: approximate with KDE variance around z_hat
+        Σ_z = KDE_CovarianceAround(KDE_model, z_hat)
+
+2.3 Sample posterior latent vectors using Gaussian Copula:
+        // Draw N_sample samples from multivariate normal N(z_hat, Σ_z)
+        samples_z = []
+        For t = 1 … N_sample:
+              z_t = MultivariateNormalSample(z_hat, Σ_z)
+              // Enforce physical bounds if needed
+              samples_z.append(z_t)
+
+2.4 Decode each sample to a spectrum:
+        spectra = []
+        For each z_t in samples_z:
+              S_t = μ_S + V_K * z_t            // size L
+              spectra.append(S_t)
+
+2.5 Compute spectrum statistics:
+        SpectrumMean = mean(spectra, axis=0)    // element‑wise mean
+        Lower, Upper = percentile(spectra, [2.5, 97.5], axis=0)   // 95% CI
+        SpectrumCI = (Lower, Upper)
+
+2.6 Taxonomy classification:
+        probs = Classifier.predict_proba(z_hat)
+
+RETURN SpectrumMean, SpectrumCI, probs
+
+ForwardModel(Spectrum, Filters):
+    // Convolve spectrum with each filter transmission curve
+    // Integrate to obtain reflectance in each band
+    m = []
+    For each filter j:
+        R_j = ∫ Spectrum(λ) * Filters[j][λ] dλ / ∫ Filters[j][λ] dλ
+        m.append(R_j)
+    Return m
+
+KernelDensityEstimate(data, bandwidth):
+    // Non‑parametric KDE (Gaussian kernel) on K‑dimensional points
+    return KDE_object
+
+MultivariateNormalSample(mean_vec, cov_mat):
+    // Draw sample from multivariate normal distribution
+    return sample_vector

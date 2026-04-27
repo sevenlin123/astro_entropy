@@ -1,0 +1,103 @@
+INPUT
+    SPECTRA_RAW   // list of N high‑resolution reflectance spectra (M wavelengths)
+    FILTER_CURVES // array of B filter transmission functions (wavelength x)
+    PHOTOMETRY_NEW  // sparse photometry of target object (length B)
+    K               // number of PCA components (default 5)
+    BANDWIDTH = 0.5 // KDE bandwidth
+    N_SYNTH          // number of synthetic latent vectors (e.g. 5000)
+    N_SAMPLES_POSTERIOR // number of posterior samples (e.g. 1000)
+
+OUTPUT
+    SPEC_POST_MEAN      // mean reconstructed spectrum (M wavelengths)
+    SPEC_CI_LOW, SPEC_CI_HIGH // 16th and 84th percentiles per wavelength
+    TAXONOMIC_PROBS     // probability vector over taxonomic classes
+
+--------------------------------------------------------------------
+1. PREPROCESSING & PCA
+--------------------------------------------------------------------
+1.1. MEAN_SPECTRUM ← average of SPECTRA_RAW over N
+1.2. CENTERED ← SPECTRA_RAW – MEAN_SPECTRUM
+1.3. COV ← covariance(CENTERED)
+1.4. (EIGVALS, EIGVECs) ← eigendecompose(COV)
+1.5. SELECT top K eigenvectors → COMPONENTS (M × K matrix)
+1.6. FOR each spectrum s in SPECTRA_RAW:
+        LATENT_REAL[i] ← COMPONENTSᵀ · (s – MEAN_SPECTRUM)   // length K
+
+--------------------------------------------------------------------
+2. KDE AUGMENTATION OF LATENT MANIFOLD
+--------------------------------------------------------------------
+2.1. DEFINE KDE_Kernel(u) = (2π)^(-K/2) * exp(-0.5 * uᵀu)
+2.2. FOR i = 1 … N_SYNTH:
+        SAMPLE u from uniform over R^K
+        WEIGHT w ← Σ_j KDE_Kernel((LATENT_REAL[j] – u)/BANDWIDTH) / BANDWIDTH^K
+        LATENT_SYNTH[i] ← u   // store synthetic latent vector
+        STORE weight w          // optional, for importance sampling
+
+--------------------------------------------------------------------
+3. FORWARD MODELING TO GENERATE NOISY PHOTOMETRY
+--------------------------------------------------------------------
+3.1. FUNCTION RECONSTRUCT_SPECTRUM(latent_vec):
+        RETURN MEAN_SPECTRUM + COMPONENTS · latent_vec
+
+3.2. FUNCTION CONVOLVE_PHOTOMETRY(spectrum):
+        FOR each filter f in FILTER_CURVES:
+            RETRIEVE throughput T_f(λ)
+            COMPUTE integral I_f = ∫ spectrum(λ) · T_f(λ) dλ
+            NORMALIZE by ∫ T_f(λ) dλ   // yields reflectance in band f
+        RETURN vector of I_f (length B)
+
+3.3. BUILD TRAINING SET:
+        INITIALIZE X_train ← [], Y_train ← []
+        FOR each latent_vec in [LATENT_REAL, LATENT_SYNTH]:
+            spec ← RECONSTRUCT_SPECTRUM(latent_vec)
+            phots ← CONVOLVE_PHOTOMETRY(spec)
+            ADD Gaussian noise:
+                phots_noisy ← phots + Normal(0, 0.20 * phots)
+            APPEND phots_noisy to X_train
+            APPEND latent_vec to Y_train
+
+--------------------------------------------------------------------
+4. TRAIN AUTO‑ML REGRESSOR (ENCODER)
+--------------------------------------------------------------------
+4.1. SELECT regressor type (e.g., GradientBoostedDecisionTrees)
+4.2. FIT model ENC ← regressor.fit(X_train, Y_train)
+
+--------------------------------------------------------------------
+5. OPTIONAL: TRAIN TAXONOMY CLASSIFIER ON LATENT SPACE
+--------------------------------------------------------------------
+5.1. LABELS ← taxonomic labels for each real spectrum
+5.2. CLASSIFIER ← regressor.fit(LATENT_REAL, LABELS)   // or separate ML model
+
+--------------------------------------------------------------------
+6. INFERENCE ON NEW PHOTOMETRY
+--------------------------------------------------------------------
+6.1. latent_mean ← ENC.predict(PHOTOMETRY_NEW)         // point estimate
+
+6.2. ESTIMATE UNCERTAINTY:
+        // use tree ensemble predictions or residual statistics
+        RESIDUALS ← Y_train – ENC.predict(X_train)
+        COV_EST ← cov(RESIDUALS)                      // K × K covariance
+
+6.3. SAMPLE POSTERIOR LATENT VECTORS:
+        FOR s = 1 … N_SAMPLES_POSTERIOR:
+            ε ← MultivariateNormal(mean=0, cov=COV_EST).sample()
+            LATENT_SAMPLE[s] ← latent_mean + ε
+
+6.4. DECODE TO RECONSTRUCT SPECTRA:
+        FOR each LATENT_SAMPLE[s]:
+            SPEC_SAMPLE[s] ← RECONSTRUCT_SPECTRUM(LATENT_SAMPLE[s])
+
+6.5. CALCULATE STATISTICS PER WAVELENGTH:
+        SPEC_POST_MEAN ← mean(SPEC_SAMPLE, axis=0)      // M‑vector
+        SPEC_CI_LOW  ← percentile(SPEC_SAMPLE, 16, axis=0)
+        SPEC_CI_HIGH ← percentile(SPEC_SAMPLE, 84, axis=0)
+
+--------------------------------------------------------------------
+7. TAXONOMIC PROBABILITY ESTIMATION
+--------------------------------------------------------------------
+7.1. TAXONOMIC_PROBS ← CLASSIFIER.predict_proba(latent_mean)
+
+--------------------------------------------------------------------
+8. RETURN RESULTS
+--------------------------------------------------------------------
+RETURN SPEC_POST_MEAN, SPEC_CI_LOW, SPEC_CI_HIGH, TAXONOMIC_PROBS

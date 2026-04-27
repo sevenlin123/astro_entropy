@@ -1,0 +1,72 @@
+Input: 
+    - Spectral library {S_i(λ)}   // i = 1 … N_s
+    - Desired number of PCs K      // e.g., 8–10
+
+Procedure:
+1.1 Compute mean spectrum μ(λ)  ← (1/N_s) Σ_i S_i(λ)
+
+1.2 Center spectra:  S'_i(λ) ← S_i(λ) – μ(λ)
+
+1.3 Assemble data matrix X of size (N_s × L) where L = number of wavelength points:
+        X_ik = S'_i(λ_k)
+
+1.4 Compute covariance matrix C = (1/(N_s−1)) * Xᵀ * X
+
+1.5 Perform eigen‑decomposition of C:
+        C v_k = λ_k v_k ,  k = 1…L
+    Sort eigenvectors v_k by decreasing eigenvalue λ_k.
+
+1.6 Construct principal‑component basis functions:
+        PC_k(λ) ← Σ_j v_kj * basis_j(λ)      // basis_j are the original wavelength grid
+    Store first K components {PC_1,…,PC_K}.
+
+1.7 Pre‑compute filter response integrals for all photometric bands:
+        For each band j:
+            - Obtain filter transmission T_j(λ).
+            - Compute denominator D_j = ∫ T_j(λ) dλ.
+            - Compute C0_j     = ∫ μ(λ) * T_j(λ) dλ / D_j          // constant term
+            - For each k=1…K:
+                Ck_j = ∫ PC_k(λ) * T_j(λ) dλ / D_j              // linear coefficients
+
+Input:
+    - Sparse photometric measurements { (f_j, σ_j) }   // j = 1 … N_f
+    - Filter coefficient tables {C0_j, Ck_j}
+    - Prior on coefficient vector a
+
+Procedure:
+2.1 Define forward model for photometry:
+        For a given coefficient vector a:
+            F̂_j(a) = C0_j + Σ_{k=1..K} a_k * Ck_j          // synthetic magnitude/flux
+
+2.2 Likelihood function (Gaussian errors):
+        ℒ(a) = Π_{j=1..N_f}  exp[ -(f_j − F̂_j(a))² / (2 σ_j²) ]
+
+2.3 Posterior over a:
+        p(a | data) ∝ ℒ(a) * p_prior(a)
+
+2.4 Sample the posterior using an efficient MCMC engine (e.g., affine‑invariant sampler):
+        - Initialize walkers at prior mean.
+        - Run burn‑in iterations until convergence diagnostics pass.
+        - Collect M posterior samples {a^(m)}_{m=1..M}.
+
+2.5 For each posterior sample a^(m), reconstruct full spectrum:
+        S^(m)(λ) = μ(λ) + Σ_{k=1..K} a_k^(m) * PC_k(λ)
+
+2.6 Assemble reconstructed spectrum statistics:
+        - Point estimate (e.g., posterior mean)  S_mean(λ) = (1/M) Σ_m S^(m)(λ)
+        - Credible intervals: For each λ, sort {S^(m)(λ)} and take desired percentiles
+          (e.g., 2.5th and 97.5th for 95% interval).
+
+Output:
+    - Reconstructed spectrum S_mean(λ)
+    - Uncertainty bands [S_lower(λ), S_upper(λ)]
+
+3.1 Project the point‑estimate spectrum onto the PC basis:
+        a_star = coefficients that minimize || S_mean − (μ + Σ a_k PC_k) ||²
+        // usually equal to the posterior mean of a.
+
+3.2 Classify by nearest‑neighbour in coefficient space or by distance to known taxonomic clusters.
+
+3.3 Flag outliers:
+        If the posterior predictive probability of observed photometry under the model
+        falls below a chosen threshold, mark the object as an anomalous spectral type.

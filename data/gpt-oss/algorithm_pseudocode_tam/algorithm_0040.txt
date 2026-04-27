@@ -1,0 +1,93 @@
+pseudocode
+Input:
+    S_seed[N][M]            // N reference spectra, M wavelength bins
+    W_mean[M]               // Solar spectrum (for reflectance conversion)
+    F_filters[P]            // Effective throughput curves for P photometric bands
+    Labels[N]               // Taxonomic class labels for seed spectra
+    h_bandwidth              // KDE smoothing parameter
+    L_samples                // Number of synthetic latent vectors to draw
+    noise_level = 0.20       // Relative reflectance uncertainty (20%)
+
+Output (per new object):
+    S_rec[M]                 // Reconstructed high‑resolution spectrum
+    Prob_class[Q]            // Probability vector over Q taxonomic classes
+
+--------------------------------------------------------------------
+Phase 0: Pre‑processing
+--------------------------------------------------------------------
+for i in 1..N:
+    // Convert to reflectance
+    R_seed[i] = S_seed[i] / W_mean
+    // Normalize spectrum (optional, e.g., unit area or 1 micron scaling)
+
+--------------------------------------------------------------------
+Phase 1: Build Latent Prior (PCA + KDE)
+--------------------------------------------------------------------
+1. Compute mean spectrum:
+        μ_R = mean(R_seed, axis=0)            // vector of length M
+
+2. Center spectra:
+        C_seed[i] = R_seed[i] – μ_R
+
+3. Compute covariance matrix:
+        Σ = (C_seed^T * C_seed) / (N – 1)     // M×M
+
+4. Eigen‑decompose Σ:
+        [λ_k, v_k] = eig(Σ)                  // λ sorted descending
+        Choose first K eigenvectors → V_K = [v_1 … v_K]   // M×K
+
+5. Project seed spectra to latent space:
+        Z_seed[i] = V_K^T * C_seed[i]         // K‑dimensional vector
+
+6. Fit multivariate KDE to {Z_seed}:
+        KDE_prior = fitKDE(Z_seed, bandwidth=h_bandwidth)
+
+--------------------------------------------------------------------
+Phase 2: Generate Synthetic Training Set
+--------------------------------------------------------------------
+7. Draw L synthetic latent vectors:
+        Z_syn[j] ~ KDE_prior   // j = 1..L
+
+8. Reconstruct synthetic spectra:
+        C_syn[j] = V_K * Z_syn[j]      // M‑dimensional
+        R_syn[j] = μ_R + C_syn[j]
+
+9. Forward‑model photometry for each synthetic spectrum:
+   for j in 1..L:
+        for p in 1..P:
+            // Convolve with filter throughput
+            m_raw[p] = ∫ R_syn[j] * F_filters[p] dλ
+            // Add Gaussian noise (relative)
+            m_noisy[p] = m_raw[p] * (1 + Normal(0, noise_level))
+        Phot_syn[j] = m_noisy
+
+--------------------------------------------------------------------
+Phase 3: Train Regressor & Classifier
+--------------------------------------------------------------------
+10. Assemble training data:
+        X_train = Phot_syn          // L × P
+        Y_train = Z_syn             // L × K
+
+11. Train AutoML regressor:
+        Regressor = AutoMLRegressor.fit(X_train, Y_train)
+
+12. Train AutoML classifier on latent space:
+        Y_class_train = Labels      // N (use seed labels)
+        Classifier = AutoMLClassifier.fit(Z_seed, Y_class_train)
+
+--------------------------------------------------------------------
+Inference (Per New Object)
+--------------------------------------------------------------------
+Input: Phot_new[P]   // Observed photometry vector
+
+13. Predict latent coefficients:
+        Z_pred = Regressor.predict(Phot_new)   // K‑dimensional vector
+
+14. Reconstruct spectrum:
+        C_pred = V_K * Z_pred
+        R_rec = μ_R + C_pred                 // M‑dimensional reflectance
+
+15. Classify taxonomy:
+        Prob_class = Classifier.predict_proba(Z_pred)   // Q probabilities
+
+16. Return S_rec = R_rec, Prob_class

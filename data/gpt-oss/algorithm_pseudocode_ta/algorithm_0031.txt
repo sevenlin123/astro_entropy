@@ -1,0 +1,27 @@
+# ------------------------------------------------------------------
+# TRAINING PHASE – build PCA spectral manifold
+# ------------------------------------------------------------------
+Input:
+    S          # NxW matrix of calibrated spectra (N spectra, W wavelengths)
+    λ_grid     # array of W wavelength values
+    K_min, K_max   # bounds on number of principal components to retain
+
+Procedure TrainSpectralPCA(S, λ_grid):
+    1.  Normalize each spectrum in S (e.g., divide by value at reference λ)
+    2.  Compute mean spectrum μ(λ)  = mean(S, axis=0)           # size W
+    3.  Center data:  X = S - μ
+    4.  Compute covariance C = (X.T @ X) / (N-1)
+    5.  Eigen-decompose C → eigenvalues λ_k, eigenvectors v_k   # v_k size W
+    6.  Sort eigenpairs descending by λ_k
+    7.  Select first K components where cumulative variance ≥ threshold
+    8.  Define principal component basis functions:
+            PC_k(λ) = v_k      for k = 1…K
+    9.  Project each centered spectrum onto basis:
+            c_i,k = PC_k · (S_i - μ)       # dot product over W
+    10.  Store:
+            μ(λ),  PC_k(λ) for k=1…K,
+            coefficient matrix C_mat (NxK)  # rows are c_i
+            prior covariance Σ_prior = cov(C_mat)
+
+Output:
+    μ, {PC_k}, Σ_prior, K

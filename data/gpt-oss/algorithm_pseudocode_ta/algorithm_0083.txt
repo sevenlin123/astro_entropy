@@ -1,0 +1,81 @@
+Input: 
+    S      ← {s₁, s₂, …, s_N}          # N full‐resolution near‑IR spectra
+    λ      ← vector of wavelengths
+    K_opt  ← number of principal components (e.g., 8–10)
+
+1. Compute mean spectrum:
+       μ = (1/N) Σ_{n=1}^{N} s_n
+
+2. Center spectra:
+       X = [s₁‑μ , s₂‑μ , … , s_N‑μ]   # column‑wise
+
+3. Compute covariance matrix:
+       C = (1/(N‑1)) X Xᵀ
+
+4. Eigen‑decompose:
+       (V, Λ) = eig(C)                # V columns = eigenvectors, Λ diagonal eigenvalues
+
+5. Sort eigenpairs by descending eigenvalue.
+
+6. Select first K_opt eigenvectors:
+       V_K = V[:, 1:K_opt]
+
+Store: μ, V_K, Λ_K (first K_opt eigenvalues).
+
+Input: 
+    F = {f₁(λ), f₂(λ), …, f_M(λ)}   # Transmission curves of M photometric filters
+    c = (c₁,…,c_K_opt)              # Latent coefficient vector
+    μ, V_K                           
+
+1. Reconstruct spectrum:
+       ŝ(λ) = μ + Σ_{k=1}^{K_opt} c_k * V_K[:,k]
+
+2. For each filter j=1…M:
+       P̂_j = ∫ ŝ(λ) * f_j(λ) dλ / ∫ f_j(λ) dλ
+   (discrete integration over wavelength grid)
+
+Output: predicted photometry vector P̂ = (P̂₁,…,P̂_M).
+
+Input:
+    P_obs = (p₁,…,p_M)        # Measured photometry
+    σ_p  = (σ₁,…,σ_M)          # Measurement uncertainties
+    c                        # Latent coeffs (as variable)
+
+Likelihood:
+    L(c | P_obs) ∝ Π_{j=1}^{M}
+                  exp{ - [p_j - P̂_j(c)]² / (2 σ_j²) } .
+
+Assume independent Gaussian prior on each coefficient:
+    p(c) = Π_{k=1}^{K_opt} N(c_k | 0, τ_k²)
+where τ_k² = Λ_K[k]   (variance from training PCA).
+
+Define target density:
+    π(c) ∝ L(c | P_obs) * p(c)
+
+Use Hamiltonian Monte Carlo (HMC) or No‑U‑Turn Sampler (NUTS):
+    Initialize c⁰ = 0
+    For iteration t = 1 … T:
+        Propose new state c* via HMC dynamics
+        Accept with probability min(1, π(c*)/π(c^{t-1}))
+        Store accepted c^t
+
+Collect {c^(t)}_{t=1}^{T} as posterior samples.
+
+For each posterior sample c^(t):
+    Compute ŝ^(t)(λ) = μ + Σ_k c_k^(t) * V_K[:,k]
+
+After all T samples:
+    For each wavelength λ_i:
+        μ_s(λ_i)   = (1/T) Σ_t ŝ^(t)(λ_i)          # posterior mean spectrum
+        σ_s(λ_i)   = sqrt{ (1/T) Σ_t [ŝ^(t)(λ_i)-μ_s(λ_i)]² }   # 1‑σ interval
+        Credible interval (e.g., 95%) obtained from sorted {ŝ^(t)(λ_i)}.
+
+Compute log‑marginal likelihood estimate:
+    ℓ = log ∫ L(c|P_obs) p(c) dc    (use Chib’s method or harmonic mean)
+
+If ℓ below threshold θ → flag observation as potential outlier.
+
+Reconstructed spectrum:
+    μ_s(λ) ± σ_s(λ)   (or full credible intervals)
+Posterior samples of latent coefficients {c^(t)}
+Outlier flag (if computed)

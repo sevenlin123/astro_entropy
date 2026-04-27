@@ -1,0 +1,136 @@
+Input:
+- Spectrum library S_i(λ), i=1..N_spectra
+- Photometric filter set F_j(λ), j=1..N_filters
+- New object's photometry y_j ± σ_j
+
+Output:
+- Posterior samples of PC coefficients α_k
+- Reconstructed spectra Ŝ(λ)
+- Uncertainty intervals
+
+Algorithm:
+
+1. Preprocess spectra
+   1.1 Interpolate all spectra onto common wavelength grid λ_m, m=1..M
+   1.2 Normalize spectra (e.g., divide by flux at reference wavelength)
+   1.3 Build data matrix D of size N_spectra × M
+
+2. Principal Component Analysis
+   2.1 Compute mean spectrum μ(λ) = mean(D, axis=0)
+   2.2 Center data: X = D - μ
+   2.3 Compute covariance C = (X^T X)/(N_spectra - 1)
+   2.4 Perform eigen decomposition: C v_k = λ_k v_k
+   2.5 Sort eigenvectors v_k by descending eigenvalue λ_k
+   2.6 Select first K PCs (k=1..K): PC_k = v_k
+   2.7 Store projection matrix P = [PC_1 ... PC_K]^T
+
+3. Forward photometry model
+   3.1 For each filter F_j, precompute filter transmission curve T_j(λ)
+   3.2 Define function synth_photometry(α):
+         // α is vector of K coefficients
+         spectrum = μ + sum_{k=1}^K α_k * PC_k
+         For each j:
+             p_j = ∫ spectrum(λ) * T_j(λ) dλ / ∫ T_j(λ) dλ
+         Return vector p = {p_j}
+
+4. Bayesian inference
+   4.1 Define likelihood L(y | α) = Π_j N(y_j | p_j(α), σ_j^2)
+   4.2 Define prior p(α) e.g., multivariate normal N(0, I) or uniform bounds
+   4.3 Posterior p(α | y) ∝ L(y | α) * p(α)
+   4.4 Sample posterior using MCMC (Metropolis-Hastings or Hamiltonian):
+        Initialize α^(0) = 0
+        For t = 1 to N_samples:
+            Propose α' = α^(t-1) + ε, ε ~ N(0, Σ_proposal)
+            Compute acceptance ratio r = [L(y|α') p(α')] / [L(y|α^(t-1)) p(α^(t-1))]
+            Accept with prob min(1, r); if accepted set α^(t)=α'; else α^(t)=α^(t-1)
+   4.5 Store samples {α^(t)}
+
+5. Spectrum reconstruction
+   5.1 For each posterior sample α^(t):
+         spectrum_t(λ) = μ(λ) + Σ_k α_k^(t) * PC_k(λ)
+   5.2 Compute point estimate: mean over samples μ_recon(λ) = mean_t spectrum_t(λ)
+   5.3 Compute credible intervals: e.g., 2.5th and 97.5th percentiles over samples
+
+6. Output
+   Return posterior samples, reconstructed spectrum, uncertainty intervals.
+
+INPUT
+  SPECTRA_LIBRARY   : N_spectra × M_wavelength array of calibrated near‑IR spectra
+  FILTER_SET        : list of N_filters filter transmission curves T_j(λ)
+  OBJECT_PHOTOMETRY : vector y_j (photometric measurements) and σ_j (uncertainties)
+
+PARAMETERS
+  K                 : number of principal components to retain (e.g., 5–10)
+  N_SAMPLES         : number of posterior draws (e.g., 10⁴)
+  PROPOSAL_STD      : standard deviation of proposal step in coefficient space
+
+OUTPUT
+  ALPHA_SAMPLES     : N_SAMPLES × K matrix of sampled PC coefficients
+  RECONSTRUCTED_SPECTRUM : mean reconstructed spectrum μ̂(λ)
+  CONFIDENCE_INTERVALS   : percentile bounds (e.g., 2.5% & 97.5%) for spectrum
+
+1.1 INTERPOLATE ALL SPECTRA onto a common wavelength grid λ_m (m = 1 … M).
+1.2 NORMALIZE each spectrum (e.g., divide by flux at a chosen reference wavelength).
+1.3 BUILD DATA_MATRIX D of size (N_spectra × M) where row i is spectrum i.
+
+2.1 COMPUTE MEAN_SPECTRUM μ(λ) = mean(D, axis=0).
+2.2 CENTER DATA:  X = D – μ.
+2.3 CALCULATE COVARIANCE C = (Xᵀ X) / (N_spectra – 1).
+2.4 PERFORM EIGEN DECOMPOSITION:  C v_k = λ_k v_k.
+2.5 SORT eigenvectors v_k by descending eigenvalues λ_k.
+2.6 SELECT FIRST K EIGENVECTORS → PC_k (k = 1 … K).
+2.7 FORM PROJECTION_MATRIX P = [PC₁ … PC_K]ᵀ  (size K × M).
+
+FOR each filter j = 1 … N_filters DO
+   PRECOMPUTE NORMALIZED_TRANSMISSION N_j(λ) = T_j(λ) / ∫ T_j(λ)dλ.
+
+DEFINE FUNCTION SYNTHETIC_PHOTOMETRY(α):
+   // α = (α₁ … α_K)ᵀ – PC coefficients
+   spectrum(λ) = μ(λ) + Σ_{k=1}^{K} α_k * PC_k(λ)
+   FOR each filter j:
+       p_j(α) = ∫ spectrum(λ) * N_j(λ) dλ      // synthetic magnitude/flux
+   RETURN vector p(α) = {p₁ … p_{N_filters}}.
+END FUNCTION
+
+4.1 DEFINE LIKELIHOOD:
+        L(y | α) = Π_{j=1}^{N_filters}  Normal(y_j | p_j(α), σ_j²).
+
+4.2 DEFINE PRIOR on α:
+        For simplicity, use independent Gaussians:
+           p(α) = Π_{k=1}^{K} Normal(α_k | 0, 1).
+
+4.3 POSTERIOR up to normalization:
+        p(α | y) ∝ L(y | α) * p(α).
+
+4.4 SAMPLE POSTERIOR USING METROPOLIS–HASTINGS:
+   INITIALISE α⁰ = (0,…,0).
+   FOR t = 1 … N_SAMPLES DO
+        PROPOSE α′ = α^{t-1} + ε ,   ε ~ Normal(0, PROPOSAL_STD² * I_K).
+        COMPUTE p_current = L(y | α^{t-1}) * p(α^{t-1}).
+        COMPUTE p_proposed = L(y | α′) * p(α′).
+        ACCEPTANCE RATIO r = p_proposed / p_current.
+        DRAW u ~ Uniform(0,1).
+        IF u < min(1, r) THEN
+              α^{t} = α′
+        ELSE
+              α^{t} = α^{t-1}
+        END IF
+   END FOR
+   STORE ALPHA_SAMPLES = {α¹ … α^{N_SAMPLES}}.
+
+5.1 FOR each sample α^(t):
+        spectrum_t(λ) = μ(λ) + Σ_{k=1}^{K} α_k^(t) * PC_k(λ).
+   END FOR
+
+5.2 COMPUTE POINT ESTIMATE:
+        RECONSTRUCTED_SPECTRUM μ̂(λ) = mean_t[ spectrum_t(λ) ].
+
+5.3 ESTIMATE CONFIDENCE INTERVALS:
+        For each λ, collect values {spectrum_t(λ)} across all t.
+        CONFIDENCE_LOWER(λ) = 2.5th percentile of the collection.
+        CONFIDENCE_UPPER(λ) = 97.5th percentile.
+
+RETURN
+  ALPHA_SAMPLES,
+  RECONSTRUCTED_SPECTRUM μ̂(λ),
+  CONFIDENCE_INTERVALS [CONFIDENCE_LOWER(λ), CONFIDENCE_UPPER(λ)].

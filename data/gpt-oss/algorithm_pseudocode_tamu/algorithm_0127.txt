@@ -1,0 +1,75 @@
+INPUT
+    • High‑resolution reference spectra S_i(λ), i = 1 … N
+    • Wavelength grid λ = {λ_1,…,λ_M}
+    • JWST NIRCam (or user) filter throughput curves {F_f(λ)}, f = 1 … F
+    • Band‑dependent Gaussian noise level σ_f (default 20 % of signal)
+
+OUTPUT
+    • Posterior predictive spectrum S_post(λ) with uncertainty bands
+    • Taxonomic class probability vector p_taxonomy
+
+1.1  Center spectra
+        μ(λ) ← (1/N) Σ_i S_i(λ)                      // Mean spectrum
+
+1.2  Assemble data matrix
+        X ← [S_1(λ) – μ(λ); … ; S_N(λ) – μ(λ)]      // N × M matrix
+
+1.3  Principal component analysis
+        Compute eigenvalues/eigenvectors of Cov(X)
+        Select K principal components (K ≈ 5–10)
+        V ← eigenvector matrix of size M × K
+
+2.1  For each i = 1 … N
+          c_i ← Vᵀ · (S_i – μ)                     // K‑dimensional coefficient vector
+
+3.1  Fit a Gaussian kernel density estimator
+        KDE(·)  ←  Σ_i  N(· | c_i , h² I_K)           // Bandwidth h ≈ 0.5
+
+4.1  Draw L synthetic latent vectors {c̃_j}  ~  KDE()  (j = 1 … L, L ≫ N)
+
+4.2  Reconstruct synthetic spectra
+        S̃_j(λ) ← μ(λ) + V · c̃_j                    // Inverse PCA
+
+4.3  Forward model photometry
+        For each filter f:
+            r_f(j) ← ∫ S̃_j(λ) F_f(λ) dλ / ∫ S_☉(λ) F_f(λ) dλ
+        // Add Gaussian noise
+        For each filter f:
+            r_f_noisy(j) ← r_f(j) + Normal(0, σ_f r_f(j))
+
+4.4  Record training tuples
+        T ← { (m_j , c̃_j) }   where  m_j = [r_1_noisy(j), … , r_F_noisy(j)]
+
+5.1  Train an AutoML ensemble (e.g., gradient‑boosted trees) to learn
+        f_enc : m → ĉ
+    using T as training data.
+
+5.2  Optionally store predictive distribution (e.g., quantile predictions) if
+        the AutoML framework supports probabilistic outputs.
+
+6.1  Label each synthetic latent vector c̃_j with the nearest real class
+        (e.g., Water, CO₂, Organics, Methanol) using distance in latent space.
+
+6.2  Train a second AutoML classifier on { (c̃_j , class_j) }.
+
+6.3  Store classifier f_cls : c → p_taxonomy.
+
+7.1  Observe photometry m_obs = [r_1(obs), … , r_F(obs)]
+
+7.2  Encode to latent space
+        ĉ_obs  ← f_enc(m_obs)                         // Point estimate
+        If f_enc provides uncertainty, draw N_samp samples
+             {ĉ_k}  k = 1 … N_samp from predictive distribution
+
+7.3  Decode to spectrum
+        For each sample ĉ_k:
+            S_k(λ) ← μ(λ) + V · ĉ_k                   // Full‑resolution spectrum
+
+7.4  Build posterior predictive spectrum
+        S_post(λ)  ← median_k  S_k(λ)
+        Uncertainty(λ) ← percentile_{16,84}_k  S_k(λ)   // 68 % CI
+
+7.5  Classify taxonomy
+        p_taxonomy ← f_cls(ĉ_obs)   // Probability vector over classes
+
+Return  S_post(λ), Uncertainty(λ), p_taxonomy

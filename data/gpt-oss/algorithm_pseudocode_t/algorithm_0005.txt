@@ -1,0 +1,84 @@
+text
+INPUT
+    • Observed magnitudes for an object:  {m_obs[i], σ_m[i]}   (i = 1 … N_filters)
+    • Filter transmission curves:          F[i](λ)          (i = 1 … N_filters)
+    • Spectral template library:            T[k](λ)          (k = 1 … N_templates)
+    • Wavelength grid:                      λ[j]             (j = 1 … N_wavelengths)
+
+OUTPUT
+    • Posterior samples of template weights:  {w_k^(s)}      (s = 1 … N_samples)
+    • Estimated reflectance spectrum:         R̂(λ) = Σ_k w_k μ k T[k](λ)
+    • Class‑membership probabilities:        P(class | data)
+
+--------------------------------------------------------------------
+STEP 1 – Pre‑processing
+--------------------------------------------------------------------
+1.1  Convert magnitudes to relative fluxes:
+        f_obs[i]   ← 10^(−0.4 * (m_obs[i] − ZP))
+        σ_f[i]     ← (ln(10)/2.5) * f_obs[i] * σ_m[i]
+    (ZP = zero‑point for each filter; assume same ZP if not given.)
+
+--------------------------------------------------------------------
+STEP 2 – Build synthetic photometry matrix
+--------------------------------------------------------------------
+2.1  For every template k and filter i:
+        S[i,k] ← ∫_λ  T[k](λ) · F[i](λ) dλ
+    (Numerical integration over the wavelength grid.)
+2.2  Store S as an N_filters × N_templates matrix.
+
+--------------------------------------------------------------------
+STEP 3 – Define statistical model
+--------------------------------------------------------------------
+3.1  Model for observed fluxes:
+        f_model[i] = Σ_k w_k · S[i,k]
+3.2  Likelihood (assuming Gaussian errors):
+        ℒ({w_k} | data) = Π_i exp[ −(f_obs[i] − f_model[i])² / (2 σ_f[i]²) ]
+3.3  Prior on weights:
+        p({w_k}) = Π_k  U(w_k | 0, 1)         // Uniform between 0 and 1
+                     OR Gaussian(0, σ_prior)
+
+--------------------------------------------------------------------
+STEP 4 – Posterior sampling (Metropolis–Hastings)
+--------------------------------------------------------------------
+4.1  Initialise weights w_k^(0) = 0.5 for all k.
+4.2  For s = 1 … N_samples:
+        • Propose new weights:
+                w_k′ = w_k^(s-1) + ε_k,   ε_k ~ N(0, τ_k²)
+          (Clip to [0,1] if uniform prior.)
+        • Compute f_model′[i] = Σ_k w_k′ · S[i,k]
+        • Evaluate likelihood ℒ′ = product over i of Gaussian terms.
+        • Compute acceptance ratio:
+                α = min(1, ℒ′ / ℒ_{s-1})
+        • Draw u ~ Uniform(0,1).
+            If u < α:
+                w_k^(s) = w_k′
+                ℒ_s    = ℒ′
+            Else:
+                w_k^(s) = w_k^(s-1)
+                ℒ_s    = ℒ_{s-1}
+4.3  After burn‑in, keep {w_k^(s)} as posterior samples.
+
+--------------------------------------------------------------------
+STEP 5 – Reconstruct spectrum
+--------------------------------------------------------------------
+5.1  For each wavelength λ[j]:
+        R̂(λ[j]) = median{ Σ_k w_k^(s) · T[k](λ[j]) }  // or mean
+5.2  Estimate uncertainty:
+        σ_R(λ[j]) = stddev{ Σ_k w_k^(s) · T[k](λ[j]) }
+
+--------------------------------------------------------------------
+STEP 6 – Taxonomic classification
+--------------------------------------------------------------------
+6.1  For each taxonomic class c with reference spectrum C_c(λ):
+        Compute χ²_c = Σ_i ( f_obs[i] − Σ_k w_k* · S[i,k] )² / σ_f[i]²
+          where w_k* are the MAP weights from the posterior.
+6.2  Convert χ²_c to likelihood L_c.
+6.3  Assume equal prior for classes → posterior class probabilities:
+        P(c | data) = L_c / Σ_{c'} L_{c'}
+
+--------------------------------------------------------------------
+RETURN
+--------------------------------------------------------------------
+• Posterior weight samples {w_k^(s)}
+• Estimated spectrum R̂(λ) ± σ_R(λ)
+• Class probabilities P(c | data)

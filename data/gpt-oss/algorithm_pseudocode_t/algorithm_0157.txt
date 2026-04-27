@@ -1,0 +1,71 @@
+Input:
+  - For each target T_i:
+      • Observed fluxes F_obs[ℓ]   (ℓ = 1 … N_filters)
+      • Associated uncertainties σ[ℓ]
+  - Reflectance basis set B_j(λ) (j = 1 … N_basis)
+  - Filter transmission curves R_ℓ(λ)
+  - Prior distributions π(c_j) for spectral coefficients c_j
+
+Output:
+  - Posterior samples {c_j^(k)} for each target
+  - Mean reconstructed spectrum S_mean(λ) for each target
+  - Uncertainty estimates (e.g., credible intervals)
+
+Algorithm:
+
+FOR each target T_i DO
+  /*----- 1. Initialisation -----*/
+  1.1 Set iteration counter k = 0
+  1.2 Initialise coefficient vector c^(0) = {c_1^(0), …, c_Nbasis^(0)}  
+        (e.g., draw from priors or use zero vector)
+  1.3 Compute initial predicted fluxes:
+        F_pred^(0)[ℓ] = ∫ [Σ_j c_j^(0) * B_j(λ)] * R_ℓ(λ) dλ
+  1.4 Compute initial log‑likelihood:
+        LL^(0) = –½ Σ_ℓ [(F_obs[ℓ] – F_pred^(0)[ℓ]) / σ[ℓ]]²
+  1.5 Compute initial log‑prior:
+        LP^(0) = Σ_j log π(c_j^(0))
+
+  /*----- 2. Metropolis–Hastings Sampling -----*/
+  WHILE k < N_iter DO
+    2.1 Proposal step:
+         Draw proposal vector Δc from symmetric proposal density q(Δc)  
+         (e.g., multivariate Gaussian with covariance Σ_prop)
+         Set c' = c^(k) + Δc
+
+    2.2 Predict fluxes for proposal:
+         F_pred'[ℓ] = ∫ [Σ_j c'_j * B_j(λ)] * R_ℓ(λ) dλ   for all ℓ
+
+    2.3 Compute proposal log‑likelihood:
+         LL' = –½ Σ_ℓ [(F_obs[ℓ] – F_pred'[ℓ]) / σ[ℓ]]²
+
+    2.4 Compute proposal log‑prior:
+         LP' = Σ_j log π(c'_j)
+
+    2.5 Acceptance probability:
+         α = min{1 , exp[(LL' + LP') – (LL^(k) + LP^(k))] }
+
+    2.6 Draw u ~ Uniform(0,1)
+         IF u ≤ α THEN
+              Accept proposal:
+                c^(k+1) = c'
+                LL^(k+1) = LL'
+                LP^(k+1) = LP'
+         ELSE
+              Reject proposal:
+                c^(k+1) = c^(k)
+                LL^(k+1) = LL^(k)
+                LP^(k+1) = LP^(k)
+
+    2.7 Increment k = k + 1
+  END WHILE
+
+  /*----- 3. Post‑processing -----*/
+  3.1 Discard first N_burn samples as burn‑in.
+  3.2 Retain remaining samples {c^(k)} as posterior draws.
+  3.3 Reconstruct mean spectrum:
+        S_mean(λ) = Σ_j (mean of c_j over retained samples) * B_j(λ)
+  3.4 Estimate uncertainties:
+        For each λ compute standard deviation across samples,
+        or construct credible bands.
+
+END FOR

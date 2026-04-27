@@ -1,0 +1,114 @@
+pseudo
+------------------------------------------------------------------
+INPUT
+    R = {S_i(λ)}          # Reference spectra (i = 1…N_obs)
+    T = {t_j}             # Target photometric filter set (j = 1…N_filt)
+    L = {label_i}         # Taxonomic labels for R  (optional)
+
+PARAMETERS
+    K                    # Number of principal components to retain
+    h_KDE                # KDE bandwidth
+    N_SYNTH              # Number of synthetic latent samples
+    σ_noise = 0.20       # Relative photometric noise (20 %)
+
+------------------------------------------------------------------
+STEP 1 – Build the Prior (latent manifold)
+------------------------------------------------------------------
+1.1  Project R into orthogonal eigenspace:
+        [E, C] = PCA(R, n_components = K)
+        # E : K × M matrix of eigenvectors (M = number of wavelength bins)
+        # C : N_obs × K matrix of coefficients (each row = coeffs for one spectrum)
+
+1.2  Estimate probability density of latent coefficients:
+        p_latent = KDE(C, bandwidth = h_KDE)
+
+1.3  Sample synthetic latent vectors:
+        C_syn = sample_from(p_latent, size = N_SYNTH)
+
+------------------------------------------------------------------
+STEP 2 – Generate synthetic photometry (implicit likelihood)
+------------------------------------------------------------------
+For each c in C_syn:
+    2.1  Reconstruct synthetic spectrum:
+            S_syn(λ) = inverse_PCA(c, E, mean_S)
+    2.2  Convolve with instrument throughput:
+            m_syn_j = integrate_over_filter(S_syn, T_j)   ∀ j
+    2.3  Add Gaussian noise to reflectance:
+            m_syn_j ← m_syn_j * (1 + Normal(0, σ_noise))
+    2.4  Store pair (m_syn, c)
+
+Result: Training set X = {m_syn} (N_SYNTH × N_filt),
+               Y = {c}        (N_SYNTH × K)
+
+------------------------------------------------------------------
+STEP 3 – Train the encoder (photometry → latent)
+------------------------------------------------------------------
+3.1  Select an AutoML regressor (e.g., XGBoost ensemble):
+        regressor = AutoML_Regressor()
+3.2  Fit regressor on (X, Y):
+        regressor.train(X, Y)
+
+------------------------------------------------------------------
+STEP 4 – Train the taxonomy classifier (latent → class)
+------------------------------------------------------------------
+4.1  Train a second AutoML model on {C, L}:
+        classifier = AutoML_Classifier()
+        classifier.train(C, L)
+
+------------------------------------------------------------------
+STEP 5 – Inference for a new object
+------------------------------------------------------------------
+Input: m_new = {m_new_j}   # observed photometry in N_filt bands
+
+5.1  Predict latent coefficient distribution:
+        μ_latent, Σ_latent = regressor.predict_distribution(m_new)
+        # regressor may return mean and covariance (e.g., via ensemble std)
+
+5.2  (Optional) Sample posterior spectra:
+        For s = 1 … N_samples:
+            c_s = sample_from_GaussianCopula(μ_latent, Σ_latent)
+            S_s(λ) = inverse_PCA(c_s, E, mean_S)
+        Store ensemble {S_s}
+
+5.3  Reconstruct nominal spectrum:
+        c_hat = μ_latent
+        S_hat(λ) = inverse_PCA(c_hat, E, mean_S)
+
+5.4  Classify taxonomy:
+        p_class = classifier.predict_proba(μ_latent)
+        # returns probability vector over taxonomic classes
+
+OUTPUT
+    S_hat(λ)                     # Reconstructed spectrum (mean)
+    {S_s(λ)} (optional)         # Ensemble for uncertainty bounds
+    p_class                      # Taxonomic probability distribution
+
+pseudo
+function PCA(dataset, n_components):
+    # Center data
+    mean_S = mean(dataset, axis=0)
+    X_centered = dataset - mean_S
+    # Compute covariance matrix
+    Cov = (X_centered.T @ X_centered) / (n_observations - 1)
+    # Eigen-decomposition
+    eigvals, eigvecs = eig(Cov)
+    # Sort by decreasing eigenvalue
+    idx = argsort(eigvals)[::-1]
+    E = eigvecs[:, idx[:n_components]]          # K principal axes
+    # Project original spectra
+    C = X_centered @ E
+    return E, C
+
+function inverse_PCA(coeffs, E, mean_S):
+    return (coeffs @ E.T) + mean_S
+
+function integrate_over_filter(spectrum, filter_curve):
+    # spectrum: array of reflectance vs λ
+    # filter_curve: transmission vs λ
+    return sum(spectrum * filter_curve) / sum(filter_curve)
+
+function sample_from_GaussianCopula(mean, cov):
+    # Build copula to preserve correlations
+    L_chol = cholesky(cov)
+    z = Normal(0, 1, size = len(mean))          # Independent standard normals
+    return mean + L_chol @ z

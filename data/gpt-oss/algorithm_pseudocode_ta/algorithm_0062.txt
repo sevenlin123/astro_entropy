@@ -1,0 +1,59 @@
+# -------------------------------------------------------------
+# Pre‑processing – build latent spectral model from training data
+# -------------------------------------------------------------
+INPUT:   Training spectra matrix S  (N_spectra × N_wave)
+         Desired number of PCs K
+
+1. μ ← mean(S, axis=0)                # mean spectrum (1 × N_wave)
+2. S_centered ← S − μ                 # center spectra
+3. [U, Λ] ← eig(S_centered.T · S_centered)   # eigen decomposition
+4. Sort eigenvalues Λ in descending order
+5. U_K ← first K columns of U          # principal component basis (N_wave × K)
+6. Store (μ, U_K)
+
+# -------------------------------------------------------------
+# Pre‑compute filter integrals for each photometric band
+# -------------------------------------------------------------
+INPUT:   List of photometric bands B = {b1,…,bM}
+         Band transmission curves T_b(λ)
+         Wavelength grid λ_grid
+
+FOR each band b in B:
+    7. r_b ← Σ_λ (T_b(λ) Δλ)                     # band‑averaged response
+    8. FOR i = 1 … K:
+           r_bi ← Σ_λ (PC_i(λ) · T_b(λ) Δλ)      # PC contribution to band
+       END FOR
+    9. Store r_b and vector r_b_vec = (r_b1,…,r_bK)
+END FOR
+
+# -------------------------------------------------------------
+# Bayesian inference for a single object
+# -------------------------------------------------------------
+INPUT:   Photometry vector p  (M × 1)            # observed fluxes
+         Uncertainty vector σ_p  (M × 1)        # measurement errors
+OUTPUT:  Reconstructed spectrum s_rec (1 × N_wave)
+         Credible interval bounds s_low, s_high
+
+10. Construct matrix A (M × K) where row b = r_b_vec(b)
+11. Construct vector c (M × 1) where element b = r_b(b)
+12. C ← diag(σ_p²)                                 # measurement covariance
+13. Prior precision: I_K = identity(K)
+
+14. Posterior covariance:
+        Σ_post ← inverse( Aᵀ C⁻¹ A + I_K )
+
+15. Posterior mean of latent coefficients:
+        μ_post ← Σ_post · Aᵀ · C⁻¹ · (p − c)
+
+16. Reconstructed spectrum:
+        s_rec ← μ + U_K · μ_post
+
+17. Spectrum covariance (per wavelength):
+        Σ_spec ← U_K · Σ_post · U_Kᵀ
+        var_spec ← diagonal elements of Σ_spec
+
+18. Credible interval (e.g., 95%):
+        s_low  ← s_rec − 1.96 · sqrt(var_spec)
+        s_high ← s_rec + 1.96 · sqrt(var_spec)
+
+19. RETURN (s_rec, s_low, s_high)

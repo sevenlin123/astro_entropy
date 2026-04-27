@@ -1,0 +1,86 @@
+INPUT
+    N        ← number of photometric measurements
+    {m_i}    ← observed apparent magnitudes (i = 1 … N)
+    {σ_i}    ← measurement uncertainties (i = 1 … N)
+    {T_i(λ)} ← transmission curve of filter i
+    S(λ)     ← solar reference spectrum
+
+    K        ← number of basis spectra in the spectral library
+    {B_k(λ)} ← basis spectra (k = 1 … K)
+
+PARAMETERS
+    nIter    ← total Monte‑Carlo iterations (e.g., 200 000)
+    nBurn    ← burn‑in iterations (e.g., 20 000)
+    δc       ← step size for weight updates
+    δa       ← step size for continuum coefficient
+
+INITIALIZE
+    c_k ← 1/K   for all k          // uniform Dirichlet prior
+    a   ← 0      // initial linear continuum coefficient
+    SAMPLE ← empty list
+
+FOR iter = 1 TO nIter DO
+
+    # 1. Propose new parameters
+    PROPOSED_c_k = c_k + Normal(0, δc)  for all k
+    PROPOSED_a   = a   + Normal(0, δa)
+
+    # 2. Enforce constraints
+    IF any(PROPOSED_c_k < 0) THEN
+        REJECT proposal; CONTINUE
+    ENDIF
+    NORMALIZE PROPOSED_c_k so that Σ_k PROPOSED_c_k = 1
+
+    # 3. Compute synthetic magnitudes
+    FOR each filter i = 1 … N DO
+        F_i = ∫ [ Σ_k PROPOSED_c_k * B_k(λ) + PROPOSED_a * λ ] * T_i(λ) dλ
+        S_i = ∫ S(λ) * T_i(λ) dλ
+        m_i_mod = -2.5 * log10(F_i / S_i)
+    END FOR
+
+    # 4. Likelihood (Gaussian in magnitudes)
+    lnL = Σ_i [ -0.5 * ((m_i - m_i_mod)/σ_i)^2 - 0.5*ln(2πσ_i^2) ]
+
+    # 5. Prior
+    lnP_prior = ln Dirichlet(c; α=1)            // uniform over simplex
+                 + ln Gaussian(a; μ=0, σ_a)   // optional continuum prior
+
+    # 6. Posterior probability
+    lnP_post = lnL + lnP_prior
+
+    # 7. Acceptance probability
+    IF iter == 1 THEN
+        lnP_old = lnP_post
+    ENDIF
+    α_acc = exp( lnP_post - lnP_old )
+    IF Uniform(0,1) < min(1, α_acc) THEN
+        ACCEPT proposal
+        c_k ← PROPOSED_c_k
+        a   ← PROPOSED_a
+        lnP_old ← lnP_post
+    ELSE
+        REJECT proposal (retain current c_k, a)
+    ENDIF
+
+    # 8. Store sample after burn‑in
+    IF iter > nBurn THEN
+        APPEND {c_k, a} TO SAMPLE
+    ENDIF
+
+END FOR
+
+# 9. Post‑processing
+# 9a. Median reconstructed spectrum
+RECON_SPECTRUM(λ) = median over SAMPLE of ( Σ_k c_k * B_k(λ) + a * λ )
+
+# 9b. Taxonomy probability estimation
+FOR each taxonomy class T
+    DEFINE basis subset {B_k}^T belonging to class T
+    CALCULATE P(T | data) =
+        (1/|SAMPLE|) * Σ_{samples} I( {c_k} belongs to class T )   // indicator
+END FOR
+
+OUTPUT
+    RECON_SPECTRUM(λ)      // median reflectance spectrum
+    CLASS_PROBS           // posterior probability for each taxonomy class
+    SAMPLE                // full posterior chain (optional)

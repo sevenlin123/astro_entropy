@@ -1,0 +1,50 @@
+Input:
+    S_train      # Training spectra matrix, shape (N_spec, N_wave)
+    λ_train      # Wavelength grid for training spectra, length N_wave
+    Filters      # List of M photometric filters, each with transmission T_f(λ)
+    y_obs        # Observed photometry for a target, array of length M
+    σ_obs        # Photometric uncertainties, array of length M
+    k            # Number of principal components to retain
+
+Output:
+    s_rec(λ)     # Reconstructed spectrum on λ_grid
+    σ_rec(λ)     # 1‑σ uncertainty per wavelength
+
+1.1   μ_s  ← mean(S_train, axis=0)          # Mean spectrum
+1.2   S_centered ← S_train – μ_s           # Centered training set
+
+1.3   U, Σ, Vt ← svd(S_centered, full_matrices=False)
+1.4   PCs ← Vt[0:k, :]                    # First k principal‑component vectors
+
+2.1   For each filter f = 1…M:
+          For each component i = 1…k:
+              A[f,i] ← ∑_λ  PCs[i,λ] * T_f(λ) * Δλ       # Numerical integration
+          b[f]   ← ∑_λ  μ_s[λ] * T_f(λ) * Δλ
+
+3.1   Σ_y ← diag(σ_obs^2)                 # Observation covariance
+
+3.2   Prior mean μ_prior ← 0_k
+3.3   Prior covariance Σ_prior ← diag(σ_prior^2)   # e.g., σ_prior = 1.0
+
+3.4   Compute posterior covariance:
+          Σ_post ← inverse( Aᵀ * Σ_y⁻¹ * A + Σ_prior⁻¹ )
+
+3.5   Compute posterior mean:
+          μ_post ← Σ_post * ( Aᵀ * Σ_y⁻¹ * (y_obs – b) + Σ_prior⁻¹ * μ_prior )
+
+4.1   s_rec(λ) ← μ_s[λ] + Σ_{i=1..k} μ_post[i] * PCs[i,λ]
+
+4.2   For each wavelength λ:
+          Var[ s_rec(λ) ] ← Σ_{i=1..k} Σ_{j=1..k}
+                               PCs[i,λ] * Σ_post[i,j] * PCs[j,λ]
+          σ_rec(λ) ← sqrt( Var[ s_rec(λ) ] )
+
+5.1   Draw L samples {c^(ℓ)} from N( μ_post , Σ_post )
+5.2   For each sample ℓ:
+          s^(ℓ)(λ) ← μ_s[λ] + Σ_i c^(ℓ)[i] * PCs[i,λ]
+
+5.3   For each λ:
+          Compute empirical percentiles (e.g., 2.5 % and 97.5 %) of
+          { s^(ℓ)(λ) } to form a full credible interval.
+
+Return s_rec(λ), σ_rec(λ)   # Optionally also the full posterior samples

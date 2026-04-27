@@ -1,0 +1,83 @@
+pseudo
+INPUT:
+    S        // matrix of training spectra, size (N_spec × N_wave)
+    R_j(λ)   // spectral response functions for each photometric filter j (j = 1 … M)
+    m_obs[j] // observed magnitudes for target object
+    σ[j]     // measurement uncertainties of m_obs
+    K        // number of principal components to keep (e.g., 8–10)
+
+OUTPUT:
+    S_rec(λ)          // reconstructed full spectrum
+    CI_low(λ), CI_hi(λ)   // lower/upper bounds of credible interval (e.g., 95%)
+
+--------------------------------------------------------------------
+STEP 1 – Build Principal‑Component Basis
+--------------------------------------------------------------------
+1.1   μ(λ) ← mean spectrum of S
+1.2   S_centered ← S – μ            // subtract mean
+1.3   COV ← (S_centeredᵀ · S_centered) / (N_spec – 1)
+1.4   Eig ← eigendecompose(COV)     // eigenvectors, eigenvalues
+1.5   PC[:,i] ← i‑th eigenvector    // shape (N_wave)
+1.6   λ[i]   ← i‑th eigenvalue
+1.7   Keep first K components:
+        PC_K  ← PC[:,1:K]
+        λ_K   ← λ[1:K]
+
+--------------------------------------------------------------------
+STEP 2 – Pre‑compute Filter Integrals
+--------------------------------------------------------------------
+For each filter j = 1 … M:
+    2.1   f0[j] ← ∫ μ(λ) · R_j(λ) dλ                // flux of mean spectrum
+    2.2   For each PC index i = 1 … K:
+              f_i[j] ← ∫ PC_K[:,i] · R_j(λ) dλ   // contribution of PC i
+
+Build matrix J (M × K):
+    J[j,i] = f_i[j]          // Jacobian of flux w.r.t coefficients
+
+Vector a (size M):
+    a[j] = f0[j]             // baseline flux from mean spectrum
+
+--------------------------------------------------------------------
+STEP 3 – Likelihood and Prior
+--------------------------------------------------------------------
+3.1   Convert observed magnitudes to fluxes (if necessary)  
+      m_obs_flux[j] = flux_from_mag(m_obs[j])  
+      σ_flux[j]      = error_from_mag(σ[j])
+
+3.2   Likelihood (Gaussian):
+      L(c) ∝ exp( –½ (m_obs_flux – a – J·c)ᵀ · W · (m_obs_flux – a – J·c) )
+      where W = diag(1 / σ_flux²)
+
+3.3   Prior on coefficients (zero‑mean Gaussian):
+      p(c) ∝ exp( –½ cᵀ · Σ_prior⁻¹ · c )
+      Σ_prior = diag(λ_K)          // variances equal to PC eigenvalues
+
+--------------------------------------------------------------------
+STEP 4 – Posterior (Closed‑Form Gaussian)
+--------------------------------------------------------------------
+4.1   Σ_post⁻¹ = Σ_prior⁻¹ + Jᵀ · W · J
+4.2   Σ_post  = inverse(Σ_post⁻¹)
+
+4.3   μ_post = Σ_post · ( Jᵀ · W · (m_obs_flux – a) )
+
+--------------------------------------------------------------------
+STEP 5 – Reconstruct Spectrum
+--------------------------------------------------------------------
+5.1   S_rec(λ) = μ(λ) + Σ_{i=1}^{K} μ_post[i] · PC_K[:,i]
+
+--------------------------------------------------------------------
+STEP 6 – Uncertainty Propagation (Credible Intervals)
+--------------------------------------------------------------------
+6.1   Draw N_samples (e.g., 1000) coefficient vectors:
+        For s = 1 … N_samples:
+            c_sample[s] ∼ Normal( μ_post, Σ_post )
+            S_sample[s](λ) = μ(λ) + Σ_i c_sample[s][i] · PC_K[:,i]
+
+6.2   For each wavelength λ:
+        Sort { S_sample[1](λ), …, S_sample[N_samples](λ) }
+        CI_low(λ) = percentile( sorted_values, 2.5 )
+        CI_hi(λ) = percentile( sorted_values, 97.5 )
+
+--------------------------------------------------------------------
+RETURN:
+    S_rec(λ), CI_low(λ), CI_hi(λ)

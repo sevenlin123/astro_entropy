@@ -1,0 +1,64 @@
+INPUT:
+    • Photometric catalog for a set of TNOs:  {(TNO_j , {λ_i , m_ij , σ_mij})}
+      where λ_i is filter central wavelength,
+            m_ij is measured apparent magnitude,
+            σ_mij is its uncertainty.
+    • Solar reference magnitudes in each filter: {m_solar_i}
+    • Filter response curves: {R_i(λ)} for every filter λ_i
+    • Training spectral library: {S_train(k,λ)}   (k = 1 … K_lib)
+
+OUTPUT (for each TNO_j):
+    • Posterior mean reflectance spectrum μ_j(λ)
+    • Posterior standard‑deviation spectrum σ_j(λ)
+    • Posterior samples of PCA coefficients {a_j^(s)}
+
+1.1  Center all training spectra:
+       μ_train(λ) = average_k S_train(k,λ)
+       S'_train(k,λ) = S_train(k,λ) – μ_train(λ)
+
+1.2  Perform Principal Component Analysis on {S'_train(k,λ)}:
+       • Compute covariance matrix C = (1/(K_lib–1)) Σ_k S'_train(k,·) ⊗ S'_train(k,·)
+       • Obtain eigenvectors {B_p(λ)} and eigenvalues λ_p
+
+1.3  Select first P principal components (P << K_lib).
+       Store basis B_p(λ)  for p = 1 … P
+
+For each TNO_j:
+    For each filter i:
+        R_obs_j,i   = 10^( -0.4 * ( m_ij – m_solar_i ) )
+        σ_Rj,i      = ln(10)/2.5 * R_obs_j,i * σ_mij     // error propagation
+
+Model spectrum for TNO_j:
+    S_j(λ; a) = μ_train(λ) + Σ_{p=1}^{P} a_p * B_p(λ)
+
+Predicted photometry in filter i:
+    P_j,i(a) = [ ∫ S_j(λ; a) * R_i(λ) dλ ] / [ ∫ R_i(λ) dλ ]
+
+Assume Gaussian measurement errors:
+    L_j(a) = Π_{i}  exp( – ( P_j,i(a) – R_obs_j,i )^2 / (2 σ_Rj,i^2) )
+
+Zero‑mean Gaussian with diagonal covariance:
+    p(a) = Π_{p}  exp( – a_p^2 / (2 τ_p^2) )
+Choose τ_p (e.g., based on variance explained by each PC)
+
+Posterior ∝ L_j(a) * p(a)
+
+For each TNO_j:
+    Initialize sampler at a = 0
+    Use Hamiltonian Monte Carlo (or Metropolis–Hastings) to generate S samples:
+        For s = 1 … N_samples:
+            Propose new a' → evaluate Posterior(a')
+            Accept/reject according to standard MCMC rule
+            Store accepted a^(s)
+
+For each sample s:
+    S_j^(s)(λ) = μ_train(λ) + Σ_p a_p^(s) * B_p(λ)
+
+Compute posterior mean and variance across samples:
+    μ_j(λ) = (1/N_samples) Σ_s S_j^(s)(λ)
+    σ_j^2(λ) = (1/(N_samples–1)) Σ_s ( S_j^(s)(λ) – μ_j(λ) )^2
+
+Return for each TNO_j:
+    – Posterior mean spectrum μ_j(λ)
+    – Posterior std‑dev spectrum σ_j(λ)
+    – Set of sampled coefficients {a_j^(s)}

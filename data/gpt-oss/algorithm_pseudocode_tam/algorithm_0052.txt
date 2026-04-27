@@ -1,0 +1,85 @@
+Inputs
+-------
+  * Spectral library S = { s_i(λ) }   // n_ref reference spectra
+  * Filter set F = { f_j(λ) }           // m filters (e.g. JWST NIRCam)
+  * Desired latent dimension K          // typically 4–10
+
+Outputs
+-------
+  * Reconstructed spectrum Ŝ(λ) for a new object
+  * Taxonomy probability vector P_tax
+  * Posterior uncertainty estimate (optional)
+
+--------------------------------------------------------------------
+1. Pre‑processing ---------------------------------------------------
+   1.1  Normalize each spectrum s_i(λ) to its reflectance spectrum R_i(λ).
+   1.2  Resample all R_i(λ) onto a common wavelength grid λ_common.
+
+--------------------------------------------------------------------
+2. Latent Space Construction ----------------------------------------
+   2.1  Perform Principal Component Analysis (PCA) on {R_i}:
+        - Compute mean spectrum μ_R
+        - Compute eigenvectors V = [v_1, …, v_p] and eigenvalues λ_eig
+        - Keep the first K eigenvectors: V_K
+   2.2  Project each reference spectrum onto V_K:
+        c_i = V_K^T · (R_i – μ_R)      // K‑dimensional coefficient vector
+   2.3  Estimate probability density of {c_i} using Kernel Density Estimation (KDE):
+        - Choose bandwidth h (e.g., 0.5)
+        - Define KDE function p_c(c)  // continuous prior over latent space
+   2.4  Sample M synthetic latent vectors {c*} from p_c(c):
+        For k = 1…M:
+            draw c*_k ~ p_c(c)
+   2.5  Decode each synthetic latent vector back to a spectrum:
+        Ŝ*_k = μ_R + V_K · c*_k        // synthetic reflectance spectra
+
+--------------------------------------------------------------------
+3. Forward Modelling of Synthetic Photometry ------------------------
+   3.1  For each synthetic spectrum Ŝ*_k:
+        For each filter f_j:
+            Compute model flux (or reflectance) m_kj by integrating
+                Ŝ*_k(λ) × f_j(λ) over λ
+   3.2  Add Gaussian noise to each m_kj:
+        σ_m = 0.2 * m_kj   // 20 % relative uncertainty
+        m_kj_noisy = m_kj + N(0, σ_m)
+   3.3  Store training pair:
+        Input X_k = { m_k1_noisy , … , m_km_noisy }
+        Target Y_k = c*_k
+
+--------------------------------------------------------------------
+4. Encoder – Photometry → Latent Coefficients -----------------------
+   4.1  Train an automated regression model (AutoML, e.g. Gradient‑Boosted Trees)
+        using training pairs {(X_k, Y_k)}.
+   4.2  Model outputs a point estimate \hat{c} and optionally a covariance Σ_c
+        to express posterior uncertainty.
+
+--------------------------------------------------------------------
+5. Taxonomy Classifier ---------------------------------------------
+   5.1  Label each reference spectrum with its taxonomic class.
+   5.2  Use the labeled set {(c_i, label_i)} to train a second AutoML
+        classifier in latent space.
+   5.3  For a new observation, the classifier returns probability vector
+        P_tax over all classes.
+
+--------------------------------------------------------------------
+6. Inference for a New Object --------------------------------------
+   Input: measured photometry m_obs = { m_1, …, m_m } with uncertainties σ_m
+
+   6.1  Encoder prediction:
+        \hat{c} = Encoder(m_obs)
+   6.2  (Optional) Draw N_samples latent vectors from a Gaussian centered
+        at \hat{c} with covariance Σ_c to propagate uncertainty.
+   6.3  Decode spectra:
+        For each sampled c_sample:
+            Ŝ_sample = μ_R + V_K · c_sample
+   6.4  Aggregate samples:
+        - Mean spectrum Ŝ_mean(λ) = average of Ŝ_sample
+        - Credible interval per λ (e.g., 2.5th–97.5th percentiles)
+   6.5  Taxonomy probabilities:
+        P_tax = Classifier(\hat{c})
+   6.6  Return:
+        • Ŝ_mean(λ)  // reconstructed spectrum
+        • Credible intervals (optional)
+        • P_tax
+
+--------------------------------------------------------------------
+End Algorithm

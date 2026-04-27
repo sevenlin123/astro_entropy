@@ -1,0 +1,54 @@
+INPUT:
+    - Observed photometry set P = { (f_i, σ_i, λ_eff_i) }  // flux, error, effective wavelength
+    - Bandpass response curves B_k(λ) for each filter k
+    - Solar spectrum S(λ)  // spectral irradiance of the Sun
+    - Spectral template library T = { t_j(λ) }  // reflectance spectra for each taxonomic class j
+    - Prior distributions:
+        * p_albedo(a)          // prior on geometric albedo
+        * p_slope(s)           // prior on spectral slope (if included)
+        * p_type(j)            // prior on taxonomic type (e.g., uniform)
+
+OUTPUT:
+    - Posterior probability distribution over spectral types {p_j}
+    - Reconstructed mean spectrum m(λ) with credible intervals
+    - Optional: goodness‑of‑fit diagnostics
+
+BEGIN
+
+1. Pre‑processing
+   1.1 For each filter k, compute effective photon‑weighted transmission T_k(λ) = B_k(λ)*S(λ).
+   1.2 For each template t_j(λ), resample onto common wavelength grid {λ_l}.
+
+2. Synthetic Photometry for Templates
+   FOR each template j IN T DO
+       2.1 Compute reflected flux spectrum R_j(λ) = a * t_j(λ) / π   // a is albedo
+       2.2 Convolve R_j(λ) with each filter transmission:
+           F_jk = ∫ R_j(λ) * T_k(λ) dλ / ∫ T_k(λ) dλ
+       2.3 Store synthetic flux vector F_j = {F_jk} for all filters k.
+
+3. Likelihood Evaluation
+   DEFINE likelihood function L(F_j, P):
+       L = Π_k  Gaussian(f_k | F_jk, σ_k)          // product over filters
+   // Optionally include a slope modifier s if templates allow:
+   IF slope parameter s is used THEN
+       modify F_jk by multiplying by (1 + s * (λ_k - λ_ref))
+
+4. Bayesian Inference
+   4.1 Define posterior for each template j:
+           p_j(a, s) ∝ L(F_j, P) * p_albedo(a) * p_slope(s) * p_type(j)
+   4.2 Marginalize over nuisance parameters a, s:
+           p_j ∝ ∫∫ L(F_j, P) * p_albedo(a) * p_slope(s) da ds
+       (Use analytic integration if possible; otherwise use numerical quadrature or MCMC sampling.)
+
+5. Model Averaging
+   5.1 Compute weighted mean spectrum:
+           m(λ) = Σ_j p_j * t_j(λ)
+   5.2 Compute variance spectrum:
+           v(λ) = Σ_j p_j * [t_j(λ) - m(λ)]^2
+
+6. Output
+   6.1 Return posterior probabilities {p_j}.
+   6.2 Return reconstructed spectrum m(λ) with uncertainty bounds √v(λ).
+   6.3 Return log‑likelihood values and any diagnostic statistics.
+
+END

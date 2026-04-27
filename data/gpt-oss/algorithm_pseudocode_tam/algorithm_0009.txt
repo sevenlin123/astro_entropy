@@ -1,0 +1,70 @@
+text
+Inputs:
+    - SpecTrain[N][M]      // N reference spectra, M wavelength bins
+    - Filters[L]           // L photometric filter transmission curves
+    - PhotObs[K]           // K observed photometric measurements for a new object
+    - UncPhotObs[K]        // corresponding measurement uncertainties
+
+Output:
+    - SpecRecon[M]         // reconstructed high‑resolution spectrum
+    - ClassProb[4]         // probability vector over 4 taxonomic classes
+
+--------------------------------------------------------------------
+1.  // ---------- 1. Build Latent Space (Prior) ----------
+2.  // 1.1 Center spectra and perform PCA
+3.  MeanSpec = mean(SpecTrain, axis=0)                // vector of length M
+4.  SpecZeroMean = SpecTrain – MeanSpec              // subtract mean
+5.  CovMat       = cov(SpecZeroMean)                 // M × M matrix
+6.  [EigVec, EigVal] = eig(CovMat)                    // eigenvectors, eigenvalues
+7.  // 1.2 Choose number of components K (e.g., 8–10)
+8.  PCBasis  = EigVec[:, 0:K]                         // M × K matrix
+9.  // 1.3 Project training spectra onto PCs
+10. PCCoeff = SpecZeroMean @ PCBasis                  // N × K matrix of latent coeffs
+11. // 1.4 Estimate continuous latent density with KDE
+12. KDEmodel = KDE(kernel='gaussian', bandwidth=0.5)  // fit to PCCoeff
+13. // 1.5 Generate synthetic latent samples
+14. NumSynth = 5000                                    // e.g., 5 k samples
+15. LatSynth = KDEmodel.sample(NumSynth)               // NumSynth × K
+16. // 1.6 Recover synthetic spectra via inverse PCA
+17. SpecSynth = LatSynth @ PCBasis.T + MeanSpec         // NumSynth × M
+
+--------------------------------------------------------------------
+2.  // ---------- 2. Simulate Photometry (Likelihood) ----------
+18. For i = 1 … NumSynth:
+19.     For j = 1 … L:
+20.         // Convolve spectrum with filter throughput
+21.         Flux[j] = integrate( SpecSynth[i,:] * Filters[j] ) / integrate( Filters[j] )
+22.     EndFor
+23.     // Add Gaussian noise (e.g., 20 % relative uncertainty)
+24.     NoiseScale = 0.2
+25.     FluxNoisy  = Flux * (1 + NoiseScale * randn(L))
+26.     Store (FluxNoisy, LatSynth[i,:])   // training pair
+27. EndFor
+28. // Assemble training set
+29. Xtrain = matrix of noisy photometry (NumSynth × L)
+30. Ytrain = matrix of latent coeffs (NumSynth × K)
+
+--------------------------------------------------------------------
+3.  // ---------- 3. Train Encoder (AutoML Regressor) ----------
+31. Encoder = AutoML_Regression(Xtrain, Ytrain)
+32. // AutoML internally builds an ensemble (e.g., GBDT + NN) and returns
+33. // a prediction function f_enc(Photometry) → latent coeff vector
+
+--------------------------------------------------------------------
+4.  // ---------- 4. Train Classifier in Latent Space ----------
+34. // Project the original reference spectra onto PCs
+35. PCLabel = label vector of length N (taxonomic class IDs)
+36. Classifier = AutoML_Classification(PCCoeff, PCLabel)
+37. // Returns a function g_latent(latent_coeff) → class probability vector
+
+--------------------------------------------------------------------
+5.  // ---------- 5. Inference for New Observation ----------
+38. // 5.1 Predict latent coefficients
+39. LatPred = Encoder( PhotObs )            // returns mean vector of length K
+40. // (Optionally, retrieve covariance or sample multiple draws)
+41. // 5.2 Reconstruct high‑resolution spectrum
+42. SpecRecon = LatPred @ PCBasis.T + MeanSpec   // vector of length M
+43. // 5.3 Classify
+44. ClassProb = Classifier( LatPred )          // vector of length 4
+
+45. Return SpecRecon, ClassProb

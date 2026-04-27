@@ -1,0 +1,106 @@
+Inputs
+-------
+- S_REF : array of N_ref high‑resolution TNO spectra (wavelength λ_i, i = 1…M)
+- T_FILTERS : list of K filter transmission curves {T_k(λ)}
+- P_TAXON : taxonomy labels for each spectrum in S_REF   (optional)
+
+Outputs
+-------
+- Reconstructed spectrum Ŝ(λ) for a new object
+- Taxonomy posterior probabilities {P_taxon}
+
+--------------------------------------------------------------------
+1. PRE‑PROCESSING
+--------------------------------------------------------------------
+1.1 Normalize spectra
+    For each spectrum s in S_REF:
+        s_norm ← s / mean(s)              # remove overall albedo scaling
+
+1.2 Compute mean spectrum μ = mean(S_REF)
+
+1.3 Center spectra
+    For each spectrum s in S_REF:
+        s_centered ← s_norm – μ
+
+--------------------------------------------------------------------
+2. LATENT SPACE (Prior) Construction
+--------------------------------------------------------------------
+2.1 Perform Principal Component Analysis (PCA)
+    [U, Σ, V] ← SVD of matrix [s_centered]      # U: eigenvectors, V: eigenvalues
+    Select first K_PC (≈ 5–10) components that capture ≥90 % variance
+    PC_basis ← rows 1…K_PC of U                  # K_PC × M matrix
+
+2.2 Project reference spectra onto latent space
+    For each s_centered:
+        c ← PC_basis · s_centered^T             # latent coefficient vector (K_PC × 1)
+
+2.3 Estimate continuous latent density via Kernel Density Estimation (KDE)
+    KDE_model ← FitGaussianKDE({c_i})           # bandwidth h ≈ 0.5
+
+2.4 Generate synthetic latent samples
+    N_SYNTH ← large number (e.g., 10 000)
+    {c_syn} ← SampleFrom(KDE_model, N_SYNTH)    # K_PC × N_SYNTH array
+
+--------------------------------------------------------------------
+3. GENERATE SYNTHETIC TRAINING SET
+--------------------------------------------------------------------
+3.1 Decode synthetic latent samples to spectra
+    For each c_syn:
+        s_syn ← PC_basis^T · c_syn + μ          # inverse PCA + mean
+        Store s_syn
+
+3.2 Forward‑model photometry for synthetic spectra
+    For each s_syn:
+        For each filter k in T_FILTERS:
+            R_k ← ∫ s_syn(λ) · T_k(λ) dλ / ∫ T_k(λ) dλ   # reflectance in filter k
+        Add Gaussian noise to R_k:
+            σ_R_k ← 0.20 * R_k                          # 20 % relative error
+            R_k_noisy ← R_k + Normal(0, σ_R_k)
+        Store photometry vector p_syn = [R_1_noisy,…,R_K]
+
+3.3 Assemble training data
+    X_train ← {p_syn}_1…N_SYNTH                # K-dimensional photometry
+    Y_latent ← {c_syn}_1…N_SYNTH                # K_PC‑dimensional latent target
+    Y_taxon ← (optional) taxonomy label for each synthetic spectrum
+              (copy label of nearest reference spectrum in latent space)
+
+--------------------------------------------------------------------
+4. TRAIN ENCODER (Photometry → Latent)
+--------------------------------------------------------------------
+4.1 Choose AutoML framework (e.g., AutoGluon)
+4.2 Train regressor:
+    EncoderModel ← AutoMLRegressor.fit(X_train, Y_latent)
+
+--------------------------------------------------------------------
+5. TRAIN CLASSIFIER (Latent → Taxonomy)
+--------------------------------------------------------------------
+5.1 Prepare training labels
+    If Y_taxon available:
+        X_cls ← Y_latent
+        y_cls ← Y_taxon
+    Else:
+        X_cls ← Y_latent
+        y_cls ← taxonomy labels of reference spectra projected onto latent space
+5.2 Train classifier:
+    TaxonomyModel ← AutoMLClassifier.fit(X_cls, y_cls)
+
+--------------------------------------------------------------------
+6. INFERENCE (Forward Prediction)
+--------------------------------------------------------------------
+Input: New photometric observation p_new = [R_1_obs,…,R_K_obs]
+Step 1: Predict latent coefficients
+    c_pred ← EncoderModel.predict(p_new)          # vector of size K_PC
+Step 2: Reconstruct high‑resolution spectrum
+    Ŝ ← PC_basis^T · c_pred + μ                   # M‑point spectrum
+Step 3: Taxonomy probabilities
+    P_taxon ← TaxonomyModel.predict_proba(c_pred)
+
+Output: Ŝ(λ), P_taxon
+--------------------------------------------------------------------
+7. POSTERIOR SAMPLING (Optional for Uncertainty Quantification)
+--------------------------------------------------------------------
+For n = 1 … N_SAMPLES:
+    c_sample ← EncoderModel.predict_with_uncertainty(p_new)
+    Ŝ_n ← PC_basis^T · c_sample + μ
+Collect {Ŝ_n} to form posterior distribution over spectra.
+--------------------------------------------------------------------

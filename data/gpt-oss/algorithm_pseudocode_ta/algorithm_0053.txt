@@ -1,0 +1,24 @@
+μ(λ) = mean(X, axis=0)                     # shape (N_wave,)
+
+Xc = X – μ(λ)                               # shape (N_spec, N_wave)
+
+U, S, Vt = svd(Xc, full_matrices=False)    # Vt shape (N_spec, N_spec)
+
+PCs = Vt[:K].T                              # shape (N_wave, K)
+
+μ_f[i] = ∫ R_f(λ) · μ(λ) dλ                # scalar
+
+A[i,j] = ∫ R_f(λ) · PCs[:,j] dλ            # scalar
+
+y = flux_t                                 # shape (N_filter,)
+
+Σ_y = diag(err_t^2)                        # shape (N_filter, N_filter)
+
+Λ = A.T @ inv(Σ_y) @ A + (1/σ_prior^2) * I_K
+      Σ_post = inv(Λ)                            # shape (K, K)
+      μ_post = Σ_post @ (A.T @ inv(Σ_y) @ (y - μ_f))
+
+ŝ(λ) = μ(λ) + PCs @ μ_post                 # shape (N_wave,)
+
+Cov_s(λ,λ') = PCs @ Σ_post @ PCs.T           # shape (N_wave, N_wave)
+      σ_s(λ) = sqrt(diag(Cov_s))                  # 1‑σ uncertainty per λ

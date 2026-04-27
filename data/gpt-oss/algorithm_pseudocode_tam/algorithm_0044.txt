@@ -1,0 +1,85 @@
+INPUT
+    S_ref   : matrix of N_ref spectra (each row = spectrum at L wavelengths)
+    K       : number of principal components to retain (e.g. 5–10)
+    N_aug   : number of synthetic latent samples to generate (e.g. 5000)
+    h_kde   : bandwidth for kernel density estimation (e.g. 0.5)
+    Filters : list of M filter transmission curves
+    σ_rel   : relative reflectance noise level for synthetic photometry (e.g. 0.20)
+    Labels  : optional taxonomic labels for each reference spectrum
+
+OUTPUT
+    regressor  : trained photometry → latent coefficient model
+    classifier : trained latent coefficient → taxonomy model (optional)
+    pca_mean   : mean spectrum used in PCA
+    pc_basis   : matrix of K eigenvectors
+
+function [pc_basis, pca_mean] = compute_PCA(S_ref, K):
+    pca_mean ← mean(S_ref, axis=rows)
+    S_centered ← S_ref – pca_mean
+    U, Σ, Vt ← svd(S_centered, full_matrices=False)
+    pc_basis ← first K columns of Vt  // K × L matrix
+    return pc_basis, pca_mean
+
+function coeff_ref = project_to_latent(S_ref, pc_basis, pca_mean):
+    S_centered ← S_ref – pca_mean
+    coeff_ref ← S_centered * pc_basis.T           // N_ref × K
+    return coeff_ref
+
+function kde_model = build_KDE(coeff_ref, h_kde):
+    kde_model ← KDE(coeff_ref, bandwidth=h_kde)    // non‑parametric
+    return kde_model
+
+function coeff_syn = sample_latent(kde_model, N_aug):
+    coeff_syn ← random_draw(kde_model, N_aug)      // N_aug × K
+    return coeff_syn
+
+function S_syn = reconstruct_spectrum(coeff_syn, pc_basis, pca_mean):
+    S_syn ← coeff_syn * pc_basis + pca_mean        // N_aug × L
+    return S_syn
+
+function phot_syn = compute_photometry(S_syn, Filters, σ_rel):
+    M ← number of filters
+    phot_syn ← zeros(N_aug, M)
+    for i in 1…M:
+        transmission ← Filters[i]                     // function of wavelength
+        flux_raw ← sum(S_syn * transmission) / sum(transmission)
+        noise_std ← σ_rel * flux_raw                  // 20 % relative noise
+        flux_noisy ← flux_raw + normal(0, noise_std)
+        phot_syn[:,i] ← flux_noisy
+    return phot_syn
+
+X_train ← phot_syn                 // N_aug × M
+y_train ← coeff_syn                // N_aug × K
+if Labels available:
+    y_taxonomy ← Labels for coeff_ref   // N_ref taxonomy labels
+
+regressor ← AutoML_Train(X_train, y_train)      // e.g. Gradient‑Boosted Trees
+
+classifier ← AutoML_Train(coeff_ref, y_taxonomy) // latent → taxonomy
+
+function reconstruct_from_photometry(phot_new):
+    // phot_new : 1 × M array of observed photometry
+    coeff_pred ← regressor.predict(phot_new)          // 1 × K
+    spectrum_rec ← coeff_pred * pc_basis + pca_mean   // 1 × L
+    if classifier exists:
+        taxonomy_probs ← classifier.predict_proba(coeff_pred)
+        taxonomy_label ← argmax(taxonomy_probs)
+    return spectrum_rec, taxonomy_label, taxonomy_probs
+
+# Pre‑processing
+pc_basis, pca_mean ← compute_PCA(S_ref, K)
+coeff_ref ← project_to_latent(S_ref, pc_basis, pca_mean)
+kde_model ← build_KDE(coeff_ref, h_kde)
+
+# Augmentation
+coeff_syn ← sample_latent(kde_model, N_aug)
+S_syn ← reconstruct_spectrum(coeff_syn, pc_basis, pca_mean)
+phot_syn ← compute_photometry(S_syn, Filters, σ_rel)
+
+# Training
+regressor ← AutoML_Train(phot_syn, coeff_syn)
+if taxonomy data:
+    classifier ← AutoML_Train(coeff_ref, Labels)
+
+# Inference
+spectrum, tax_label, tax_prob ← reconstruct_from_photometry(phot_observed)

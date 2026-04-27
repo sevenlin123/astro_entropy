@@ -1,0 +1,82 @@
+S_train[1…Ns][1…Nλ]          # Training spectra (flux vs. wavelength)
+F_filters[1…Nf]              # Filter transmission curves (function of λ)
+phot_obs[1…Nf]               # Observed photometry (flux or magnitude)
+phot_err[1…Nf]               # Measurement uncertainties
+K                            # Number of principal‑components to retain (e.g., 8–10)
+N_iter                       # Number of MCMC iterations
+
+c_samples[1…N_iter][1…K]     # Posterior samples of latent coefficients
+spec_recon[1…N_iter][1…Nλ]   # Reconstructed spectra for each sample
+spec_mean[1…Nλ]              # Posterior‑mean spectrum
+spec_CI_low[1…Nλ], spec_CI_high[1…Nλ]   # Credible‑interval bounds (e.g., 95%)
+
+pseudocode
+# 1.1 Center training data
+mu_s      ← mean over i of S_train[i,:]                # 1×Nλ vector
+S_center  ← S_train – mu_s                             # Ns × Nλ matrix
+
+# 1.2 Compute covariance and eigen‑decomposition
+C_cov     ← (S_center^T · S_center) / (Ns – 1)        # Nλ × Nλ
+eig_vals, eig_vecs ← eig(C_cov)                       # eig_vecs: columns are PCs
+
+# 1.3 Sort eigenpairs by descending eigenvalue
+sort(eig_vals, eig_vecs, order="desc")
+
+# 1.4 Select first K PCs
+U_K       ← eig_vecs[:, 1…K]                           # Nλ × K matrix
+lambda_K  ← eig_vals[1…K]                               # K‑vector
+
+# 1.5 Project training spectra onto PCs
+C_train   ← S_center · U_K                              # Ns × K matrix
+prior_cov ← cov(C_train)                                # K × K matrix (diagonal if desired)
+
+pseudocode
+for j = 1 … Nf:
+    # Convolve mean spectrum and each PC with filter j
+    mu_conv[j]        ← integrate_over_lambda( mu_s * F_filters[j] )
+    for k = 1 … K:
+        PC_conv[j,k]  ← integrate_over_lambda( U_K[:,k] * F_filters[j] )
+
+pseudocode
+pred_flux[j] = mu_conv[j] + Σ_{k=1}^{K} PC_conv[j,k] * c[k]
+
+pseudocode
+# 4.1 Initialize
+c_current   ← zeros(K)                     # or draw from prior
+log_post_current ← log_likelihood(c_current) + log_prior(c_current)
+
+# 4.2 Pre‑compute constants for speed
+inv_prior_cov ← inverse(prior_cov)
+
+for it = 1 … N_iter:
+
+    # 4.3 Propose new c
+    proposal_cov ← scaling_factor * prior_cov   # e.g., 0.1 * prior_cov
+    c_proposal ← c_current + multivariate_normal_draw(0, proposal_cov)
+
+    # 4.4 Evaluate log‑posterior
+    log_likelihood_proposal ← -0.5 * Σ_{j=1}^{Nf}
+                                 ( (phot_obs[j] - pred_flux_j(c_proposal))^2 / phot_err[j]^2 )
+    log_prior_proposal      ← -0.5 * c_proposal^T · inv_prior_cov · c_proposal
+    log_post_proposal       ← log_likelihood_proposal + log_prior_proposal
+
+    # 4.5 Acceptance probability
+    accept_prob ← min(1, exp(log_post_proposal - log_post_current))
+
+    # 4.6 Accept or reject
+    if uniform(0,1) < accept_prob:
+        c_current         ← c_proposal
+        log_post_current  ← log_post_proposal
+
+    # 4.7 Store sample
+    c_samples[it,:] ← c_current
+
+pseudocode
+for it = 1 … N_iter:
+    c ← c_samples[it,:]
+    spec_recon[it,:] ← mu_s + U_K · c            # Nspectra × Nλ matrix
+
+pseudocode
+spec_mean[λ]   ← mean over it of spec_recon[it,λ]
+spec_CI_low[λ] ← percentile(spec_recon[:,λ], 2.5)    # e.g., 95 % CI lower bound
+spec_CI_high[λ]← percentile(spec_recon[:,λ], 97.5)   # upper bound

@@ -1,0 +1,67 @@
+text
+INPUT:
+    - P = {p_1, p_2, …, p_N}   # N TNOs
+    - For each TNO p_k:
+        * m_k[i]      # i‑th observed magnitude (i = 1…M_k)
+        * λ_k[i]      # central wavelength of filter used for m_k[i]
+        * σ_k[i]      # measurement uncertainty of m_k[i]
+
+    - K                         # Number of latent spectral components (basis spectra)
+    - B[ℓ][λ]  (ℓ = 1…K)       # Pre‑defined spectral templates over wavelength grid
+    - Prior parameters for component weights and noise
+
+OUTPUT:
+    - Posterior samples of component weight vector w_k[ℓ] for each TNO
+    - Reconstructed spectrum S_k(λ) for each TNO
+    - Model evidence (optional)
+
+ALGORITHM:
+
+1. **Pre‑processing**
+   1.1. Build common wavelength grid Λ = {λ_1, …, λ_L}.
+   1.2. For every TNO k:
+          - Interpolate each template B[ℓ] onto Λ if needed.
+          - Convert magnitudes m_k[i] → fluxes F_k[i] using zero‑point calibration.
+          - Compute synthetic fluxes for each template:
+                B_k[ℓ][i] = ∫ B[ℓ](λ) * R_i(λ) dλ
+              where R_i(λ) is the transmission curve of filter i.
+          - Store design matrix A_k[i, ℓ] = B_k[ℓ][i].
+
+2. **Probabilistic Model Definition**
+   2.1. Assume linear mixture model:
+        F_k[i] ≈ Σ_{ℓ=1..K} w_k[ℓ] * A_k[i, ℓ] + ε_k[i]
+        with ε_k[i] ~ Normal(0, σ_k[i]^2).
+   2.2. Place Dirichlet prior on weights:
+        w_k ~ Dirichlet(α),  α > 0.
+   2.3. Optional: place Gaussian prior on additive noise variance.
+
+3. **Posterior Inference (via Gibbs / Metropolis‑Hastings)**
+   For each iteration t = 1 … T:
+        For each TNO k:
+            a. **Sample weights w_k given current noise variance**  
+               - Compute conditional posterior:
+                    p(w_k | F_k, A_k, σ^2) ∝
+                      Π_i N(F_k[i] | Σ_ℓ w_k[ℓ] A_k[i,ℓ], σ_k[i]^2) *
+                      Dirichlet(w_k | α)
+               - Draw w_k^{(t)} from this distribution (e.g., using
+                 constrained Metropolis–Hastings or slice sampler).
+
+            b. **Sample noise variance σ^2 (global or per‑TNO)**
+               - If global: update σ^2 by drawing from its inverse‑gamma
+                 conditional posterior using all residuals.
+               - If per‑TNO: update σ_k^2 similarly using residuals of TNO k.
+
+   3.1. Store samples after burn‑in and thinning.
+
+4. **Spectral Reconstruction**
+   4.1. For each TNO k:
+         - Compute posterior mean of weights:
+             μ_wk[ℓ] = mean_t w_k^{(t)}[ℓ].
+         - Reconstruct spectrum:
+             S_k(λ) = Σ_{ℓ=1..K} μ_wk[ℓ] * B[ℓ](λ).
+
+5. **Optional Model Evaluation**
+   5.1. Compute log‑likelihood of data under posterior predictive distribution.
+   5.2. Compare models with different K using marginal likelihood approximations.
+
+END

@@ -1,0 +1,73 @@
+INPUT:
+    - Photometry data for one TNO:
+        * magnitudes m_k with uncertainties σ_k for filters k = 1…K
+    - Filter transmission functions T_k(λ) for each filter
+    - Reference solar spectrum S(λ)
+    - Library of N class template reflectance spectra R_j(λ), j = 1…N
+    - Hyper‑parameters:
+        * Number of MCMC iterations I
+        * Burn‑in fraction b
+
+OUTPUT:
+    - Posterior samples of class weight vector w = [w_1 … w_N]
+    - Posterior predictive spectrum R_pred(λ)
+    - Class membership probabilities P(class=j | data)
+    - Outlier flag (χ² > χ²_thr?)
+
+STEP 0 – Preprocessing
+    1. Convert magnitudes to reflectances:
+         r_k = 10^(-0.4*(m_k - m_sun,k))
+         where m_sun,k = -2.5*log10(∫S(λ)*T_k(λ)dλ / ∫T_k(λ)dλ)
+    2. Propagate uncertainties:
+         σ_rk = (ln 10 / 2.5) * r_k * σ_k
+
+STEP 1 – Define Spectral Model
+    3. For any weight vector w, construct composite spectrum:
+         R_w(λ) = Σ_{j=1}^{N} w_j * R_j(λ)
+       Constraint: w_j ≥ 0, Σ w_j = 1
+    4. Predict flux in filter k:
+         F_pred,k = ∫ R_w(λ)*T_k(λ)dλ / ∫ T_k(λ)dλ
+    5. Predicted reflectance in filter k:
+         r_pred,k = F_pred,k / (solar_reflectance_in_filter)
+    6. Convert to magnitude:
+         m_pred,k = -2.5*log10(r_pred,k)
+
+STEP 2 – Likelihood
+    7. Assume Gaussian errors in reflectances:
+         L(w) = Π_{k=1}^{K} exp[-(r_k - r_pred,k)^2 / (2*σ_rk^2)]
+
+STEP 3 – Prior
+    8. Dirichlet prior on weights:
+         p(w) = Dirichlet(α_1,…,α_N)   (default α_j = 1)
+
+STEP 4 – Posterior Sampling (Metropolis–Hastings)
+    9. Initialize w^(0) = uniform vector
+    10. For iter = 1 to I:
+          a. Propose w' by Dirichlet proposal centered at current w
+          b. Compute acceptance ratio:
+               a = min(1, [L(w')p(w')] / [L(w^(iter-1))p(w^(iter-1))])
+          c. Draw u ~ Uniform(0,1)
+             If u < a:
+                 w^(iter) = w'
+             Else:
+                 w^(iter) = w^(iter-1)
+    11. Discard first floor(b*I) samples as burn‑in
+    12. Store remaining samples {w^(i)}
+
+STEP 5 – Posterior Summaries
+    13. For each retained sample, compute composite spectrum R_w(λ)
+    14. Posterior mean spectrum:
+         R_mean(λ) = average over samples
+    15. Posterior standard deviation per λ: std_w(λ)
+    16. Class membership probability:
+         P(class=j) = fraction of samples with w_j > threshold (e.g., 0.5)
+    17. Goodness‑of‑fit:
+         χ² = Σ_{k=1}^{K} [(r_k - r_pred,k)^2 / σ_rk^2]  (using posterior mean R_mean)
+    18. Outlier flag:
+         outlier = (χ² > χ²_thr)
+
+RETURN:
+    - Posterior samples {w^(i)}
+    - R_mean(λ) ± std_w(λ)
+    - Class probabilities P(class=j)
+    - Outlier flag

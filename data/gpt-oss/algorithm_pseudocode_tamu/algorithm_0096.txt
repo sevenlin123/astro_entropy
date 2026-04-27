@@ -1,0 +1,110 @@
+INPUT
+    – Reference spectra S_ref[1..N]   (wavelength λ, reflectance R)
+    – Filter throughputs T_filt[j]    (wavelength λ, transmission τ_j(λ))
+    – Desired number of PCA components K
+    – KDE bandwidth h
+    – Number of synthetic latent draws M
+    – Encoder training data size L   (≤ M)
+    – Number of posterior samples P  (e.g., 1000)
+
+OUTPUT
+    – Trained encoder model E
+    – Trained taxonomy classifier C
+    – PCA mean μ_s and eigen‑basis V_k (k = 1..K)
+
+--------------------------------------------------------------------
+1. PRE‑PROCESS AND PCA
+--------------------------------------------------------------------
+1.1  For each reference spectrum s_i:
+        * Normalize or continuum‑subtract if desired.
+        * Store vector r_i[ℓ] = R_i(λ_ℓ)  (ℓ = 1..L_wav)
+
+1.2  Stack all r_i into matrix R (N × L_wav).
+
+1.3  Compute mean spectrum μ_s = mean(R, axis=0).
+
+1.4  Center spectra: R_centered = R – μ_s.
+
+1.5  Perform singular‑value decomposition:
+        U, Σ, Vt = svd(R_centered, full_matrices=False)
+        Eigenvectors V = Vt.T[:, :K]          // first K PCs
+        Singular values σ_k = Σ[:K]
+
+1.6  Project each centered spectrum onto PCs:
+        a_i[k] = (R_centered[i,:] · V[:,k])   // latent coefficients
+        Store a_i ∈ ℝ^K
+
+--------------------------------------------------------------------
+2. LATENT SPACE AUGMENTATION (KDE)
+--------------------------------------------------------------------
+2.1  Fit Gaussian KDE to the set {a_i} with bandwidth h.
+
+2.2  Sample M latent vectors {z_j} from KDE.
+
+--------------------------------------------------------------------
+3. SYNTHETIC SPECTRA AND PHOTOMETRY
+--------------------------------------------------------------------
+3.1  For each sampled latent vector z_j:
+        * Reconstruct spectrum:
+              s_j = μ_s + Σ_{k=1..K} z_j[k] * V[:,k]
+        * Convolve with each filter:
+              p_j[j] = ∫ s_j(λ) * τ_j(λ) dλ   (numerical integration)
+        * Add Gaussian noise:
+              p_j_noisy[j] = p_j[j] * (1 + ε_j)
+              ε_j ~ Normal(0, 0.20)          // 20 % relative uncertainty
+
+3.2  Store training pairs:
+        X_train = {p_j_noisy[j]}      // photometry (dim = N_filt)
+        Y_train = {z_j}               // latent coefficients
+
+--------------------------------------------------------------------
+4. ENCODER TRAINING
+--------------------------------------------------------------------
+4.1  Split X_train, Y_train into training subset (size L) and optional
+     validation subset.
+
+4.2  Train a probabilistic regressor E (e.g., AutoGluon XGBoost):
+        E learns mapping  p → μ_z , σ_z
+        (predicts mean and uncertainty for each latent dimension).
+
+--------------------------------------------------------------------
+5. TAXONOMY CLASSIFIER
+--------------------------------------------------------------------
+5.1  Label each reference spectrum with taxonomic class (H₂O, CO₂,
+     Org, Met).
+
+5.2  Train a classifier C on {a_i} and labels.
+
+--------------------------------------------------------------------
+6. INFERENCE ON NEW OBJECT
+--------------------------------------------------------------------
+Input: observed photometry m_obs[1..N_filt] with uncertainties u_obs.
+
+6.1  Encoder prediction:
+        μ_pred, σ_pred = E(m_obs)
+        // μ_pred, σ_pred ∈ ℝ^K
+
+6.2  Build joint posterior over latent coefficients:
+        For each dimension k:
+            draw z_k ~ Normal(μ_pred[k], σ_pred[k])
+        // Optionally combine draws using Gaussian copula to preserve
+        // learned correlations (requires estimated correlation matrix
+        // from training residuals).
+
+6.3  For i = 1..P:
+        * Sample latent vector z_i from posterior.
+        * Decode spectrum:
+              s_i = μ_s + Σ_{k=1..K} z_i[k] * V[:,k]
+        * Store s_i.
+
+6.4  Posterior spectrum statistics:
+        s_mean(λ) = mean_{i}(s_i[λ])
+        s_lower(λ), s_upper(λ) = 2.5th and 97.5th percentiles of {s_i[λ]}
+
+6.5  Taxonomy probabilities:
+        probs = C.predict_proba(μ_pred)   // or average over samples
+
+RETURN
+    – Mean reconstructed spectrum s_mean
+    – Credible interval [s_lower, s_upper] per wavelength
+    – Taxonomy probability vector probs

@@ -1,0 +1,100 @@
+INPUT:
+    S_ref[1..N]           # Reference spectra (wavelength × flux) of N TNOs
+    F[1..M]               # Throughput curves of M photometric filters
+    K                     # Number of retained principal components
+    h                     # KDE bandwidth
+    L_aug                 # Number of synthetic latent samples to generate
+    σ_rel = 0.20          # Relative photometric noise (20%)
+
+OUTPUT:
+    For any new photometry m[1..M]:
+        – Posterior samples of full spectrum S[λ]
+        – Credible‑interval envelope of S[λ]
+        – Taxonomy probability vector P_taxon
+
+--------------------------------------------------------------------
+1.  PRE‑PROCESS REFERENCE SPECTRA
+    1.1   Normalize each S_ref[i] to reflectance (divide by solar spectrum)
+    1.2   Interpolate all spectra onto a common wavelength grid λ[1..L]
+
+--------------------------------------------------------------------
+2.  PRINCIPAL COMPONENT ANALYSIS (Latent Space Definition)
+    2.1   Assemble data matrix X of shape (N, L)  ← rows = spectra
+    2.2   Mean‑center X:  X̄ = X – mean(X, axis=0)
+    2.3   Perform SVD / eigendecomposition on covariance(X̄)
+            → eigenvectors V[1..L] , eigenvalues Λ
+    2.4   Retain first K eigenvectors → V_K  (basis matrix L×K)
+    2.5   Project each spectrum onto basis:
+            coeff[i] = X̄[i,:] · V_K      (size K)
+    2.6   Store coefficient matrix C of size (N, K)
+
+--------------------------------------------------------------------
+3.  LATENT SPACE DENSITY ESTIMATION (KDE Augmentation)
+    3.1   Fit multivariate Gaussian KDE to {coeff[i]} with bandwidth h
+            → PDF_KDE(c)
+    3.2   Generate L_aug latent vectors:
+            C_aug[j]  ~ PDF_KDE(c)   for j = 1 .. L_aug
+
+--------------------------------------------------------------------
+4.  SYNTHETIC SPECTRA AND PHOTOMETRY (Forward Modelling)
+    FOR j = 1 .. L_aug
+        4.1   Reconstruct high‑resolution spectrum:
+                S_aug[j] = mean(X, axis=0) + V_K · C_aug[j]^T
+        4.2   Convolve S_aug[j] with each filter F[m]:
+                p_true[j,m] = ∫ S_aug[j](λ) * F[m](λ) dλ
+        4.3   Add Gaussian noise to each band:
+                p_noisy[j,m] = p_true[j,m] * (1 + N(0, σ_rel))
+    END FOR
+    // Training data:
+        X_train = {p_noisy[j,:]}       # M‑dim photometry
+        Y_train = {C_aug[j,:]}         # K‑dim latent coefficients
+
+--------------------------------------------------------------------
+5.  TRAIN REGRESSOR (Encoder)
+    5.1   Choose AutoML regressor (e.g., ensemble of GBDT + NN)
+    5.2   Fit regressor R:  X_train  →  Y_train
+    5.3   Store trained model R
+
+--------------------------------------------------------------------
+6.  TRAIN CLASSIFIER (Latent‑Space Taxonomy)
+    6.1   Label each coefficient vector C[i] with known taxonomy
+    6.2   Fit AutoML classifier T:  C[i] → taxonomy label
+    6.3   Store trained classifier T
+
+--------------------------------------------------------------------
+7.  INFERENCE (Forward Phase)
+    INPUT: observed photometry m[1..M]  (with measurement errors if available)
+
+    7.1   Predict latent mean and covariance:
+            μ_pred, Σ_pred = R.predict_with_uncertainty(m)
+            // If R outputs point estimate only,
+            // approximate Σ_pred by empirical variance over bootstrap samples
+
+    7.2   SAMPLE FROM POSTERIOR IN LATENT SPACE
+            // Use Gaussian Copula to preserve dependencies
+            FOR s = 1 .. S_samples
+                c_s ~ MVN(μ_pred, Σ_pred)  // draw K‑dim vector
+            END FOR
+
+    7.3   DECODING TO FULL SPECTRA
+            FOR each sample c_s
+                S_s = mean(X, axis=0) + V_K · c_s^T
+                Store S_s
+            END FOR
+
+    7.4   BUILD CREDIBLE INTERVALS
+            For each wavelength λ_k
+                Collect {S_s[λ_k]} over all samples
+                Compute desired percentiles (e.g., 2.5th, 97.5th) → CI[λ_k]
+
+    7.5   TAXONOMY PROBABILITIES
+            // Option A: Use classifier on point estimate μ_pred
+            p_tax = T.predict_proba(μ_pred)
+            // Option B: Average classifier outputs over samples
+            p_tax_avg = mean_over_s (T.predict_proba(c_s))
+
+--------------------------------------------------------------------
+8.  RETURN
+    – Posterior samples {S_s[λ]}
+    – Credible‑interval envelope CI[λ]
+    – Taxonomy probability vector p_tax (or p_tax_avg)

@@ -1,0 +1,91 @@
+INPUT
+    SpectraRef[1..N]      // 1‑D reflectance arrays of reference TNO spectra
+    Filters[]             // list of photometric filter transmission curves
+    K                     // number of principal components (e.g. 8–10)
+    h                     // KDE bandwidth (≈0.5)
+    M                     // number of synthetic latent samples (≈10 000)
+    NoiseSigma            // relative photometric noise level (e.g. 0.20)
+
+OUTPUT
+    For any new photometric vector m[1..F]:
+        PosteriorSamples[1..S]   // S ≈ 1000 reconstructed spectra
+        TaxonomyProb[H]          // probabilities for each taxonomic class
+
+--------------------------------------------------------------------
+STEP 1 – Build PCA prior from reference spectra
+--------------------------------------------------------------------
+1.1 Align all spectra to common wavelength grid λ[1..L].
+1.2 Normalize each spectrum to unit mean reflectance.
+1.3 Stack spectra into matrix X (N × L).
+1.4 Compute mean spectrum μ_X = mean(X, axis=0).
+1.5 Center data: X_centered = X - μ_X.
+1.6 Perform SVD / eigendecomposition:
+        X_centered = U Σ Vᵀ
+   Keep first K columns of Vᵀ → PCs[1..K][1..L]
+1.7 Project reference spectra into latent space:
+        CoeffRef[i] = PCs × (SpectraRef[i] - μ_X)ᵀ    // size K
+1.8 Store: PCs, μ_X, and CoeffRef[1..N].
+
+--------------------------------------------------------------------
+STEP 2 – Construct continuous prior via KDE
+--------------------------------------------------------------------
+2.1 Fit Gaussian KDE to CoeffRef using bandwidth h:
+        KDE(θ) ∝ Σ_{i=1..N} exp(-||θ - CoeffRef[i]||²/(2h²))
+2.2 Sample M latent vectors from KDE → LatentSamples[1..M][1..K].
+
+--------------------------------------------------------------------
+STEP 3 – Generate synthetic training data
+--------------------------------------------------------------------
+For each latent vector θ in LatentSamples:
+    3.1 Reconstruct spectrum:
+          SpecFake = μ_X + PCsᵀ × θ        // size L
+    3.2 Forward‑model photometry:
+          For each filter f in Filters:
+                m_f = ∫ SpecFake(λ) * T_f(λ) dλ
+          (normalize by solar spectrum if desired)
+    3.3 Inject Gaussian noise:
+          m_f_noisy = m_f + Normal(0, NoiseSigma * m_f)
+    3.4 Store pair (m_noisy, θ) as one training example.
+
+Result: TrainingSet = {(Photometry_j, LatentCoeff_j)}_{j=1..M}
+
+--------------------------------------------------------------------
+STEP 4 – Train AutoML encoder (photometry → latent)
+--------------------------------------------------------------------
+4.1 Split TrainingSet into train/validation (ignore for core algorithm).
+4.2 Use AutoML framework (e.g., AutoGluon Tabular) to fit regressor R:
+        Input: Photometry vector (length F)
+        Target: Latent coefficient vector (length K)
+        Output: Prediction model P(θ | m)
+
+--------------------------------------------------------------------
+STEP 5 – Train AutoML classifier (latent → taxonomy)
+--------------------------------------------------------------------
+5.1 Label each reference spectrum with its taxonomic class.
+5.2 Train classifier C on (CoeffRef[i], label_i):
+        Input: Latent coefficients
+        Target: Class probability distribution
+
+--------------------------------------------------------------------
+STEP 6 – Inference for a new photometric observation m*
+--------------------------------------------------------------------
+6.1 Apply encoder:
+        θ_pred = P(θ | m*)          // point estimate
+6.2 Build posterior distribution over θ:
+        a. Approximate P(θ | m*) as multivariate normal
+           with mean θ_pred and covariance Σ_pred
+           (Σ_pred can be estimated from training residuals or
+           via ensemble predictions).
+        b. Optionally apply Gaussian Copula to enforce
+           realistic correlations between PCs.
+6.3 Sample S latent vectors {θ_s} from posterior.
+6.4 Decode each sample to spectrum:
+        Spec_s = μ_X + PCsᵀ × θ_s
+   Store as PosteriorSamples[s].
+6.5 Classify using latent classifier:
+        TaxonomyProb = C(θ_pred)
+
+--------------------------------------------------------------------
+RETURN
+    PosteriorSamples   // ensemble of reconstructed spectra
+    TaxonomyProb       // class probabilities

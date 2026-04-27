@@ -1,0 +1,101 @@
+INPUT:
+  - Object list O = {O₁,…,O_N}
+      * For each object O_k: observed magnitudes m_k[j] with uncertainties σ_mk[j]
+        for filters j = 1…F
+  - Filter response curves T[j](λ)  for j = 1…F
+  - Spectral template library L = {S_i(λ)} for i = 1…M
+      * Each template S_i is defined at a common wavelength grid λ = {λ₁,…,λ_L}
+  - Zero‑point fluxes ZP[j] for each filter j
+
+OUTPUT:
+  - For each object O_k: posterior samples of spectral parameters
+  - Reconstructed mean spectrum Ŝ_k(λ) and uncertainty band
+
+--------------------------------------------------------------
+STEP 0 : Pre‑compute model fluxes for all templates
+--------------------------------------------------------------
+for each template i = 1 … M do
+    for each filter j = 1 … F do
+        F_i[j] ← ∫ S_i(λ) · T[j](λ) dλ          # analytic or numerical integration
+    end for
+end for
+
+--------------------------------------------------------------
+STEP 1 : Convert observed magnitudes to fluxes
+--------------------------------------------------------------
+for each object k = 1 … N do
+    for each filter j = 1 … F do
+        f_obs[k][j]   ← 10^(-0.4 * (m_k[j] - ZP[j]))   # flux in arbitrary units
+        σ_fobs[k][j]  ← f_obs[k][j] * ln(10)/2.5 * σ_mk[j]   # propagate error
+    end for
+end for
+
+--------------------------------------------------------------
+STEP 2 : Define Bayesian forward model
+--------------------------------------------------------------
+# Model: linear combination of templates
+#   S_model(λ | w) = Σ_i w[i] · S_i(λ) ,  w[i] ≥ 0
+#   Flux predicted in filter j: f_mod[j] = Σ_i w[i] · F_i[j]
+
+Define prior P(w):
+    * e.g., Dirichlet(α) with α = (1,…,1)  (non‑informative) 
+    * enforce Σ_i w[i] = 1, w[i] ≥ 0
+
+Define likelihood for an object k:
+    L_k(w) = Π_{j=1}^{F}  N( f_obs[k][j] | Σ_i w[i]·F_i[j] , σ_fobs[k][j]^2 )
+
+Define joint posterior for object k:
+    P_k(w | data) ∝ P(w) · L_k(w)
+
+--------------------------------------------------------------
+STEP 3 : Sample posterior using Metropolis–Hastings
+--------------------------------------------------------------
+for each object k = 1 … N do
+    Initialize w⁰ (e.g., uniform weights)
+    for t = 1 … N_iter do
+        # Propose new weights
+        w' ← w^{t-1} + ε ,  ε ~ Normal(0,σ_prop)
+        Project w' onto simplex (Σ_i w'[i] = 1, w'[i]≥0)
+        # Compute model fluxes
+        for each filter j = 1 … F do
+            f_mod'[j] ← Σ_i w'[i] · F_i[j]
+        end for
+        # Compute acceptance ratio
+        α ← min( 1 , [ P(w')·∏_j N(f_obs[k][j] | f_mod'[j], σ_fobs[k][j]^2) ] /
+                     [ P(w^{t-1})·∏_j N(f_obs[k][j] | f_mod^{t-1}[j], σ_fobs[k][j]^2) ] )
+        # Accept / Reject
+        u ← Uniform(0,1)
+        if u < α then
+            w^t ← w'
+            f_mod^t ← f_mod'
+        else
+            w^t ← w^{t-1}
+            f_mod^t ← f_mod^{t-1}
+        end if
+    end for
+    Store chain {w^t}_{t=1}^{N_iter}
+end for
+
+--------------------------------------------------------------
+STEP 4 : Post‑processing per object
+--------------------------------------------------------------
+for each object k do
+    # Discard burn‑in, thin if desired
+    posterior_samples ← {w^t}_{t=burn+1 … N_iter step s}
+
+    # Estimate posterior means
+    w_mean[i] ← mean_{samples}( w[i] )
+
+    # Reconstruct spectrum
+    for each wavelength λ_l do
+        Ŝ_k(λ_l) ← Σ_i w_mean[i] · S_i(λ_l)
+    end for
+
+    # Uncertainty band (e.g., 16th/84th percentiles)
+    for each λ_l do
+        S_lower_k(λ_l) ← percentile_{samples}( Σ_i w[i]·S_i(λ_l), 16 )
+        S_upper_k(λ_l) ← percentile_{samples}( Σ_i w[i]·S_i(λ_l), 84 )
+    end for
+end for
+
+RETURN {Ŝ_k(λ), S_lower_k(λ), S_upper_k(λ)}  for all objects k

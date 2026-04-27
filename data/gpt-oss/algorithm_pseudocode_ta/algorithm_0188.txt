@@ -1,0 +1,86 @@
+INPUT:
+    S_raw          # matrix of N_spectral × N_wavelength (training spectra)
+    B              # matrix of N_filters × N_wavelength (bandpass transmission curves)
+    phot[i][f]     # photometric measurements for object i in filter f
+    err[i][f]      # photometric uncertainties for object i in filter f
+    k_latent       # number of principal components to keep (e.g., 8–10)
+    n_samples      # number of posterior samples per object (e.g., 1000)
+
+OUTPUT:
+    spec_mean[i]   # mean reconstructed spectrum for object i
+    spec_cov[i]    # covariance matrix of reconstructed spectrum for object i
+    cred_ints[i]   # credible intervals (e.g., 95%) per wavelength for object i
+
+--------------------------------------------------------------------
+STEP 1 – Principal‑Component Basis Construction
+--------------------------------------------------------------------
+1.1 Normalize training spectra:
+        For each spectrum s in S_raw:
+            subtract mean spectrum μ_s = mean(s over wavelength)
+            optionally divide by standard deviation if needed
+1.2 Compute covariance matrix C = (S_normalized)^T * S_normalized / (N_spectral-1)
+1.3 Perform eigendecomposition of C → eigenvalues λ_j and eigenvectors v_j
+1.4 Sort eigenpairs by decreasing λ_j
+1.5 Select first k_latent eigenvectors → V_latent (shape N_wavelength × k_latent)
+1.6 Precompute mean spectrum μ_s
+1.7 Store basis V_latent and mean μ_s
+
+--------------------------------------------------------------------
+STEP 2 – Forward Photometry Model
+--------------------------------------------------------------------
+For each filter f:
+    2.1 Compute effective filter vector b_f = ∫ B[f] * λ  dλ    # integrated throughput
+    2.2 Normalise b_f so that unit flux corresponds to magnitude zero
+
+--------------------------------------------------------------------
+STEP 3 – Bayesian Inference for Each Object
+--------------------------------------------------------------------
+For each target object i:
+
+    3.1 Define latent vector z_i ∈ ℝ^{k_latent}
+    3.2 Reconstructed spectrum:
+            ŝ_i(λ | z_i) = μ_s + V_latent * z_i          # linear combination
+    3.3 Predicted photometry in filter f:
+            p̂_i(f | z_i) = Σ_{λ} [ ŝ_i(λ | z_i) * b_f(λ) ]  # discrete convolution
+    3.4 Likelihood for observed photometry:
+            L(z_i) = Π_f  N( phot[i][f] | p̂_i(f | z_i), err[i][f]^2 )
+    3.5 Prior on latent vector:
+            p(z_i) = N( 0 , I )   # zero‑mean unit‑covariance Gaussian
+    3.6 Posterior:
+            p(z_i | phot[i]) ∝ L(z_i) * p(z_i)
+
+    3.7 Sample posterior:
+            Use e.g., Metropolis–Hastings or Hamiltonian MC:
+                Initialize z_i^0 = zeros(k_latent)
+                For t = 1 … n_samples:
+                    propose z' = z_i^{t-1} + η   # η ~ N(0, step_cov)
+                    compute acceptance ratio α = min(1, p(z'|phot)/p(z_i^{t-1}|phot))
+                    accept or reject accordingly
+                    store accepted z_i^t
+    3.8 Store all sampled latent vectors {z_i^t}
+
+--------------------------------------------------------------------
+STEP 4 – Spectrum Reconstruction and Uncertainty Propagation
+--------------------------------------------------------------------
+For each object i:
+
+    4.1 For every sampled latent vector z_i^t:
+            compute ŝ_i^t(λ) = μ_s + V_latent * z_i^t
+    4.2 Compute mean spectrum:
+            spec_mean[i](λ) = (1/n_samples) Σ_t ŝ_i^t(λ)
+    4.3 Compute covariance:
+            spec_cov[i] = (1/(n_samples-1)) Σ_t (ŝ_i^t - spec_mean[i]) (ŝ_i^t - spec_mean[i])^T
+    4.4 Credible intervals:
+            For each wavelength λ:
+                sort values {ŝ_i^t(λ)} over t
+                95% lower = percentile 2.5%
+                95% upper = percentile 97.5%
+            store as cred_ints[i](λ) = [lower, upper]
+
+--------------------------------------------------------------------
+STEP 5 – Output Results
+--------------------------------------------------------------------
+Return for each object i:
+    - mean reconstructed spectrum spec_mean[i]
+    - spectrum covariance spec_cov[i]
+    - 95% credible interval cred_ints[i]

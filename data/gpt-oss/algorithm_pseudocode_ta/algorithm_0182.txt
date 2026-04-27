@@ -1,0 +1,68 @@
+pseudocode
+INPUT:
+    S_train        # NxL matrix of training spectra (N spectra, L wavelengths)
+    R              # MxL matrix of filter responses (M filters)
+    y_obs          # vector of length M (observed photometry)
+    sigma_obs      # vector of length M (measurement uncertainties)
+
+OUTPUT:
+    s_mean         # mean reconstructed spectrum (length L)
+    s_credible     # credible interval bounds (length L × 2)
+    z_posterior    # posterior distribution parameters (mean, covariance)
+
+------------------------------------------------------------------
+STEP 1 – Spectral preprocessing
+------------------------------------------------------------------
+1.1  μ_S  ← mean(S_train, axis=0)                     # mean spectrum
+1.2  S_center ← S_train – μ_S                        # centered spectra
+
+------------------------------------------------------------------
+STEP 2 – Principal‑Component Analysis (PCA)
+------------------------------------------------------------------
+2.1  C ← (S_center.T @ S_center) / (N-1)             # covariance matrix
+2.2  [eig_vals, eig_vecs] ← eig(C)                   # eigen‑decomposition
+2.3  sort eig_vals descending; reorder eig_vecs
+2.4  Choose K (# components) to capture desired variance
+2.5  U_K ← eig_vecs[:, 0:K]                          # K principal vectors
+2.6  λ   ← eig_vals[0:K]                             # corresponding variances
+
+------------------------------------------------------------------
+STEP 3 – Build latent representations of training spectra
+------------------------------------------------------------------
+3.1  Z_train ← S_center @ U_K                         # N×K matrix of coefficients
+
+------------------------------------------------------------------
+STEP 4 – Forward photometric model
+------------------------------------------------------------------
+4.1  For each filter m (1…M):
+        a_m ← R[m,:] @ U_K                           # 1×K row vector
+   Assemble A ← [a_1; … ; a_M]  # M×K matrix
+4.2  Compute mean photometry of training set:
+        μ_y ← mean(A @ Z_train.T, axis=1)            # length M
+4.3  Define residual vector:
+        y_tilde ← y_obs – μ_y
+
+------------------------------------------------------------------
+STEP 5 – Bayesian inference in latent space
+------------------------------------------------------------------
+5.1  Prior:  z ~ N(0, Λ)  where Λ = diag(λ)
+5.2  Likelihood:  y_tilde | z ~ N(A @ z, Σ)  with Σ = diag(sigma_obs^2)
+5.3  Posterior is Gaussian:
+        Λ_inv  ← diag(1/λ)
+        V_post ← (A.T @ Σ⁻¹ @ A + Λ_inv)⁻¹           # posterior covariance
+        m_post ← V_post @ A.T @ Σ⁻¹ @ y_tilde         # posterior mean
+
+------------------------------------------------------------------
+STEP 6 – Sampling posterior (optional, for uncertainty propagation)
+------------------------------------------------------------------
+6.1  Draw N_samples from N(m_post, V_post)
+6.2  For each sample z_s:
+        s_s ← μ_S + U_K @ z_s                       # reconstructed spectrum
+6.3  Compute statistics over {s_s}:
+        s_mean      ← mean({s_s}, axis=0)
+        s_credible  ← percentile({s_s}, [5, 95], axis=0)
+
+------------------------------------------------------------------
+STEP 7 – Output
+------------------------------------------------------------------
+Return s_mean, s_credible, z_posterior = (m_post, V_post)

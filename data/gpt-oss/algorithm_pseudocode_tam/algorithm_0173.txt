@@ -1,0 +1,78 @@
+INPUT
+    SPECTRA[]          // list of N observed high‑resolution TNO spectra  
+    FILTERS[]           // list of M filter transmission curves (e.g., JWST NIRCam)
+    BAND_ERR           // nominal photometric relative error (e.g., 0.20)
+    K_PCA              // number of principal components to retain (e.g., 5–10)
+    N_SYNTH            // number of synthetic latent samples to draw (e.g., 5000)
+    H_KDE              // KDE bandwidth (e.g., 0.5)
+
+OUTPUT
+    RECONSTRUCTED_SPECTRUM  // high‑resolution spectrum for a new object
+    TAXONOMIC_PROBS         // probability distribution over taxonomic classes
+
+--------------------------------------------------------------------
+STEP 1 – Build Latent Manifold (Prior)
+--------------------------------------------------------------------
+1.1   STANDARDIZE spectra
+        For each spectrum s ∈ SPECTRA:
+            subtract mean over all spectra
+            divide by std dev over all spectra
+
+1.2   Perform PCA
+        Compute covariance matrix C of standardized spectra.
+        Obtain eigenvalues λ[1..D], eigenvectors V[1..D].
+        Select first K_PCA eigenvectors V[:,1..K_PCA].
+        Project each spectrum onto PCs:
+            coeff_real[i] = V[:,1..K_PCA]^T · (spectrum_i – μ)
+
+1.3   Fit non‑parametric KDE to coeff_real
+        Use multivariate KDE with bandwidth H_KDE on coeff_real.
+        Sample N_SYNTH points from KDE → coeff_synth[1..N_SYNTH].
+
+--------------------------------------------------------------------
+STEP 2 – Generate Synthetic Photometry (Likelihood Training Data)
+--------------------------------------------------------------------
+For each sampled coefficient vector c in {coeff_real, coeff_synth}:
+    2.1   Decode to high‑resolution spectrum:
+          spectrum_hat = μ + V[:,1..K_PCA] · c
+    2.2   Forward‑model photometry:
+          For each filter f in FILTERS:
+              flux_f = integrate( spectrum_hat * f.transmission ) / integrate( solar_flux * f.transmission )
+    2.3   Add Gaussian noise to photometry:
+          noisy_flux_f = flux_f * (1 + Normal(0, BAND_ERR))
+    2.4   Store training example:
+          TRAIN_X.append(noisy_flux_vector)      // length M
+          TRAIN_Y.append(c)                      // length K_PCA
+
+--------------------------------------------------------------------
+STEP 3 – Train Encoder (Photometry → Latent Coefficients)
+--------------------------------------------------------------------
+3.1   Configure AutoML regressor (e.g., AutoGluon Tabular):
+          - Base learner: Gradient Boosted Decision Trees (GBDT)
+          - Hyper‑parameter search: default AutoML settings
+3.2   Fit model on TRAIN_X, TRAIN_Y
+          MODEL_ENC = AutoML.train(X=TRAIN_X, y=TRAIN_Y)
+
+--------------------------------------------------------------------
+STEP 4 – Train Classifier (Latent Coefficients → Taxonomy)
+--------------------------------------------------------------------
+4.1   Label each real spectrum with its known taxonomic class
+          LABELS[i] = class_of(spectrum_i)   // e.g., H₂O, CO₂, Organic, Methanol
+4.2   Train AutoML classifier on coeff_real and LABELS
+          MODEL_CLF = AutoML.train_classifier(X=coeff_real, y=LABELS)
+
+--------------------------------------------------------------------
+STEP 5 – Inference for a New Object
+--------------------------------------------------------------------
+Input: NEW_PHOTOMETRY[1..M]  // measured reflectances in the M filters
+
+5.1   Predict latent coefficients:
+          coeff_pred = MODEL_ENC.predict(NEW_PHOTOMETRY)
+
+5.2   Reconstruct high‑resolution spectrum:
+          spectrum_recon = μ + V[:,1..K_PCA] · coeff_pred
+
+5.3   Classify taxonomy:
+          TAXONOMIC_PROBS = MODEL_CLF.predict_proba(coeff_pred)
+
+Return spectrum_recon, TAXONOMIC_PROBS

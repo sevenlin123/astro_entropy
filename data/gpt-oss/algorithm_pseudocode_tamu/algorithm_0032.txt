@@ -1,0 +1,78 @@
+INPUT:
+    S_ref[1..N_ref]          # Reference high‑resolution spectra (N_ref ≈ 50)
+    filt_eff[1..F]           # Effective throughput curves of target filters
+    K_pca                     # Desired number of principal components (e.g. 8–10)
+    h_kde                     # KDE bandwidth (≈ 0.5)
+    N_aug                      # Number of synthetic latent vectors to generate (e.g. 5000)
+    sigma_rel = 0.20           # Relative photometric uncertainty for forward modelling
+
+PROCEDURE:
+1. Compute mean spectrum μ_s and covariance Σ_s from S_ref.
+2. Perform PCA on S_ref:
+        U, λ = eig(Σ_s)          # Eigenvectors & eigenvalues
+        V = U[:, 1:K_pca]        # Retain first K_pca components
+3. Project each reference spectrum into latent space:
+        c_i = Vᵀ · (S_ref[i] - μ_s)   for i = 1..N_ref
+4. Estimate density in latent space using KDE:
+        p_c = KDE(c_i, bandwidth = h_kde)
+5. Sample synthetic latent vectors:
+        c_syn[j] ~ p_c      for j = 1..N_aug
+6. Reconstruct synthetic spectra:
+        S_syn[j] = μ_s + V · c_syn[j]
+7. Forward‑model synthetic spectra into photometry:
+        m_syn[j][f] = ∫ S_syn[j](λ) * filt_eff[f](λ) dλ    for f = 1..F
+8. Add Gaussian noise to photometry:
+        m_noisy[j][f] = m_syn[j][f] * (1 + ε_f)
+        ε_f ~ Normal(0, σ_rel)
+OUTPUT:
+    X_train = {m_noisy[j]}               # Feature matrix (photometry)
+    Y_latent = {c_syn[j]}                # Target matrix (latent coefficients)
+    Y_labels = {label(i)}                # Taxonomic label for each synthetic vector
+
+PROCEDURE:
+1. Train Encoder (regressor):
+        Reg = AutoML_Train(X_train, Y_latent)
+2. Train Classifier:
+        Clf = AutoML_Train(X_train, Y_labels)
+OUTPUT:
+    Trained encoder Reg
+    Trained classifier Clf
+
+INPUT:
+    m_obs[1..F]          # Measured photometry for the new object
+    Reg, Clf             # Trained models
+    V, μ_s               # PCA basis & mean spectrum
+    Σ_prior              # Covariance of latent space from KDE (optional)
+    n_draws = 1000       # Number of posterior draws
+
+PROCEDURE:
+1. Predict latent coefficient distribution:
+        c_mean, c_cov = Reg.predict_with_uncertainty(m_obs)
+        # If Reg returns point estimate only, use ensemble variance
+2. Construct Gaussian Copula sampler:
+        R = corr_matrix_from(c_cov)          # Correlation from covariance
+        U ~ Uniform(0,1)^K_pca
+        Z = Φ⁻¹(U)                           # Standard normal samples
+        C = L(R) · Z                         # Cholesky of R
+        c_sample = c_mean + C                # Draws from multivariate normal
+        (Optionally clip to bounds implied by KDE)
+3. Generate posterior spectrum draws:
+        S_sample[t] = μ_s + V · c_sample[t]    for t = 1..n_draws
+4. Obtain spectrum statistics:
+        S_pred   = mean(S_sample, axis=1)
+        S_ci_low = percentile(S_sample, 2.5, axis=1)
+        S_ci_high= percentile(S_sample, 97.5, axis=1)
+5. Classify taxonomic type:
+        prob_type = Clf.predict_proba(m_obs)   # Class probabilities
+OUTPUT:
+    S_pred          # Point‑estimate reconstructed spectrum
+    S_ci_low, S_ci_high   # 95 % credible interval per wavelength bin
+    prob_type      # Posterior probability for each taxonomic class
+
+PROCEDURE:
+1. Verify physical plausibility:
+        if any(S_pred < 0): reject or rescale
+2. Compute diagnostic metrics:
+        slope = derivative(S_pred)         # Spectral slope
+        band_depth = max(S_pred) - min(S_pred)  # Example absorption depth
+3. Store results in structured format (e.g., FITS table)

@@ -1,0 +1,85 @@
+INPUT
+    P_real : {S_i | i = 1 … N}          // N high‑resolution reference spectra
+    T_filters : {F_j | j = 1 … M}       // Instrument filter throughputs
+    p_spec   : Photometry of a new object (array of length M)
+
+OUTPUT
+    S_rec    : Reconstructed spectrum (full wavelength grid)
+    C_prob   : Taxonomic probability vector (H₂O, CO₂, Organic, Methanol)
+
+--------------------------------------------------------------------
+1.  BUILD PRIOR (Latent Manifold)
+--------------------------------------------------------------------
+1.1  Perform PCA on P_real
+        • Compute mean spectrum μ_s
+        • Compute eigenbasis E = [e₁ … e_K] (choose K such that ~90–95% variance retained)
+        • For each spectrum S_i, obtain coefficient vector
+              a_i = Eᵀ · (S_i – μ_s)                // Projection onto PCs
+
+1.2  Estimate density in coefficient space
+        • Use Kernel Density Estimation (KDE) on {a_i}
+        • Select bandwidth h ≈ 0.5 (or tune via cross‑validation on a separate metric)
+        • Store KDE model KDE_a
+
+--------------------------------------------------------------------
+2.  GENERATE AUGMENTED TRAINING SET
+--------------------------------------------------------------------
+2.1  Sample L synthetic coefficient vectors from KDE_a
+        a_syn_j ~ KDE_a     (j = 1 … L,   L ≫ N, e.g., L = 5 000)
+
+2.2  For each a_syn_j
+        • Reconstruct spectrum
+              S_syn_j = μ_s + E · a_syn_j          // Inverse PCA
+
+        • Compute synthetic photometry
+              m_syn_j[k] = ∫ S_syn_j(λ) · F_k(λ) dλ / ∫ F_k(λ) dλ
+              (for k = 1 … M)
+
+        • Perturb photometry with Gaussian noise
+              m_syn_noisy_j[k] = m_syn_j[k] · (1 + ε_k)
+              where ε_k ~ Normal(0, σ²) , σ = 0.20  (20% relative uncertainty)
+
+2.3  Assemble training matrix
+        X_train = { m_syn_noisy_j }      // shape (L, M)
+        Y_train = { a_syn_j }            // shape (L, K)
+
+--------------------------------------------------------------------
+3.  TRAIN PHOTOMETRY → LATENT COEFFICIENT REGRESSOR
+--------------------------------------------------------------------
+3.1  Use an AutoML framework (e.g., AutoGluon Tabular) to
+        • Search ensemble of models (GBDT, NN, etc.)
+        • Optimize hyper‑parameters (learning rate, depth, etc.)
+        • Evaluate via k‑fold CV on X_train → Y_train
+
+3.2  Save the best regressor R_phot_to_latent
+
+--------------------------------------------------------------------
+4.  TRAIN LATENT → TAXONOMY CLASSIFIER
+--------------------------------------------------------------------
+4.1  Label each real spectrum a_i with its known class label L_i
+        (H₂O, CO₂, Organic, Methanol)
+
+4.2  Train a second AutoML classifier C_latent on
+        • Features = { a_i } (or a_syn_j if desired)
+        • Targets = { L_i }
+
+4.3  Save the trained classifier C_latent
+
+--------------------------------------------------------------------
+5.  INFERENCE ON NEW PHOTOMETRY
+--------------------------------------------------------------------
+Input: p_spec (length M)
+
+5.1  Predict latent coefficients
+        • Apply regressor: a_hat = R_phot_to_latent(p_spec)
+        • Optionally obtain predictive covariance Σ̂ from the ensemble
+
+5.2  Reconstruct spectrum
+        • S_rec = μ_s + E · a_hat
+
+5.3  Classify taxonomy
+        • C_prob = C_latent(a_hat)          // probability vector over classes
+
+Return S_rec, C_prob
+--------------------------------------------------------------------
+END

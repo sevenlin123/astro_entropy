@@ -1,0 +1,96 @@
+text
+# ------------------------------------------------------------------
+# 1. INPUT
+# ------------------------------------------------------------------
+#   S_ref      : Array of N_ref high‑resolution reference spectra  
+#                 (shape [N_ref, N_wave])
+#   R_eff[band] : Effective throughput curves of the photometric
+#                 instruments (array of shape [N_band, N_wave])
+#   K          : Desired number of principal components (e.g., 8–10)
+#   h_kde      : KDE bandwidth (e.g., 0.5)
+#   N_aug      : Number of synthetic latent samples to generate
+#                 (e.g., 10 000)
+#   σ_phot     : Typical photometric relative uncertainty
+#                 (e.g., 0.20 → 20 %)
+#   N_pred     : Number of posterior samples for uncertainty
+#                 estimation (optional)
+# ------------------------------------------------------------------
+# 2. TRAINING PHASE
+# ------------------------------------------------------------------
+# 2.1 PCA on reference spectra
+PC, eig_vals = PCA(S_ref, n_components=K)            # returns
+                                               #   PC   : [K, N_wave]
+                                               #   eig_vals : [K]
+S_proj = Project(S_ref, PC)                         # [N_ref, K]
+
+# 2.2 Kernel Density Estimation on latent space
+kde_model = KDE(S_proj, bandwidth=h_kde)
+
+# 2.3 Sample synthetic latent vectors
+Latent_aug = kde_model.sample(N_aug)                # [N_aug, K]
+
+# 2.4 Reconstruct synthetic high‑resolution spectra
+S_syn    = InversePCA(Latent_aug, PC)               # [N_aug, N_wave]
+
+# 2.5 Generate noisy synthetic photometry
+Phot_syn = []
+for each S in S_syn:
+    # Convolution with filter curves
+    m = []                                       # observed reflectances
+    for each band b:
+        m_b = Integrate(S * R_eff[b]) / Integrate(Sun(b) * R_eff[b])
+        # Add Gaussian noise
+        m_b_noisy = m_b * (1 + Normal(0, σ_phot))
+        m.append(m_b_noisy)
+    Phot_syn.append(m)
+Phot_syn = array(Phot_syn)                        # [N_aug, N_band]
+
+# 2.6 Prepare training data for encoder
+X_train = Phot_syn          # [N_aug, N_band]
+Y_train = Latent_aug         # [N_aug, K]
+
+# 2.7 Train AutoML regressor (Encoder)
+regressor = AutoML_Trainer(X_train, Y_train)        # returns trained model
+
+# 2.8 OPTIONAL: Train a latent‑space classifier
+#           (class labels known for the reference spectra)
+Y_labels = TaxonomyLabels(S_ref)                   # [N_ref]
+classifier = AutoML_Classifier(S_proj, Y_labels)   # returns trained model
+# ------------------------------------------------------------------
+# 3. INFERENCE PHASE (new observation)
+# ------------------------------------------------------------------
+# 3.1 Input observed photometry for a target object
+m_obs = ObservedPhotometry()                       # [N_band]
+
+# 3.2 Encode photometry to latent coefficients
+latent_mean = regressor.predict(m_obs)             # [K]
+# Optional: obtain predictive variance from ensemble or Bayesian regressor
+
+# 3.3 Posterior sampling (uncertainty propagation)
+latent_samples = []
+for i in 1 … N_pred:
+    # Draw from joint posterior (Gaussian copula or simple perturbation)
+    latent_i = latent_mean + Normal(0, sigma_latent)  # sigma_latent from model
+    latent_samples.append(latent_i)
+
+# 3.4 Decode each latent sample to full spectrum
+S_pred_samples = []
+for lat in latent_samples:
+    S_hat = InversePCA(lat, PC)                    # [N_wave]
+    S_pred_samples.append(S_hat)
+
+# 3.5 Aggregate predictions
+S_pred_mean  = Mean(S_pred_samples)                # point estimate spectrum
+S_pred_cov   = Covariance(S_pred_samples)          # uncertainty envelope
+
+# 3.6 OPTIONAL: Taxonomic classification
+tax_prob = classifier.predict_proba(latent_mean)   # vector of class probabilities
+
+# ------------------------------------------------------------------
+# 4. OUTPUT
+# ------------------------------------------------------------------
+return {
+    "spectrum_mean"   : S_pred_mean,               # reconstructed spectrum
+    "spectrum_cov"    : S_pred_cov,                # 1‑σ intervals per wavelength
+    "taxonomy_probs"  : tax_prob                  # probability over classes
+}

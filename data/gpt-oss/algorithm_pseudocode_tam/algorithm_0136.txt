@@ -1,0 +1,79 @@
+Input:
+    S_ref[1..N]          // Reference high‑resolution spectra (reflectance vs λ)
+    filt[1..F]           // Effective throughput curves of the photometric system
+    σ_rel = 0.20         // Relative reflectance uncertainty to inject into mock photometry
+
+# 2.1 Perform PCA on reference spectra
+PC, mean_spec, eig_vals = PCA(S_ref, n_components = K)   # K ~ 5–10
+
+# 2.2 Project reference spectra into latent space
+Lat_real = { PCᵀ (S_ref[i] – mean_spec) for i in 1..N }     # each is a K‑vector
+
+# 2.3 Estimate continuous density with KDE
+kde = KDE(Lat_real, bandwidth = h)      # h ≈ 0.5
+
+# 2.4 Sample synthetic latent vectors
+M = 5000                                  # number of synthetic points
+Lat_syn = kde.sample(M)                    # each is a K‑vector
+
+# 2.5 Reconstruct synthetic spectra (inverse PCA)
+S_syn = { mean_spec + PC * Lat_syn[j]  for j in 1..M }
+
+# 3.1 Convolve each synthetic spectrum with filter curves
+for j in 1..M:
+    for f in 1..F:
+        m_clean[f] = integrate( S_syn[j] * filt[f] ) / integrate( filt[f] )
+    # 3.2 Add Gaussian noise (20 % relative)
+    for f in 1..F:
+        σ_f = σ_rel * m_clean[f]
+        m_noisy[f] = normal(m_clean[f], σ_f)
+    Phot_syn[j] = m_noisy
+
+# 4.1 Assemble training pairs
+Train_X = Phot_syn          # shape: (M, F)
+Train_Y = Lat_syn           # shape: (M, K)
+
+# 4.2 Fit an AutoML regressor (ensemble of GBDT + NN)
+encoder = AutoML_Regressor()
+encoder.train(Train_X, Train_Y)
+
+# 5.1 Assign taxonomy labels to reference spectra
+labels_real = [ taxonomy(S_ref[i]) for i in 1..N ]    # H₂O, CO₂, Org, MeOH, ...
+
+# 5.2 Train a classifier on the real latent vectors
+classifier = AutoML_Classifier()
+classifier.train(Lat_real, labels_real)
+
+function reconstruct(Phot_obs):
+    # Input: Phot_obs – observed photometry vector (size F)
+
+    # 6.1 Predict mean and variance of latent coefficients
+    μ_lat, Σ_lat = encoder.predict_distribution(Phot_obs)
+
+    # 6.2 Draw N_sample samples from the predicted latent distribution
+    Lat_samples = multivariate_normal(μ_lat, Σ_lat, size = N_sample)
+
+    # 6.3 Decode each sample to a full spectrum
+    Spec_samples = { mean_spec + PC * Lat_samples[n]  for n in 1..N_sample }
+
+    # 6.4 Compute posterior mean spectrum and credible intervals
+    Spec_mean      = average(Spec_samples)
+    Spec_CI_low    = percentile(Spec_samples, 2.5)
+    Spec_CI_high   = percentile(Spec_samples, 97.5)
+
+    # 6.5 Classify taxonomy from mean latent vector
+    tax_probs = classifier.predict_proba(μ_lat)
+
+    return {
+        "spectrum_mean" : Spec_mean,
+        "spectrum_CI_low": Spec_CI_low,
+        "spectrum_CI_high": Spec_CI_high,
+        "taxonomy_probs": tax_probs
+    }
+
+function detect_outlier(Phot_obs):
+    # Use Mahalanobis distance in latent space
+    μ_lat, Σ_lat = encoder.predict_distribution(Phot_obs)
+    d2 = (μ_lat - mean(Lat_real))ᵀ · inv(Σ(Lat_real)) · (μ_lat - mean(Lat_real))
+    if d2 > threshold:
+        flag_as_outlier()

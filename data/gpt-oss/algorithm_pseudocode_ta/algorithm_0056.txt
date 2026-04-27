@@ -1,0 +1,65 @@
+Input:
+    S_train      – training spectra matrix (N_spec × N_wave)
+    λ            – wavelength array (length N_wave)
+    Φ_filters    – list of M filter transmission curves
+    phot_obs     – observed fluxes for target object (length M)
+    σ_phot       – 1‑σ uncertainties of phot_obs (length M)
+    K            – number of retained principal components
+
+Output:
+    μ_spec       – reconstructed mean spectrum (length N_wave)
+    Σ_spec       – spectral covariance matrix (N_wave × N_wave)
+
+Algorithm:
+
+1. Pre‑processing (once, before any targets are processed)
+   1.1 Compute mean spectrum:
+          μ_bar(λ) = mean(S_train, axis=0)
+   1.2 Center spectra:
+          X_centered = S_train – μ_bar
+   1.3 Perform PCA on centered spectra:
+          U, Σ, Vt = svd(X_centered, full_matrices=False)
+          PCs = Vt[:K, :]         # K principal components (each length N_wave)
+          eig_vals = Σ[:K]        # variances explained by each component
+   1.4 Store PCs and eig_vals
+
+2. Forward model construction
+   2.1 For each filter j (1…M):
+          2.1.1 Compute filter response R_j(λ) (normalised)
+          2.1.2 Project each PC onto filter:
+                 a_jk = ∫ PCs_k(λ) * R_j(λ) dλ / ∫ R_j(λ) dλ
+                 (for k=1…K)
+          2.1.3 Store column vector a_j = [a_j1 … a_jK]
+   2.4 Assemble design matrix A (M × K) from vectors a_j
+   2.5 Compute predicted mean flux in each filter:
+          f_bar_j = ∫ μ_bar(λ) * R_j(λ) dλ / ∫ R_j(λ) dλ
+   2.6 Form vector f_bar = [f_bar_1 … f_bar_M]^T
+
+3. Bayesian inference for a target object
+   3.1 Define coefficient vector c (length K) to be inferred
+   3.2 Likelihood: for each filter j,
+          p(f_obs_j | c) = Normal(
+                             mean = f_bar_j + (A_j · c),
+                             std  = σ_phot_j )
+   3.3 Prior: assume independent Gaussian priors on c:
+          p(c_k) ~ Normal(mean=0, std=√eig_vals_k)
+   3.4 Posterior is Gaussian:
+          Σ_c = ( A^T W A + C_prior^-1 )^-1
+          μ_c = Σ_c · ( A^T W (phot_obs – f_bar) )
+          where W = diag(1/σ_phot^2), C_prior = diag(eig_vals)
+   3.5 Draw N_samples samples from posterior of c:
+          for s in 1…N_samples:
+              c_s ~ MultivariateNormal(μ_c, Σ_c)
+              store c_s
+
+4. Spectral reconstruction
+   4.1 For each sampled coefficient vector c_s:
+          spec_s(λ) = μ_bar(λ) + Σ_{k=1}^{K} c_s_k * PCs_k(λ)
+   4.2 Estimate reconstructed spectrum:
+          μ_spec(λ) = mean_over_samples(spec_s(λ))
+   4.3 Estimate spectral covariance:
+          Σ_spec = cov_over_samples(spec_s(λ))
+          (Optionally, propagate through linear model:
+           Σ_spec = PCs · Σ_c · PCs^T)
+
+5. Output μ_spec and Σ_spec for downstream tasks

@@ -1,0 +1,93 @@
+INPUT:
+    - Photometric catalog: {m_k, σ_mk}   for bands k = 1 … K
+    - Filter transmission curves: T_k(λ)
+    - Basis spectra: {b_i(λ)}          for i = 1 … N
+    - Prior standard deviations: σ_ai   for each coefficient a_i
+
+OUTPUT:
+    - Posterior samples {a^(ℓ)}_{ℓ=1…L}
+    - Mean reconstructed spectrum:  R̄(λ) = Σ_i ⟨a_i⟩ b_i(λ)
+    - Covariance of spectrum:      C_R(λ, λ′) = Σ_{i,j} Cov(a_i, a_j) b_i(λ)b_j(λ′)
+    - Outlier flags for each band
+
+--------------------------------------------------------------------
+STEP 0 – Pre‑compute integrals
+--------------------------------------------------------------------
+FOR each band k:
+    Compute normalisation factor:
+        Z_k = ∫ b_ref(λ) * T_k(λ) dλ           // reference spectrum (e.g. flat)
+    Store Z_k
+END FOR
+
+--------------------------------------------------------------------
+STEP 1 – Forward model for predicted magnitudes
+--------------------------------------------------------------------
+FUNCTION predict_mag(a[1..N]):
+    FOR each band k:
+        // Reflectance as linear combination of bases
+        R_k = Σ_i a_i * b_i(λ)                     // evaluated on wavelength grid
+        // Integrate reflectance through filter
+        f_k = Σ_λ R_k(λ) * T_k(λ) * Δλ / Z_k       // Δλ pixel width
+        // Convert flux to magnitude
+        m_pred_k = -2.5 * log10(f_k) + ZP_k         // ZP_k = zero‑point for band k
+    END FOR
+    RETURN {m_pred_k}
+END FUNCTION
+
+--------------------------------------------------------------------
+STEP 2 – Log‑posterior evaluation
+--------------------------------------------------------------------
+FUNCTION log_posterior(a[1..N]):
+    m_pred = predict_mag(a)
+    // Gaussian likelihood
+    lnL = -0.5 * Σ_k ((m_k - m_pred_k)/σ_mk)^2
+    // Gaussian prior
+    lnπ = -0.5 * Σ_i (a_i/σ_ai)^2
+    RETURN lnL + lnπ
+END FUNCTION
+
+--------------------------------------------------------------------
+STEP 3 – MCMC sampler (Metropolis–Hastings)
+--------------------------------------------------------------------
+Initialize a_current = zeros(N)
+Compute log_post_current = log_posterior(a_current)
+
+FOR ℓ = 1 TO L:
+    // Propose new coefficients by adding Gaussian step
+    a_proposed = a_current + ε * randn(N)          // ε is step scale
+    log_post_proposed = log_posterior(a_proposed)
+
+    // Acceptance probability
+    α = min(1, exp(log_post_proposed - log_post_current))
+
+    IF uniform(0,1) < α:
+        a_current = a_proposed
+        log_post_current = log_post_proposed
+    END IF
+
+    Store a_current as sample ℓ
+END FOR
+
+--------------------------------------------------------------------
+STEP 4 – Posterior statistics
+--------------------------------------------------------------------
+Compute posterior means:
+    ⟨a_i⟩ = (1/L) * Σ_ℓ a_i^{(ℓ)}
+Compute posterior covariances:
+    Cov(a_i, a_j) = (1/(L-1)) * Σ_ℓ (a_i^{(ℓ)}-⟨a_i⟩)(a_j^{(ℓ)}-⟨a_j⟩)
+
+Reconstruct mean spectrum:
+    R̄(λ) = Σ_i ⟨a_i⟩ * b_i(λ)
+
+Construct spectral covariance:
+    C_R(λ, λ′) = Σ_{i,j} Cov(a_i, a_j) * b_i(λ) * b_j(λ′)
+
+--------------------------------------------------------------------
+STEP 5 – Outlier detection
+--------------------------------------------------------------------
+FOR each band k:
+    Compute χ_k^2 = ((m_k - m_pred_k)/σ_mk)^2   // using MAP estimate a_MAP
+    IF χ_k^2 > χ²_threshold:
+        flag band k as outlier
+    END IF
+END FOR

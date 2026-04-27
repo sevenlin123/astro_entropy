@@ -1,0 +1,72 @@
+text
+INPUT
+    SpectraSet   = {S_1, S_2, … , S_N}          # reference reflectance spectra (λ‑grid)
+    FilterCurves = {F_1(λ), F_2(λ), … , F_J(λ)} # effective throughput of J photometric filters
+    K            = number of PCA components (default 8–10)
+    h            = KDE bandwidth (default 0.5)
+    M            = number of synthetic latent samples (e.g. 5000)
+    L            = number of posterior draws for reconstruction (e.g. 200)
+
+STEP 1 – PREPROCESS SPECIFIES
+    For each S_i:
+        • Normalise to unit solar spectrum or keep reflectance.
+        • Store as vector of length P (wavelength points).
+
+STEP 2 – PCA BASIS (PRIOR)
+    1. Compute mean spectrum μ_S  = (1/N) Σ S_i .
+    2. Subtract mean: ȦS_i = S_i – μ_S .
+    3. Compute covariance matrix C = (1/(N-1)) Σ (ȦS_i)(ȦS_i)^T .
+    4. Perform eigendecomposition of C → eigenvectors V_k , eigenvalues λ_k .
+    5. Keep first K eigenvectors → PC = [V_1 … V_K] .
+    6. For each i: project onto PCs → a_i = PC^T · (S_i – μ_S)      # latent coefficient vector (length K)
+
+STEP 3 – KERNEL‑DENSITY AUGMENTATION
+    1. Fit Gaussian KDE on {a_i} with bandwidth h .
+    2. Draw M synthetic latent vectors {a_j} from KDE.
+    3. For each a_j:
+        a_j_real = μ_S + PC · a_j                     # reconstruct synthetic spectrum
+        For each filter j=1..J:
+            m_j = ∫ a_j_real(λ) · F_j(λ) dλ / ∫ F_j(λ) dλ
+        Add Gaussian noise:  m_j_noisy = m_j + N(0, 0.2·m_j)
+
+STEP 4 – TRAIN AUTOML REGRESSOR (ENCODER)
+    • Input dimension = J (photometry).
+    • Output dimension = K (latent coefficients).
+    • Train on pairs { (m_noisy, a_j) } using AutoML (e.g., ensemble of GBDTs + NN).
+    • Store predictive mean μ̂_a( m ) and predictive covariance Σ̂_a( m ) (or
+      predictive variance per component if only point estimate available).
+
+STEP 5 – TAXONOMY CLASSIFIER (optional)
+    • Train separate AutoML classifier on { (a_i, label_i) } where label_i ∈ {H2O, CO₂,
+      Org, Meth}.
+    • Store classifier model f_class( a ).
+
+FORWARD INFERENCE ON NEW PHOTOMETRY m_obs
+
+STEP 6 – MAP OBSERVED PHOTOMETRY TO LATENT SPACE
+    • Compute μ̂_a = regressor.predict_mean( m_obs ).
+    • If available, obtain Σ̂_a = regressor.predict_covariance( m_obs ).
+
+STEP 7 – SAMPLE FROM POSTERIOR (Gaussian COPULA)
+    For l = 1 … L:
+        • Generate u_l ∼ Uniform(0,1)^K .
+        • Transform to normal space: z_l = Φ⁻¹( u_l )     # Φ⁻¹ inverse CDF of standard normal
+        • Correlate: y_l = L(Σ̂_a) · z_l                  # Cholesky of Σ̂_a
+        • Map back to latent: a_l = μ̂_a + y_l
+        • (If only predictive means are available, skip steps 7a–c and set a_l = μ̂_a.)
+
+STEP 8 – RECONSTRUCT HIGH‑RESOLUTION SPECTRA
+    For each a_l:
+        S_l = μ_S + PC · a_l           # linear combination of PCs
+    Collect { S_1, … , S_L }.
+
+STEP 9 – COMPUTE STATISTICAL SUMMARY
+    • Mean spectrum:  Ŝ(λ) = (1/L) Σ S_l(λ).
+    • Credible intervals: For each λ, compute percentile bounds (e.g., 2.5% and 97.5%)
+      from the set {S_l(λ)}.
+    • Optional taxonomy probabilities: p_cls = f_class( μ̂_a ).
+
+OUTPUT
+    • Ŝ(λ) : mean reconstructed spectrum.
+    • CI(λ): credible‑interval envelope.
+    • p_cls: posterior taxonomic class distribution.

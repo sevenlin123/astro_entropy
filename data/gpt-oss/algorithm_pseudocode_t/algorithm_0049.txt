@@ -1,0 +1,71 @@
+Inputs
+------
+- For each object o:
+    * Observed magnitudes   M_o[j]   ,  j = 1 … J
+    * Photometric errors   Err_o[j] ,  j = 1 … J
+- Filter transmission curves   T[j][λ]   ,  j = 1 … J
+- Spectral basis set          B[k][λ]   ,  k = 1 … K
+- Zero‑point constants        ZP[j]     ,  j = 1 … J
+- Taxonomic reference library R[l][k]   ,  l = 1 … L   (coefficients of known classes)
+
+Pre‑processing
+---------------
+1. For every filter j and basis spectrum k:
+       * Compute synthetic flux  
+         F[j][k] = ∫ B[k][λ] * T[j][λ] dλ
+       * Compute synthetic magnitude  
+         M_syn[j][k] = –2.5*log10(F[j][k]) + ZP[j]
+
+2. Assemble basis matrix
+       B_vec[j] = [F[j][1], F[j][2], … , F[j][K]]   (size J × K)
+
+Core Reconstruction Loop
+------------------------
+For each object o:
+
+   1. **Define Model Parameters**
+      * Coefficients a[1…K]  (non‑negative, optional simplex constraint ∑a = 1)
+
+   2. **Predict Magnitudes**
+      For each filter j:
+         * Flux_pred[j] = Σ_k a[k] * F[j][k]
+         * Mag_pred[j]  = –2.5*log10(Flux_pred[j]) + ZP[j]
+
+   3. **Likelihood Function**
+      * lnL(a) = Σ_j [ –0.5 * ( (M_o[j] – Mag_pred[j]) / Err_o[j] )²
+                      – ln(√(2π)*Err_o[j]) ]
+
+   4. **Prior on a**
+      * Uniform over [0,∞) or Dirichlet if simplex constraint enforced
+
+   5. **Posterior Sampling (MAP or MCMC)**
+      * Initialize a⁰ (e.g., equal weights)
+      * Repeat until convergence:
+            a. Propose new a′ = aⁿ + ε  (ε drawn from proposal distribution)
+            b. If any a′[k] < 0 → reject
+            c. Compute lnL(a′)
+            d. Accept with probability min(1, exp(lnL(a′) – lnL(aⁿ)))
+            e. Set aⁿ⁺¹ = accepted value
+      * Store chain of a values; compute posterior mean â
+
+   6. **Reconstructed Spectrum**
+      * f_rec[λ] = Σ_k â[k] * B[k][λ]
+
+   7. **Taxonomic Classification**
+      * For each reference class l:
+            * Compute similarity s[l] = –Σ_k (â[k] – R[l][k])²
+      * Assign taxonomy = argmax_l s[l]
+      * Compute probability P_taxonomy = softmax(s)
+
+   8. **Outlier Detection**
+      * χ² = Σ_j ( (M_o[j] – Mag_pred[j]) / Err_o[j] )²
+      * If χ² > χ²_threshold → flag object as outlier
+
+Output
+------
+For each object o:
+   * Posterior coefficient distribution {a[k]}
+   * Reconstructed spectrum f_rec[λ]
+   * Taxonomic assignment with probability P_taxonomy
+   * Outlier flag (True/False)
+   * χ² diagnostic

@@ -1,0 +1,99 @@
+pseudocode
+/* ------------------------------------------------------------------
+   INPUTS
+   -------------------------------------------------------------------*/
+   REF_SPECTRA   : array[N_ref][N_lambda]     // high‑resolution reference spectra
+   FILTER_CURVES : array[N_filt][N_lambda]    // instrumental response functions
+   PHOTOMETRY    : array[N_obj][N_filt]       // observed photometric data (new objects)
+   BAND_ERRORS   : array[N_filt]              // typical measurement uncertainties
+   K_PCA         : integer                    // number of principal components to keep
+   KDE_BANDWIDTH : float                      // bandwidth for KDE density estimation
+   N_SYNTH       : integer                    // number of synthetic latent samples
+   N_POSTERIOR   : integer                    // number of posterior samples per object
+/* ------------------------------------------------------------------
+   STEP 1 – Build Latent Manifold (Prior)
+   -------------------------------------------------------------------*/
+   1.1  // PCA on reference spectra
+        MEAN_SPECTRUM = mean(REF_SPECTRA over axis 0)
+        SPECTRA_ZERO  = REF_SPECTRA - MEAN_SPECTRUM
+        [U, S, Vt]    = SVD(SPECTRA_ZERO)          // U: eigenvectors (principal comps)
+        PC_MATRIX     = Vt[:K_PCA, :]              // first K_PCA components
+        PC_VALUES     = SPECTRA_ZERO @ PC_MATRIX' // projections in latent space
+
+   1.2  // KDE density in latent space
+        kde = KernelDensity(kernel='gaussian', bandwidth=KDE_BANDWIDTH)
+        kde.fit(PC_VALUES)                         // non‑parametric estimate
+
+   1.3  // Sample synthetic latent vectors
+        LATENT_SYNTH = kde.sample(N_SYNTH)         // N_SYNTH × K_PCA matrix
+
+   1.4  // Reconstruct synthetic spectra from latent vectors
+        SYNTH_SPEC = LATENT_SYNTH @ PC_MATRIX      // matrix multiplication
+        SYNTH_SPEC = SYNTH_SPEC + MEAN_SPECTRUM    // add mean back
+
+/* ------------------------------------------------------------------
+   STEP 2 – Forward Model: Synthetic Photometry + Noise
+   -------------------------------------------------------------------*/
+   2.1  FOR i IN 0 … N_SYNTH-1:
+           spec = SYNTH_SPEC[i, :]
+           FOR j IN 0 … N_filt-1:
+                filt = FILTER_CURVES[j, :]
+                // integrate (convolve) spectrum with filter transmission
+                ph_opt[j] = ∫ spec * filt dλ / ∫ filt dλ
+           END FOR
+           // Add Gaussian noise to mimic measurement errors
+           noisy_phot = ph_opt + Normal(0, BAND_ERRORS)
+           STORE (noisy_phot, LATENT_SYNTH[i,:])   // training pair
+   END FOR
+
+   // Create training dataset
+   TRAIN_PHOTOMETRY = array of all noisy_phot      // shape: N_SYNTH × N_filt
+   TRAIN_LATENT     = array of all LATENT_SYNTH     // shape: N_SYNTH × K_PCA
+
+/* ------------------------------------------------------------------
+   STEP 3 – Train Encoder (Photometry → Latent)
+   -------------------------------------------------------------------*/
+   3.1  ENCODER_MODEL = AutoML_Ensemble()           // e.g., XGBoost + NN
+   3.2  ENCODER_MODEL.fit(TRAIN_PHOTOMETRY, TRAIN_LATENT)
+   // Output: for a new photometry vector p,
+   //         predicts a multivariate Gaussian mean μ(p) and covariance Σ(p)
+
+   // (If AutoML supplies deterministic outputs, fit a second model to
+   //  predict covariance or use bootstrapping to estimate uncertainties.)
+
+/* ------------------------------------------------------------------
+   STEP 4 – Train Classifier (Latent → Taxonomy)
+   -------------------------------------------------------------------*/
+   4.1  // Obtain latent labels from REF_SPECTRA
+        LATENT_LABELS = assign_taxonomy(PC_VALUES)  // known taxonomic classes
+
+   4.2  CLASSIFIER_MODEL = AutoML_Classifier()
+   4.3  CLASSIFIER_MODEL.fit(PC_VALUES, LATENT_LABELS)
+
+/* ------------------------------------------------------------------
+   STEP 5 – Inference for New Observations
+   -------------------------------------------------------------------*/
+   FOR each object o in PHOTOMETRY:
+       // 5.1  Predict latent posterior
+       μ_o, Σ_o = ENCODER_MODEL.predict_proba(PHOTOMETRY[o,:])
+
+       // 5.2  Sample from posterior in latent space
+       LATENT_SAMPLES = MultivariateNormal(μ_o, Σ_o).sample(N_POSTERIOR)
+
+       // 5.3  Reconstruct spectra from each sample
+       RECON_SPECS = LATENT_SAMPLES @ PC_MATRIX + MEAN_SPECTRUM
+
+       // 5.4  Compute posterior statistics for spectrum
+       SPEC_MEAN   = mean(RECON_SPECS over samples)
+       SPEC_COV    = cov(RECON_SPECS over samples)
+       SPEC_CI_LOW , SPEC_CI_HIGH = percentile(RECON_SPECS, [2.5, 97.5])
+
+       // 5.5  Classify taxonomy from latent mean
+       TAX_PROBS = CLASSIFIER_MODEL.predict_proba(μ_o)
+
+       OUTPUT:
+            o.id
+            SPEC_MEAN          // reconstructed spectrum
+            SPEC_CI_LOW, SPEC_CI_HIGH   // 95% credible interval
+            TAX_PROBS          // probability over taxonomic classes
+   END FOR

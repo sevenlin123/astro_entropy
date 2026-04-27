@@ -1,0 +1,107 @@
+Input: photometry {m_k, sigma_k} for k=1..K bands, filter response R_k(lambda)
+Output: posterior distribution of reflectance S(lambda) on grid λ_j
+
+Algorithm:
+1. Define wavelength grid Λ = {λ_1,...,λ_J}
+2. For each band k, compute basis vector B_k where B_k[j] = ∫ R_k(λ) φ_j(λ) dλ / ∫ R_k(λ) dλ  (if using basis functions φ)
+3. Construct GP prior: mean μ(Λ), covariance K(Λ,Λ;θ) with hyperparameters θ
+4. Assemble design matrix X where X[k,j] = B_k[j]
+5. Initialize hyperparameters θ, mean parameters μ0
+6. Repeat until convergence:
+   a. Sample spectrum f ~ N(μ, K)  (or use MCMC)
+   b. Predict magnitudes m_pred = X * f + m_0 (zero-point)
+   c. Compute log-likelihood L = Σ_k -0.5[(m_k-m_pred_k)/σ_k]^2
+   d. Update posterior of f via Gibbs or HMC
+   e. Update hyperparameters θ via MAP or slice sampling
+7. After burn-in, collect posterior samples of f
+8. Return statistics: median spectrum, credible intervals
+
+Given f ~ GP(μ, K)
+Observations y_k = w_k^T f + ε_k, ε_k ~ N(0, σ_k^2)
+
+Define W matrix KxJ with elements w_kj = ∫ R_k(λ_j)*Δλ / normalization
+
+Posterior: f | y ~ N( μ_post, K_post )
+where
+K_post = K - K * W^T * (W*K*W^T + Σ)^(-1) * W * K
+μ_post = μ + K * W^T * (W*K*W^T + Σ)^(-1) * (y - W*μ)
+
+pseudocode
+INPUT
+    Photometric measurements:  { (band_k, mag_k, err_k) } for k = 1 … K
+    Filter throughput curves:  R_k(λ)  for each band k
+    Reference wavelength grid: λ_j   for j = 1 … J  (uniform or chosen)
+    GP kernel hyper‑parameters: θ  (length scale ℓ, amplitude σ_f, noise σ_n)
+    Prior mean function: μ₀(λ)  (often zero or low‑order polynomial)
+
+OUTPUT
+    Posterior distribution of reflectance spectrum S(λ_j) on the grid λ_j
+    Derived spectral descriptors (median, confidence bands, slope, etc.)
+
+--------------------------------------------------------------------
+1. PREPARE GRID AND FILTER WEIGHTS
+--------------------------------------------------------------------
+1.1  For every band k:
+        Compute weight vector w_k of length J:
+            w_k[j] = ∫_{λ_min}^{λ_max} R_k(λ) * φ_j(λ) dλ /
+                     ∫_{λ_min}^{λ_max} R_k(λ) dλ
+          where φ_j(λ) is a basis representation of the spectrum
+          (e.g., Dirac delta at λ_j for pointwise GP on grid).
+
+1.2  Stack all w_k into a K × J matrix W  (rows = bands, columns = grid points).
+
+--------------------------------------------------------------------
+2. DEFINE GAUSSIAN PROCESSES
+--------------------------------------------------------------------
+2.1  Construct covariance matrix K_JJ of size J × J:
+        K_JJ[i,j] = σ_f² * exp( -(λ_i – λ_j)² / (2ℓ²) )     // Squared‑exponential
+2.2  Build observation noise covariance Σ_KK:
+        Σ_KK[k,k] = err_k²      // Photometric errors
+
+--------------------------------------------------------------------
+3. COMPUTE POSTERIOR FOR SPECIES
+--------------------------------------------------------------------
+3.1  Vectorize prior mean on grid:
+        μ_vec[j] = μ₀(λ_j)
+
+3.2  Compute intermediate matrix:
+        A = W * K_JJ * Wᵗ + Σ_KK         // K × K
+
+3.3  Invert A efficiently (e.g., Cholesky):
+        L_A = chol(A)          // A = L_A * L_Aᵗ
+        invA = solve(L_Aᵗ, solve(L_A, I_K))   // A⁻¹
+
+3.4  Posterior covariance of spectrum:
+        K_post = K_JJ – K_JJ * Wᵗ * invA * W * K_JJ
+
+3.5  Posterior mean of spectrum:
+        residual = mag_vector – W * μ_vec
+        μ_post = μ_vec + K_JJ * Wᵗ * invA * residual
+
+--------------------------------------------------------------------
+4. SAMPLE FROM POSTERIOR (optional, if full posterior desired)
+--------------------------------------------------------------------
+4.1  Draw N_samples draws from multivariate normal:
+        f_samp[n] ~ N( μ_post , K_post )   // for n = 1 … N_samples
+    (use Cholesky decomposition of K_post)
+
+--------------------------------------------------------------------
+5. ESTIMATE DESCRIPTORS
+--------------------------------------------------------------------
+5.1  Median spectrum:
+        med_S[λ_j] = median{ f_samp[n][j] }
+
+5.2  Credible intervals (e.g., 16th and 84th percentiles):
+        lower[j], upper[j] = percentile{ f_samp[:,j] , [16,84] }
+
+5.3  Spectral slope (example):
+        slope = (med_S[λ_high] – med_S[λ_low]) / (λ_high – λ_low)
+
+--------------------------------------------------------------------
+6. RETURN RESULTS
+--------------------------------------------------------------------
+Return:
+    μ_post (posterior mean spectrum)
+    K_post (posterior covariance matrix)
+    med_S, lower, upper (credible bands)
+    any additional descriptors computed

@@ -1,0 +1,76 @@
+text
+Inputs
+------
+O          – List of observed objects  
+For each object o ∈ O:
+    m_o[b]      – measured apparent magnitude in band b
+    σ_o[b]      – measurement uncertainty in band b
+    R_b(λ)      – filter transmission function for band b
+    ZP_b        – zero‑point for band b
+S(λ)         – Solar spectral energy distribution (reference)
+
+Parameters
+----------
+N_basis       – number of basis functions used to represent the spectrum
+N_iter        – total number of MCMC iterations
+B            – number of burn‑in iterations to discard
+step_cov      – covariance matrix for proposal step (e.g., diagonal with small values)
+
+Representations
+---------------
+Basis functions ϕ_k(λ), k = 1…N_basis  (e.g., low‑order polynomials, splines)
+Reflectance model
+    R_o(λ; θ) = Σ_{k=1}^{N_basis} θ_k ϕ_k(λ)
+    θ = (θ_1,…,θ_N_basis)  – spectral parameters for object o
+
+Forward model
+-------------
+For any θ:
+    For each band b:
+        F_o,b(θ) = ∫ S(λ) · R_o(λ;θ) · R_b(λ) dλ
+        m_o,b^(model)(θ) = –2.5·log10[F_o,b(θ)] + ZP_b
+
+Prior on θ
+-----------
+Choose a weakly informative prior, e.g.
+    θ_k ~ Normal(0, σ_prior^2)   for all k
+    Impose R_o(λ;θ) ≥ 0 by rejecting proposals that yield negative
+    reflectance at any λ.
+
+Log–posterior
+-------------
+logπ(θ | data) =
+    –½ Σ_b [ (m_o,b – m_o,b^(model)(θ)) / σ_o,b ]²     // Gaussian likelihood
+    + Σ_k log[Normal(θ_k | 0, σ_prior²)]                // prior log‑density
+    + 0  if R_o(λ;θ) ≥ 0 everywhere, else –∞           // hard positivity constraint
+
+MCMC Sampler (Metropolis–Hastings)
+----------------------------------
+Initialize θ₀ randomly from prior
+Compute logπ₀ = logπ(θ₀ | data)
+
+For t = 1 … N_iter
+    Propose θ' = θ_{t–1} + ε ,  ε ~ Normal(0, step_cov)
+    If R_o(λ;θ') < 0 anywhere: reject (θ_t = θ_{t–1}, logπ_t = logπ_{t–1}); continue
+    Compute logπ' = logπ(θ' | data)
+    Acceptance probability α = min(1, exp(logπ' – logπ_{t–1}))
+    Draw u ~ Uniform(0,1)
+    If u < α:
+        θ_t = θ',  logπ_t = logπ'
+    Else:
+        θ_t = θ_{t–1},  logπ_t = logπ_{t–1}
+    Store θ_t
+
+Post‑processing
+---------------
+Discard first B stored samples as burn‑in
+Return the remaining {θ_t} as draws from the posterior for object o
+
+Output
+------
+For each object:
+    Posterior samples of θ
+    Derived spectral reflectance curves:
+        R_o(λ;θ_t)  for every stored θ_t
+    Optionally summary statistics:
+        Median spectrum, 68% credible intervals per λ

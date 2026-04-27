@@ -1,0 +1,54 @@
+INPUT
+    ObservedObjects  // list of O objects
+        O_i = {  ID,
+                 Filters = {f1, f2, …, fn},
+                 Magnitudes = {m_f1, m_f2, …, m_fn},
+                 Errors     = {σ_f1, σ_f2, …, σ_fn} }
+    SpectralLibrary  // list of M template spectra
+        S_j(λ)   // flux density as function of wavelength
+
+PARAMETERS
+    PriorWeights[j]   // optional prior probability for each template (default = 1/M)
+    Tolerance          // convergence tolerance for iterative refinement (optional)
+
+PREPROCESSING
+    1. For every filter fk, obtain its transmission curve T_fk(λ).
+    2. For each template S_j, compute predicted magnitudes in all filters:
+           m_pred(j,k) = -2.5 * log10( ∫ S_j(λ) * T_fk(λ) dλ / ∫ T_fk(λ) dλ )
+       Store as Matrix M_pred[M][N]  // M templates × N filters
+
+RECONSTRUCTION (per object)
+FOR each object O_i IN ObservedObjects DO
+    1. Extract arrays:
+           F_obs = [m_f1, m_f2, …, m_fn]
+           E_obs = [σ_f1, σ_f2, …, σ_fn]
+    2. Likelihood evaluation:
+        FOR each template j = 1…M DO
+            a. Compute residual vector:
+                   Δ_j = F_obs - M_pred[j]          // element‑wise subtraction
+            b. Compute χ²_j = Σ_k (Δ_j[k]² / E_obs[k]²)
+            c. Compute likelihood L_j = exp(-0.5 * χ²_j)
+        END FOR
+    3. Posterior probability calculation:
+        a. Unnormalized posterior P̃_j = L_j * PriorWeights[j]
+        b. Normalization constant Z = Σ_j P̃_j
+        c. Posterior P_j = P̃_j / Z
+    4. Spectral reconstruction options:
+        (a) Deterministic best‑fit:
+                j_best = argmax_j P_j
+                ReconstructedSpectrum = S_{j_best}
+        (b) Probabilistic mixture:
+                ReconstructedSpectrum(λ) =
+                     Σ_j P_j * S_j(λ)          // weighted sum over all templates
+    5. Store results:
+        Result_i = {ID = O_i.ID,
+                    Posterior = [P_1,…,P_M],
+                    BestFit   = j_best,
+                    Spectrum  = ReconstructedSpectrum}
+END FOR
+
+OUTPUT
+    Results list containing, for each object:
+        • Posterior probabilities over all templates
+        • Selected best‑fit template index
+        • Reconstructed spectral distribution (either best‑fit or mixture)

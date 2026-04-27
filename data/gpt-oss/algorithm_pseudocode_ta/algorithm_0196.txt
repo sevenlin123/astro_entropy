@@ -1,0 +1,60 @@
+INPUT
+    S_train[ N_spec ][ N_wave ]   # Training spectra (flux vs wavelength)
+    Filters[ N_filter ]           # Filter transmission curves T_f(λ)
+    y_obs[ N_filter ]             # Observed photometry for target
+    sigma[ N_filter ]             # Measurement uncertainties
+    K                              # Number of PCs to retain (default 5–10)
+
+OUTPUT
+    s_recon[ N_wave ]             # Reconstructed full spectrum
+    cov_recon[ N_wave ][ N_wave ] # Uncertainty matrix for spectrum
+    posterior_c[ K ]              # MAP coefficients
+    posterior_cov_c[ K ][ K ]     # Posterior covariance of coefficients
+
+1.1   Normalize all S_train to a common reference (e.g., median at 1.6 µm).
+1.2   Interpolate each spectrum onto a shared wavelength grid λ[ N_wave ].
+1.3   Compute the mean spectrum μ_s[ N_wave ] = mean(S_train, axis=0).
+1.4   Center data: X_centered[ i ][ j ] = S_train[i][j] – μ_s[j].
+
+2.1   Compute covariance matrix C = (X_centered^T · X_centered) / (N_spec – 1).
+2.2   Eigendecompose: [eig_vals, eig_vecs] = eig(C).
+2.3   Sort eig_vals descending; keep first K eigenvectors → PC[ K ][ N_wave ].
+2.4   Project training spectra onto PCs:
+        c_train[ i ][ k ] = dot( X_centered[i], PC[k] ).
+
+3.1   For each filter f in Filters:
+        For each PC k:
+            φ[k][f] = ∫ PC[k](λ) * T_f(λ) dλ   /   ∫ T_f(λ) dλ
+        μ_f[f] = ∫ μ_s(λ) * T_f(λ) dλ / ∫ T_f(λ) dλ
+
+3.2   Assemble design matrix Φ[ K ][ N_filter ] with entries φ[k][f].
+3.3   Assemble mean flux vector μ_f[ N_filter ].
+3.4   Assemble observation vector y = y_obs.
+3.5   Assemble weighting matrix W = diag( 1 / sigma^2 ).
+
+4.1   Prior mean μ_c = 0[ K ].
+4.2   Prior covariance Λ = diag( eig_vals[0:K] ).
+
+4.3   Posterior precision matrix:
+        P = Φ^T · W · Φ + Λ^(-1)
+
+4.4   Posterior mean of coefficients:
+        c_map = P^(-1) · Φ^T · W · ( y – μ_f )
+
+4.5   Posterior covariance of coefficients:
+        cov_c = P^(-1)
+
+5.1   Reconstructed spectrum:
+        s_recon[ j ] = μ_s[j] + sum_k( c_map[k] * PC[k][j] )
+
+5.2   Propagate coefficient uncertainty to spectrum:
+        For each pair (j, j'):
+            cov_recon[j][j'] = sum_k( λ_k * PC[k][j] * PC[k][j'] )
+
+6.1   Draw M samples of coefficients:
+        c_sample[m] ~ MVN( c_map, cov_c )
+
+6.2   For each sample, compute s_sample[m] = μ_s + PC · c_sample[m]
+6.3   Empirical credible intervals can be derived from {s_sample}.
+
+return s_recon, cov_recon, c_map, cov_c

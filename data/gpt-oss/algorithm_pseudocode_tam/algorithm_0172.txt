@@ -1,0 +1,87 @@
+pseudocode
+--------------------------------------------------------------------
+INPUTS
+--------------------------------------------------------------------
+  S_seed[1..N]          # High‑resolution reflectance spectra of N TNOs
+  T_filter[1..F][λ]     # Throughput curves of F photometric filters
+  K                     # Desired number of principal components (≈ 5–10)
+  h                     # KDE bandwidth (≈ 0.5)
+  M                     # Number of synthetic latent samples (≈ 5000)
+  N_sample              # Number of posterior samples during inference
+  σ_phot                # Relative photometric noise (0.2)
+--------------------------------------------------------------------
+OUTPUTS
+--------------------------------------------------------------------
+  Posterior reconstruction of full spectrum S_recon(λ)
+  Credible‑interval bands (α, β, …)  # e.g., 68%, 95%
+  Taxonomic probability vector P_tax
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+TRAINING PHASE
+--------------------------------------------------------------------
+1.  /* 1.1 Spectral preprocessing   */
+2.  FOR each spectrum s in S_seed:
+3.      Normalize s (divide by solar spectrum if needed)
+4.  END FOR
+
+5.  /* 1.2 Principal Component Analysis */
+6.  Compute mean spectrum μ_S = mean(S_seed)
+7.  Centered spectra  X = S_seed – μ_S
+8.  Perform SVD on X → eigenvectors U[1..K], eigenvalues λ_i
+9.  Project seeds onto PCs:
+10.    Z_seed[i] = Uᵀ · (S_seed[i] – μ_S)   // i = 1…N, size K
+
+11. /* 1.3 Kernel Density Estimation of latent space */
+12.  Fit KDE to {Z_seed} with bandwidth h → density f_Z(z)
+
+13. /* 1.4 Synthetic latent sample generation */
+14.  DRAW M latent vectors {z*} ~ f_Z(z)
+
+15. /* 1.5 Reconstruct synthetic spectra */
+16.  FOR each z*:
+17.      S* = μ_S + U · z*
+18.      Store S* in S_syn
+19.  END FOR
+
+20. /* 1.6 Forward‑model synthetic photometry */
+21.  FOR each synthetic spectrum S* in S_syn:
+22.      FOR each filter j:
+23.          m_j = ∫ S*(λ) · T_filter[j](λ) dλ   // numeric integration
+24.      END FOR
+25.      Add Gaussian noise: m_j ← m_j × (1 + Normal(0, σ_phot))
+26.      Store noisy photometry vector m_syn
+27.  END FOR
+
+28. /* 1.7 Build training tables */
+29.  TRAINING_SET = {(m_syn[k], z*_k)}   // k = 1…M
+30.  CLASS_LABELS = {L_seed[i]}         // known taxonomic labels for seeds
+
+31. /* 1.8 Train photometry→latent regressor */
+32.  R = AutoML_Regression(TRAINING_SET)   // e.g., gradient‑boosted trees
+
+33. /* 1.9 Train latent→taxonomic classifier */
+34.  C = AutoML_Classifier({(Z_seed[i], L_seed[i])})
+
+--------------------------------------------------------------------
+FORWARD INFERENCE
+--------------------------------------------------------------------
+INPUT: Observed photometry vector m_obs[1..F]
+
+1. /* Predict latent coefficient posterior */
+2.  z_mean, z_cov = R.predict_posterior(m_obs)   // mean & covariance
+
+3. /* Sample posterior latent vectors */
+4.  FOR n = 1 … N_sample:
+5.      z_n = Sample_Gaussian(z_mean, z_cov)      // Monte‑Carlo draw
+6.      S_n = μ_S + U · z_n                      // inverse PCA
+7.      Store S_n
+8.  END FOR
+
+9. /* Aggregate spectra to form posterior */
+10. S_mean(λ) = mean_over_n{S_n(λ)}
+11. CredibleIntervals(λ) = percentiles_of{S_n(λ)}
+
+12. /* Taxonomic probabilities */
+13. P_tax = C.predict_probabilities(z_mean)   // or average over samples
+
+14. RETURN S_mean, CredibleIntervals, P_tax

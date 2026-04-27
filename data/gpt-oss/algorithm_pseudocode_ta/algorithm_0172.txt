@@ -1,0 +1,74 @@
+text
+INPUT:
+    S_train[1..N]          // N near‑IR spectra (flux vs λ) on common wavelength grid
+    F_filters[1..M]        // M filter transmission curves (same λ grid)
+    photometry[1..K]      // K objects with observed fluxes f_k[i], i=1..M
+    sigma_phot[1..K][1..M]// corresponding photometric uncertainties
+
+PARAMETERS:
+    nPC                    // number of principal components to retain
+    prior_cov              // prior covariance matrix for PC coefficients (default = I)
+
+OUTPUT:
+    reconstructed_spectrum[k][1..L]   // reconstructed fluxes for each object k
+    coeff_mean[k][1..nPC]            // posterior means of PC coefficients
+    coeff_cov[k][1..nPC][1..nPC]     // posterior covariances
+    cred_int[k][1..L]                // e.g. 95% credible intervals per wavelength
+
+--------------------------------------------------------------------
+STEP 0: Pre‑processing
+--------------------------------------------------------------------
+0.1  Compute mean spectrum μ_s(λ) = (1/N) Σ_i S_train[i](λ)
+0.2  Center training spectra: X[i] = S_train[i] – μ_s
+0.3  Perform singular value decomposition: X = U Σ Vᵀ
+0.4  Retain first nPC columns of V → PCs[1..nPC] (each a λ‑vector)
+0.5  Project centered spectra onto PCs: α[i,j] = U[i,j] * Σ[j]
+     (α[i] is the PC coefficient vector for spectrum i)
+
+--------------------------------------------------------------------
+STEP 1: Build Filter Design Matrix
+--------------------------------------------------------------------
+1.1  For each filter j=1..M:
+        For each PC p=1..nPC:
+            Compute projected flux a[j,p] = ∫ PCs[p](λ) * F_filters[j](λ) dλ
+    (This yields an M × nPC matrix A)
+1.2  For each filter j:
+        Compute mean flux contribution from mean spectrum:
+            μ_f[j] = ∫ μ_s(λ) * F_filters[j](λ) dλ
+
+--------------------------------------------------------------------
+STEP 2: Bayesian Inference for Each Object
+--------------------------------------------------------------------
+For each object k = 1..K:
+    2.1  Observation vector y = [f_k[1] … f_k[M]]ᵀ
+    2.2  Weight matrix W = diag( 1 / σ_phot[k,1]² , … , 1 / σ_phot[k,M]² )
+    2.3  Likelihood:   y | α_k ~ N( μ_f + A α_k , W⁻¹ )
+    2.4  Prior:        α_k ~ N(0 , prior_cov)
+    2.5  Posterior precision:
+            Λ = Aᵀ W A + prior_cov⁻¹
+    2.6  Posterior mean:
+            μ_post = Λ⁻¹ Aᵀ W (y – μ_f)
+    2.7  Posterior covariance:
+            Σ_post = Λ⁻¹
+    2.8  Store μ_post → coeff_mean[k]
+          Store Σ_post → coeff_cov[k]
+
+--------------------------------------------------------------------
+STEP 3: Spectrum Reconstruction
+--------------------------------------------------------------------
+For each object k:
+    3.1  Reconstruct mean spectrum:
+            Ŝ_k(λ) = μ_s(λ) + Σ_{p=1}^{nPC} μ_post[p] * PCs[p](λ)
+    3.2  To obtain uncertainties:
+            3.2.1  Sample N_samp sets of coefficients:
+                    α_sample = μ_post + L * z
+                    where L = chol(Σ_post) and z ~ N(0,I) size nPC
+            3.2.2  For each sample, build spectrum:
+                    S_sample(λ) = μ_s(λ) + Σ_p α_sample[p] * PCs[p](λ)
+            3.2.3  For each λ, compute 2.5th and 97.5th percentiles of {S_sample(λ)}
+                    → cred_int[k][λ]
+    3.3  Store Ŝ_k(λ) → reconstructed_spectrum[k]
+
+--------------------------------------------------------------------
+END
+--------------------------------------------------------------------

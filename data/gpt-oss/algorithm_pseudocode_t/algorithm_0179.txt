@@ -1,0 +1,68 @@
+Input:
+    - Filter set {F_i} (i = 1 … N_f) with transmission curves R_i(λ)
+    - Wavelength grid Λ = {λ_ℓ} (ℓ = 1 … N_λ)
+    - Basis templates {T_k(λ)} (k = 1 … N_b) – e.g. linear, step, Gaussian, exponential
+    - Observations for each target t:
+        • Magnitudes m_i^(t) and errors σ_i^(t) in each filter F_i
+    - Taxonomic class prototypes {S_c(λ)} (c = 1 … N_c)  // mean spectra
+    - Prior standard deviation σ_a for template coefficients a_k
+
+Output for each target t:
+    - Posterior samples {a_k} over basis coefficients
+    - Reconstructed mean spectrum Ŝ(λ)
+    - Uncertainty bands (e.g. 16th–84th percentile)
+    - Posterior class probabilities P(c | data)
+
+--------------------------------------------------------------------
+Pre‑processing
+--------------------------------------------------------------------
+1. For every filter F_i:
+       For every template T_k:
+           Compute integral I[i,k] = ∫ R_i(λ) * T_k(λ) dλ          // forward model
+           Normalize I[i,k] such that 1 unit coefficient gives a
+           magnitude shift equal to zero (or store as is)
+2. Store all I[i,k] in matrix I (size N_f × N_b).
+
+--------------------------------------------------------------------
+Per‑target processing
+--------------------------------------------------------------------
+For each target t:
+    1. Gather observation vector y = [m_1^(t), …, m_Nf^(t)]ᵀ
+       Observation error vector σ = [σ_1^(t), …, σ_Nf^(t)]ᵀ
+    2. Define log‑posterior function L(a):
+           # a is vector of coefficients [a_1 … a_Nb]
+           Predict magnitudes:
+               y_pred[i] = Σ_k I[i,k] * a_k          // linear model
+           Compute χ²:
+               χ² = Σ_i ((y[i] - y_pred[i]) / σ[i])²
+           Log‑prior (Gaussian centered at 0):
+               logp = -0.5 * Σ_k (a_k / σ_a)²
+           Return L = -0.5*χ² + logp
+    3. Sample posterior of a using e.g. Hamiltonian Monte Carlo or
+       affine‑invariant ensemble sampler:
+           Initialize walker positions near zero.
+           Run until convergence (e.g. 2000 draws, burn‑in 500).
+           Store posterior samples {a^{(s)}} (s = 1 … N_s).
+    4. Reconstruct mean spectrum:
+           Compute mean coefficients μ_k = mean_s{a_k^{(s)}}
+           Ŝ(λ_ℓ) = Σ_k μ_k * T_k(λ_ℓ)
+    5. Estimate spectral uncertainty:
+           For each λ_ℓ:
+               Gather S^{(s)}(λ_ℓ) = Σ_k a_k^{(s)} * T_k(λ_ℓ)
+               Compute 16th, 50th, 84th percentiles → envelope.
+    6. Classify taxonomically:
+           For each class c:
+               Compute distance D_c =
+                   sqrt( Σ_ℓ (Ŝ(λ_ℓ) - S_c(λ_ℓ))² / N_λ )
+           Convert distances to probabilities:
+               P(c | data) = exp( - D_c² / (2 τ²) ) /
+                             Σ_{c'} exp( - D_{c'}² / (2 τ²) )
+           where τ is a scaling hyper‑parameter (e.g. median of D_c).
+    7. Output:
+           • Posterior samples {a^{(s)}}
+           • Mean spectrum Ŝ(λ) and uncertainty envelope
+           • Class probabilities {P(c | data)}
+
+--------------------------------------------------------------------
+End of Algorithm
+--------------------------------------------------------------------

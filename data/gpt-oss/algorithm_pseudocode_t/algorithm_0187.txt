@@ -1,0 +1,42 @@
+K_fk = ∫_λ λ B_k(λ) R_f(λ) dλ
+
+FOR each object i = 1 … N_obj DO
+
+   # 1. Convert magnitudes to fluxes
+   FOR each filter f IN Filters DO
+        F_i[f]    = 10^( -0.4 * ( M_i[f] - ZP_f ) )            # flux
+        σ_F_i[f]  = 0.4 * ln(10) * F_i[f] * σ_M_i[f]           # propagate error
+   END FOR
+
+   # 2. Weight matrix
+   W_i = diag( 1 / σ_F_i[f]^2 )
+
+   # 3. Weighted linear solve (Non‑Negative Least Squares)
+   #    Minimize   || sqrt(W_i) * (F_i - K * a) ||^2
+   #    Subject to a_k ≥ 0
+   a_i = NNLS( K , F_i , W_i )          # returns coefficient vector
+
+   # 4. Spectrum reconstruction
+   FOR each wavelength ℓ = 1 … L DO
+        S_i[ℓ] = Σ_{k=1}^{K}  a_i[k] * B_k( λ_grid[ℓ] )
+   END FOR
+
+   # 5. Uncertainty propagation
+   #    Covariance of coefficients:  C = (Kᵀ W_i K)^(-1)
+   C_i = inverse( Kᵀ * W_i * K )
+   FOR each wavelength ℓ = 1 … L DO
+        Var_S_i[ℓ] = Σ_{j=1}^{K} Σ_{k=1}^{K} 
+                      B_j(λ_grid[ℓ]) * C_i[j,k] * B_k(λ_grid[ℓ])
+   END FOR
+
+   # 6. (Optional) Bayesian refinement via MCMC
+   #    Define posterior p(a | data) ∝ exp(-½ (F_i - K a)ᵀ W_i (F_i - K a))
+   #    × Prior(a)
+   #    Sample a_i using Metropolis–Hastings or Hamiltonian Monte Carlo
+   #    Recompute S_i and Var_S_i from samples if higher precision desired.
+
+   # 7. Taxonomic classification (optional)
+   #    Compute χ² similarity between S_i and each class template T_c
+   #    Assign posterior class probabilities.
+
+END FOR

@@ -1,0 +1,92 @@
+INPUT:
+    - Photometric observations for each object i:
+        * Filters F = {f1, f2, …, fn}
+        * Apparent magnitudes m_i,f
+        * Measurement uncertainties σ_i,f
+    - Reference spectral library L = {L_k(λ)}   // optional, for prior construction
+    - Spectral basis B = {b_j(λ)}              // e.g., polynomials, PCs, or endmembers
+    - Hyper‑parameters for priors (σ_prior, correlations)
+
+OUTPUT:
+    - Posterior samples of spectral reflectance S_i(λ) for each object
+    - Derived color indices (e.g., g–r, r–i, ...)
+    - Classification labels (optional)
+
+--------------------------------------------------------------------
+STEP 1 – INITIALIZE COMPUTATIONAL FRAMEWORK
+--------------------------------------------------------------------
+1.1 Define wavelength grid Λ covering all filter effective wavelengths.
+1.2 Project each filter response R_f(λ) onto Λ to obtain forward model matrix A_f[λ] = ∫ R_f(λ) dλ.
+1.3 For every object i, assemble observation vector y_i = [m_i,f1, …, m_i,fn]^T.
+1.4 Build design matrix X_i = [A_f1 · B; … ; A_fn · B] such that
+      y_i ≈ X_i · θ_i + ε_i,
+   where θ_i are coefficients in basis B and ε_i ~ N(0, Σ_i).
+1.5 Set covariance Σ_i = diag(σ_i,f^2).
+
+--------------------------------------------------------------------
+STEP 2 – DEFINE PRIOR MODEL
+--------------------------------------------------------------------
+2.1 Specify prior on θ_i as multivariate normal:
+      θ_i ~ N(μ_prior, Σ_prior).
+2.2 Choose μ_prior and Σ_prior from:
+      • Empirical moments of L if available.
+      • Non‑informative defaults (μ_prior = 0, Σ_prior = large).
+2.3 If desired, enforce positivity of reflectances by reparameterising:
+      θ_i = exp(φ_i)  and place Gaussian prior on φ_i.
+
+--------------------------------------------------------------------
+STEP 3 – FORMULATE LIKELIHOOD
+--------------------------------------------------------------------
+3.1 For each i, likelihood:
+      p(y_i | θ_i) = N(y_i | X_i·θ_i , Σ_i).
+3.2 Compute log‑likelihood:
+      ℓ_i(θ_i) = -0.5 * [(y_i - X_i·θ_i)^T Σ_i^{-1} (y_i - X_i·θ_i) + ln|Σ_i| + n ln(2π)].
+
+--------------------------------------------------------------------
+STEP 4 – POSTERIOR SAMPLING (MCMC)
+--------------------------------------------------------------------
+4.1 Initialise chain for each i with θ_i^(0) = μ_prior.
+4.2 For iteration t = 1 … N_iter:
+     a. Propose new coefficients θ_i' = θ_i^(t-1) + η,  where η ~ N(0, Δ).
+     b. Compute log‑posterior difference:
+          Δlogp = ℓ_i(θ_i') + log p(θ_i')  –  (ℓ_i(θ_i^(t-1)) + log p(θ_i^(t-1))).
+     c. Accept θ_i' with probability min(1, exp(Δlogp)).
+        If accepted set θ_i^(t)=θ_i'; else θ_i^(t)=θ_i^(t-1).
+4.3 Store posterior samples {θ_i^(t)} after burn‑in and thinning.
+
+--------------------------------------------------------------------
+STEP 5 – RECONSTRUCT REFLECTANCE CURVES
+--------------------------------------------------------------------
+5.1 For each retained sample θ_i^(t):
+      S_i^(t)(λ) = B(λ) · θ_i^(t)    // linear combination in basis
+5.2 Compute posterior predictive mean:
+      ⟨S_i(λ)⟩ = (1 / N_samples) Σ_t S_i^(t)(λ).
+5.3 Compute posterior predictive variance:
+      Var[S_i(λ)] = (1 / (N_samples-1)) Σ_t (S_i^(t)(λ) - ⟨S_i(λ)⟩)^2.
+
+--------------------------------------------------------------------
+STEP 6 – DERIVE PHYSICAL PARAMETERS
+--------------------------------------------------------------------
+6.1 Calculate color indices for each sample:
+      CI_k^(t) = m_i,f_a^(t) - m_i,f_b^(t)   // where m = -2.5 log10(S).
+6.2 Obtain posterior means and credible intervals for each CI_k.
+6.3 Optional: integrate reflectance over known bandpasses to predict
+      photometry in unobserved filters.
+
+--------------------------------------------------------------------
+STEP 7 – TAXONOMY CLUSTERING (optional)
+--------------------------------------------------------------------
+7.1 Assemble feature vector for each object:
+      v_i = [mean(CI_1), …, mean(CI_p), std(CI_1), …].
+7.2 Standardise features across all objects.
+7.3 Run unsupervised clustering (e.g., K‑means, Gaussian Mixture) on {v_i}.
+7.4 Assign cluster labels as taxonomic classes.
+
+--------------------------------------------------------------------
+STEP 8 – OUTPUT RESULTS
+--------------------------------------------------------------------
+8.1 Save posterior samples of θ_i and derived S_i(λ).
+8.2 Export posterior predictive means, variances, and color indices.
+8.3 Record classification labels if clustering performed.
+
+END

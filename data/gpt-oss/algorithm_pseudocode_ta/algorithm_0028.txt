@@ -1,0 +1,78 @@
+pseudocode
+--------------------------------------------------------------------
+INPUT
+    Training spectra set S[1..Ns]  // each S[i] is flux at wavelengths λ[1..Nλ]
+    Filter list F[1..NF]           // each filter has transmission curve T_f(λ)
+    Observed photometry for one target:
+        Magnitudes   M[f]   (f = 1..Nobs ≤ NF)
+        Measurement errors  σ[f]
+--------------------------------------------------------------------
+OUTPUT
+    Reconstructed spectrum S_rec[1..Nλ]
+    Spectral covariance matrix CovS[1..Nλ][1..Nλ]
+--------------------------------------------------------------------
+ALGORITHM
+--------------------------------------------------------------------
+1.  PRE‑PROCESS TRAINING SPECTRA
+    --------------------------------------------------------------
+    1.1  Compute mean spectrum μ[λ] = mean_i S[i][λ]
+    1.2  Center spectra: X[i][λ] = S[i][λ] – μ[λ]
+    1.3  Build data matrix X of shape (Ns , Nλ)
+
+2.  PRINCIPAL COMPONENT ANALYSIS (PCA)
+    --------------------------------------------------------------
+    2.1  Compute covariance C = (Xᵀ * X) / (Ns – 1)          // shape (Nλ , Nλ)
+    2.2  Eigen‑decompose:  C = V * diag(λk) * Vᵀ              // V columns are PCs
+    2.3  Sort PCs by descending eigenvalue
+    2.4  Choose K PCs such that cumulative variance ≥ desired threshold
+    2.5  Form PC matrix V_K = V[:, 1..K]                       // shape (Nλ , K)
+
+3.  FORWARD MODEL FOR FILTER MAGNITUDES
+    --------------------------------------------------------------
+    For each filter f ∈ F:
+        3.1  Compute scalar base term:
+                 m0[f] = ∫ T_f(λ) * μ(λ) dλ                    // baseline flux
+        3.2  Compute vector of filter–PC overlaps:
+                 w[f][k] = ∫ T_f(λ) * V_K[λ, k] dλ  for k=1..K
+        // The predicted magnitude for latent vector a is:
+        //     m_pred[f] = m0[f] + w[f] · a
+
+4.  BUILD PHOTOMETRIC DATA FOR TARGET
+    --------------------------------------------------------------
+    4.1  Identify observed filters O ⊆ F
+    4.2  Construct observation vector y[ ] = M[f] – m0[f]   for f ∈ O
+    4.3  Construct design matrix W[ ][ ] of size (|O| × K):
+             W[f, k] = w[f][k]   for f ∈ O, k=1..K
+    4.4  Observation noise covariance:
+             Σ_noise = diag(σ[f]^2)   for f ∈ O
+
+5.  PRIORS ON LATENT COEFFICIENTS
+    --------------------------------------------------------------
+    5.1  From training set compute coefficient vectors a[i]:
+             a[i] = V_Kᵀ * X[i]        // shape (K,)
+    5.2  Compute prior mean μ_prior = mean_i a[i]
+    5.3  Compute prior covariance Σ_prior = cov_i(a[i])  // shape (K × K)
+
+6.  BAYESIAN INFERENCE (LINEAR GAUSSIAN)
+    --------------------------------------------------------------
+    // Posterior is Gaussian:  a | y ~ N( μ_post , Σ_post )
+    6.1  Compute posterior precision:
+             Λ_post = Σ_prior⁻¹ + Wᵀ * Σ_noise⁻¹ * W            // shape (K×K)
+    6.2  Compute posterior covariance:
+             Σ_post = Λ_post⁻¹
+    6.3  Compute posterior mean:
+             μ_post = Σ_post * ( Σ_prior⁻¹ * μ_prior + Wᵀ * Σ_noise⁻¹ * y )
+
+7.  RECONSTRUCT FULL SPECTRUM
+    --------------------------------------------------------------
+    7.1  Mean spectrum estimate:
+             S_mean[λ] = μ[λ] + Σ_k μ_post[k] * V_K[λ, k]
+    7.2  Spectral covariance:
+             CovS = V_K * Σ_post * V_Kᵀ                           // shape (Nλ × Nλ)
+    7.3  Optionally extract 1σ interval at each λ:
+             ±σ_spec[λ] = sqrt( CovS[λ, λ] )
+
+8.  RETURN
+    -------------------------------------------------------------------
+    S_rec = S_mean
+    CovS   (or per‑wavelength uncertainties σ_spec)

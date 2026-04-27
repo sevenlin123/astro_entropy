@@ -1,0 +1,79 @@
+PROCEDURE RECONSTRUCT_SPECTRUM(object_photometry, filter_transmissions,
+                               basis_library, prior_params, mcmc_settings):
+
+    1. // ---------- 1. Data Preparation ----------
+    1.1 FOR EACH measurement i IN object_photometry:
+            mag_i      ← measurement.magnitude
+            err_mag_i  ← measurement.error
+            filt_i     ← measurement.filter_name
+            λ_eff_i    ← effective_wavelength(filter_transmissions[filt_i])
+            F_i        ← MAG_TO_FLUX(mag_i, λ_eff_i)          // e.g. F_i = F_0 * 10^(-0.4*mag_i)
+            σ_F_i      ← TRANSFER_ERROR(err_mag_i, F_i)       // propagate magnitude error to flux
+            STORE (F_i, σ_F_i, filt_i) IN flux_list
+
+    2. // ---------- 2. Design Matrix Construction ----------
+    2.1 N_filters   ← LENGTH(flux_list)
+    2.2 N_basis     ← SIZE_OF(basis_library)                // number of template spectra
+    2.3 INITIALIZE A AS N_filters × N_basis matrix of zeros
+    2.4 FOR EACH basis j IN 1 … N_basis:
+            basis_spectrum_j ← basis_library[j]              // λ–normalized reflectance values
+            FOR EACH (F_i, σ_F_i, filt_i) IN flux_list:
+                    model_flux_ij ← INTEGRATE(basis_spectrum_j, filter_transmissions[filt_i])
+                    A[i, j] ← model_flux_ij
+
+    3. // ---------- 3. Likelihood Function ----------
+    3.1 DEFINE vector F_obs WITH components F_i
+    3.2 DEFINE covariance Σ = diag(σ_F_i^2)
+    3.3 FUNCTION LIKELIHOOD(c):
+            residual ← F_obs – A · c
+            return EXP( –0.5 * TRANSPOSE(residual) · INV(Σ) · residual )
+
+    4. // ---------- 4. Prior Specification ----------
+    4.1 IF prior_params.type == 'Dirichlet':
+            α ← prior_params.parameters   // concentration vector
+            PRIOR(c) ← DIRICHLET_PROB(c, α)
+       ELSE IF prior_params.type == 'Gaussian':
+            μ ← prior_params.mean         // usually zeros
+            Λ ← prior_params.covariance
+            PRIOR(c) ← GAUSSIAN_PROB(c, μ, Λ)
+
+    5. // ---------- 5. Posterior Sampling ----------
+    5.1 INITIALIZE chain c_current (e.g., from non‑negative least squares)
+    5.2 FOR iter FROM 1 TO mcmc_settings.Nsamples:
+            PROPOSE c_proposed ← SAMPLE_FROM proposal_distribution(c_current)
+            accept_ratio ← (LIKELIHOOD(c_proposed) * PRIOR(c_proposed)) /
+                            (LIKELIHOOD(c_current)  * PRIOR(c_current))
+            IF RANDOM_UNIFORM(0,1) < MIN(1, accept_ratio):
+                c_current ← c_proposed
+            RECORD c_current IN samples[iter]
+    5.3 END FOR
+
+    6. // ---------- 6. Posterior Summary ----------
+    6.1 COMPUTE posterior_mean_c ← MEAN(samples)
+    6.2 COMPUTE posterior_cov_c  ← COVARIANCE(samples)
+
+    7. // ---------- 7. Spectrum Reconstruction ----------
+    7.1 FOR EACH wavelength λ_k IN desired_output_grid:
+            reconstructed_flux(λ_k) ← SUM_over_j( posterior_mean_c[j] *
+                                                   basis_library[j](λ_k) )
+    7.2 ESTIMATE spectral_uncertainty(λ_k) ← PROPAGATE(posterior_cov_c,
+                                                       basis_library_at_λk)
+
+    8. // ---------- 8. Classification ----------
+    8.1 FOR EACH taxonomic_class t:
+            template_t ← average_spectrum_of_class(t)
+            distance_t ← RMS_DISTANCE(reconstructed_flux, template_t)
+            classification_probability[t] ← NORMALIZED_WEIGHT(distance_t)
+    8.2 SELECT class_with_max_probability AS predicted_class
+
+    9. // ---------- 9. Output ----------
+    RETURN {
+           spectrum: { wavelengths: λ_k_array,
+                       fluxes: reconstructed_flux,
+                       uncertainties: spectral_uncertainty },
+           coefficients: posterior_mean_c,
+           coefficient_covariance: posterior_cov_c,
+           classification: predicted_class,
+           class_probabilities: classification_probability
+          }
+END PROCEDURE

@@ -1,0 +1,106 @@
+INPUT:
+    - Photometric measurements for a target:
+        * Fluxes      F_meas[j]   (j = 1 … J, number of filters)
+        * Uncertainties σ[j]
+    - Filter transmission curves T_j(λ)  (for all j)
+    - Library of basis spectra R_k(λ)     (k = 1 … K)
+    - Prior hyper‑parameters:
+        * α_k for Dirichlet prior on spectral weights
+        * Uniform prior on class labels C ∈ {1 … Cmax}
+    - MCMC parameters:
+        * Number of iterations N_iter
+        * Burn‑in N_burn
+        * Step size ε for weights
+
+OUTPUT:
+    - Posterior samples {w^(i), C^(i)}  i = 1 … N_iter
+    - Class posterior probabilities P(C | data)
+    - Posterior predictive spectrum S(λ) = Σ_k w_k R_k(λ)
+
+--------------------------------------------------------------------
+
+STEP 1: PRECOMPUTE BAND‑BASE SPECIFIC FLUX MATRIX
+--------------------------------------------------------------------
+FOR each filter j = 1 TO J DO
+    FOR each basis spectrum k = 1 TO K DO
+        // Numerical integration over wavelength
+        A[j,k] ← ∫ T_j(λ) · R_k(λ) dλ
+    END FOR
+END FOR
+// A is a J × K matrix of expected fluxes for unit weight on each basis
+
+--------------------------------------------------------------------
+STEP 2: DEFINE MODEL AND LIKELIHOOD
+--------------------------------------------------------------------
+MODEL: For a given weight vector w (K×1) and class label C
+    Predicted flux vector:
+        F_pred[j] = Σ_k A[j,k] · w[k]      (matrix multiplication)
+
+LIKELIHOOD: Assume Gaussian measurement errors
+    L(F_meas | w) =
+        Π_{j=1}^{J}  exp[ -(F_meas[j] - F_pred[j])² / (2 σ[j]²) ]
+
+PRIORS:
+    - w  ~ Dirichlet(α_1,…,α_K)          (ensures w_k ≥ 0 and Σ w_k = 1)
+    - C  ~ Uniform{1,…,Cmax}
+
+POSTERIOR:
+    p(w, C | F_meas) ∝ L(F_meas | w) · Dirichlet(w | α) · Uniform(C)
+
+--------------------------------------------------------------------
+STEP 3: MCMC SAMPLING
+--------------------------------------------------------------------
+INITIALIZE:
+    w_current ← random draw from Dirichlet(α)
+    C_current ← random integer in {1,…,Cmax}
+    Compute F_pred_current = A · w_current
+    Compute L_current = L(F_meas | w_current)
+
+FOR i = 1 TO N_iter DO
+    ----------------------------------------------------------------
+    3a. WEIGHT UPDATE (Metropolis–Hastings)
+    ----------------------------------------------------------------
+    Propose w_proposed ← w_current + Normal(0, ε² I_K)
+    Project w_proposed onto simplex {w_k ≥ 0, Σ w_k = 1}
+    Compute F_pred_proposed = A · w_proposed
+    Compute L_proposed = L(F_meas | w_proposed)
+    Acceptance probability:
+        α_w = min(1, L_proposed / L_current)
+    Draw u ~ Uniform(0,1)
+    IF u < α_w THEN
+        w_current ← w_proposed
+        L_current ← L_proposed
+    END IF
+
+    ----------------------------------------------------------------
+    3b. CLASS UPDATE (Gibbs / Metropolis)
+    ----------------------------------------------------------------
+    For each candidate class c in {1,…,Cmax}:
+        Compute posterior weight p_c ∝ L_current · Uniform(c)
+    Normalize {p_c} to sum to 1
+    Sample new C_current from categorical({p_c})
+
+    ----------------------------------------------------------------
+    3c. STORE SAMPLE
+    ----------------------------------------------------------------
+    Record (w_current, C_current)
+
+END FOR
+
+--------------------------------------------------------------------
+STEP 4: POST‑PROCESSING
+--------------------------------------------------------------------
+DISCARD first N_burn samples as burn‑in
+Compute class posterior:
+    P(C = c | data) = (number of stored samples with C=c) / (N_iter - N_burn)
+
+Compute posterior predictive spectrum:
+    S_post(λ) = mean over stored weights of Σ_k w_k R_k(λ)
+
+Optionally compute covariance of weights and spectral uncertainty bands.
+
+--------------------------------------------------------------------
+RETURN:
+    - Stored weight samples {w^(i)}
+    - Class posterior probabilities P(C | data)
+    - Posterior predictive spectrum S_post(λ)

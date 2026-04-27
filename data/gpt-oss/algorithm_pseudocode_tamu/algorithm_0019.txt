@@ -1,0 +1,96 @@
+text
+--------------------------------------------------------------------
+INPUT:
+    SPECTRA  – list of N_highres spectra {S_i}  (flux vs λ)
+    FILTERS   – list of M filter transmission curves {T_j(λ)}
+    BAND_ERR  – relative error on each band (default 0.20)
+    K         – number of PCA components to retain (≈4–10)
+    H_KDE     – KDE bandwidth (≈0.5)
+    N_SYNTH   – number of synthetic latent samples to generate (≈10⁴)
+    N_RECON   – number of posterior samples for reconstruction (≈100)
+
+OUTPUT:
+    RECON_SPECTRUM – mean reconstructed spectrum with 95 % CI
+    TAXONOMY_PROBS – probability vector over taxonomic classes
+--------------------------------------------------------------------
+1.  PREPROCESS SPECIES
+    1.1   Normalise each spectrum S_i to unit area or median flux.
+    1.2   Interpolate all spectra onto a common wavelength grid λ_grid.
+    1.3   Store as matrix X (shape N_highres × L,  L = len(λ_grid)).
+
+2.  PRINCIPAL COMPONENT ANALYSIS (Prior definition)
+    2.1   Compute mean spectrum μ_X = mean(X, axis=0).
+    2.2   Center data: X_c = X – μ_X.
+    2.3   Perform SVD on X_c → obtain U, Σ, Vt.
+    2.4   Select first K columns of Vtᵀ → eigenbasis E (shape L × K).
+    2.5   Project spectra onto latent space: Z = X_c @ E   (shape N_highres × K).
+
+3.  BUILD LATENT PRIOR WITH KDE
+    3.1   Fit multivariate Gaussian kernel density to points in Z
+          using bandwidth H_KDE.
+    3.2   Draw N_SYNTH samples {z_synth} from KDE → latent matrix Z_syn (N_SYNTH × K).
+
+4.  SYNTHETIC SPECTRA AND PHOTOMETRY GENERATION
+    For each z in Z_syn:
+        4.1   Reconstruct high‑resolution spectrum:
+              S_syn = μ_X + z @ Eᵀ   (shape L).
+        4.2   Compute ideal photometry:
+              For each filter j:
+                  m_j = ∫ S_syn(λ) · T_j(λ) dλ / ∫ T_j(λ) dλ
+              → vector m (length M).
+        4.3   Add Gaussian noise:
+              σ_j = BAND_ERR * m_j
+              m_noisy_j = m_j + Normal(0, σ_j)
+        4.4   Store pair (m_noisy, z).
+
+    Result: training set {(m_noisy_k , z_k)} of size N_SYNTH.
+
+5.  TRAIN AUTO‑ML REGRESSOR (Encoder)
+    5.1   Split training set into X_train (photometry) and Y_train (latent).
+    5.2   Use AutoML framework (e.g., AutoGluon) to fit a regression model
+          mapping X_train → Y_train.
+    5.3   Save trained regressor R_enc.
+
+6.  TRAIN AUTO‑ML CLASSIFIER (Taxonomy)
+    6.1   Label each real spectrum S_i with class label c_i
+            (H₂O, CO₂, Organics‑rich, Organics‑poor …).
+    6.2   For each real spectrum, compute its latent vector z_real = Z[i].
+    6.3   Fit classifier C_cls on pairs (z_real , c_i) using AutoML.
+    6.4   Save trained classifier C_cls.
+
+--------------------------------------------------------------------
+INFERENCE FOR NEW OBJECT
+--------------------------------------------------------------------
+Input: Observed sparse photometry m_obs (length M)
+
+7.  PREDICT LATENT POSTERIOR USING ENCODER
+    7.1   Run regressor R_enc on m_obs → predicted mean latent vector μ_ẑ.
+    7.2   Obtain predictor‑provided variance σ²_ẑ or
+          alternatively bootstrap the regressor to get N_RECON samples:
+              For t = 1…N_RECON:
+                  draw z_t ~ Normal(μ_ẑ, diag(σ²_ẑ))
+    7.3   (Optional) Enforce physical correlations via Gaussian Copula:
+              a) Estimate correlation matrix Σ_lat from training latent set Z.
+              b) Replace independent draws with multivariate Normal
+                 N(μ_ẑ, Σ_lat) samples.
+
+8.  RECONSTRUCT SPECTRA FROM LATENT SAMPLES
+    For each sampled latent vector z_t:
+        8.1   Spectrum reconstruction: S_t = μ_X + z_t @ Eᵀ
+        8.2   Store S_t.
+
+    After N_RECON samples:
+        8.3   Compute mean spectrum:
+              S_mean(λ) = mean_{t}(S_t(λ)).
+        8.4   Compute 95 % credible interval at each λ:
+              lower(λ) = percentile_{2.5}(S_t(λ)),
+              upper(λ) = percentile_{97.5}(S_t(λ)).
+
+9.  TAXONOMIC PROBABILITY
+    9.1   Pass each z_t to classifier C_cls → class probability vector p_t.
+    9.2   Average over samples:
+              TAXONOMY_PROBS = mean_{t}(p_t).
+
+10. RETURN
+    RECON_SPECTRUM = {S_mean(λ), lower(λ), upper(λ)}
+    TAXONOMY_PROBS

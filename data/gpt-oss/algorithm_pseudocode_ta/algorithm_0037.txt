@@ -1,0 +1,59 @@
+INPUT
+    S_train[n_s, n_w]          # Training set of n_s near‑IR spectra (n_w wavelengths)
+    filt_resp[k][n_w]          # Response curves of k photometric filters
+    photometry[m][k]           # Observed magnitudes/fluxes for m objects
+    phot_err[m][k]             # Measurement uncertainties
+    K                           # Number of principal components to retain
+OUTPUT
+    spec_recon[m][n_w]          # Reconstructed spectra for each object
+    spec_cov[m][n_w][n_w]       # Posterior covariance of spectra (optional)
+    coeff_mean[m][K]            # Posterior means of latent coefficients
+    coeff_cov[m][K][K]          # Posterior covariances of latent coefficients
+
+ALGORITHM
+
+1. **Pre‑processing of Training Spectra**
+   1.1 Compute mean spectrum μ[n_w] = mean(S_train, axis=0).
+   1.2 Center spectra: S_centered = S_train – μ.
+   1.3 Perform singular value decomposition (SVD):
+        [U, Σ, Vt] = svd(S_centered, full_matrices=False).
+   1.4 Select first K principal components:
+        PC[K][n_w] = Vt[:K]          # Rows of Vt are eigenvectors (principal components)
+   1.5 Compute eigenvalues λ[1…K] = (Σ[:K])² / (n_s – 1).
+
+2. **Forward Model: From Latent Coefficients to Filter Fluxes**
+   2.1 For each filter j (j = 1…k):
+         For each component i (i = 1…K):
+            h[j][i] = ∫ PC[i](λ) * filt_resp[j](λ) dλ
+                # Numerical integration over wavelengths.
+   2.2 Assemble design matrix H[k][K] = h.
+
+3. **Prior on Latent Coefficients**
+   3.1 Assume independent Gaussian priors:
+         a ~ N(0, Λ)   where Λ = diag(λ[1…K]).
+
+4. **Posterior Inference (Linear Gaussian Case)**
+   For each object o (o = 1…m):
+     4.1 Gather observed flux vector y_o[k] = photometry[o].
+     4.2 Gather observation covariance S_o = diag(phot_err[o]²).
+     4.3 Compute posterior precision matrix:
+            P_o = Hᵀ S_o⁻¹ H + Λ⁻¹
+     4.4 Compute posterior covariance:
+            C_a_o = inverse(P_o)           # K × K
+     4.5 Compute posterior mean of coefficients:
+            μ_a_o = C_a_o * Hᵀ * S_o⁻¹ * y_o
+     4.6 Store coeff_mean[o] = μ_a_o
+            coeff_cov[o]  = C_a_o
+
+5. **Spectral Reconstruction**
+   For each object o:
+     5.1 Reconstruct spectrum:
+            s_hat_o[n_w] = μ + Σ_{i=1}^{K} μ_a_o[i] * PC[i]
+     5.2 Optionally compute spectral covariance:
+            # Covariance at wavelength λ_p due to latent uncertainty:
+            cov_p = Σ_{i,j} PC[i][p] * C_a_o[i,j] * PC[j][p]
+            store spec_cov[o][p][p] = cov_p   # diagonal only if off‑diagonal not required
+     5.3 Save spec_recon[o] = s_hat_o
+
+6. **Return Results**
+   Return spec_recon, spec_cov, coeff_mean, coeff_cov.

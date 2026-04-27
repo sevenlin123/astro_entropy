@@ -1,0 +1,82 @@
+PROCEDURE RECONSTRUCT_SPECTRUM(
+        OBS         // observed magnitudes {m_i} with uncertainties {σ_i}
+        FILTERS     // set of filter transmission curves {T_f(λ)}
+        LIBRARY     // spectral library {S_j(λ)}   (j = 1 … N_TAXA)
+        PRIOR       // prior probabilities for each taxon (default uniform)
+        NSAMPLES    // number of MCMC iterations
+    ) RETURNS (BEST_TAXON, POST_PROBS, RECONSTRUCTED_SPECTRUM)
+
+    -------------------------------------------------------------
+    // 1. Pre‑compute synthetic photometry for every template
+    -------------------------------------------------------------
+    FOR each TAXON j IN 1 .. N_TAXA DO
+        FOR each FILTER f IN FILTERS DO
+            // Integrate template spectrum through filter
+            SYNTH_MAG[j][f] ← ∫ S_j(λ) · T_f(λ) dλ      // normalized to unit albedo
+        END FOR
+    END FOR
+
+    -------------------------------------------------------------
+    // 2. Define likelihood for a given taxon and scale factor
+    -------------------------------------------------------------
+    FUNCTION LIKELIHOOD(j, α):
+        χ² ← 0
+        FOR each observation i (filter f_i) DO
+            // Predicted magnitude for this taxon, scaled by α
+            μ ← α × SYNTH_MAG[j][f_i]
+            χ² ← χ² + ((OBS.m[i] – μ) / OBS.sigma[i])²
+        END FOR
+        RETURN exp( -0.5 × χ² )
+    END FUNCTION
+
+    -------------------------------------------------------------
+    // 3. Bayesian inference by Metropolis–Hastings MCMC
+    -------------------------------------------------------------
+    INITIALISE current_taxon ← random integer in [1,N_TAXA]
+    INITIALISE current_alpha  ← 1.0
+    INITIALISE chain_counts[1…N_TAXA] ← 0
+
+    FOR iter FROM 1 TO NSAMPLES DO
+        // ----- Propose new state --------------------------------
+        // 3a. Randomly choose whether to change taxon or alpha
+        IF random() < 0.5 THEN
+            proposed_taxon ← random integer in [1,N_TAXA]
+            proposed_alpha ← current_alpha          // keep same scale
+        ELSE
+            proposed_taxon ← current_taxon           // keep same taxon
+            proposed_alpha ← current_alpha + δα     // δα sampled from N(0,σ_α)
+        END IF
+
+        // ----- Compute acceptance ratio ------------------------
+        p_current ← LIKELIHOOD(current_taxon, current_alpha) × PRIOR[current_taxon]
+        p_proposed← LIKELIHOOD(proposed_taxon, proposed_alpha) × PRIOR[proposed_taxon]
+        acc_ratio ← min(1, p_proposed / p_current)
+
+        // ----- Accept or reject -------------------------------
+        IF random() < acc_ratio THEN
+            current_taxon ← proposed_taxon
+            current_alpha ← proposed_alpha
+        END IF
+
+        // ----- Record accepted taxon --------------------------
+        chain_counts[current_taxon] ← chain_counts[current_taxon] + 1
+    END FOR
+
+    -------------------------------------------------------------
+    // 4. Compute posterior probabilities for each taxon
+    -------------------------------------------------------------
+    SUM_counts ← Σ_{j=1}^{N_TAXA} chain_counts[j]
+    FOR each TAXON j DO
+        POST_PROBS[j] ← chain_counts[j] / SUM_counts
+    END FOR
+    BEST_TAXON ← argmax_j POST_PROBS[j]
+
+    -------------------------------------------------------------
+    // 5. Construct most probable reconstructed spectrum
+    -------------------------------------------------------------
+    // Use the best taxon's template scaled by mean α over accepted states
+    ALPHA_MEAN ← mean{ α values for which current_taxon = BEST_TAXON }
+    RECONSTRUCTED_SPECTRUM ← ALPHA_MEAN × S_{BEST_TAXON}(λ)
+
+    RETURN (BEST_TAXON, POST_PROBS, RECONSTRUCTED_SPECTRUM)
+END PROCEDURE

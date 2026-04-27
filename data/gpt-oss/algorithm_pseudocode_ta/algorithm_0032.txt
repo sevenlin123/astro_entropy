@@ -1,0 +1,82 @@
+Input:
+    - Training spectra {S_i(λ)} i = 1…N_train
+    - Filter set {T_j(λ)} j = 1…N_filters
+    - Observed photometry for target object: 
+        * Fluxes y_j   (j = 1…N_filters)
+        * Uncertainties σ_j
+
+Parameters:
+    - Number of principal components K  (≈ 4–5 for taxonomy, ≈ 8–10 for full reconstruction)
+    - Prior covariance for coefficients Λ  (diagonal, derived from training)
+
+Output:
+    - Posterior mean spectrum Ĥ(λ)
+    - Credible‑interval envelopes (e.g., 68%, 95%) for each λ
+    - Posterior samples {a^(ℓ)} of latent coefficients (ℓ = 1…N_samples)
+
+Procedure:
+
+1. **PCA on Training Spectra**
+   1.1. Resample all training spectra onto common wavelength grid {λ_m}.
+   1.2. Compute mean spectrum μ(λ_m) = (1/N_train) Σ_i S_i(λ_m).
+   1.3. Center training spectra: Ẋ_i(λ_m) = S_i(λ_m) – μ(λ_m).
+   1.4. Perform singular value decomposition (SVD) on the matrix of centered spectra to obtain eigenvectors (principal components) φ_k(λ_m), k = 1…K.
+   1.5. Store first K eigenvectors φ_k(λ_m).
+
+2. **Pre‑compute Filter Projections**
+   For each filter j:
+       2.1. Compute integrated flux of the mean spectrum through filter:
+           μ_j = ∫ μ(λ) · T_j(λ) dλ / ∫ T_j(λ) dλ.
+       2.2. For each component k:
+           F_jk = ∫ φ_k(λ) · T_j(λ) dλ / ∫ T_j(λ) dλ.
+   Store μ_vec = [μ_1 … μ_N_filters]^T  and
+         F_matrix (N_filters × K) with entries F_jk.
+
+3. **Formulate Linear Observation Model**
+   Model prediction for filter j:
+       ŷ_j(a) = μ_j + Σ_{k=1}^{K} a_k · F_jk.
+   In vector form: ŷ(a) = μ_vec + F_matrix · a.
+
+4. **Define Priors and Likelihood**
+   4.1. Prior on coefficients:
+           a ∼ N(0, Λ)          // Λ = diag(σ_prior^2)
+   4.2. Observation noise:
+           ε ∼ N(0, Σ_noise),  Σ_noise = diag(σ_j^2).
+   4.3. Likelihood:
+           p(y | a) ∝ exp{ -½ (y – ŷ(a))^T Σ_noise^{-1} (y – ŷ(a)) }.
+
+5. **Compute Posterior (Closed Form, Gaussian)**
+   5.1. Weight matrix: W = Σ_noise^{-1}.
+   5.2. Posterior covariance:
+           Σ_post = (F_matrix^T · W · F_matrix + Λ^{-1})^{-1}.
+   5.3. Posterior mean:
+           μ_post = Σ_post · (F_matrix^T · W · (y – μ_vec)).
+   5.4. Store μ_post and Σ_post.
+
+6. **Draw Samples of Coefficients**
+   6.1. Set number of Monte‑Carlo draws N_samples (e.g., 1000).
+   6.2. For ℓ = 1…N_samples:
+           a^(ℓ) ← Sample from multivariate normal N(μ_post, Σ_post).
+
+7. **Reconstruct Spectra**
+   For each draw a^(ℓ):
+       7.1. Compute spectral reconstruction:
+            S^(ℓ)(λ_m) = μ(λ_m) + Σ_{k=1}^{K} a_k^(ℓ) · φ_k(λ_m).
+   7.2. Store all S^(ℓ).
+
+8. **Post‑Processing: Mean & Credible Intervals**
+   8.1. For each wavelength λ_m:
+           - Mean spectrum Ĥ(λ_m) = (1/N_samples) Σ_ℓ S^(ℓ)(λ_m).
+           - 68% interval: percentile 16–84 of {S^(ℓ)(λ_m)}.
+           - 95% interval: percentile 2.5–97.5 of {S^(ℓ)(λ_m)}.
+   8.3. Output Ĥ(λ_m) and interval envelopes.
+
+9. **Optional Outlier Diagnostics (brief)**
+   9.1. Compute distance of μ_post to training PC distribution:
+           d = sqrt( (μ_post)^T Λ^{-1} μ_post ).
+   9.2. Flag object if d > threshold (e.g., 3σ).
+
+Return:
+    - Posterior mean spectrum Ĥ(λ)
+    - Credible intervals at each λ
+    - Posterior samples of latent coefficients {a^(ℓ)}

@@ -1,0 +1,124 @@
+plaintext
+Input
+------
+- Reference spectra   :  { S_i  |  i = 1 … N_ref }  
+   (each S_i is a vector of reflectances at D wavelengths)
+- Instrument filter set: { T_f  |  f = 1 … F }  
+   (transmission curves of the desired broadband filters)
+
+Parameters
+----------
+- K          : number of principal components to keep
+- h_KDE      : bandwidth of the Gaussian KDE in latent space
+- M_aug      : number of synthetic samples to generate
+- σ_noise    : relative photometric noise (e.g. 0.20 for 20 %)
+- N_post     : number of posterior samples for reconstruction
+- autoML_cfg : configuration for the AutoML regressor / classifier
+
+Output
+------
+For any new photometric measurement m* (length F):
+- Mean reconstructed spectrum  Ŝ_mean(λ)
+- Credible interval envelope Ŝ_CI(λ)  (e.g. 2.5–97.5 %)
+- Posterior probability of each taxonomic class
+
+------------------------------------------------------------------
+Phase 0 – Pre‑processing (performed once)
+------------------------------------------------------------------
+1.  Align all reference spectra on a common wavelength grid.
+2.  (Optional) Normalize each spectrum to unit area or median
+    reflectance to remove absolute albedo effects.
+
+------------------------------------------------------------------
+Phase 1 – Latent‑space construction (Prior)
+------------------------------------------------------------------
+3.  Assemble data matrix X = [S_1, S_2, … , S_N_ref]^T   // size N_ref × D
+4.  Compute PCA on X:
+        • Subtract mean μ_X from each row of X.
+        • Compute eigenvectors V (D × D) and eigenvalues λ.
+        • Choose smallest K such that Σ_{i=1}^{K} λ_i / Σ_{j=1}^{D} λ_j ≥ 0.95
+        • Keep first K columns of V → V_K  (D × K)
+5.  Project all spectra onto the K‑dimensional space:
+        C_i = V_K^T · (S_i – μ_X)                // shape: K × N_ref
+6.  Fit a Gaussian KDE to the set {C_i} with bandwidth h_KDE:
+        kde(C)  ←  KDE_h_KDE({C_i})
+   // kde(C) gives p(C) – the prior density over latent coefficients.
+
+------------------------------------------------------------------
+Phase 2 – Synthetic‑data augmentation
+------------------------------------------------------------------
+7.  Draw M_aug synthetic latent vectors:
+        {C̃_k} ~ kde(C)          // k = 1 … M_aug
+8.  For each synthetic latent vector C̃_k:
+        a)  Reconstruct high‑resolution spectrum:
+                Ŝ_k = μ_X + V_K · C̃_k          // shape: 1 × D
+        b)  Forward‑model photometry:
+                For each filter f:
+                    m̃_{k,f} = ∫ Ŝ_k(λ) · T_f(λ) dλ   // scalar
+        c)  Add Gaussian noise to each band:
+                m̃_{k,f} ← m̃_{k,f} + ε,   ε ~ N(0, (σ_noise·m̃_{k,f})²)
+   // Store pair (m̃_k , C̃_k)
+
+------------------------------------------------------------------
+Phase 3 – Training data assembly
+------------------------------------------------------------------
+9.  For each real reference spectrum S_i:
+        a)  Forward‑model photometry m_i (same convolution as above)
+        b)  Add Gaussian noise (σ_noise) to obtain m_i_noisy
+        c)  Pair (m_i_noisy , C_i)
+
+10.  Concatenate real and synthetic pairs into training set:
+        T_train = {(m_noisy , C_target)}
+
+------------------------------------------------------------------
+Phase 4 – Encoder & Classifier training
+------------------------------------------------------------------
+11.  Train an AutoML regressor (encoder) R on T_train:
+        R : ℝ^F  →  ℝ^K
+        // Output: point estimate of latent coefficient vector
+12.  (Optional) Train an AutoML classifier C on the same set:
+        C : ℝ^K  →  categorical taxonomic labels
+        // Uses true C_i as training targets
+
+------------------------------------------------------------------
+Phase 5 – Inference for new observations
+------------------------------------------------------------------
+Given a new photometric measurement m* (length F):
+
+13.  Build an array of N_post noisy copies of m*:
+        For j = 1 … N_post:
+            m*_j = m* + ε_j,   ε_j ~ N(0, (σ_noise·m*)²)
+
+14.  For each noisy copy m*_j:
+        a)  Predict latent coefficient:
+                Ĉ_j = R(m*_j)              // vector of length K
+        b)  Store Ĉ_j
+
+15.  Combine the N_post latent samples {Ĉ_j} with the KDE prior
+    to form a Gaussian copula sampler:
+        a)  Estimate marginal distributions of each dimension from {Ĉ_j}.
+        b)  Estimate correlation matrix ρ from {Ĉ_j}.
+        c)  Sample N_post latent vectors from the copula
+            (ensures physical dependencies between PCs).
+
+16.  For each sampled latent vector C_samp:
+        a)  Reconstruct spectrum:
+                S_samp = μ_X + V_K · C_samp     // shape: 1 × D
+        b)  Store S_samp
+
+17.  Compute reconstruction statistics over the ensemble:
+        Ŝ_mean(λ) = mean_{s}(S_samp(λ))
+        Ŝ_lower(λ) = percentile_{2.5}(S_samp(λ))
+        Ŝ_upper(λ) = percentile_{97.5}(S_samp(λ))
+
+18.  (Optional) Classify:
+        a)  Compute taxonomic probabilities from classifier C
+            applied to the latent samples {C_samp} or to the mean
+            latent coefficient C̄ = mean(C_samp).
+        b)  Return probability vector P(class | m*).
+
+Return  { Ŝ_mean, Ŝ_lower, Ŝ_upper, P }
+
+------------------------------------------------------------------
+End of Algorithm
+------------------------------------------------------------------

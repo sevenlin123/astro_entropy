@@ -1,0 +1,96 @@
+text
+--------------------------------------------------------------------
+INPUTS
+--------------------------------------------------------------------
+REF_SPECTRA   : array of N reference spectra (wavelength × flux)
+FILTERS       : list of instrument filter throughput curves
+K             : number of principal components to retain (e.g. 8–10)
+H_KDE         : KDE bandwidth (≈0.5)
+NSYN          : number of synthetic latent samples (e.g. 5000)
+SIGMA_PHOT    : relative photometric noise level (default 0.20)
+NCOV_SAMPLES  : number of posterior samples for reconstruction (e.g. 1000)
+
+--------------------------------------------------------------------
+PHASE 1 – TRAINING
+--------------------------------------------------------------------
+
+1.  /* 1.1  PCA on reference spectra */
+    MEAN_SPECT, COMPONENTS, LATENT_REPR = PCA(REF_SPECTRA, K)
+
+    // LATENT_REPR is NxK matrix of coefficients (a_i for each reference spectrum)
+
+2.  /* 1.2  Kernel Density Estimation in latent space */
+    KDE_MODEL = KDE(LATENT_REPR, bandwidth=H_KDE)
+
+3.  /* 1.3  Generate synthetic latent vectors */
+    SYN_LATENT = SAMPLE(KDE_MODEL, NSYN)        // NSYN × K array
+
+4.  /* 1.4  Reconstruct synthetic spectra from latent vectors */
+    FOR each vector a_j in SYN_LATENT:
+        SENS_j = INVERSE_PCA(a_j, MEAN_SPECT, COMPONENTS)
+
+5.  /* 1.5  Forward‑model synthetic photometry */
+    FOR each synthetic spectrum SENS_j:
+        PHOT_j = CONVOLVE(SENS_j, FILTERS)     // gives m_j (band fluxes)
+
+6.  /* 1.6  Inject realistic noise to emulate likelihood */
+    FOR each PHOT_j:
+        NOISY_PHOT_j = PHOT_j * (1 + NORM(0, SIGMA_PHOT))
+
+7.  /* 1.7  Assemble training tables */
+    TRAIN_X = stack(NOISY_PHOT_j)              // (NSYN × BANDS)
+    TRAIN_Y = stack(SYN_LATENT)                // (NSYN × K)
+
+    /* 1.8  OPTIONAL: attach taxonomy labels to synthetic samples
+            (e.g. nearest‑neighbour assignment from REF_SPECTRA) */
+    LABS_SYN = LABEL_ASSIGNMENT(SYN_LATENT, LATENT_REPR, REF_LABELS)
+
+8.  /* 1.9  Train encoder (photometry → latent) */
+    ENCODER_MODEL = AUTOML_REGRESSOR(TRAIN_X, TRAIN_Y)
+
+9.  /* 1.10  Train latent‑space classifier */
+    CLASSIFIER_MODEL = AUTOML_CLASSIFIER(LATENT_REPR, REF_LABELS)
+
+--------------------------------------------------------------------
+PHASE 2 – INFERENCE (FOR A NEW OBJECT)
+--------------------------------------------------------------------
+
+INPUT:
+    OBS_PHOT   : observed photometry vector (length = BANDS)
+    ERR_PHOT   : photometric uncertainties (same length)
+
+1.  /* 2.1  Predict latent coefficient distribution */
+    A_MEAN, A_COV = ENCODER_MODEL.PREDICT_DISTRIBUTION(OBS_PHOT, ERR_PHOT)
+
+    /* 2.2  (Optional) convert to marginal CDFs for copula sampling */
+    MARGINALS = ESTIMATE_MARGINALS(A_MEAN, A_COV)
+    CORR_MATRIX = ESTIMATE_CORRELATION(MARGINALS)
+
+2.  /* 2.3  Sample latent vectors from posterior */
+    FOR i in 1..NCOV_SAMPLES:
+        IF USE_COPULA:
+            a_i = GAUSSIAN_COPULA_SAMPLE(MARGINALS, CORR_MATRIX)
+        ELSE:
+            a_i = MVN_SAMPLE(A_MEAN, A_COV)
+        STORE a_i
+
+3.  /* 2.4  Decode each latent sample to a full spectrum */
+    FOR each a_i:
+        S_i = INVERSE_PCA(a_i, MEAN_SPECT, COMPONENTS)
+        STORE S_i
+
+4.  /* 2.5  Build spectrum posterior statistics */
+    RECON_MEAN  = MEAN_OVER(S_i)              // mean spectrum
+    RECON_LOWER = PERCENTILE(S_i, 2.5)       // lower 95% CI
+    RECON_UPPER = PERCENTILE(S_i, 97.5)      // upper 95% CI
+
+5.  /* 2.6  Taxonomy probabilities from latent mean */
+    TAX_PROBS = CLASSIFIER_MODEL.PREDICT_PROB(A_MEAN)
+
+--------------------------------------------------------------------
+OUTPUTS
+--------------------------------------------------------------------
+RECON_MEAN   : reconstructed mean spectrum (wavelength × flux)
+RECON_LOWER  : lower 95% credible interval per wavelength
+RECON_UPPER  : upper 95% credible interval per wavelength
+TAX_PROBS    : probability distribution over taxonomic classes

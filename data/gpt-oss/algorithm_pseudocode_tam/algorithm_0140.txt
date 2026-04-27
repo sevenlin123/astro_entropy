@@ -1,0 +1,84 @@
+text
+--------------------------------------------------------------------
+INPUT
+    • SeedSpectra[1..Ns]      # high‑resolution TNO spectra (wavelength, flux)
+    • FilterCurves[1..F]      # effective throughput vs λ for each filter
+    • PhotometryObs[1..M]     # observed (or simulated) photometry for a target
+    • Hyperparams:
+          K            = number of principal components (≈4–8)
+          h_KDE        = KDE bandwidth (≈0.5)
+          Nsynthetic   = number of synthetic latent samples (≈10^4)
+          NoiseLevel   = relative photometric noise (≈0.20)
+--------------------------------------------------------------------
+OUTPUT
+    • ReconstructedSpectrum  # full‑resolution flux vector
+    • TaxonomyProbabilities  # P(class | photometry)
+--------------------------------------------------------------------
+GLOBAL VARIABLES (created during training)
+    • PCA_Transform          # (mean, eigenvectors) of seed spectra
+    • KDE_Sampler            # kernel density estimator over latent space
+    • RegressorModel         # AutoML regressor (GBDT) mapping photometry → latent
+    • ClassifierModel        # AutoML classifier mapping latent → taxonomic class
+--------------------------------------------------------------------
+TRAINING PHASE
+--------------------------------------------------------------------
+1.  #--- 1.1 PCA on seed spectra ---------------------------------
+2.  For each spectrum s in SeedSpectra:
+3.      Convert to reflectance R_s(λ)  # divide by solar spectrum if desired
+4.  Assemble matrix X_seed of shape (Ns, Nλ)  # Nλ = number of wavelength bins
+5.  Compute PCA with K components:
+6.      [U, Σ, Vt] = SVD(X_seed)
+7.      Eigenvecs   = first K columns of Vtᵀ
+8.      MeanVec     = mean(X_seed, axis=0)
+9.      LatentSeed[i] = (X_seed[i] – MeanVec) · Eigenvecs   # shape (Ns, K)
+
+10. #--- 1.2 Kernel density estimate in latent space -------------
+11. KDE_Sampler = FitKDE(LatentSeed, bandwidth=h_KDE)
+
+12. #--- 1.3 Generate synthetic latent samples -------------------
+13. LatentSynthetic = DrawSamples(KDE_Sampler, Nsynthetic)  # shape (Nsynthetic, K)
+
+14. #--- 1.4 Reconstruct synthetic spectra ------------------------
+15. For each latent vector z in LatentSynthetic:
+16.     SpectrumSyn = MeanVec + z · Eigenvecsᵀ                # inverse PCA
+17.     Store SpectrumSyn as S_syn
+
+18. #--- 1.5 Forward‑model synthetic photometry ------------------
+19. For each synthetic spectrum S_syn:
+20.     For each filter f in FilterCurves:
+21.         Flux_f = ∫ S_syn(λ) * FilterCurves[f](λ) dλ
+22.         Reflectance_f = Flux_f / ∫ Solar(λ)*FilterCurves[f](λ) dλ
+23.         Phot_f_noisy = Reflectance_f * (1 + Normal(0, NoiseLevel))
+24.     Assemble PhotSyn = [Phot_f_noisy for all f]
+25.     Store (PhotSyn , LatentSynthetic_vector)
+
+26. #--- 1.6 Train regressor --------------------------------------
+27. RegressorModel = AutoMLTrain(
+28.                      Inputs  = PhotSyn_set,
+29.                      Targets = LatentSynthetic_set,
+30.                      Task    = 'regression',
+31.                      Ensemble= True)   # e.g., GBDT + NN ensemble
+
+32. #--- 1.7 Train taxonomic classifier ----------------------------
+33. ClassifierModel = AutoMLTrain(
+34.                      Inputs  = LatentSynthetic_set,
+35.                      Targets = TaxonomyLabels_of_seed_spectra (one‑hot),
+36.                      Task    = 'classification',
+37.                      Ensemble= True)
+
+END TRAINING PHASE
+--------------------------------------------------------------------
+INFERENCE PHASE
+--------------------------------------------------------------------
+1. #--- 2.1 Pre‑process observed photometry -----------------------
+2. Normalize PhotometryObs by mean & std derived from training photometry
+3. #--- 2.2 Predict latent coefficients --------------------------
+4. LatentPred = RegressorModel.Predict(PhotometryObs)   # shape (K,)
+
+5. #--- 2.3 Decode to full spectrum --------------------------------
+6. SpectrumRecon = MeanVec + LatentPred · Eigenvecsᵀ
+
+7. #--- 2.4 Taxonomy prediction -----------------------------------
+8. TaxonomyProbabilities = ClassifierModel.PredictProba(LatentPred)
+
+9. RETURN SpectrumRecon, TaxonomyProbabilities

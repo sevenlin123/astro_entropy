@@ -1,0 +1,76 @@
+Input:
+    S_real = {s_i ∈ ℝ^L | i = 1…N}          // L‑dimensional observed spectra
+    m_obs = {m_j ∈ ℝ^F | j = 1…M}           // F photometric bands for new target
+    T = {t_i}                               // taxonomic labels for S_real
+    K                                        // number of principal components to keep
+    h                                        // KDE bandwidth
+    n_samples                                // number of synthetic latent samples
+    n_posterior_draws                         // draws for posterior sampling
+
+Output:
+    s_rec ∈ ℝ^L                               // reconstructed high‑resolution spectrum
+    CI_s : confidence interval per wavelength
+    p_taxonomy : probability vector over classes
+
+--------------------------------------------------------------------
+1.  Principal Component Analysis (PCA) – Prior Construction
+--------------------------------------------------------------------
+1.1   Compute mean spectrum μ_S ← mean(S_real)
+1.2   Center spectra: X ← S_real – μ_S
+1.3   Perform eigen‑decomposition of covariance(X)
+1.4   Select first K eigenvectors → V_K  (matrix L×K)
+1.5   Project spectra to latent space:
+        c_i ← V_Kᵀ · (s_i – μ_S)              // c_i ∈ ℝ^K
+
+--------------------------------------------------------------------
+2.  Latent Manifold Augmentation – KDE Sampling
+--------------------------------------------------------------------
+2.1   Fit multivariate Gaussian KDE to {c_i} with bandwidth h
+2.2   Draw n_samples latent vectors:
+        C_syn ← {c'_k | k=1…n_samples}  ~ KDE
+2.3   Decode synthetic spectra:
+        s_syn_k ← μ_S + V_K · c'_k          // inverse PCA
+
+--------------------------------------------------------------------
+3.  Synthetic Photometry Generation – Forward Modeling
+--------------------------------------------------------------------
+3.1   For each s_syn_k:
+          m_syn_k ← convolve(s_syn_k, filter_transmissions)
+3.2   Add Gaussian noise (σ = 0.2·m_syn_k) to each band:
+          m_syn_k_noisy ← m_syn_k + N(0, σ)
+
+--------------------------------------------------------------------
+4.  Train Photometry→Latent Encoder (AutoML Regressor)
+--------------------------------------------------------------------
+4.1   Assemble training set:
+          X_train ← {m_syn_k_noisy | k=1…n_samples}
+          Y_train ← {c'_k | k=1…n_samples}
+4.2   Call AutoML regression module:
+          Encoder ← AutoML_Train(X_train, Y_train)
+
+--------------------------------------------------------------------
+5.  Train Latent→Taxonomy Classifier (AutoML Classifier)
+--------------------------------------------------------------------
+5.1   Assemble training set:
+          X_cls ← {c_i | i=1…N}
+          Y_cls ← {t_i | i=1…N}
+5.2   Call AutoML classification module:
+          Classifier ← AutoML_Train(X_cls, Y_cls)
+
+--------------------------------------------------------------------
+6.  Inference on New Observation
+--------------------------------------------------------------------
+6.1   Predict posterior latent mean and covariance:
+          (μ̂_c , Σ̂_c ) ← Encoder.predict_distribution(m_obs)
+6.2   Sample n_posterior_draws latent vectors from Gaussian Copula:
+          {c^*_ℓ | ℓ=1…n_posterior_draws} ~ Copula(μ̂_c , Σ̂_c )
+6.3   Decode each draw to spectrum:
+          s^*_ℓ ← μ_S + V_K · c^*_ℓ
+6.4   Compute point estimate spectrum:
+          s_rec ← mean({s^*_ℓ})
+6.5   Compute confidence interval at each wavelength:
+          CI_s(w) ← percentile({s^*_ℓ(w)}, [2.5%, 97.5%])
+6.6   Classify taxonomy:
+          p_taxonomy ← Classifier.predict_proba(μ̂_c)
+
+Return s_rec, CI_s, p_taxonomy

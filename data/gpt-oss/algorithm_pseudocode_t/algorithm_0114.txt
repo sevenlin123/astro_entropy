@@ -1,0 +1,63 @@
+Input
+    - Photometric measurements {m_i} for i = 1 … N_filters
+    - Measurement uncertainties {σ_i}
+    - Spectral basis set {B_k(λ)} for k = 1 … K_basis
+    - Instrument transmission curves {T_i(λ)} for each filter
+    - Prior hyper‑parameters for coefficient vector c
+
+Output
+    - Posterior samples of spectral coefficients c
+    - Reconstructed spectrum S(λ) = Σ_k c_k B_k(λ)
+    - Residuals and likelihood for outlier assessment
+
+------------------------------------------------------------------
+1. Build the forward model
+   1.1 Compute the synthetic photometric matrix A of size N_filters × K_basis:
+        A[i,k] = ∫ B_k(λ) * T_i(λ) dλ
+   1.2 Construct the observed flux vector y:
+        y[i] = m_i (converted to physical flux units)
+
+------------------------------------------------------------------
+2. Define the probabilistic model
+   2.1 Likelihood:
+        y | c ~ Normal( A · c , diag(σ²) )
+   2.2 Prior on coefficients:
+        • Non‑negative constraint: c_k ≥ 0
+        • Optional sparsity or Dirichlet prior to encourage few dominant components
+   2.3 Full joint posterior:
+        p(c | y) ∝ p(y | c) × p(c)
+
+------------------------------------------------------------------
+3. Inference of spectral coefficients
+   3.1 Initialize c^(0) (e.g., zeros or random positive values)
+   3.2 For iteration t = 1 … N_iter
+         3.2.1 Sample a new candidate c' from proposal distribution q(c'|c^(t−1))
+              (e.g., random walk in log‑space or Gaussian perturbation)
+         3.2.2 Compute acceptance probability α =
+                 min{ 1,
+                      [p(y|c') p(c')] / [p(y|c^(t−1)) p(c^(t−1))] }
+         3.2.3 With probability α accept c^(t) = c', else c^(t) = c^(t−1)
+   3.3 After burn‑in discard early samples; keep remaining as posterior samples.
+
+------------------------------------------------------------------
+4. Reconstruct the full spectrum
+   4.1 For each posterior sample c^(s):
+          S^(s)(λ) = Σ_k c_k^(s) B_k(λ)
+   4.2 Estimate mean spectrum:
+          Ŝ(λ) = (1 / N_post) Σ_s S^(s)(λ)
+   4.3 Compute spectral uncertainty band:
+          σ_S(λ) = sqrt( (1 / N_post) Σ_s (S^(s)(λ) − Ŝ(λ))² )
+
+------------------------------------------------------------------
+5. Compute diagnostic quantities
+   5.1 Residual vector r = y − A · E[c]   // Expected coefficient vector
+   5.2 Predictive likelihood of observation:
+          L = Π_i Normal(m_i | (A·E[c])_i , σ_i²)
+   5.3 Flag potential outliers:
+          If L < threshold_T then mark object as outlier
+
+------------------------------------------------------------------
+6. Return results
+   - Posterior coefficient distribution p(c|y)
+   - Reconstructed spectrum Ŝ(λ) with uncertainty σ_S(λ)
+   - Residuals r and likelihood L for outlier assessment

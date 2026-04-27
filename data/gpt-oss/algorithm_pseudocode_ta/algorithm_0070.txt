@@ -1,0 +1,101 @@
+INPUT
+    S_train[1..M]            # training spectra (each is array of fluxes at λ[1..N_λ])
+    filt_trans[f][1..N_λ]    # transmission curve of each filter f (f = 1..N_f)
+    phot_obs[1..N_f]         # observed fluxes for target object
+    phot_err[1..N_f]         # 1‑σ uncertainties of observed fluxes
+    K                         # number of principal components to retain
+    N_samp                    # number of posterior samples (e.g., 1000)
+
+OUTPUT
+    spec_mean[1..N_λ]         # posterior‑mean reconstructed spectrum
+    spec_ci_lower[1..N_λ]     # lower bound of chosen credible interval
+    spec_ci_upper[1..N_λ]     # upper bound of chosen credible interval
+    coeff_posterior_mean[1..K]
+    coeff_posterior_cov[K][K]
+
+
+--------------------------------------------------------------------
+STEP 1 – Train Principal‑Component Model
+--------------------------------------------------------------------
+1.1 Compute mean spectrum:
+        μ[λ] = (1/M) * Σ_{m=1}^{M} S_train[m][λ]
+
+1.2 Center spectra:
+        X[m][λ] = S_train[m][λ] – μ[λ]          # m = 1..M
+
+1.3 Compute covariance matrix:
+        C = (1/(M-1)) * X * Xᵀ                   # size N_λ × N_λ
+
+1.4 Eigen‑decompose C:
+        {λ_k , v_k[λ]}  for k = 1..N_λ
+        Sort eigenvalues λ_k in descending order,
+        reorder eigenvectors accordingly.
+
+1.5 Select first K eigenvectors:
+        PC_k[λ] = v_k[λ]          # k = 1..K
+
+1.6 Store for later use:
+        - mean spectrum μ[λ]
+        - principal components PC_k[λ]
+        - prior variances σ_prior_k² = λ_k   # from training data
+
+
+--------------------------------------------------------------------
+STEP 2 – Construct Filter Projection Matrix
+--------------------------------------------------------------------
+2.1 For each filter f = 1..N_f:
+        Compute normalization:
+            norm_f = Σ_{j=1}^{N_λ} filt_trans[f][j] * Δλ_j
+        For each PC k = 1..K:
+            p_fk = ( Σ_{j=1}^{N_λ} filt_trans[f][j] * PC_k[j] * Δλ_j ) / norm_f
+            store in projection matrix P[f][k] = p_fk
+
+2.2 Compute mean flux per filter:
+        μ_f[f] = ( Σ_{j=1}^{N_λ} filt_trans[f][j] * μ[j] * Δλ_j ) / norm_f
+
+
+--------------------------------------------------------------------
+STEP 3 – Bayesian Linear Inference for Coefficients
+--------------------------------------------------------------------
+3.1 Define weight matrix:
+        W = diag( 1 / phot_err[f]² )          # size N_f × N_f
+
+3.2 Prior precision matrix:
+        Λ = diag( 1 / σ_prior_k² )            # size K × K
+
+3.3 Compute posterior covariance:
+        Σ_post = ( Pᵀ * W * P + Λ )⁻¹         # size K × K
+
+3.4 Compute posterior mean of coefficients:
+        a_post = Σ_post * Pᵀ * W * ( phot_obs – μ_f )
+
+--------------------------------------------------------------------
+STEP 4 – Posterior Sampling and Spectrum Reconstruction
+--------------------------------------------------------------------
+4.1 Draw N_samp samples from multivariate normal:
+        For s = 1..N_samp:
+            a_s = a_post + L * z_s
+            where L = cholesky(Σ_post)   # lower‑triangular
+                  z_s ~ N(0, I_K)
+
+4.2 Reconstruct spectrum for each sample:
+        For s = 1..N_samp:
+            For j = 1..N_λ:
+                spec_s[j] = μ[j] + Σ_{k=1}^{K} a_s[k] * PC_k[j]
+
+--------------------------------------------------------------------
+STEP 5 – Compute Posterior Summary
+--------------------------------------------------------------------
+5.1 Posterior‑mean spectrum:
+        spec_mean[j] = (1/N_samp) * Σ_{s=1}^{N_samp} spec_s[j]
+
+5.2 Credible interval per wavelength (e.g., 95 %):
+        For each j:
+            sort {spec_s[j]} over s
+            ci_low[j]  = percentile(spec_s[j], 2.5)
+            ci_high[j] = percentile(spec_s[j], 97.5)
+
+5.3 Output:
+        spec_mean, ci_low, ci_high,
+        coeff_posterior_mean = a_post,
+        coeff_posterior_cov = Σ_post

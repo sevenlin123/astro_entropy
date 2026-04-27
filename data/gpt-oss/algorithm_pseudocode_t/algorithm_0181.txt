@@ -1,0 +1,123 @@
+pseudocode
+INPUT
+    N        ← number of photometric bands
+    m[1…N]   ← observed apparent magnitudes
+    σ[1…N]   ← corresponding Gaussian 1‑σ uncertainties
+    T[1…M]   ← library of discrete spectral templates
+                (each T[j] is a vector of reflectance values vs. wavelength)
+    R[1…N]   ← band‑pass transmission curves
+    S(λ)     ← solar spectrum (used only for pre–integration)
+    r, Δ, α  ← heliocentric distance, geocentric distance,
+               phase angle (optional, used only in the distance term)
+    σₛ       ← proposal width for the magnitude offset (default ≈ 0.5 mag)
+
+OUTPUT
+    Posterior samples of (template index k, scaling s)
+    Reconstructed spectra (scaled templates)
+    Derived colors and albedo estimates (if desired)
+
+--------------------------------------------------------------------
+1. PRECOMPUTATION
+--------------------------------------------------------------------
+FOR each template j = 1 … M DO
+    FOR each band i = 1 … N DO
+        // Integrate template × solar spectrum over the bandpass
+        f[j][i]  ← ∫ T[j](λ) · S(λ) · R[i](λ)  dλ
+        // Convert to a magnitude offset relative to the Sun
+        ref[j][i]← –2.5 · log10( f[j][i] )
+    END FOR
+END FOR
+// Ref[j][i] now contains the “intrinsic” magnitude of template j in band i.
+
+--------------------------------------------------------------------
+2. LIKELIHOOD FUNCTION
+--------------------------------------------------------------------
+FUNCTION logLik(k, s)
+    LL ← 0
+    FOR i = 1 … N DO
+        μ   ← ref[k][i] + s                     // predicted magnitude
+        LL  ← LL – 0.5 * ( (m[i] – μ) / σ[i] )²
+    END FOR
+    RETURN LL
+END FUNCTION
+
+--------------------------------------------------------------------
+3. PRIOR (uniform over templates, Gaussian over scaling)
+--------------------------------------------------------------------
+FUNCTION logPrior(k, s)
+    // Uniform over templates → constant (ignored)
+    RETURN –0.5 * (s / σₛ)²   // log of a zero‑mean normal prior
+END FUNCTION
+
+--------------------------------------------------------------------
+4. BAYESIAN UPDATE (Metropolis–Hastings MCMC)
+--------------------------------------------------------------------
+INITIALIZE
+    k      ← argmin_j Σ_i (m[i] – ref[j][i])²          // template that fits best initially
+    s      ← 0
+    iter   ← 0
+    BURN   ← 5000                                   // number of burn‑in iterations
+    NUM    ← 20000                                  // total iterations
+    STORE  ← empty list of (k, s) tuples
+
+REPEAT
+    iter ← iter + 1
+
+    // ----- Propose new template ----------
+    WITH probability 0.2
+        k′ ← random choice from {1,…,M} \ {k}
+    ELSE
+        k′ ← k
+    END IF
+
+    // ----- Propose new scaling ----------
+    s′ ← s + Normal(0, σₛ)
+
+    // ----- Compute log probabilities ----------
+    logP_cur ← logLik(k , s ) + logPrior(k , s )
+    logP_new ← logLik(k′, s′) + logPrior(k′, s′)
+
+    // ----- Acceptance test ----------
+    acceptProb ← min(1 , exp( logP_new – logP_cur ))
+    IF RandomUniform(0,1) < acceptProb THEN
+        k ← k′
+        s ← s′
+    END IF
+
+    // ----- Store after burn‑in ----------
+    IF iter > BURN THEN
+        APPEND (k, s) TO STORE
+    END IF
+
+UNTIL iter ≥ NUM
+
+--------------------------------------------------------------------
+5. POST‑PROCESSING
+--------------------------------------------------------------------
+FOR each stored sample (k_s, s_s) DO
+    // Scale the chosen template to obtain the physical spectrum
+    SPECTRA_s ← T[k_s] · 10^( –0.4 * s_s )
+END FOR
+
+// Posterior statistics
+MODE_TEMPLATE ← mode of all k_s
+MEAN_SCALE    ← mean of all s_s
+VAR_SCALE     ← variance of all s_s
+
+// Optional: compute colors and albedo
+FOR any pair of bands (i, j) DO
+    COLOR_ij ← ref[MODE_TEMPLATE][i] – ref[MODE_TEMPLATE][j]   // independent of s
+END FOR
+
+ALBEDO_ESTIMATE ← 10^( –0.4 * MEAN_SCALE ) * (solar flux at 1 AU) / (observed flux)
+
+--------------------------------------------------------------------
+6. OUTPUT
+--------------------------------------------------------------------
+RETURN
+    MODE_TEMPLATE
+    MEAN_SCALE
+    VAR_SCALE
+    SPECTRA_s (posterior mean or median spectrum)
+    COLOR_ij (any needed colors)
+    ALBEDO_ESTIMATE

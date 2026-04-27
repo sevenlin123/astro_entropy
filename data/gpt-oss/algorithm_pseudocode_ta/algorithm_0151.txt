@@ -1,0 +1,32 @@
+μ_s = mean(S, axis=0)              # shape: N_wave
+
+U, Σ, Vt = svd(S_c, full_matrices=False)
+   PCs = U[:, :K]                      # first K principal components, shape: N_wave × K
+
+Z_train = S_c @ PCs                  # shape: N_spec × K
+
+for each j:
+       μ_p[j] = mean( integrate_over_λ( (μ_s + PCs*Z_train_i) * T_j ) )
+
+for each j, i:
+       B[j, i] = integrate_over_λ( PCs[:, i] * T_j )    # shape: J × K
+
+p(z) = μ_p + B @ z                # shape: J
+
+L(y | z) ∝ exp( -0.5 * (y - p(z))ᵀ * W * (y - p(z)) )
+   W = diag(1 / σ²)                    # weighting matrix
+
+prior_mean = zeros(K)
+   prior_cov  = diag( variance(Z_train, axis=0) )      # shape: K × K
+   prior_prec = inverse(prior_cov)                     # precision matrix
+
+post_cov = inverse( Bᵀ @ W @ B + prior_prec )
+
+diff = y - μ_p
+   post_mean = post_cov @ ( Bᵀ @ W @ diff )
+
+s_recon = μ_s + PCs @ post_mean              # shape: N_wave
+
+for n in 1 … N_sample:
+       z_sample[n] = mvnormal(mean=post_mean, cov=post_cov)
+       s_sample[n] = μ_s + PCs @ z_sample[n]

@@ -1,0 +1,135 @@
+# ==============================================================
+# 1. INITIAL SETUP
+# ==============================================================
+
+INPUT:
+    SPECTRA_obs   # array of observed TNO spectra (shape: N_obs × N_wav)
+    FILTERS       # list of filter throughput curves (list of arrays, same shape as N_wav)
+    LABELS        # taxonomic labels for each observed spectrum
+    K             # number of principal components to retain
+    H             # KDE bandwidth (≈0.5)
+    M             # number of synthetic latent vectors to draw
+    SIGMA_REL     # relative photometric noise (≈0.20)
+
+OUTPUT:
+    RECONSTRUCTED_SPECTRA  # high‑resolution spectra for new targets
+    CLASS_PROBS            # posterior class probabilities for new targets
+
+
+# ==============================================================
+# 2. PREPROCESS OBSERVED SPECTRA
+# ==============================================================
+
+def normalize_spectrum(s):
+    """
+    Normalize each spectrum by its median reflectance (or a chosen pivot wavelength).
+    """
+    return s / np.median(s)
+
+SPECTRA_norm = [normalize_spectrum(s) for s in SPECTRA_obs]
+SPECTRA_arr  = np.array(SPECTRA_norm)          # shape: N_obs × N_wav
+
+# ==============================================================
+# 3. PRINCIPAL COMPONENT ANALYSIS (PCA)
+# ==============================================================
+
+pca = PCA(n_components=K)                     # initialize PCA
+LATENT_obs = pca.fit_transform(SPECTRA_arr)   # shape: N_obs × K
+#  - LATENT_obs[j,k]  →  coefficient of k‑th PC for j‑th spectrum
+
+# ==============================================================
+# 4. GENERATE SYNTHETIC LATENT VECTORS WITH KDE
+# ==============================================================
+
+kde = KernelDensity(kernel='gaussian', bandwidth=H)
+kde.fit(LATENT_obs)                            # fit density to observed latent points
+
+LATENT_synth = kde.sample(M)                   # shape: M × K   (synthetic latent vectors)
+
+# ==============================================================
+# 5. RECONSTRUCT SYNTHETIC SPECTRA FROM LATENT VECTORS
+# ==============================================================
+
+def inverse_pca(coefficients):
+    """
+    Map K‑dim latent vector back to full spectrum via inverse PCA transform.
+    """
+    return pca.inverse_transform(coefficients)   # shape: N_wav
+
+SPECTRA_synth = [inverse_pca(l) for l in LATENT_synth]   # list of M synthetic spectra
+
+# ==============================================================
+# 6. FORWARD‑MODEL PHOTOMETRY AND ADD NOISE
+# ==============================================================
+
+def compute_photometry(spectrum, filters):
+    """
+    Convolve a spectrum with each filter throughput to obtain expected reflectance.
+    """
+    phot = []
+    for f in filters:
+        # integrate (spectrum * f) / integral(f)  →  monochromatic reflectance in band
+        R = np.trapz(spectrum * f, axis=-1) / np.trapz(f, axis=-1)
+        phot.append(R)
+    return np.array(phot)                          # shape: N_filters
+
+PHOT_synth = []                                    # list of M photometric vectors
+for s in SPECTRA_synth:
+    phot_clean = compute_photometry(s, FILTERS)   # shape: N_filters
+    # add Gaussian noise with relative uncertainty SIGMA_REL
+    noise = np.random.normal(scale=SIGMA_REL * phot_clean)
+    phot_noisy = phot_clean + noise
+    PHOT_synth.append(phot_noisy)
+
+PHOT_synth = np.array(PHOT_synth)                  # shape: M × N_filters
+
+# ==============================================================
+# 7. TRAIN THE REGRESSOR (PHOTOMETRY → LATENT COEFFICIENTS)
+# ==============================================================
+
+regressor = AutoML_Regressor()                     # e.g., AutoGluon AutoML
+regressor.fit(X=PHOT_synth, y=LATENT_synth)       # supervised regression
+
+# ==============================================================
+# 8. TRAIN THE CLASSIFIER (LATENT COEFFICIENTS → TAXONOMIC LABELS)
+# ==============================================================
+
+classifier = AutoML_Classifier()                   # e.g., AutoGluon AutoML
+classifier.fit(X=LATENT_obs, y=LABELS)            # supervised classification
+
+# ==============================================================
+# 9. INFERENCE ON NEW TARGETS
+# ==============================================================
+
+def infer(target_photometry):
+    """
+    Given a vector of observed photometry for a new target,
+    return reconstructed spectrum and class probabilities.
+    """
+    # 9.1 Predict latent coefficients (posterior mean)
+    lat_pred = regressor.predict(target_photometry.reshape(1, -1))   # shape: 1 × K
+
+    # 9.2 Reconstruct full spectrum via inverse PCA
+    spec_recon = inverse_pca(lat_pred[0])                           # shape: N_wav
+
+    # 9.3 Obtain class probabilities
+    class_prob = classifier.predict_proba(lat_pred)                 # shape: 1 × n_classes
+
+    return spec_recon, class_prob
+
+# ==============================================================
+# 10. (Optional) POSTERIOR SAMPLING FOR UNCERTAINTY ESTIMATION
+# ==============================================================
+
+def sample_posteriors(target_photometry, nsamples=100):
+    """
+    Draw multiple latent samples from regressor predictive distribution
+    to estimate uncertainty on reconstructed spectra.
+    """
+    lat_samples = regressor.predict_distribution(target_photometry, nsamples)
+    specs = [inverse_pca(l) for l in lat_samples]
+    return specs
+
+# ==============================================================
+# END OF PIPELINE
+# ==============================================================

@@ -1,0 +1,57 @@
+Algorithm: Probabilistic Spectral Reconstruction (PSR)
+
+Inputs:
+    - Spectral database S_ref = {S_i} for i=1..N_ref (high‑resolution reflectance spectra)
+    - Filter set F = {f_j} for j=1..M (throughput curves)
+    - Photometric observations of target object: m_obs = {m_k} for k=1..P
+    - Desired number of PCA components K (≤10)
+    - KDE bandwidth h (≈0.5)
+    - Number of synthetic latent samples L (≥ 10^4)
+    - Photometric noise level σ_rel (≈20%)
+Outputs:
+    - Posterior distribution over spectra p(S | m_obs)
+    - Reconstructed spectrum S_rec (mean of posterior)
+    - Taxonomic probability vector P_tax (over H₂O, CO₂, Organics, Methanol)
+Procedure:
+
+1.  PCA Prior Construction
+    1.1  Align all reference spectra S_ref to common wavelength grid λ.
+    1.2  Compute mean spectrum μ_S = mean(S_ref).
+    1.3  Subtract mean: X = S_ref − μ_S.
+    1.4  Perform Singular Value Decomposition: X = U Σ Vᵀ.
+    1.5  Select first K columns of U as eigenbasis U_K.
+    1.6  Project reference spectra onto basis: Z_ref = X · U_K.
+    1.7  Store eigenbasis U_K and mean μ_S for later decoding.
+
+2.  Latent Space Augmentation
+    2.1  Estimate density of Z_ref using Kernel Density Estimation with bandwidth h.
+    2.2  Sample L synthetic latent vectors {z_l} from estimated density.
+    2.3  For each z_l, reconstruct synthetic spectrum: S_syn_l = μ_S + z_l · U_Kᵀ.
+    2.4  Convolve each S_syn_l with each filter f_j to obtain synthetic photometry:
+         m_syn_lj = ∫ S_syn_l(λ) f_j(λ) dλ / ∫ f_j(λ) dλ.
+    2.5  Add Gaussian noise with relative std σ_rel to m_syn_lj to simulate measurement errors.
+
+3.  Encoder Training (Photometry → Latent)
+    3.1  Assemble training set T_enc = {(m_syn_l, z_l)} for all l.
+    3.2  Train an AutoML ensemble regressor R_enc to predict latent vector given photometry.
+    3.3  Validate R_enc internally (e.g., hold‑out split) to ensure prediction accuracy.
+
+4.  Taxonomy Classifier Training
+    4.1  Label each reference spectrum S_ref with taxonomic class C_i ∈ {H₂O, CO₂, Org, Met}.
+    4.2  Associate label with corresponding latent vector z_i from Step 1.6.
+    4.3  Train an AutoML classifier R_cls on {(z_i, C_i)} to output class probabilities.
+
+5.  Forward Inference for Target Observation
+    5.1  Input observed photometry m_obs into trained encoder:
+         z_pred = R_enc(m_obs).
+    5.2  Decode latent vector to spectrum:
+         S_rec = μ_S + z_pred · U_Kᵀ.
+    5.3  Obtain taxonomic probability vector:
+         P_tax = R_cls(z_pred).
+
+6.  Posterior Sampling (Optional)
+    6.1  Draw N_samples latent samples {z_s} from predictive distribution of R_enc conditioned on m_obs.
+    6.2  For each sample, decode to spectrum S_s = μ_S + z_s · U_Kᵀ.
+    6.3  Construct posterior distribution over spectra from {S_s}.
+
+7.  Return S_rec, P_tax, and optional posterior samples.

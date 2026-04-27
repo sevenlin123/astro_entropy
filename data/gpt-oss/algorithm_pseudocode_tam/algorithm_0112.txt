@@ -1,0 +1,90 @@
+Input:  Reference spectral library R = {S_i | i = 1…N_ref}
+        (Each S_i is a reflectance vector sampled uniformly in wavelength)
+
+Step 1.1  // Normalization
+    For each S_i:
+        Normalize S_i to unit Euclidean norm.
+
+Step 1.2  // Principal Component Analysis
+    Compute covariance matrix C = cov(R).
+    Perform eigen-decomposition of C → eigenvalues λ_k, eigenvectors v_k.
+    Sort eigenvectors by descending λ_k.
+
+Step 1.3  // Select number of PCs K
+    Choose K such that cumulative variance explained ≥ 95 % (typical K = 8–10).
+
+Step 1.4  // Project spectra to latent space
+    For each S_i:
+        z_i = V_Kᵀ · (S_i – μ)          // μ = mean spectrum
+    Store latent vectors Z = {z_i}.
+
+Step 1.5  // Estimate continuous density with KDE
+    Choose bandwidth h ≈ 0.5 (tuned empirically).
+    Fit KDE over Z → p_Z(z).
+
+Step 1.6  // Generate synthetic latent training set
+    Sample M synthetic latent vectors {z_j^syn} from p_Z(z)
+    (M ≫ N_ref, e.g. M = 10 000).
+
+Step 1.7  // Reconstruct synthetic spectra
+    For each z_j^syn:
+        S_j^syn = μ + V_K · z_j^syn
+    Store synthetic spectra set S_syn.
+
+Input:  Filter set F = {F_k | k = 1…N_filt}
+        Transmission curves T_k(λ)
+        Solar spectrum S_⊙(λ)
+
+For each synthetic spectrum S_j^syn:
+    For each filter F_k:
+        Compute reflected flux:
+            R_k = ∫ S_j^syn(λ) * T_k(λ) dλ / ∫ S_⊙(λ) * T_k(λ) dλ
+        Add Gaussian noise:
+            σ_k = 0.20 * R_k          // 20 % relative uncertainty
+            m_k = R_k + Normal(0, σ_k)
+    Record noisy photometry vector m_j^syn = [m_1, …, m_N_filt].
+
+Model:  AutoML regressor (ensemble of Gradient‑Boosted Trees & Neural Nets)
+Input:  m_j^syn  (photometry vector)
+Output: predicted latent vector ẑ_j
+
+Procedure:
+    Split TrainingData into train/validation sets.
+    Use AutoML to search hyperparameters, build ensembles.
+    Train regressor to minimize mean squared error between ẑ_j and z_j^syn.
+    Validate on hold‑out set; tune until convergence.
+    Save trained encoder E.
+
+Input:  Latent vectors Z (real spectra) with known taxonomy labels L_i
+Model:  AutoML classifier (e.g., Random Forest, XGBoost)
+Train classifier C on (Z, L).
+Save C for later use.
+
+Input:  New photometric measurement m_new ∈ ℝ^{N_filt}
+        (with uncertainties σ_new)
+
+Step 5.1  // Encode photometry to latent space
+    ẑ_new = E(m_new)
+
+Step 5.2  // Reconstruct full spectrum
+    S_new = μ + V_K · ẑ_new
+
+Step 5.3  // Optional: Taxonomic probabilities
+    if classifier C exists:
+        P_tax = C.predict_proba(ẑ_new)
+
+Output:
+    Reconstructed spectrum S_new,
+    Latent vector ẑ_new,
+    Taxonomic probability distribution P_tax (if available).
+
+Procedure: Monte Carlo Dropout or Bootstrap
+    Repeat Steps 5.1–5.2 B times with perturbed photometry
+        m'_new = m_new + Normal(0, σ_new)
+        ẑ'_new = E(m'_new)
+        S'_new = μ + V_K · ẑ'_new
+    Collect {S'_new}_B.
+Compute per‑wavelength statistics:
+    Mean = ⟨S'_new⟩
+    Credible interval = percentile bounds (e.g., 2.5 % and 97.5 %)
+Return: Mean spectrum + confidence bands.

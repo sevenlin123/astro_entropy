@@ -1,0 +1,98 @@
+pseudo
+INPUT: 
+    S_ref[1..N]          // Reference high‑resolution spectra (reflectance vectors, length L)
+    λ_ref[1..L]          // Wavelength grid for reference spectra
+    f_list[1..F]         // Instrument filter transmission curves
+    K                    // Desired number of PCA components (e.g., 8–10)
+    h_KDE                 // KDE bandwidth (≈0.5)
+    N_aug                  // Number of synthetic samples to generate (e.g., 5000)
+
+OUTPUT: 
+    PCA_basis[1..K]       // Principal component eigenvectors (length L)
+    μ_S                   // Mean of reference spectra (length L)
+    μ_lat[1..K]           // Mean of latent coefficients
+    σ_lat[1..K]           // Std dev of latent coefficients
+
+pseudo
+// 1.1 Center spectra
+for i = 1 to N:
+    ΔS[i] = S_ref[i] – mean(S_ref)
+
+// 1.2 Perform PCA (SVD) on centered data matrix (ΔS)
+[P, Σ, V] = SVD(ΔS)                // P columns are eigenvectors of covariance
+PCA_basis = first K columns of P   // Each column length L
+
+// 1.3 Project reference spectra onto PCA basis to obtain latent coefficients
+for i = 1 to N:
+    coeff[i] = PCA_basis^T * (S_ref[i] – μ_S)      // length K
+
+μ_lat = mean(coeff[1..N])            // Component means
+σ_lat = std(coeff[1..N])             // Component stds
+
+pseudo
+// 2.1 Build KDE in K‑dimensional latent space
+KDE_model = FitKDE(coeff[1..N], bandwidth = h_KDE)
+
+// 2.2 Sample synthetic latent vectors
+for j = 1 to N_aug:
+    lat_aug[j] = SampleFrom(KDE_model)     // length K
+
+// 2.3 Reconstruct synthetic high‑resolution spectra
+for j = 1 to N_aug:
+    S_syn[j] = μ_S + PCA_basis * lat_aug[j]     // length L
+
+pseudo
+// 3.1 Pre‑compute filter integrals for all synthetic spectra
+for j = 1 to N_aug:
+    for k = 1 to F:
+        m_syn[j][k] = Convolve(S_syn[j], f_list[k])   // Reflectance in filter k
+    // 3.2 Inject Gaussian noise (20 % relative uncertainty)
+    for k = 1 to F:
+        noise = Normal(0, 0.2 * m_syn[j][k])
+        m_syn_noisy[j][k] = m_syn[j][k] + noise
+
+pseudo
+// 4.1 Assemble training set
+TrainingInput  = { m_syn_noisy[j] | j = 1..N_aug }    // Shape: N_aug × F
+TrainingTarget = { lat_aug[j]    | j = 1..N_aug }    // Shape: N_aug × K
+
+// 4.2 Train encoder (regressor) using AutoML framework
+EncoderModel = AutoMLTrain(
+                   X = TrainingInput,
+                   Y = TrainingTarget,
+                   task = "regression")
+
+// 4.3 Train latent‑space classifier
+//    (Use original reference latent coeffs with known taxonomic labels)
+ClassifierModel = AutoMLTrain(
+                       X = coeff[1..N],
+                       Y = labels[1..N],      // e.g., H2O, CO2, Organic, Methanol
+                       task = "classification")
+
+pseudo
+INPUT:
+    m_new[1..F]          // Observed photometry vector for new object
+
+PROCESS:
+1. Predict latent coefficients:
+    lat_pred = EncoderModel.predict(m_new)          // Length K
+
+2. Reconstruct spectrum:
+    S_recon = μ_S + PCA_basis * lat_pred           // Length L
+
+3. Classify taxonomy:
+    tax_prob = ClassifierModel.predict_proba(lat_pred)   // Probabilities for each class
+
+OUTPUT:
+    S_recon          // Reconstructed high‑resolution spectrum
+    tax_prob         // Probabilistic taxonomy assignment
+
+pseudo
+// 6.1 Sample from Encoder predictive distribution (if available)
+//     or approximate via bootstrapping / Monte Carlo on EncoderModel
+for s = 1 to N_samples:
+    lat_samp[s] = SamplePredictive(EncoderModel, m_new)
+    S_samp[s]   = μ_S + PCA_basis * lat_samp[s]
+
+S_mean   = mean(S_samp[1..N_samples])
+S_std    = std(S_samp[1..N_samples])     // Spectral uncertainty envelope

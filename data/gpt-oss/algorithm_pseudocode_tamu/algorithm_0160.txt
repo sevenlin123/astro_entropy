@@ -1,0 +1,49 @@
+# 2.1 Principal Component Analysis (PCA)
+PCA_model ← PCA(S_ref, n_components=K)
+S_ref_PC ← PCA_model.transform(S_ref)          # Shape: (N, K)
+
+# 2.2 Kernel Density Estimation (KDE) in latent space
+KDE_model ← KDE(S_ref_PC, bandwidth=h)        # Non‑parametric density
+
+# 2.3 Generate synthetic latent vectors
+latent_samples ← KDE_model.sample(Nsynth)      # Shape: (Nsynth, K)
+
+# 2.4 Decode synthetic latent vectors to spectra
+S_syn ← PCA_model.inverse_transform(latent_samples)   # Shape: (Nsynth, λ_grid)
+
+# 2.5 Forward‑model synthetic spectra to photometry
+for i in 1…Nsynth:
+    m_syn[i] ← convolve(S_syn[i], F)          # Fluxes per filter
+    m_syn[i] ← add_gaussian_noise(m_syn[i], σ_noise)
+
+# 2.6 Train Encoder (photometry → latent)
+Encoder_model ← AutoML.train(features=m_syn, targets=latent_samples)
+
+# Train classifier on latent coordinates of real spectra
+Classifier_model ← AutoML.train(features=S_ref_PC, targets=taxonomic_labels)
+
+# 4.1 Predict latent mean & covariance from observed photometry
+latent_mean, latent_cov ← Encoder_model.predict(m_obs)     # Mean & diagonal var
+
+# 4.2 Sample posterior of latent coefficients (Gaussian Copula)
+latent_samples_post ← GaussianCopula.sample(mean=latent_mean,
+                                            cov=latent_cov,
+                                            size=Npost)
+
+# 4.3 Decode each sample to full spectrum
+for j in 1…Npost:
+    S_post[j] ← PCA_model.inverse_transform(latent_samples_post[j])
+
+# 4.4 Construct posterior credible interval per wavelength
+for λ in λ_grid:
+    values_λ ← [S_post[j][λ] for j in 1…Npost]
+    lower[λ] ← percentile(values_λ, 2.5)
+    median[λ]← percentile(values_λ, 50)
+    upper[λ]← percentile(values_λ, 97.5)
+
+# 4.5 Taxonomy probability (optional)
+latent_pred, _ ← Encoder_model.predict_proba(m_obs)
+taxonomy_probs ← Classifier_model.predict_proba(latent_pred)
+
+for each new m_obs:
+    run Steps 4.1 – 5

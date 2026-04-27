@@ -1,0 +1,10 @@
+Input:
+    S_ref   – Reference set of high‑resolution spectra {s_1 … s_N}  (N≈50)
+    R       – Instrument response curves for the desired photometric filters
+    U       – Number of principal components to retain (U = 5–10)
+    h_KDE   – Bandwidth for kernel density estimation (≈0.5)
+    σ_noise – Relative photometric uncertainty to inject (≈0.20)
+
+Output for any new object:
+    S_hat   – Reconstructed high‑resolution spectrum
+    C_hat   – Posterior probability distribution over taxonomic classes

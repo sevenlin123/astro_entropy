@@ -1,0 +1,90 @@
+Inputs
+-------
+- SPECTRA      : list of N measured TNO spectra  
+                  (wavelength array λ_i, reflectance R_i, i=1…N_spec)
+- FILTERS      : list of M filter transmission curves T_m(λ), m=1…M
+- PHOTOMETRY_NEW : observed photometry of a new TNO (vector m_new, length M)
+
+Parameters
+----------
+- K            : number of principal components to retain (default 8–10)
+- h            : KDE bandwidth (default 0.5)
+- M_samp       : number of synthetic latent samples (default 5000)
+- σ_noise      : relative photometric noise (default 0.20)
+
+Output
+------
+- S_rec        : reconstructed high‑resolution spectrum (same λ grid as SPECTRA)
+- TAX_PROBS    : probability distribution over taxonomy classes
+
+pseudo
+# 1.1 Align and normalize all spectra to common wavelength grid
+λ_common ← common wavelength grid
+S_norm   ← interpolate each spectrum onto λ_common
+S_norm   ← divide by solar spectrum (if desired)
+
+# 1.2 Perform PCA on the normalized spectra
+[U, Σ, Vᵀ] ← SingularValueDecomposition(S_norm)     # U: eigenvectors (principal components)
+μ_S        ← mean(S_norm, axis=0)                    # mean spectrum
+PCs        ← first K columns of U                     # K principal components
+
+# 1.3 Project real spectra onto PCs to obtain latent coefficients
+C_real ← (S_norm - μ_S) · PCs                         # shape (N × K)
+
+pseudo
+# 2.1 Fit a non‑parametric KDE over C_real
+KDE_model ← KDE(C_real, bandwidth=h)
+
+# 2.2 Draw M_samp synthetic latent vectors
+C_synth ← KDE_model.sample(M_samp)                    # shape (M_samp × K)
+
+pseudo
+# 3.1 Reconstruct synthetic spectra from latent vectors
+S_synth ← μ_S + C_synth · PCsᵀ                        # shape (M_samp × N_spec)
+
+# 3.2 For each synthetic spectrum, compute noiseless photometry
+for j in 1 … M_samp:
+    for m in 1 … M:
+        # Convolution with filter throughput
+        f_jm ← ∫ S_synth[j, λ] * T_m(λ) dλ / ∫ T_m(λ) dλ
+    P_synth[j,:] ← [f_j1, f_j2, …, f_jM]              # shape (M_samp × M)
+
+# 3.3 Inject Gaussian photometric noise (relative σ_noise)
+P_noisy ← P_synth * (1 + Normal(0, σ_noise, size=P_synth.shape))
+
+pseudo
+# 4.1 Combine real and synthetic pairs
+Train_X ← concatenate( real_photometry_from_real_spectra,
+                       P_noisy )                    # shape (N_real+M_samp, M)
+Train_Y ← concatenate( C_real, C_synth )           # shape (N_real+M_samp, K)
+
+pseudo
+# 5.1 Instantiate an AutoML regressor (e.g., AutoGluon Tabular)
+Regressor ← AutoML_Regressor()
+Regressor.fit(Train_X, Train_Y)
+
+pseudo
+# 6.1 Obtain class labels for real spectra (four taxonomic groups)
+Labels_real ← taxonomy_labels_of_real_spectra             # length N_real
+
+# 6.2 Train a separate AutoML classifier on C_real
+Classifier ← AutoML_Classifier()
+Classifier.fit(C_real, Labels_real)
+
+pseudo
+# 7.1 Predict latent coefficients for new photometry
+c_hat ← Regressor.predict(PHOTOMETRY_NEW)                # shape (K,)
+
+# 7.2 Reconstruct spectrum
+S_rec ← μ_S + c_hat · PCsᵀ                               # shape (N_spec,)
+
+# 7.3 Classify taxonomy
+TAX_PROBS ← Classifier.predict_proba(c_hat)              # vector of class probabilities
+
+pseudo
+# 8.1 For i = 1 … N_samples:
+#       - draw noise realization n_i ~ Normal(0, σ_noise)
+#       - m_i = PHOTOMETRY_NEW + n_i
+#       - c_i = Regressor.predict(m_i)
+#       - S_i = μ_S + c_i · PCsᵀ
+# 8.2 Compute mean, standard deviation, or credible intervals over {S_i}

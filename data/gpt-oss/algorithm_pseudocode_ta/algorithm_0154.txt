@@ -1,0 +1,75 @@
+# ------------------------------------------------------------------
+# 1. TRAINING PHASE
+# ------------------------------------------------------------------
+# Input:  full_spectra   :  array of shape (N_spectra, N_wavelengths)
+#         wavelengths   :  array of shape (N_wavelengths,)
+#         filters       :  list of filter objects; each filter has
+#                          (name, transmission curve T(λ))
+#         k             :  desired number of principal components
+#
+# Output: pca_model     :  {mean_spec, pc_vectors, pc_variances}
+#         filter_matrix :  matrix M of shape (N_filters, k)
+#                        that maps PC coefficients to synthetic
+#                        photometric fluxes in each filter
+#
+def train_reconstruction(full_spectra, wavelengths, filters, k):
+
+    # 1.1 Mean‑center spectra
+    mean_spec = mean(full_spectra, axis=0)                     # (N_wavelengths,)
+    centered  = full_spectra - mean_spec                       # (N_spectra, N_wavelengths)
+
+    # 1.2 Compute PCA basis
+    cov_mat    = (centered.T @ centered) / (N_spectra-1)        # (N_wavelengths,N_wavelengths)
+    eig_vals, eig_vecs = eig(cov_mat)                          # eig_vecs columns = PCs
+    sort_indices = argsort(eig_vals)[::-1]                      # descending order
+    pc_vectors   = eig_vecs[:, sort_indices[:k]]                # (N_wavelengths,k)
+    pc_variances = eig_vals[sort_indices[:k]]                   # (k,)
+
+    # 1.3 Store PCA model
+    pca_model = {
+        'mean_spec'   : mean_spec,
+        'pc_vectors'  : pc_vectors,
+        'pc_variances': pc_variances
+    }
+
+    # 1.4 Compute filter response matrix M
+    #      M[j, i] = <pc_i , filter_j> / <1 , filter_j>
+    M = zeros((len(filters), k))                                # (N_filters,k)
+    for j, filt in enumerate(filters):
+        T = filt.transmission            # (N_wavelengths,)
+        norm = sum(T)                    # integral of filter over λ
+        for i in range(k):
+            pc = pc_vectors[:, i]
+            M[j,i] = sum(pc * T) / norm
+
+    # Also compute mean photometric flux per filter from mean_spec
+    mean_flux = zeros(len(filters))
+    for j, filt in enumerate(filters):
+        T = filt.transmission
+        mean_flux[j] = sum(mean_spec * T) / sum(T)
+
+    return pca_model, M, mean_flux
+
+--------------------------------------------------------------------
+# 3. OUTLIER DETECTION (optional)
+# --------------------------------------------------------------------
+# Detect if an object lies in a low‑probability region of the latent space.
+# Compute the Mahalanobis distance of the MAP coefficient estimate from
+# the prior mean; flag if distance > threshold.
+
+--------------------------------------------------------------------
+# 4. SUMMARY OF USAGE
+# --------------------------------------------------------------------
+# 1. Train on a set of high‑resolution near‑IR spectra:
+#    pca_model, M, mean_flux = train_reconstruction(all_spectra,
+#                                                   wavelengths,
+#                                                   filter_list,
+#                                                   k=8)
+
+# 2. For any TNO with sparse photometry:
+#    samples, μ_a, Σ_a = reconstruct_spectra(obs_flux, obs_err,
+#                                            pca_model, M, mean_flux,
+#                                            nsamples=100)
+
+# 3. If desired, test for outlier status:
+#    is_outlier = check_outlier(μ_a, diag(pca_model['pc_variances']))

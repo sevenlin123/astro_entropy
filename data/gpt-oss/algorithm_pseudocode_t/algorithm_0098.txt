@@ -1,0 +1,83 @@
+Input:
+  - photometry_matrix: N_objects x N_bands matrix of observed fluxes
+  - sigma_matrix: same shape for uncertainties
+  - filter_response: N_bands x wavelength array of throughput
+  - template_spectra: N_templates x wavelength array of spectral reflectance
+
+Steps:
+ 1. For each template:
+    a. Convolve template with each filter to get synthetic flux vector (size N_bands)
+ 2. For each object:
+    a. Initialize weights w_i (N_templates) randomly or uniform
+    b. Define scaling factor s
+    c. Define function predict_flux(w, s):
+           predicted = s * sum_i w_i * template_flux_i
+    d. Define log_likelihood(w, s):
+           sum over bands: -(obs - pred)^2 / (2*sigma^2) - log(sigma*sqrt(2pi))
+    e. Define priors:
+           Dirichlet(alpha) on w (ensuring sum=1, non-neg)
+           Prior on s (e.g., lognormal)
+    f. Run MCMC sampler for (w, s) to draw samples from posterior
+    g. Compute posterior mean of w and s
+    h. Construct reconstructed spectrum:
+           recon_spec = s * sum_i w_i * template_spectrum_i
+ 3. Output for each object: posterior mean weights, reconstructed spectrum, uncertainties
+
+# 1.1 Photometry
+PHOTOMETRY[N_obj][N_band]          # observed fluxes (e.g. AB mag → flux)
+SIGMA[N_obj][N_band]               # observational 1σ uncertainties
+
+# 1.2 Instrumental Response
+FILTER_RESP[N_band][N_wave]        # relative throughput vs wavelength
+
+# 1.3 Spectral Library
+TEMPLATE_SPECTRA[N_temp][N_wave]   # reflectance or flux density for each taxonomic class
+WAVELENGTHS[N_wave]                # common wavelength grid for all templates
+
+for t in 1 … N_temp:
+    for b in 1 … N_band:
+        # Integrate template over the filter bandpass
+        num = Σ_over_w (TEMPLATE_SPECTRA[t][w] * FILTER_RESP[b][w] * Δλ[w])
+        den = Σ_over_w (FILTER_RESP[b][w] * Δλ[w])
+        SYNTH_FLUX[t][b] = num / den     # flux predicted by template t in band b
+
+# Unknowns:
+#   W[t]   : weight of template t (≥0, Σ W = 1)
+#   S      : overall scaling factor (positive)
+
+# Priors:
+PRIOR_W ~ Dirichlet(α[1…N_temp])        # e.g., α = (1,1,…,1)  -> uniform on simplex
+PRIOR_S ~ LogNormal(mean=0, std=1)      # wide prior for overall brightness
+
+function P_LIKE(W, S):
+    for b in 1 … N_band:
+        μ_b = S * Σ_{t=1}^{N_temp} W[t] * SYNTH_FLUX[t][b]      # predicted flux
+        likelihood_contrib = Gaussian(PHOTOMETRY[o][b] | μ_b, SIGMA[o][b])
+    return product_of_all_likelihood_contrib
+
+# Use a generic Metropolis–Hastings or Hamiltonian sampler
+initialize W = uniform_on_simplex
+initialize S = 1.0
+for iter in 1 … N_iter:
+    propose new_W, new_S by small perturbation (respecting constraints)
+    accept_ratio = [P_LIKE(new_W, new_S) * PRIOR_W(new_W) * PRIOR_S(new_S)] /
+                    [P_LIKE(current_W, current_S) * PRIOR_W(current_W) * PRIOR_S(current_S)]
+    if random() < min(1, accept_ratio):
+        current_W = new_W
+        current_S = new_S
+    record (current_W, current_S)
+
+W_mean[t] = average over samples of W[t]
+S_mean    = average over samples of S
+
+# Reconstructed full‑spectrum
+RECON_SPEC[w] = S_mean * Σ_{t=1}^{N_temp} W_mean[t] * TEMPLATE_SPECTRA[t][w]
+
+χ² = Σ_b (PHOTOMETRY[o][b] – S_mean*Σ_t W_mean[t]*SYNTH_FLUX[t][b])² / SIGMA[o][b]²
+if χ² > threshold: flag as potential outlier
+
+OBJECT_ID[o]
+WEIGHTS[o][t]   = W_mean[t]          # posterior mean weight of each template
+SCALING[o]      = S_mean
+RECONSTRUCTED_SPECTRUM[o][w] = RECON_SPEC[w]
+CHI_SQUARE[o]   = χ²                 # optional

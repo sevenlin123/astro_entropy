@@ -1,0 +1,95 @@
+Input:
+    S_ref   = {S_i | i = 1 … N}      # Reference high‑resolution spectra (reflectance)
+    filt    = {F_j | j = 1 … M}     # Instrument filter throughput curves
+    K       = number of PCA components (default 8–10)
+    h_KDE   = KDE bandwidth (≈0.5)
+    n_aug   = number of synthetic latent samples (e.g., 5000)
+    σ_phot  = photometric noise level (relative, e.g., 20%)
+
+Steps:
+
+1.1  Perform PCA on S_ref:
+        [E, Λ] = PCA(S_ref, num_components = K)
+        // E : K×L eigenvectors (L = spectral bins)
+        // Λ : K eigenvalues
+        For each spectrum S_i:
+            z_i = E * (S_i - μ_S)          // Latent coefficients (mean μ_S of S_ref)
+
+1.2  Estimate latent density with KDE:
+        KDE_model = KernelDensityEstimate({z_i}, bandwidth = h_KDE, kernel = Gaussian)
+
+1.3  Sample augmented latent vectors:
+        For t = 1 … n_aug:
+            z_t ~ KDE_model
+            S_t  = μ_S + Eᵀ * z_t          // Inverse PCA → synthetic spectrum
+            Store (z_t, S_t)
+
+1.4  Generate synthetic photometry:
+        For each (z_t, S_t):
+            For each filter F_j:
+                m_tj = Convolve(S_t, F_j)              // Compute theoretical reflectance in filter j
+            Add Gaussian noise: 
+                m_tj_noisy = m_tj * (1 + Normal(0, σ_phot))
+            Store (m_tj_noisy, z_t)
+
+1.5  Train encoder (regressor) on (m_noisy, z):
+        Encoder = AutoMLRegressor()
+        Encoder.train(inputs = {m_tj_noisy}, targets = {z_t})
+        // Encoder outputs point estimate of latent vector from photometry
+
+1.6  Train classifier on latent vectors:
+        Classifier = AutoMLClassifier()
+        Classifier.train(inputs = {z_t}, labels = {taxonomic_class_of_S_t})
+
+Input:
+    m_obs = {m_obs_j | j = 1 … M}   # Observed sparse photometry (with uncertainties)
+    Encoder, Classifier, E, μ_S
+    KDE_model                      // Optional for posterior sampling
+
+Procedure:
+
+2.1  Predict latent coefficients:
+        z_pred = Encoder.predict(m_obs)
+        // Optionally obtain predictive covariance from Encoder (if available)
+
+2.2  Construct posterior over latent space:
+        // Sample N_post points from a Gaussian Copula centered at z_pred
+        For s = 1 … N_post:
+            z_s = SampleGaussianCopula(mean = z_pred, cov = Cov_z_pred)
+            Ensure z_s lies within support of KDE_model (reject if needed)
+            Store z_s
+
+2.3  Decode spectra:
+        For each z_s:
+            S_s = μ_S + Eᵀ * z_s           // Inverse PCA → full spectrum
+            Store S_s
+
+2.4  Aggregate posterior:
+        Spectrum_mean   = Mean({S_s})
+        Spectrum_cov    = Covariance({S_s})   // Per‑wavelength uncertainty
+        // Confidence intervals from percentiles of {S_s}
+
+2.5  Classify taxonomy:
+        class_probs = Classifier.predict_proba(z_pred)
+        // (or average class probabilities over samples {z_s})
+
+Output:
+    Spectrum_mean          # Reconstructed reflectance spectrum
+    Spectrum_cov or CI     # Uncertainty bounds
+    class_probs            # Probabilities for each taxonomic class
+
+Convolve(Spectrum, FilterCurve):
+    Integrate(Spectrum * FilterCurve) / Integrate(FilterCurve)
+
+KernelDensityEstimate(data, bandwidth, kernel):
+    Standard KDE implementation (Gaussian kernel)
+
+SampleGaussianCopula(mean, cov):
+    1. Draw u ~ Uniform(0,1)^K
+    2. Transform to standard normal: x = Φ⁻¹(u)
+    3. Apply Cholesky(L) of cov: y = L * x
+    4. Return mean + y
+
+AutoMLRegressor(), AutoMLClassifier():
+    Wrapper that searches over tree ensembles, neural nets, etc.,
+    returning best‑performing model with cross‑validated performance.

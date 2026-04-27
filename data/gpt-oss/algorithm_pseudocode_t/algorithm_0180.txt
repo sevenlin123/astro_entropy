@@ -1,0 +1,69 @@
+INPUT:
+    OBS = {(filter_k, mag_m_i, errσ_mi, r_i, Δ_i, α_i, t_i)}   // all photometric observations
+    FILTERS = {k → S_k(λ)}                                    // spectral response for each filter
+    SUNMAG = {k → m_sun_k}                                    // solar magnitudes per filter
+    BASIS = {B_i(λ)}                                           // i = 1…N basis functions
+    PRIORS:
+        σ_w²      // variance of Gaussian prior on weights w_i
+        H0, σ_H   // mean and std dev of Gaussian prior on absolute magnitude H
+        G0, σ_G   // mean and std dev of Gaussian prior on phase slope G
+    PHASEFUNC(α,G)   // e.g., Bowell et al. 1989 phase law
+    GRID = {λ_j}     // wavelength grid for final spectrum (0.3–2.5 µm)
+
+PRECOMPUTE:
+    For each filter k:
+        norm_k = ∫ S_k(λ) dλ
+        For each basis i:
+            C[k][i] = (1/norm_k) * ∫ B_i(λ) * S_k(λ) dλ        // projection coefficients
+
+FORWARD MODEL (given parameters w[1…N], H, G):
+    For each filter k:
+        logR_k   = – Σ_i w[i] * C[k][i]
+        R_k      = exp(logR_k)                                 // relative reflectance factor
+        Δm_k     = –2.5 * log10(R_k)
+        m_ref_k  = m_sun_k + Δm_k                              // magnitude relative to Sun
+    For each observation i:
+        k_i = OBS[i].filter
+        m_model_i = m_ref_k_i
+                     + 5*log10(OBS[i].r * OBS[i].Δ)
+                     – 2.5*log10(PHASEFUNC(OBS[i].α, G))
+    Return vector m_model = {m_model_i}
+
+LIKELIHOOD:
+    L(w,H,G | OBS) = Π_i exp( –½ * ( (OBS[i].mag_m_i – m_model_i)² / σ_mi² ) )
+
+POTENTIAL (posterior density):
+    P(w,H,G | OBS) ∝ L * exp( –½ * Σ_i (w[i]² / σ_w²) )
+                     * exp( –½ * ((H–H0)² / σ_H²) )
+                     * exp( –½ * ((G–G0)² / σ_G²) )
+
+MCMC SAMPLING:
+    Initialize w ← 0 (vector), H ← H0, G ← G0
+    FOR t = 1 TO N_iter:
+        Propose w' = w + ε_w   // ε_w ~ N(0, Σ_wstep)
+        Propose H' = H + ε_H   // ε_H ~ N(0, σ_Hstep²)
+        Propose G' = G + ε_G   // ε_G ~ N(0, σ_Gstep²)
+        Compute logPosterior_current = logP(w,H,G | OBS)
+        Compute logPosterior_proposed = logP(w',H',G' | OBS)
+        α = min(1, exp( logPosterior_proposed – logPosterior_current ))
+        Draw u ~ Uniform(0,1)
+        IF u < α:
+            w ← w',  H ← H',  G ← G'
+        STORE current (w,H,G) as sample if t > Burnin
+    END FOR
+
+POST‑PROCESSING:
+    // Build reflectance spectra from posterior samples
+    For each stored sample s:
+        For each λ_j in GRID:
+            R_s(λ_j) = exp( – Σ_i w_s[i] * B_i(λ_j) )
+    Compute mean spectrum:
+        mean_R(λ_j) = (1/NumSamples) * Σ_s R_s(λ_j)
+    Compute uncertainties:
+        lower(λ_j) = 16th percentile of {R_s(λ_j)}
+        upper(λ_j) = 84th percentile of {R_s(λ_j)}
+
+OUTPUT:
+    Posterior samples {w_s, H_s, G_s}
+    mean_R(λ), lower(λ), upper(λ)   // reflectance spectrum with 68% credible band
+    Derived quantities (colors, taxonomic class) may be computed from mean_R

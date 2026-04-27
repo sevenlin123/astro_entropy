@@ -1,0 +1,60 @@
+INPUT
+    S_train      : N_spec × N_wave array of training spectra (flux vs wavelength)
+    filt_resp    : list of M filter response curves R_j(λ) (normalized)
+    f_obs        : length‑M vector of observed photometry (fluxes)
+    sigma_f      : length‑M vector of photometric uncertainties
+    K            : number of principal components to retain (e.g., 8–10)
+
+OUTPUT
+    S_rec(λ)     : reconstructed spectrum (mean + PC combination)
+    sigma_S(λ)   : 1‑σ uncertainty envelope of the reconstruction
+
+1.1 Compute mean spectrum
+        μ(λ) ← mean over all rows of S_train
+
+1.2 Center spectra
+        S_centered ← S_train – μ(λ)   // broadcast subtraction
+
+1.3 Singular‑Value Decomposition
+        [U, Σ, Vt] ← SVD(S_centered)      // U: N_spec×N_spec, Σ: diag, Vt: K×N_wave
+        PCs ← Vt[0:K]ᵀ                     // first K right singular vectors (N_wave×K)
+
+1.4 For each PC k, store eigenvalue λ_k = Σ_k² / (N_spec – 1)
+
+2.1 For each filter j (1…M):
+        2.1.1 Compute synthetic mean flux
+                μ_j ← ∫ μ(λ) * R_j(λ) dλ / ∫ R_j(λ) dλ
+        2.1.2 For each PC k (1…K):
+                A_jk ← ∫ PCs_k(λ) * R_j(λ) dλ / ∫ R_j(λ) dλ
+
+3.1 Residual photometry
+        y ← f_obs – μ_vec                // M‑vector
+
+3.2 Observation weights
+        W ← diag( 1 / sigma_f² )         // M×M diagonal matrix
+
+4.1 Prior on coefficients (Gaussian, zero mean)
+        Σ_prior_inv ← diag( 1 / λ_k )     // inverse prior covariance (K×K)
+
+4.2 Posterior precision matrix
+        P_post ← Aᵀ · W · A + Σ_prior_inv   // K×K
+
+4.3 Posterior mean (MAP estimate)
+        c_map ← solve( P_post , Aᵀ · W · y )   // linear system
+
+4.4 Posterior covariance
+        Σ_post ← inverse( P_post )            // K×K
+
+5.1 For each wavelength λ_i (i = 1 … N_wave):
+        5.1.1 Stack PC values into vector v(λ_i) ← PCs[λ_i, :]    // length K
+        5.1.2 Reconstructed flux
+                S_rec(λ_i) ← μ(λ_i) + v(λ_i) · c_map
+        5.1.3 Uncertainty
+                var_i ← v(λ_i)ᵀ · Σ_post · v(λ_i)
+                sigma_S(λ_i) ← sqrt( var_i )
+
+6.1 If user requests “rare” spectra:
+        6.1.1 Generate many posterior samples {c_s} from Σ_post
+        6.1.2 For each sample, compute full spectrum and compare to training library
+        6.1.3 Select samples lying farthest (e.g., > 3σ) from nearest neighbors in PC space
+        6.1.4 Return those spectra as candidate low‑probability types

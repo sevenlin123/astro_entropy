@@ -1,0 +1,115 @@
+Input
+------
+- S_ref[1..N][1..M]          # Reference spectra (reflectance vs wavelength)
+- λ[1..M]                    # Wavelength grid of spectra
+- Filters[1..F]              # Transmission curves (λ, T(λ)) for each filter
+- K                          # Number of principal‑component dimensions (≈ 10)
+- h = 0.5                     # KDE bandwidth
+- N_syn                      # Number of synthetic latent samples (e.g. 10 000)
+- σ_rel = 0.20                # Relative photometric noise (20 %)
+
+Output
+------
+- For any new photometry m_new[1..F]:
+    • Estimated high‑resolution spectrum S_est[1..M]
+    • Probability vector P_tax[1..C] over taxonomic classes
+
+--------------------------------------------------------------------
+1. PREPROCESS REFERENCE SPECTRA
+--------------------------------------------------------------------
+1.1   Normalize each spectrum in S_ref to its median reflectance
+      (or divide by solar spectrum if required).
+
+1.2   Compute the mean spectrum μ_s[1..M] = mean(S_ref, axis=0).
+
+1.3   Subtract the mean: X[1..N][1..M] = S_ref - μ_s.
+
+--------------------------------------------------------------------
+2. PRINCIPAL COMPONENT ANALYSIS (PCA)
+--------------------------------------------------------------------
+2.1   Perform SVD on X → X = U Σ Vᵀ.
+
+2.2   Select the first K columns of V (principal‑component basis):
+       V_pc[1..M][1..K].
+
+2.3   Project reference spectra onto PCs:
+       Z_real[1..N][1..K] = X · V_pc.
+
+--------------------------------------------------------------------
+3. PRIOR ESTIMATION VIA KDE
+--------------------------------------------------------------------
+3.1   Fit a multivariate KDE to Z_real with bandwidth h:
+       p_z = KDE(Z_real, h).
+
+3.2   Sample N_syn latent vectors from the KDE:
+       Z_syn[1..N_syn][1..K] = sample(p_z, N_syn).
+
+--------------------------------------------------------------------
+4. GENERATE SYNTHETIC PHOTOMETRY
+--------------------------------------------------------------------
+For each i = 1 … N_syn
+4.1   Reconstruct synthetic spectrum:
+        S_i = μ_s + V_pc · Z_syn[i]          # (1×M)
+
+4.2   For each filter f = 1 … F
+         – Convolve S_i with Filter_f:
+             m_i[f] = ∫ S_i(λ) · T_f(λ) dλ / ∫ T_f(λ) dλ
+           (numerically integrate over λ grid).
+
+4.3   Add Gaussian noise to each band:
+         m_i[f] ← m_i[f] * (1 + Normal(0, σ_rel))
+
+Store pairs (m_i, Z_syn[i]) as synthetic training set.
+
+--------------------------------------------------------------------
+5. TRAIN AUTO‑ML REGRESSOR (Encoder)
+--------------------------------------------------------------------
+5.1   Use an AutoML framework (e.g., AutoGluon) to build an ensemble
+     of regressors that map photometry → latent coordinates.
+
+5.2   Input features: m_i[1..F]
+     Target outputs:  Z_syn[i][1..K]
+
+5.3   Train model R to minimize L2 loss on training set.
+     (Optionally perform cross‑validation on the synthetic set.)
+
+--------------------------------------------------------------------
+6. TRAIN TAXONOMIC CLASSIFIER
+--------------------------------------------------------------------
+6.1   Label each real reference spectrum with its known class C_j
+      (e.g., H₂O, CO₂, Organics, Methanol).
+
+6.2   Optionally augment the labeled set with synthetic latent vectors
+      paired with the class of the nearest real spectrum.
+
+6.3   Use AutoML to train a classifier C on input Z (either Z_real
+      or combined real+synthetic) with labels.
+
+--------------------------------------------------------------------
+7. INFERENCE ON NEW OBSERVATIONS
+--------------------------------------------------------------------
+Given new photometry m_new[1..F]:
+
+7.1   Predict latent vector:
+       ẑ = R.predict(m_new)          # (1×K)
+
+7.2   Reconstruct spectrum:
+       S_est = μ_s + V_pc · ẑ        # (1×M)
+
+7.3   Class probabilities:
+       P_tax = C.predict_proba(ẑ)    # (1×C)
+
+Return S_est and P_tax.
+
+--------------------------------------------------------------------
+Optional: POSTERIOR UNCERTAINTY ESTIMATION
+--------------------------------------------------------------------
+7.4   Draw N_sample latent samples from the predictive posterior
+      of R (e.g., by sampling the ensemble predictions).
+      For each sample, reconstruct a spectrum.
+      Compute mean and variance across the ensemble to obtain
+      per‑wavelength uncertainties.
+
+--------------------------------------------------------------------
+END
+--------------------------------------------------------------------

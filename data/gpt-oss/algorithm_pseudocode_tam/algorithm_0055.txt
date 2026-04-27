@@ -1,0 +1,102 @@
+INPUT:
+    S_raw   – list of N_seed high‑resolution TNO spectra (flux vs λ)
+    F_list  – list of M filter transmission curves (including JWST/NIRCam filters)
+    h_kde   – KDE bandwidth (≈0.5)
+    K_comp  – number of principal components (4–10, e.g. 8)
+    n_aug   – number of synthetic latent samples to generate (e.g. 5000)
+    noise_sd – relative photometric noise level (≈20 %)
+
+OUTPUT:
+    For any new photometric vector m_obs (length M):
+        - Posterior distribution over latent coefficients z
+        - Reconstructed high‑resolution spectrum S_rec
+        - Taxonomy probability vector p_tax
+
+--------------------------------------------------------------------
+STEP 1: PREPARE PRIOR (LATENT SPACE)
+--------------------------------------------------------------------
+1.1  Normalize each spectrum in S_raw (e.g., divide by solar spectrum, 
+      scale to unit area, or mean‑center if desired).
+1.2  Stack spectra into matrix X (shape N_seed × L_wavelength).
+1.3  Perform Principal Component Analysis (PCA) on X:
+        - Compute mean spectrum μ_S
+        - Compute eigenvectors {E_j}_{j=1}^{K_comp} and eigenvalues.
+        - Project each spectrum onto PCs: z_i = E^T · (x_i – μ_S).
+        - Store projection matrix P = [E_1 … E_{K_comp}]^T.
+1.4  Estimate probability density p(z) in K_comp‑dimensional latent space:
+        - Use Kernel Density Estimation (KDE) with bandwidth h_kde on 
+          the set {z_i}.
+1.5  Sample n_aug latent vectors {z̃_k} from KDE to form augmented latent set.
+
+--------------------------------------------------------------------
+STEP 2: GENERATE AUGMENTED SYNTHETIC SPECTRA
+--------------------------------------------------------------------
+2.1  For each sampled latent vector z̃_k:
+        - Reconstruct spectrum: s̃_k = μ_S + P^T · z̃_k.
+        - Store s̃_k.
+
+--------------------------------------------------------------------
+STEP 3: FORWARD MODEL PHOTOMETRY (LIKELIHOOD)
+--------------------------------------------------------------------
+3.1  For each synthetic spectrum s̃_k:
+        - Convolve with each filter f_m (m = 1…M):
+              r_k,m = ∫ s̃_k(λ) * f_m(λ) dλ / ∫ f_m(λ) dλ
+          → yields reflectance in each band.
+        - Add Gaussian noise:
+              r_k,m ← r_k,m + 𝒩(0, noise_sd * r_k,m)
+        - Collect noisy photometry vector m_k = [r_k,1 … r_k,M].
+3.2  Assemble training set T = {(m_k, z̃_k)} for k = 1…n_aug.
+
+--------------------------------------------------------------------
+STEP 4: TRAIN ENCODER (PHOTOMETRY → LATENT COEFFICIENTS)
+--------------------------------------------------------------------
+4.1  Choose an AutoML framework (e.g., AutoGluon).
+4.2  Configure AutoML to perform regression from input dimension M 
+      to output dimension K_comp.
+4.3  Train the encoder model E_enc on training set T.
+      - Hyper‑parameters are tuned automatically.
+4.4  Validate encoder on a hold‑out portion of T (optional).
+
+--------------------------------------------------------------------
+STEP 5: TRAIN TAXONOMY CLASSIFIER (LATENT → TYPE PROBABILITIES)
+--------------------------------------------------------------------
+5.1  Assign taxonomic labels ℓ_i ∈ {H₂O, CO₂, Organics, Methanol} to each 
+      seed spectrum x_i (from literature).
+5.2  Map labels to latent vectors {z_i} from Step 1.3.
+5.3  Train an AutoML classification model C_cls on {(z_i, ℓ_i)}.
+5.4  Evaluate classification accuracy (optional).
+
+--------------------------------------------------------------------
+STEP 6: INFERENCE (FOR NEW OBSERVATIONS)
+--------------------------------------------------------------------
+For any new observed photometric vector m_obs:
+
+6.1  Use encoder E_enc to predict latent coefficients:
+         z_pred = E_enc(m_obs)
+
+6.2  Optionally sample posterior around z_pred:
+         - Draw n_samples from a Gaussian centered at z_pred with
+           covariance estimated from encoder prediction uncertainty.
+         - For each sample z_samp:
+                S_samp = μ_S + P^T · z_samp
+         - Aggregate samples to obtain posterior mean spectrum S_rec
+           and credible intervals per wavelength.
+
+6.3  Reconstruct single deterministic spectrum:
+         S_rec_det = μ_S + P^T · z_pred
+
+6.4  Classify taxonomy:
+         p_tax = C_cls(z_pred)   // returns probability vector over classes
+
+--------------------------------------------------------------------
+STEP 7: OUTPUT
+--------------------------------------------------------------------
+Return:
+    - Posterior distribution over latent coefficients (if sampled).
+    - Reconstructed spectrum S_rec (posterior mean or deterministic).
+    - Credible intervals (e.g., 68%, 95%) per wavelength.
+    - Taxonomy probability vector p_tax.
+
+--------------------------------------------------------------------
+END OF ALGORITHM
+--------------------------------------------------------------------

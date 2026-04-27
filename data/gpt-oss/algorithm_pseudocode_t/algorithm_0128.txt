@@ -1,0 +1,74 @@
+Inputs
+-------
+- Observed photometry for an object:
+    * Measurements y[1..n]        # apparent magnitudes (or fluxes)
+    * Uncertainties σ[1..n]       # measurement errors
+    * Filter bandpasses B[1..n](λ) # transmission curves
+
+- Wavelength grid λ[1..m] (e.g., 0.4–1.5 µm)
+
+- Basis functions φ[1..p](λ) (e.g., cubic splines or polynomials)
+
+Outputs
+-------
+- Posterior samples of spectral coefficients α[1..p]
+- Reconstructed spectra R[1..m] for each posterior sample
+- Derived taxonomic classifications (optional)
+
+Algorithm
+---------
+1. **Pre‑processing**
+   1.1 Convert magnitudes y to linear fluxes f_obs[1..n] if necessary.
+   1.2 Convert uncertainties σ to flux uncertainties σ_f[1..n].
+
+2. **Build Design Matrix (Linearisation of Band Integrals)**
+   2.1 For each filter i in 1..n:
+        g[i, k] = ∫ φ[k](λ) · B[i](λ) dλ   for all k in 1..p
+        # g is an n × p matrix where element g[i,k] is the response
+        # of basis function k in filter i.
+   2.2 Let G be the resulting matrix g.
+
+3. **Gaussian Process Prior over Coefficients α**
+   3.1 Define GP mean μ_GP(λ) (usually zero or a smooth template).
+   3.2 Define GP covariance function κ(λ, λ'; ℓ, σ_gp):
+        # ℓ – length‑scale hyperparameter, σ_gp – amplitude.
+   3.3 Evaluate covariance on the basis knot points to obtain K_prior[p×p]:
+        K_prior[k, l] = κ(λ_k, λ_l; ℓ, σ_gp)
+   3.4 Impose prior on α:
+        α ~ Normal(μ_prior, K_prior)
+        # μ_prior can be obtained by projecting μ_GP onto the basis.
+
+4. **Likelihood Function**
+   4.1 Predicted flux for filter i:
+        f_pred[i] = Σ_{k=1}^{p} G[i, k] · α[k]
+   4.2 Observation model:
+        f_obs[i] ~ Normal(f_pred[i], σ_f[i]^2)
+
+5. **Bayesian Inference**
+   5.1 Define joint log‑posterior:
+        log p(α | f_obs) = 
+            -0.5 * Σ_{i=1}^{n} ((f_obs[i]-Σ_k G[i,k]α[k])^2 / σ_f[i]^2)
+          -0.5 * (α - μ_prior)^T K_prior^{-1} (α - μ_prior)
+          -0.5 * log|K_prior|
+          -0.5 * Σ_{i=1}^{n} log(σ_f[i]^2) + const
+   5.2 Sample from the posterior using a suitable sampler:
+        - Hamiltonian Monte Carlo (HMC) or No‑U‑Turn Sampler (NUTS)
+        - Alternatively, use Variational Bayes if speed is critical.
+   5.3 Store a set of L posterior draws {α^(ℓ)}_{ℓ=1..L}.
+
+6. **Reconstruct Spectra**
+   6.1 For each posterior draw ℓ:
+        For each wavelength j:
+            R_ℓ[j] = Σ_{k=1}^{p} α^(ℓ)[k] · φ[k](λ[j])
+   6.2 Store the collection {R_ℓ} as the posterior predictive spectrum.
+
+7. **Optional Taxonomic Classification**
+   7.1 Load template spectra T_t[1..m] for taxonomic classes t.
+   7.2 For each draw ℓ:
+        Compute similarity metric s_t^(ℓ) = 
+            Σ_{j=1}^{m} (R_ℓ[j] - T_t[j])^2 / σ_template_t[j]^2
+   7.3 Average similarities over draws to get class probabilities.
+
+8. **Return Results**
+   8.1 Output posterior coefficient samples α^(ℓ), reconstructed spectra R_ℓ,
+        and optionally taxonomic probability vector P[t].

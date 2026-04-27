@@ -1,0 +1,70 @@
+INPUT
+    D = { (f_i, σ_i, R_i) }   // observed fluxes, uncertainties, and filter response curves
+    B = { b_j(λ) }            // set of K basis spectra (λ grid)
+    λ_grid = [λ_1 … λ_M]      // wavelength grid covering all filters
+    N_iter = number of MCMC iterations
+    n_samples = desired number of posterior samples
+
+OUTPUT
+    Θ_samples = { θ^(k) }     // posterior samples of spectral coefficients
+    S_post(λ) = mean posterior spectrum
+    S_std(λ) = standard deviation of posterior spectrum
+
+--------------------------------------------------------------------
+PROCEDURE
+
+1. INITIALIZE
+    1.1. Set initial coefficient vector θ⁰ = zeros(K)
+    1.2. Compute initial model spectrum:
+          S⁰(λ) = Σ_{j=1}^{K} θ⁰_j * b_j(λ)
+    1.3. For each filter i:
+          μ_i = ∫ S⁰(λ) * R_i(λ) dλ          // predicted flux
+    1.4. Compute initial log‑likelihood:
+          lnL⁰ = Σ_{i=1}^{N} –0.5 * [(f_i – μ_i)/σ_i]^2 – 0.5 * ln(2πσ_i²)
+
+2. PREPARE PRIOR
+    2.1. Define prior density p(θ):
+          p(θ) = N(θ | 0, α² I_K)          // zero‑mean Gaussian with variance α²
+    2.2. Compute log‑prior:
+          lnπ⁰ = –0.5 * (θ⁰ᵀ θ⁰)/α² – 0.5*K*ln(2πα²)
+
+3. MCMC SAMPLING
+    3.1. For iter = 1 to N_iter
+        3.1.1. Propose new coefficients:
+              δ ~ N(0, β² I_K)             // proposal step size β
+              θ′ = θ⁰ + δ
+        3.1.2. Build proposed spectrum:
+              S′(λ) = Σ_{j=1}^{K} θ′_j * b_j(λ)
+        3.1.3. For each filter i:
+              μ′_i = ∫ S′(λ) * R_i(λ) dλ
+        3.1.4. Compute proposed log‑likelihood:
+              lnL′ = Σ_{i=1}^{N} –0.5 * [(f_i – μ′_i)/σ_i]^2 – 0.5 * ln(2πσ_i²)
+        3.1.5. Compute proposed log‑prior:
+              lnπ′ = –0.5 * (θ′ᵀ θ′)/α² – 0.5*K*ln(2πα²)
+        3.1.6. Acceptance probability:
+              a = min(1, exp[(lnL′+lnπ′) – (lnL⁰+lnπ⁰)])
+        3.1.7. Draw u ~ Uniform(0,1)
+              If u < a
+                  Accept: θ⁰ ← θ′, lnL⁰ ← lnL′, lnπ⁰ ← lnπ′
+              Else
+                  Reject: keep current state
+        3.1.8. Store current state every n_store iterations:
+              Append θ⁰ to Θ_samples
+    3.2. End For
+
+4. POST‑PROCESS
+    4.1. Convert coefficient samples to spectra:
+          For each θ^(k) in Θ_samples
+              S_k(λ) = Σ_{j=1}^{K} θ^(k)_j * b_j(λ)
+    4.2. Compute posterior mean and std:
+          S_post(λ) = (1 / |Θ_samples|) Σ_k S_k(λ)
+          S_std(λ)  = sqrt( (1/(|Θ_samples|-1)) Σ_k [S_k(λ) – S_post(λ)]² )
+
+5. OPTIONAL TAXONOMY ASSIGNMENT
+    5.1. Load library of template spectra T_m(λ), m = 1…M
+    5.2. For each template m:
+          Compute similarity score:
+              corr_m = correlation(S_post(λ), T_m(λ))
+    5.3. Assign taxonomy label = argmax_m corr_m
+
+RETURN Θ_samples, S_post(λ), S_std(λ), taxonomy label (if computed)

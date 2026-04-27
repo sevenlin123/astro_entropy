@@ -1,0 +1,50 @@
+Input:
+    - Observed fluxes D = {d₁,…,d_m}           # m filters
+    - Flux uncertainties σ = {σ₁,…,σ_m}
+    - Filter transmission functions T_j(λ)      # j = 1…m
+    - Spectral grid λ_i, i = 1…n               # n wavelength bins
+    - Prior covariance matrix K (n × n)        # e.g. SE kernel
+    - (Optional) Prior mean μ_prior (n)
+
+Output:
+    - Posterior mean spectrum μ_post (n)
+    - Posterior covariance Σ_post (n × n)
+    - (Optional) Posterior class probabilities
+
+--------------------------------------------------------------------
+1.  Build the forward operator A (m × n)
+    For each filter j:
+        For each wavelength bin i:
+            A[j,i] = ∫_λ T_j(λ) * B_i(λ) dλ
+            # B_i(λ) is a unit‐area rectangle covering λ_i
+            # Numerical integration may use trapezoidal rule
+
+--------------------------------------------------------------------
+2.  Observation covariance
+    Σ = diag(σ₁², …, σ_m²)
+
+--------------------------------------------------------------------
+3.  Compute the precision matrices
+    P_prior   = K⁻¹                                 # prior precision
+    P_likelihood = Aᵀ * Σ⁻¹ * A                    # data precision mapped to spectrum
+
+--------------------------------------------------------------------
+4.  Posterior precision and covariance
+    P_post = P_prior + P_likelihood
+    Σ_post = P_post⁻¹
+
+--------------------------------------------------------------------
+5.  Posterior mean
+    μ_post = Σ_post * (Aᵀ * Σ⁻¹ * D + P_prior * μ_prior)
+
+--------------------------------------------------------------------
+6.  (Optional) Class–probability evaluation
+    For each class k with prototype spectrum r_k:
+        f_k = A * r_k                                 # predicted flux
+        χ²_k = Σ_j ((d_j – f_k[j])² / σ_j²)
+        L_k = exp(-½ χ²_k)                            # likelihood
+        P_k ∝ L_k * π_k                               # prior class weight π_k
+    Normalize {P_k} to sum to 1
+
+--------------------------------------------------------------------
+Return μ_post, Σ_post, (and {P_k} if computed)

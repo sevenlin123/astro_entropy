@@ -1,0 +1,75 @@
+INPUT:
+    S_ref[1..N_ref][1..L]      // Reference high‑resolution spectra (L wavelength bins)
+    W_filter[1..F]             // Effective throughput curves for F photometric filters
+    n_components K             // Number of principal components to retain
+    h_KDE                       // KDE bandwidth
+    noise_level σ = 0.20       // Relative photometric noise (20%)
+    regressor_params            // Hyperparameters for AutoML regressor
+    classifier_params           // Hyperparameters for AutoML classifier
+
+OUTPUT:
+    For any new photometry m[1..F]:
+        Posterior samples of spectrum S_post[L]
+        Taxonomic probability vector P_tax[1..T]
+
+--------------------------------------------------------------------
+1. TRAINING PHASE
+--------------------------------------------------------------------
+1.1. PCA of reference spectra
+    - Center spectra: S_center = S_ref – mean(S_ref)
+    - Compute covariance matrix C = (S_centerᵀ * S_center) / (N_ref – 1)
+    - Eigen‑decompose C → eigenvalues λ[1..L], eigenvectors U[1..L][1..L]
+    - Select first K eigenvectors: U_K = U[:,1..K]
+    - Project reference spectra to latent space:
+        Z_ref[1..N_ref][1..K] = S_center * U_K
+
+1.2. KDE augmentation of latent space
+    - Fit a multivariate kernel density estimator KDE over Z_ref with bandwidth h_KDE
+    - Sample M_aug latent vectors Z_aug[1..M_aug][1..K] from KDE
+
+1.3. Generate synthetic high‑resolution spectra
+    - For each z in Z_aug:
+        S_syn = mean(S_ref) + z * U_Kᵀ          // inverse PCA
+        Store S_syn in S_syn_set
+
+1.4. Forward‑model photometry for synthetic spectra
+    - For each S_syn in S_syn_set:
+        For each filter f = 1..F:
+            m_f = ∫ S_syn(λ) * W_filter[f](λ) dλ   // numerical integration
+        Add Gaussian noise: m_f ← m_f * (1 + Normal(0, σ))
+        Store noisy photometry m_syn in M_syn_set
+
+1.5. Train photometry→latent regressor
+    - Inputs: M_syn_set (F‑dimensional)
+    - Targets: Z_aug (K‑dimensional)
+    - Use AutoML framework to fit an ensemble regressor R_pred
+      (e.g., gradient‑boosted trees, neural nets)
+    - Tune regressor_params automatically
+
+1.6. Train taxonomic classifier in latent space
+    - Labels: taxonomic class of each reference spectrum (from S_ref)
+    - Train AutoML classifier C_tax on pairs (Z_ref, label)
+    - Tune classifier_params automatically
+
+--------------------------------------------------------------------
+2. INFERENCE PHASE
+--------------------------------------------------------------------
+For any new observation m_new[1..F]:
+
+2.1. Predict latent coefficients
+    - z_hat = R_pred(m_new)                     // point estimate
+    - (optional) sample multiple draws from regressor’s predictive distribution
+
+2.2. Decode to high‑resolution spectrum
+    - S_rec = mean(S_ref) + z_hat * U_Kᵀ
+
+2.3. Optional posterior sampling
+    - For i = 1..N_samples:
+        z_i ← draw from predictive posterior of R_pred
+        S_i  = mean(S_ref) + z_i * U_Kᵀ
+    - Aggregate {S_i} to obtain posterior mean, variance, credible intervals
+
+2.4. Taxonomic classification
+    - P_tax = C_tax(z_hat)      // probability vector over T classes
+
+Return S_rec (or posterior samples) and P_tax

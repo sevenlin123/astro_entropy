@@ -1,0 +1,93 @@
+INPUT:
+    S_ref = {s_i | i = 1 … N_ref}            // high‑resolution reference spectra
+    λ = {λ_j | j = 1 … N_λ}                 // wavelength grid of spectra
+    F = {F_k | k = 1 … N_F}                 // photometric filter response curves
+    y_ref = {y_i | i = 1 … N_ref}           // taxonomic label for each reference spectrum
+    h_kde                                     // KDE bandwidth
+    N_aug = number of synthetic latent samples
+    σ_phot = 0.20          // relative photometric noise (20 %)
+
+OUTPUT:
+    For any new sparse photometry vector m_obs:
+        • posterior distribution over latent coefficients α
+        • reconstructed spectrum S_hat(λ)
+        • taxonomic probability vector p_tax
+
+--------------------------------------------------------------------
+STEP 0: PRE‑PROCESSING
+--------------------------------------------------------------------
+1.   Compute the mean spectrum μ(λ) = (1/N_ref) Σ_i s_i(λ)
+2.   Center reference spectra: s_i' = s_i – μ
+3.   Perform Principal Component Analysis on {s_i'}:
+        • Eigenvectors: {E_k(λ)}   (k = 1 … K, where K chosen e.g. 5–10)
+        • Eigenvalues:   λ_k
+4.   Project each centered spectrum onto first K PCs:
+        α_i(k) = <s_i', E_k>      // latent coefficient vector for spectrum i
+   Store matrix A_ref = [α_1, α_2, …, α_N_ref]   // shape K × N_ref
+
+--------------------------------------------------------------------
+STEP 1: LATENT PRIOR ESTIMATION (KDE)
+--------------------------------------------------------------------
+5.   Fit a non‑parametric Kernel Density Estimator (KDE) to A_ref
+        kde(α)   with bandwidth h_kde
+6.   Draw N_aug latent vectors from kde:
+        {α*} = {α*_j | j = 1 … N_aug}
+
+--------------------------------------------------------------------
+STEP 2: GENERATIVE DATA AUGMENTATION
+--------------------------------------------------------------------
+For each synthetic latent vector α*_j:
+    a.  Reconstruct a synthetic spectrum:
+            s*_j(λ) = μ(λ) + Σ_{k=1}^{K} α*_j(k) * E_k(λ)
+    b.  Compute synthetic photometry by convolving with filters:
+            m*_j(k) = ∫ s*_j(λ) * F_k(λ) dλ / ∫ F_k(λ) dλ
+       (for all k = 1 … N_F)
+    c.  Inject Gaussian noise:
+            m*_j_noisy(k) = m*_j(k) * (1 + ε),  ε ~ N(0, σ_phot²)
+    d.  Store training tuple:
+            (input = m*_j_noisy , target = α*_j)
+
+Let D_train = {(m*_j_noisy , α*_j)}_{j=1}^{N_aug}
+
+--------------------------------------------------------------------
+STEP 3: TRAIN PHOTOMETRY→LATENT REGRESSOR
+--------------------------------------------------------------------
+7.   Use an AutoML framework (e.g., AutoGluon) to train an ensemble
+        regressor R that maps:
+            R: m → α̂
+        on dataset D_train.
+   Optionally, obtain predictive variance or posterior samples
+        (e.g., by bootstrapping or Bayesian tree ensembles).
+
+--------------------------------------------------------------------
+STEP 4: TRAIN TAXONOMY CLASSIFIER (in latent space)
+--------------------------------------------------------------------
+8.   For each reference spectrum i, use its latent vector α_i and label y_i.
+9.   Train a second AutoML classifier C that maps:
+            C: α → p_tax
+   using the pairs {(α_i, y_i)}.
+
+--------------------------------------------------------------------
+STEP 5: INFERRING NEW OBJECTS
+--------------------------------------------------------------------
+Given a new object with observed photometry vector m_obs (length N_F):
+
+10. Predict latent coefficients:
+        α̂ = R(m_obs)
+    If probabilistic regressor:
+        • Sample N_post latent vectors {α̂_s} from R’s posterior
+        • Compute mean ᾱ and covariance Σ_post
+
+11. Reconstruct spectrum:
+        S_hat(λ) = μ(λ) + Σ_{k=1}^{K} α̂(k) * E_k(λ)
+    If multiple posterior samples:
+        • Produce ensemble of spectra {S_hat_s(λ)}
+        • Estimate spectral uncertainty per wavelength
+
+12. Classify taxonomy:
+        p_tax = C(α̂)
+
+13. Return:
+        • Posterior mean latent vector ᾱ (with uncertainty)
+        • Reconstructed spectrum S_hat(λ) (with uncertainty)
+        • Taxonomic probability vector p_tax

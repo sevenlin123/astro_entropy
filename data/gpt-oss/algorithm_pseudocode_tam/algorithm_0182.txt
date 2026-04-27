@@ -1,0 +1,87 @@
+INPUT
+    S_ref[1..N_ref][1..L]          # Reference spectra (wavelength dimension L)
+    Filters[1..F][1..L]           # Transmission curves for F photometric filters
+    K                            # Number of principal components to retain
+    h                            # KDE bandwidth
+    M_syn                        # Number of synthetic latent points to generate
+    Noise_Relative               # Relative reflectance noise (e.g. 0.20)
+
+OUTPUT
+    For any new photometry vector m_new[1..F]:
+        1. Reconstructed spectrum S_rec[1..L]
+        2. (Optional) Taxonomic probability vector P_type[1..T]
+
+--------------------------------------------------------------------
+# 1. Build the Prior (latent manifold)
+
+1.1  # Standardize spectra (e.g., mean‑zero, unit‑variance per wavelength)
+    for i in 1..N_ref:
+        S_std[i] = (S_ref[i] - mean(S_ref)) / std(S_ref)
+
+1.2  # Perform Principal Component Analysis
+    (U, Σ, Vt) = PCA(S_std, num_components=K)   # U: N_ref×K, Vt: K×L
+
+1.3  # Latent coefficients for reference spectra
+    C_ref[1..N_ref][1..K] = U                      # Each row = coefficient vector
+
+--------------------------------------------------------------------
+# 2. Generate a continuous prior via KDE
+
+2.1  # Fit KDE to latent coefficients
+    KDE_model = FitKDE(C_ref, bandwidth=h)       # Non‑parametric kernel density
+
+2.2  # Sample synthetic latent points
+    for j in 1..M_syn:
+        c_syn[j] = Sample(KDE_model)             # c_syn[j] is K‑dimensional
+
+--------------------------------------------------------------------
+# 3. Forward‑model synthetic spectra and photometry
+
+3.1  # Decode synthetic latent points to spectra
+    for j in 1..M_syn:
+        s_syn[j] = Vtᵀ · c_syn[j]                # Linear combination → L‑dim spectrum
+
+3.2  # Compute noiseless photometry for each synthetic spectrum
+    for j in 1..M_syn:
+        for f in 1..F:
+            μ_noisy[f] = ∫ s_syn[j](λ) * Filters[f](λ) dλ
+            # Normalize by solar spectrum if desired
+        μ_clean[j] = [μ_noisy[1], …, μ_noisy[F]]
+
+3.3  # Inject realistic Gaussian noise
+    for j in 1..M_syn:
+        for f in 1..F:
+            σ_noise = Noise_Relative * μ_clean[j][f]
+            μ_noisy[j][f] = Normal(mean=μ_clean[j][f],
+                                   std=σ_noise)
+
+--------------------------------------------------------------------
+# 4. Train the encoder (photometry → latent coefficients)
+
+4.1  # Prepare training data
+    X_train = { μ_noisy[j] }            # F‑dimensional features
+    Y_train = { c_syn[j] }              # K‑dimensional targets
+
+4.2  # Train AutoML regressor (ensemble of gradient‑boosted trees, etc.)
+    EncoderModel = AutoML_Regressor(X_train, Y_train)
+
+4.3  # (Optional) Train taxonomic classifier on latent space
+    Labels = TaxonomyLabels(S_ref)       # One‑hot or probabilistic labels
+    ClassifierModel = AutoML_Classifier(C_ref, Labels)
+
+--------------------------------------------------------------------
+# 5. Inference on new observations
+
+5.1  # Receive new photometry vector m_new[1..F]
+    # (assumed already measured reflectances or magnitudes)
+
+5.2  # Predict latent coefficients (posterior mean)
+    c_pred = EncoderModel.Predict(m_new)     # Returns K‑dim vector
+
+5.3  # Decode to full spectrum
+    S_rec = Vtᵀ · c_pred                      # L‑dim reconstructed spectrum
+
+5.4  # (Optional) Taxonomic probabilities
+    P_type = ClassifierModel.Predict(c_pred)  # Vector of length T
+
+RETURN S_rec, (optional) P_type

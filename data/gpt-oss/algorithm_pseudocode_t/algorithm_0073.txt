@@ -1,0 +1,98 @@
+INPUT
+    SPECTRAL_LIBRARY          # high‑resolution spectra of known TNOs (λ, R(λ))
+    FILTER_TRANSMISSION_CURVES  # T_f(λ) for each photometric filter f
+    TARGET_OBJECTS              # list of objects, each with:
+                                 #   (filter_i, mag_i, err_i, epoch_i)
+
+PARAMETERS
+    WAVELENGTH_GRID = [λ1 … λN]    # e.g., 400–2500 nm, Δλ = 2 nm
+    GP_LENGTH_SCALE = ℓ
+    GP_VARIANCE     = σ²
+    NUM_MCMC_SAMPLES = 10 000
+    N_BURNIN       = 2000
+    N_THRUOUT      = 5
+
+PROCEDURE
+
+1. BUILD_KDE_PRIOR()
+   -------------------------------------------------
+   1.1 FOR each spectrum s in SPECTRAL_LIBRARY DO
+           NORMALIZE s to unit flux (or convert to reflectance)
+           INTERPOLATE s onto WAVELENGTH_GRID → R_s[1..N]
+   1.2 STACK all R_s vectors into matrix R_lib[N_s × N]
+   1.3 ESTIMATE kernel bandwidth h from R_lib (e.g., Silverman rule)
+   1.4 DEFINE KDE_PROBABILITY(spectrum_vector):
+            PROB = (1/N_s) * Σ_{k=1}^{N_s}
+                    exp( -0.5 * ||R_k – spectrum_vector||² / h² )
+   1.5 STORE KDE_PROBABILITY as prior function P_prior(R)
+
+2. PRECOMPUTE_FILTER_RESPONSE()
+   -------------------------------------------------
+   2.1 FOR each filter f DO
+           CALCULATE bandpass response:
+               RESP_f[n] = ∫ T_f(λ) dλ over λ_n bin
+           NORMALIZE RESP_f so that Σ RESP_f[n] = 1
+   2.2 STORE RESP_f for later use
+
+3. RECONSTRUCT_SPECTRA_FOR_ALL_OBJECTS()
+   -------------------------------------------------
+   FOR each object O in TARGET_OBJECTS DO
+        3.1 EXTRACT data arrays:
+                filt[]   = {f_i}
+                mag[]    = {m_i}
+                err[]    = {σ_i}
+                epoch[]  = {t_i}
+        3.2 CONVERT magnitudes to fluxes:
+                flux[i] = 10^(-0.4 * mag[i])
+                flux_err[i] = ln(10)/2.5 * flux[i] * err[i]
+        3.3 DEFINE MODEL:
+                Let R[1..N] be latent reflectance spectrum
+                For each observation i:
+                   μ_i = Σ_{n=1}^{N} RESP_{filt[i]}[n] * R[n]   # model flux
+                Likelihood:
+                   flux[i] ~ Normal(μ_i, flux_err[i])
+                Prior on R:
+                   log P_prior(R)  # from KDE
+                Gaussian Process prior (optional):
+                   Cov(R) = GP_COV(N, ℓ, σ²)   # e.g., squared‑exponential
+                Posterior:
+                   P(R | data) ∝ P_prior(R) * Likelihood * exp(-0.5 Rᵀ Cov⁻¹ R)
+        3.4 IMPLEMENT MCMC SAMPLING:
+                INITIALIZE chain at mean of SPECTRAL_LIBRARY
+                FOR sample = 1 TO NUM_MCMC_SAMPLES + N_BURNIN DO
+                       PROPOSE new_R = R_current + random_normal(0, proposal_std)
+                       COMPUTE log_posterior_new = log P_prior(new_R) +
+                                                   log_likelihood(new_R, data) +
+                                                   log_GP_prior(new_R)
+                       COMPUTE log_posterior_curr
+                       ACCEPT with probability min(1, exp(log_posterior_new -
+                                                        log_posterior_curr))
+                DISCARD first N_BURNIN samples
+                STORE every N_THRUOUT‑th sample to reduce autocorrelation
+        3.5 POST‑PROCESS SAMPLE SET:
+                COMPUTE posterior mean spectrum:
+                    R_mean[n] = average over retained samples
+                COMPUTE posterior credible intervals:
+                    R_lower[n], R_upper[n]  (e.g., 16th & 84th percentiles)
+                DERIVE broadband colors:
+                    FOR each pair of filters (f_a, f_b):
+                        color_ab = -2.5 * log10( Σ RESP_{f_a}[n] * R_mean[n] /
+                                                Σ RESP_{f_b}[n] * R_mean[n] )
+                CLASSIFY spectrum:
+                    COMPARE R_mean against taxonomy templates (χ² minimisation)
+                    ASSIGN class with smallest χ²
+                STORE results for O:
+                    R_mean, credible intervals, colors, class label, log evidence
+
+4. OUTPUT
+   -------------------------------------------------
+   FOR each object O:
+        WRITE to file:
+            Object ID
+            Posterior mean spectrum R_mean[λ]
+            Credible interval bounds R_lower[λ], R_upper[λ]
+            Derived colors (e.g., g−r, r−i)
+            Taxonomic classification
+            Log marginal likelihood (model evidence)
+
+END

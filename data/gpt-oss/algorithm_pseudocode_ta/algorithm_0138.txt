@@ -1,0 +1,69 @@
+Input:
+    S_spec      # Matrix of N_s spectra (rows) at M wavelength points
+    F_filters   # List of J photometric filter response functions R_j(λ)  (j = 1…J)
+    P_obs       # Observed photometry vector p_obs (length J)
+    σ_obs       # Photometric uncertainties vector σ_obs (length J)
+
+Parameters:
+    K           # Number of principal components to retain
+    n_samples   # Number of posterior samples to draw (e.g., 10^4)
+
+Output:
+    s_recon     # Reconstructed spectrum (length M)
+    CI_low,CI_high  # Credible‑interval bounds at each λ
+
+--------------------------------------------------------------------
+1. Principal‑Component Analysis (PCA)
+--------------------------------------------------------------------
+1.1 Compute mean spectrum μ = mean(S_spec, axis=0)
+1.2 Center spectra: X_centered = S_spec – μ
+1.3 Compute covariance matrix C = (X_centeredᵀ · X_centered) / (N_s – 1)
+1.4 Perform eigen‑decomposition of C: 
+        {λ_k, v_k} = eig(C)  sorted by descending λ_k
+1.5 Select first K eigenvectors: V_K = [v_1 … v_K]  (M × K)
+1.6 Project centered spectra onto PCs:
+        Z = X_centered · V_K          # shape: N_s × K
+1.7 Store basis:
+        Basis = μ + V_K               # matrix of size M × K (mean + PCs)
+
+--------------------------------------------------------------------
+2. Forward Photometry Model
+--------------------------------------------------------------------
+2.1 For each filter j ∈ {1…J}:
+        Compute filter integral matrix G_j:
+            G_j[i] = ∫ Basis[i, :] · R_j(λ) dλ   for i = 1…K
+        (G_j is a 1×K row vector giving contribution of each PC to filter j)
+2.2 Assemble design matrix G (J × K):
+        G[j,:] = G_j
+
+--------------------------------------------------------------------
+3. Bayesian Inference for PC Coefficients
+--------------------------------------------------------------------
+3.1 Define prior on coefficients z:
+        p(z) = N(z | 0, I_K)          # zero‑mean unit covariance
+3.2 Define likelihood for observed photometry:
+        p(p_obs | z) ∝ exp( -½ Σ_j ((p_obs[j] – (G z)[j])² / σ_obs[j]²) )
+3.3 Posterior:
+        p(z | p_obs) ∝ p(p_obs | z) · p(z)
+
+3.4 Sample posterior using Metropolis–Hastings (or other MCMC):
+        Initialise z₀ = 0
+        For t = 1 … n_samples:
+            Propose z' ~ N(z_{t-1}, Σ_prop)   # Σ_prop chosen heuristically
+            Compute acceptance ratio:
+                α = min(1, p(p_obs | z') / p(p_obs | z_{t-1}) )
+            With probability α accept z_t = z', else z_t = z_{t-1}
+        Store all accepted z_t samples
+
+--------------------------------------------------------------------
+4. Spectrum Reconstruction
+--------------------------------------------------------------------
+4.1 For each sampled coefficient vector z_t:
+        Reconstruct spectrum s_t = μ + V_K · z_t   # shape M
+4.2 From collection {s_t} compute:
+        s_mean(λ)   = mean_t[ s_t(λ) ]
+        CI_low(λ)   = percentile_t( s_t(λ), 2.5 )
+        CI_high(λ)  = percentile_t( s_t(λ), 97.5 )
+4.3 Return:
+        s_recon = s_mean
+        CredibleIntervals = (CI_low, CI_high)

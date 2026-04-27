@@ -1,0 +1,74 @@
+INPUT:
+    SpectralLibrary  {S_i(λ)}          // i = 1 … N
+    FilterResponses  {R_k(λ)}          // k = 1 … K
+    Photometry       {m_k, σ_k}        // observed fluxes and uncertainties
+    M                // number of principal components to retain
+    SAMPLES          // number of posterior samples to draw
+
+OUTPUT:
+    MeanReconstruction   {S̄(λ)}         // mean reconstructed spectrum
+    CredibleIntervals   {[S_low(λ), S_high(λ)]}  // 95 % CI per wavelength
+    PosteriorSamples     {p^(s)}          // samples of PC coefficients
+
+ALGORITHM:
+
+1. PREPROCESS SPECTRA
+   1.1 Resample every S_i(λ) onto a common wavelength grid λ_grid.
+   1.2 Compute the mean spectrum:
+          μ(λ) ← (1/N) Σ_i S_i(λ).
+   1.3 Center each spectrum:
+          X_i(λ) ← S_i(λ) – μ(λ).
+
+2. PRINCIPAL COMPONENT ANALYSIS
+   2.1 Compute covariance matrix:
+          C ← (1/(N‑1)) Σ_i X_i(λ) X_i(λ)^T.
+   2.2 Eigen‑decompose C:
+          (λ_m, v_m) ← eig(C), sorted by descending λ_m.
+   2.3 Construct principal components:
+          P_m(λ) ← v_m(λ),  m = 1 … M.
+
+3. DEFINE FORWARD MODEL
+   For any coefficient vector p = (p_1,…,p_M):
+      3.1 Spectrum model:
+          s_p(λ) ← μ(λ) + Σ_m p_m P_m(λ).
+      3.2 Predicted photometry in filter k:
+          f_k(p) ← Σ_j s_p(λ_j) · R_k(λ_j) · Δλ_j
+          (numerical integration over λ_grid).
+
+4. POSTERIOR FORMULATION
+   4.1 Likelihood:
+          L(p) ← ∏_k 𝒩( m_k | f_k(p), σ_k² )
+          where 𝒩(x|μ,σ²) is the Gaussian density.
+   4.2 Prior on coefficients (example Gaussian zero‑mean):
+          π(p) ← ∏_m 𝒩( p_m | 0, σ_prior_m² )
+          with σ_prior_m chosen from λ_m or set uniformly.
+
+   Posterior density:
+          P(p | data) ∝ L(p) · π(p).
+
+5. POSTERIOR SAMPLING (Metropolis–Hastings)
+   5.1 Initialise p₀ (e.g., zeros).
+   5.2 For t = 1 to SAMPLES:
+          5.2.1 Propose p' = p_{t‑1} + ε,  ε ~ 𝒩(0, ϵ²I).
+          5.2.2 Compute acceptance ratio:
+                 α ← min(1, [L(p')π(p')]/[L(p_{t‑1})π(p_{t‑1})]).
+          5.2.3 Draw u ~ Uniform(0,1).
+          5.2.4 If u < α then p_t ← p' else p_t ← p_{t‑1}.
+   5.3 Store the chain {p^(s)} = {p_t}.
+
+6. RECONSTRUCTION FROM POSTERIOR SAMPLES
+   For each stored sample p^(s):
+      6.1 Compute reconstructed spectrum:
+          S^(s)(λ) ← μ(λ) + Σ_m p^(s)_m P_m(λ).
+   6.2 Collect all {S^(s)}.
+
+7. STATISTICS ON THE RECONSTRUCTED SPECTRA
+   For every wavelength point λ_j:
+      7.1 Mean spectrum:
+           S̄(λ_j) ← (1/SAMPLES) Σ_s S^(s)(λ_j).
+      7.2 Credible interval (e.g., 95 %):
+           S_low(λ_j)  ← 2.5th percentile of {S^(s)(λ_j)}.
+           S_high(λ_j) ← 97.5th percentile of {S^(s)(λ_j)}.
+
+RETURN:
+    S̄(λ), [S_low(λ), S_high(λ)], {p^(s)}.

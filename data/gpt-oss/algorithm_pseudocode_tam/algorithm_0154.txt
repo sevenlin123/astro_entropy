@@ -1,0 +1,113 @@
+pseudocode
+INPUT:
+    S_list          ← list of N high‑resolution spectra (flux vs. λ)
+    R_list          ← list of m filter response curves R_j(λ)
+    K               ← desired number of PCA components (≤ 10)
+    h_KDE           ← KDE bandwidth (≈ 0.5)
+    n_noise         ← relative noise level for synthetic photometry (0.20)
+    N_synth         ← number of synthetic latent samples to generate (e.g., 5000)
+
+OUTPUT:
+    TrainedRegr      ← AutoML regressor (photometry → latent coeffs)
+    TrainedClassif   ← AutoML classifier (latent coeffs → taxon probs)
+    PCA_mean         ← mean spectrum μ(λ)
+    PCA_basis        ← K principal eigenvectors U_k(λ)
+
+pseudocode
+   λ_common ← common wavelength grid (interpolated from all S_list)
+   for each spectrum S_i in S_list:
+       S_i_interp ← interpolate S_i onto λ_common
+
+pseudocode
+   PCA_mean ← mean(S_i_interp over i)          // vector of length L
+   X_mat ← [S_1_interp - PCA_mean,
+            S_2_interp - PCA_mean,
+            ...,
+            S_N_interp - PCA_mean]            // size N × L
+
+pseudocode
+   U, Λ ← eigen-decompose covariance(X_mat)   // U: L×L eigenvectors, Λ: eigenvalues
+   PCA_basis ← first K columns of U           // size L × K
+
+pseudocode
+   for each i in 1…N:
+       c_i ← transpose(PCA_basis) · (S_i_interp - PCA_mean)   // K‑vector
+   C_real ← [c_1, c_2, …, c_N]                               // N × K matrix
+
+pseudocode
+   KDE_prior ← fit_kernel_density(C_real, bandwidth = h_KDE)   // K‑dimensional KDE
+
+pseudocode
+   for t in 1…N_synth:
+       c_t ← sample_from(KDE_prior)                             // K‑vector
+       C_synth[t] ← c_t
+
+pseudocode
+   for each c_t in C_synth:
+       S_t ← PCA_mean + PCA_basis · c_t                        // L‑vector
+       S_synth.append(S_t)
+
+pseudocode
+   for each synthetic spectrum S_t:
+       for each filter j in 1…m:
+           m_j ← ∫ S_t(λ) * R_j(λ) dλ  /  ∫ R_j(λ) dλ          // noiseless reflectance
+           m_j_noisy ← m_j + Gaussian(0, n_noise * m_j)       // add 20% Gaussian noise
+           phot_t[j] ← m_j_noisy
+       Photometry_synth.append(phot_t)                         // vector of length m
+
+pseudocode
+   TrainingPairs ← [(Photometry_synth[t], C_synth[t]) for t in 1…N_synth]
+
+pseudocode
+    TrainedRegr ← AutoML.fit(
+                      X = [Photometry_synth[t] for t],
+                      y = [C_synth[t] for t],
+                      task = 'regression',
+                      n_folds = 5,
+                      search_space = AutoML_default)              // GBDTs, NN, etc.
+
+pseudocode
+    Labels_real ← taxonomy labels for each S_i in S_list
+    TrainedClassif ← AutoML.fit(
+                           X = C_real,
+                           y = Labels_real,
+                           task = 'classification',
+                           n_folds = 5,
+                           search_space = AutoML_default)
+
+pseudocode
+FUNCTION reconstruct_and_classify(Photometry_obs):
+    # Photometry_obs : m‑dimensional vector of measured reflectance (or magnitudes)
+
+    # 1. Predict latent coefficients (posterior mean)
+    c_pred ← TrainedRegr.predict(Photometry_obs)                 // vector length K
+
+    # 2. Decode to full spectrum
+    S_rec ← PCA_mean + PCA_basis · c_pred                        // vector length L
+
+    # 3. Classify taxonomy
+    taxon_probs ← TrainedClassif.predict_proba(c_pred)           // dict of class → prob
+
+    RETURN S_rec, taxon_probs
+END FUNCTION
+
+pseudocode
+σ_c_pred ← TrainedRegr.predict_variance(Photometry_obs)
+σ_S_rec(λ_k) = sqrt( Σ_{l=1}^{K} (U_k,l * σ_c_pred[l])^2 )
+
+Observed Spectra  ──► PCA  ──► Latent Coefficients (C_real)
+                   │                     ▲
+                   ▼                     │
+               KDE Augmentation   ───────┘
+                   │                     │
+                   ▼                     │
+           Synthetic Photometry  (noisy)   │
+                   │                     │
+                   ▼                     │
+              AutoML Regressor (train)  │
+                   │                     │
+                   ▼                     │
+              AutoML Classifier (train) │
+                   │                     │
+                ────────────────────────┘
+                     Inference on New Data

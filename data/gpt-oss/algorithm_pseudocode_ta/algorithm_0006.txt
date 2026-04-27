@@ -1,0 +1,141 @@
+pseudocode
+/* --------------------------------------------------------------
+   1. TRAINING PHASE – Build the latent spectral space
+   -------------------------------------------------------------- */
+INPUT:  
+    S_train[n_spec × n_lambda]   // Near‑IR spectra (flux vs. wavelength)  
+    K                            // Number of principal components to retain  
+
+PROCEDURE TrainPCA(S_train, K):
+
+    1.1  Align all spectra on a common wavelength grid.
+    1.2  Compute mean spectrum μ[λ] = mean(S_train, axis=spec).
+    1.3  Center the data:  S_c[n_spec × n_lambda] = S_train – μ.
+    1.4  Covariance C = (S_cᵀ · S_c) / (n_spec – 1).
+    1.5  Eigen‑decompose C → eigenvalues λ_e[1…n_lambda], eigenvectors v_e[1…n_lambda].
+    1.6  Sort eigenvalues descending; keep first K eigenvectors:
+          PC_k[λ] = v_e[:,k]    for k = 1…K
+    1.7  Store:
+          • μ[λ]
+          • PCs = {PC_1,…,PC_K}
+          • Optional: training coefficients a_train[i,k] = PC_kᵀ · (S_train[i,:] – μ)
+
+    RETURN (μ, PCs, a_train)
+END PROCEDURE
+
+
+/* --------------------------------------------------------------
+   2. FILTER PROJECTION – Prepare design matrix for a given filter set
+   -------------------------------------------------------------- */
+INPUT:  
+    PCs[K × n_lambda]           // Principal components  
+    Filters[J]                  // List of J filter transmission curves f_j(λ)  
+    μ[λ]                        // Mean spectrum  
+
+PROCEDURE BuildDesignMatrix(PCs, Filters, μ):
+
+    2.1  For each filter j = 1…J:
+          • Compute projected mean:
+                μ_j = ∫ μ(λ) · f_j(λ) dλ
+          • For each component k = 1…K:
+                X[j,k] = ∫ PC_k(λ) · f_j(λ) dλ
+    2.2  Assemble vectors:
+          μ_vec[J] = {μ_j}
+          Design matrix X[J × K]
+    2.3  Return (X, μ_vec)
+
+END PROCEDURE
+
+
+/* --------------------------------------------------------------
+   3. PRIOR ON COEFFICIENTS – From training coefficients
+   -------------------------------------------------------------- */
+INPUT:  
+    a_train[n_spec × K]         // Coefficients of training spectra  
+
+PROCEDURE ComputePrior(a_train):
+
+    3.1  Prior mean a0 = zeros(K)          // Zero‑mean assumption
+    3.2  Prior covariance Σ_prior =
+            diag( var(a_train[:,k]) )  // Empirical variances per component
+    3.3  Return (a0, Σ_prior)
+
+END PROCEDURE
+
+
+/* --------------------------------------------------------------
+   4. POSTERIOR INFERENCE – Given new photometry
+   -------------------------------------------------------------- */
+INPUT:  
+    m[J]                        // Measured magnitudes / fluxes in J filters  
+    σ[J]                        // Measurement uncertainties  
+    X[J × K]                    // Design matrix from step 2  
+    μ_vec[J]                    // Projected mean from step 2  
+    a0[K], Σ_prior[K×K]         // Prior from step 3  
+
+PROCEDURE InferPosterior(m, σ, X, μ_vec, a0, Σ_prior):
+
+    4.1  Residual vector r = m – μ_vec              // Observation minus mean
+    4.2  Weight matrix W = diag(1/σ²)               // Observation precision
+    4.3  Posterior precision:
+             Π = Xᵀ · W · X + Σ_prior⁻¹
+    4.4  Posterior covariance:
+             Σ_post = Π⁻¹
+    4.5  Posterior mean:
+             a_hat = Σ_post · (Xᵀ · W · r + Σ_prior⁻¹ · a0)
+    4.6  Return (a_hat, Σ_post)
+
+END PROCEDURE
+
+
+/* --------------------------------------------------------------
+   5. RECONSTRUCTION OF THE FULL SPECTRUM
+   -------------------------------------------------------------- */
+INPUT:  
+    a_hat[K]                    // Posterior coefficient mean  
+    Σ_post[K×K]                 // Posterior covariance  
+    μ[λ]                        // Mean spectrum  
+    PCs[K × n_lambda]           // Principal components  
+
+PROCEDURE ReconstructSpectrum(a_hat, Σ_post, μ, PCs):
+
+    5.1  Spectrum estimate:
+             ŝ[λ] = μ[λ] + Σ_{k=1}^{K} a_hat[k] · PC_k[λ]
+
+    5.2  Variance of spectrum at each λ:
+             Var[λ] = Σ_{k=1}^{K} Σ_{l=1}^{K}
+                        PC_k[λ] · PC_l[λ] · Σ_post[k,l]
+
+    5.3  Credible interval (±1σ):
+             lower[λ] = ŝ[λ] – sqrt(Var[λ])
+             upper[λ] = ŝ[λ] + sqrt(Var[λ])
+
+    5.4  OPTIONAL: Draw N samples from N(a_hat, Σ_post) to obtain
+             Monte‑Carlo credible bands for non‑Gaussian posteriors.
+
+    5.5  Return (ŝ[λ], lower[λ], upper[λ]) 
+
+END PROCEDURE
+
+
+/* --------------------------------------------------------------
+   MAIN WORKFLOW
+   -------------------------------------------------------------- */
+MAIN:
+
+    /* 1. Build latent space from training data */
+    (μ, PCs, a_train) = TrainPCA(S_train, K)
+
+    /* 2. Define filter set for new object */
+    (X, μ_vec) = BuildDesignMatrix(PCs, Filters, μ)
+
+    /* 3. Prior on coefficients from training set */
+    (a0, Σ_prior) = ComputePrior(a_train)
+
+    /* 4. For each new TNO with photometry m, σ */
+    FOR each TNO in catalog:
+        (a_hat, Σ_post) = InferPosterior(m, σ, X, μ_vec, a0, Σ_prior)
+        (ŝ, lower, upper) = ReconstructSpectrum(a_hat, Σ_post, μ, PCs)
+        OUTPUT (ŝ, lower, upper) for the TNO
+
+END MAIN

@@ -1,0 +1,97 @@
+INPUT: 
+    S_ref      // N reference high‑resolution spectra (wavelength array λ, reflectance R)
+    Filters    // List of M filter throughput curves T_m(λ)
+    K          // Number of PCA components to retain (e.g., 4–10)
+    h_KDE      // KDE bandwidth (≈0.5)
+    M_synth    // Number of synthetic latent samples (e.g., 10 000)
+    σ_noise    // Relative photometric noise level (0.20 for 20 %)
+
+STEP 1 – PCA on Reference Spectra
+    1.1  Compute mean spectrum μ = (1/N) Σ_i R_i
+    1.2  Center spectra: R'_i = R_i − μ   for i = 1…N
+    1.3  Perform SVD or eigen‑decomposition on covariance of {R'_i}
+    1.4  Retain first K eigenvectors → matrix U (size N_wavelength × K)
+    1.5  Project each centered spectrum onto PCs:
+         c_i = Uᵀ · R'_i     // latent coefficient vector (length K)
+    1.6  Store {(c_i, R_i)} as (latent, spectrum) pairs
+
+STEP 2 – KDE Density in Latent Space
+    2.1  Fit multivariate Gaussian KDE on {c_i} with bandwidth h_KDE
+    2.2  Define density function p(c)
+
+STEP 3 – Synthetic Spectrum Generation
+    FOR j = 1 … M_synth
+        3.1  Sample latent vector c_synth_j ~ p(c)
+        3.2  Reconstruct spectrum:
+             R_synth_j = μ + U · c_synth_j
+        3.3  FOR each filter m = 1 … M
+                3.3.1  Compute noiseless photometry:
+                        r_m = ∫ R_synth_j(λ) · T_m(λ) dλ / ∫ T_m(λ) dλ
+                3.3.2  Add Gaussian noise:
+                        r_m_noisy = r_m + Normal(0, σ_noise·r_m)
+            END FOR
+        3.4  Store training example: (photometry vector r_noisy, latent c_synth_j)
+    END FOR
+
+STEP 4 – Train Photometry→Latent Regressor
+    4.1  Assemble training matrix X = {r_noisy} (size M_synth × M)
+    4.2  Assemble target matrix Y = {c_synth} (size M_synth × K)
+    4.3  Use AutoML library (e.g., AutoGluon, XGBoost, etc.) to fit regressor R:
+         R : ℝ^M → ℝ^K
+    4.4  Optionally, train classifier C on {c_i} with known taxonomy labels.
+
+OUTPUT: 
+    - PCA basis U, mean μ
+    - Trained regressor R
+    - (Optional) Trained classifier C
+
+INPUT:
+    r_obs      // Observed sparse photometry vector (M values)
+    σ_obs      // Optional photometric uncertainties (M values)
+    R, U, μ    // From offline training
+    (Optional) C
+    N_sample   // Number of posterior samples (e.g., 1000)
+
+STEP 5 – Predict Latent Posterior
+    5.1  Pass r_obs through regressor R to obtain:
+         μ_c   = R(r_obs)          // point estimate of latent coefficients
+         (If R provides variance) Σ_c = R_variance(r_obs)
+    5.2  IF uncertainties σ_obs are available:
+         5.2.1  Generate N_MC perturbations:
+                 FOR k = 1 … N_MC
+                     r_k = r_obs + Normal(0, σ_obs)
+                     μ_c_k = R(r_k)
+                 END FOR
+         5.2.2  Set μ_c = mean_k(μ_c_k)
+                 Set Σ_c = cov_k(μ_c_k)
+         ELSE
+                 Use Σ_c from regressor if supplied; otherwise assume diagonal
+                 with small variance ε.
+
+STEP 6 – Sample Latent Coefficients (Gaussian Copula)
+    6.1  Construct correlation matrix ρ from Σ_c (or use identity if only diagonal).
+    6.2  Generate N_sample draws z ~ N(0, ρ)  (multivariate normal)
+    6.3  Transform each component to uniform u = Φ(z)   // Φ = standard normal CDF
+    6.4  Map uniforms to latent space via inverse marginal CDFs of PCs:
+         c_sample_j = μ_c + √(Σ_c_diag) ⊙ Φ⁻¹(u_j)   // elementwise scaling
+    6.5  (Optionally, enforce KDE support by rejecting samples far from KDE mode.)
+
+STEP 7 – Decode to Spectra
+    FOR each sampled latent vector c_sample_j
+        7.1  Reconstruct spectrum:
+              R_j = μ + U · c_sample_j
+    END FOR
+
+STEP 8 – Aggregate Reconstruction
+    8.1  Compute mean spectrum: R_mean = (1/N_sample) Σ_j R_j
+    8.2  Compute credible intervals per wavelength:
+           For each λ:
+               lower, upper = percentile(R_j(λ), [2.5, 97.5])
+    8.3  (Optional) Taxonomy probabilities:
+           Use classifier C on each c_sample_j to obtain class probs,
+           then average over samples.
+
+OUTPUT:
+    - Mean reconstructed spectrum R_mean(λ)
+    - Credible‑interval bands [lower(λ), upper(λ)]
+    - (Optional) Class probability vector P_taxonomy

@@ -1,0 +1,99 @@
+PROCEDURE RECONSTRUCT_SPECTRUM(photometry, filters, templates, priors):
+    # 1. Pre‑processing ----------------------------------------------------
+    FOR each observation obs IN photometry:
+        band      ← obs.band                     # filter identifier
+        flux_obs  ← obs.flux                     # measured flux (e.g. AB mag → erg/s/cm²/Hz)
+        err_obs   ← obs.error                    # flux uncertainty
+        filt_resp ← filters[band]                # transmission curve T(λ)
+        STORE (flux_obs, err_obs, filt_resp)
+    END FOR
+
+    # 2. Template preparation ---------------------------------------------
+    # All templates are already on the same wavelength grid λ_grid.
+    # Compute synthetic photometry for each template in every filter.
+    FOR each template t IN templates:
+        FOR each filter f IN filters:
+            # Synthetic flux = ∫ R_t(λ) · T_f(λ) dλ / ∫ T_f(λ) dλ
+            syn_flux[t,f] ← INTEGRATE( templates[t](λ_grid) * f.transmission ) /
+                            INTEGRATE( f.transmission )
+        END FOR
+    END FOR
+
+    # 3. Model definition ---------------------------------------------------
+    # Model predicts flux as weighted sum of template synthetic fluxes.
+    # w = [w_1, …, w_N] are non‑negative weights, Σ w_i = 1.
+    DEFINE MODEL(w):
+        FOR each observation i IN photometry:
+            band_i   ← observation[i].band
+            pred[i]  ← Σ_{t} w[t] * syn_flux[t, band_i]
+        END FOR
+        RETURN pred
+    END DEFINE
+
+    # 4. Likelihood ---------------------------------------------------------
+    DEFINE LIKELIHOOD(w):
+        pred ← MODEL(w)
+        χ²   ← Σ_{i} ((obs[i].flux - pred[i])² / obs[i].error²)
+        RETURN exp(-0.5 * χ²)          # Gaussian likelihood
+    END DEFINE
+
+    # 5. Prior definition ---------------------------------------------------
+    DEFINE PRIOR(w):
+        # Dirichlet prior over the simplex (non‑negative, sums to 1)
+        α ← priors.dirichlet_alpha          # vector of concentration parameters
+        RETURN DirichletPDF(w | α)
+    END DEFINE
+
+    # 6. Posterior evaluation -----------------------------------------------
+    DEFINE POSTERIOR(w):
+        RETURN LIKELIHOOD(w) * PRIOR(w)
+    END DEFINE
+
+    # 7. Sampling / optimisation -------------------------------------------
+    # Use Metropolis–Hastings to draw samples from the posterior.
+    INIT w_current ← uniform_weights()           # e.g., w = (1/N,...,1/N)
+    FOR iteration = 1 TO N_iter:
+        # Propose new weights by perturbing current weights
+        w_proposed ← PROPOSE(w_current)
+
+        # Enforce simplex constraints (normalize, clip negatives)
+        w_proposed ← PROJECT_TO_SIMPLEX(w_proposed)
+
+        # Acceptance probability
+        a ← min(1, POSTERIOR(w_proposed) / POSTERIOR(w_current))
+
+        IF rand_uniform() < a:
+            w_current ← w_proposed
+        END IF
+
+        STORE w_current AS sample
+    END FOR
+
+    # 8. Posterior summarisation --------------------------------------------
+    # Compute mean and variance of weights across all stored samples.
+    w_mean   ← MEAN(samples)
+    w_stddev ← STDDEV(samples)
+
+    # Reconstruct the spectrum: weighted sum of templates.
+    reconstructed_spectrum(λ) ← Σ_{t} w_mean[t] * templates[t](λ)
+
+    # Optional: compute predictive fluxes and uncertainties in each filter.
+    FOR each filter f IN filters:
+        pred_flux[f] ← Σ_{t} w_mean[t] * syn_flux[t,f]
+        pred_err[f]  ← sqrt( Σ_{t} (w_stddev[t] * syn_flux[t,f])² )
+    END FOR
+
+    # 9. Taxonomy inference --------------------------------------------------
+    # Convert posterior weight distribution into taxonomic probabilities.
+    taxonomy_probabilities ← NORMALISE(w_mean)
+
+    # 10. Return results -----------------------------------------------------
+    RETURN {
+        'weights'               : w_mean,
+        'weight_uncertainty'    : w_stddev,
+        'spectrum'              : reconstructed_spectrum,
+        'predictive_fluxes'     : {f: pred_flux[f] for f in filters},
+        'predictive_errors'     : {f: pred_err[f] for f in filters},
+        'taxonomy_probabilities': taxonomy_probabilities
+    }
+END PROCEDURE

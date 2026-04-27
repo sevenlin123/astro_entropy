@@ -1,0 +1,76 @@
+INPUT
+    • Reference spectra matrix R [Ns × Nλ]   // Ns = number of seed spectra, Nλ = wavelength bins
+    • JWST NIRCam filter transmission curves {T_f}   // f = 1 … Nf
+    • Photometric observations M_obs [1 × Nf]         // measured reflectance (or magnitude) in each filter
+    • Photometric uncertainties σ_obs [1 × Nf]
+    • Desired number of latent samples L (e.g., 1000)
+
+PARAMETERS
+    • K      = number of principal components to retain (default 5–10)
+    • h      = KDE bandwidth (default 0.5)
+    • noise_rel = relative Gaussian noise for synthetic photometry (default 0.20)
+
+--------------------------------------------------------------------
+STEP 1 – Build Prior (latent space) ----------------------------------
+    1.1 Compute mean spectrum μ_R = mean(R, axis=0)
+    1.2 Center spectra:  Rc = R – μ_R
+    1.3 Perform PCA on Rc:
+          • Eigenvalues λ_i, eigenvectors e_i (i=1…K)
+          • Project seeds into latent space: Z_seed = Rc @ E_K
+            where E_K = [e_1 … e_K]  (size Nλ×K)
+    1.4 Fit a non‑parametric Kernel Density Estimate (KDE) to Z_seed with bandwidth h
+    1.5 Sample synthetic latent vectors:
+          Z_syn = KDE.sample(L)              // shape L × K
+    1.6 Reconstruct synthetic spectra:
+          S_syn = (Z_syn @ E_K.T) + μ_R      // shape L × Nλ
+
+--------------------------------------------------------------------
+STEP 2 – Generate Synthetic Photometry -------------------------------
+    2.1 For each synthetic spectrum s in S_syn:
+          • Convolve with each filter transmission:
+                p_f = ∫ s(λ) * T_f(λ) dλ / ∫ T_f(λ) dλ
+          • Store photometry vector p = [p_1 … p_Nf]
+    2.2 Add Gaussian noise to each p_f:
+          p_f_noisy = p_f + N(0, (noise_rel·p_f)^2)
+    2.3 Create training dataset:
+          X_train = {p_noisy}                // shape L × Nf
+          Y_train = {Z_syn}                  // shape L × K
+
+--------------------------------------------------------------------
+STEP 3 – Train AutoML Regressor -------------------------------------
+    3.1 Initialize AutoML framework (e.g., AutoGluon Tabular)
+    3.2 Specify objective: regression from X_train → Y_train
+    3.3 Run AutoML training; obtain ensemble regressor Rg
+    3.4 Store Rg for later inference
+
+--------------------------------------------------------------------
+STEP 4 – Train AutoML Classifier (taxonomy) -------------------------
+    4.1 Label each seed spectrum with its taxonomic class (Water, CO₂, Organic, Methanol)
+    4.2 Map labels to latent coordinates:
+          Z_label = Z_seed   // already available from Step 1.3
+    4.3 Train classifier C on (Z_label, label) using AutoML
+    4.4 Store C for later inference
+
+--------------------------------------------------------------------
+STEP 5 – Inference on New Observation -------------------------------
+    INPUT: M_obs, σ_obs
+    --------------------------------------------------------------
+    5.1 Standardize observation:
+          m_std = (M_obs – mean(M_train)) / std(M_train)
+          // mean/std derived from X_train during Step 3
+    5.2 Predict latent mean and variance:
+          Z_mean, Z_var = Rg.predict_with_uncertainty(m_std)
+          // If regressor only returns point estimate, approximate variance from ensemble spread
+    5.3 Draw L latent samples:
+          Z_pred = Z_mean + sqrt(Z_var) * N(0, I_K, size=L)
+    5.4 Reconstruct spectra:
+          S_pred = (Z_pred @ E_K.T) + μ_R
+    5.5 Taxonomic probabilities:
+          P_tax = C.predict_proba(Z_pred.mean(axis=0))
+    --------------------------------------------------------------
+    OUTPUT:
+        • Posterior distribution over spectra S_pred (mean, credible intervals)
+        • Taxonomy probability vector P_tax
+        • Optional: diagnostics (e.g., reconstructed photometry vs. observed)
+
+END

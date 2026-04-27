@@ -1,0 +1,48 @@
+text
+INPUT:
+    Photometry:   { (band_k, mag_k, err_k) }   k = 1…N
+    Filters:      Transmission curves T_k(λ)   k = 1…N
+    Templates:    { S_j(λ) }                  j = 1…M
+    Priors:       Uniform over templates
+
+OUTPUT:
+    Posterior probabilities P_j for each template
+    Reconstructed reflectance R(λ)
+
+ALGORITHM:
+
+1. CONVERT magnitudes to relative fluxes:
+   for each observation k:
+        f_k   ← 10^( -0.4 * (mag_k - ZP) )          // ZP: zero‑point
+        σ_k   ← ln(10)/2.5 * f_k * err_k           // propagate error
+
+2. BUILD design matrix A (N × M):
+   for each band k:
+        for each template j:
+            A[k,j] ← ∫ S_j(λ) * T_k(λ) dλ /
+                      ∫ T_k(λ) dλ                    // expected flux ratio
+
+3. FORM weight matrix W = diag( 1 / σ_k^2 ).
+
+4. SOLVE weighted least‑squares for coefficient vector x:
+        x̂ = (Aᵀ W A)⁻¹ Aᵀ W f
+   (x̂_j is the amplitude of template j contributing to the spectrum)
+
+5. COMPUTE residuals and χ²:
+        r  = f – A x̂
+        χ² = rᵀ W r
+
+6. CALCULATE likelihood:
+        L = exp( -0.5 * χ² )
+
+7. OBTAIN posterior probabilities (assuming uniform prior over templates):
+        for each template j:
+            P_j = L_j / Σ_{l=1..M} L_l
+        where L_j = exp( -0.5 * χ²_j ) and χ²_j is computed by setting all
+        other coefficients to zero except x̂_j (or equivalently by re‑running
+        step 4 with only template j active).
+
+8. RECONSTRUCT full reflectance spectrum:
+        R(λ) = Σ_{j=1..M} x̂_j * S_j(λ)
+
+9. RETURN {P_j}, R(λ)

@@ -1,0 +1,81 @@
+Input:
+    - Spectral training set  {S_i}   (i = 1 … N, N ≈ 50)
+    - Filter transmission curves {T_f}   (f = 1 … F)
+    - Desired number of principal components K  (typically 5–10)
+
+Output:
+    - PCA basis matrix W ∈ ℝ^(λ×K)          (λ = # spectral wavelengths)
+    - KDE density function p_latent(α)      (α ∈ ℝ^K)
+    - Encoder model E: 𝑚 → α̂              (maps photometry → latent coeffs)
+    - Classifier model C: α → τ             (taxonomic label probabilities)
+
+1.1.1 Assemble matrix M ∈ ℝ^(N×λ) with rows = spectra S_i.
+1.1.2 Center M:  M̄ = M – mean(M, axis=0).
+1.1.3 Perform SVD:  M̄ = U Σ Vᵀ.
+1.1.4 Set W = V[:, 1:K]        // first K right‑singular vectors
+1.1.5 For each S_i, compute latent vector α_i = Wᵀ · (S_i – mean(M, axis=0)).
+
+2.1 Choose Gaussian kernel bandwidth h  (≈ 0.5 recommended).
+2.2 Define KDE density:
+        p_latent(α) = (1/N) Σ_{i=1..N}  N(α | α_i, h² I_K).
+
+3.1 Sample M_aug synthetic latent vectors {α*} from p_latent(α).
+3.2 For each α*:
+        3.2.1 Reconstruct spectrum S* = mean(M, axis=0) + W · α*.
+        3.2.2 Convolve S* with each filter T_f to obtain synthetic photometry:
+                m*_f = ∫ S*(λ) · T_f(λ) dλ  /  ∫ T_f(λ) dλ .
+        3.2.3 Add Gaussian noise to each m*_f:
+                m_noisy_f = m*_f + 0.20 * m*_f * ε_f
+                (ε_f ~ 𝒩(0,1), 20% relative uncertainty).
+        3.2.4 Store pair (m_noisy, α*) in training set.
+
+4.1 Input:   photometry vectors {m_noisy}  (size F)
+   Output:  latent vectors {α*}            (size K)
+4.2 Use AutoML (e.g., AutoGluon) to ensemble:
+        - Gradient‑Boosted Decision Trees (GBDT)
+        - Neural Networks (NN)
+   Optimize hyperparameters automatically.
+4.3 Save trained model E.
+
+5.1 For each original spectrum S_i, assign taxonomic label τ_i ∈ {H2O, CO2, OrgMeth, OrgPure}.
+5.2 Train classifier C on latent vectors {α_i} → τ_i using same AutoML pipeline.
+5.3 Save trained model C.
+
+Input:
+    - New photometric observation m_obs ∈ ℝ^F
+    - Trained models: W, mean_spectrum, E, C
+    - KDE density p_latent(α)
+    - Number of posterior draws N_draw (e.g., 500)
+
+Output:
+    - Posterior samples of reconstructed spectra {S_j}
+    - Taxonomic probability distribution p(τ | m_obs)
+
+1.1 Predict mean latent vector:  α̂ = E(m_obs)     // point estimate
+1.2 Estimate predictive covariance Σ_pred from E
+        (e.g., via ensemble variance or model‑specific uncertainty output).
+
+2.1 Draw N_draw samples z_k ~ 𝒩(0, I_K).
+2.2 Transform to correlated samples:
+        α_k = α̂ + L · z_k
+        (L from Cholesky decomposition of Σ_pred).
+2.3 Optionally apply KDE truncation:
+        Reject any α_k with p_latent(α_k) < threshold.
+
+3.1 For each α_k:
+        S_k = mean_spectrum + W · α_k
+
+4.1 Pass each α_k to classifier C → τ_k.
+4.2 Count occurrences of each taxon over N_draw samples.
+4.3 Normalize to obtain p(τ | m_obs).
+
+Return:
+    - Mean spectrum:  ⟨S⟩ = (1/N_draw) Σ_k S_k
+    - Credible intervals per wavelength: e.g., 2.5th & 97.5th percentiles over {S_k}
+    - Taxonomy probability vector p(τ | m_obs)
+
+If desired, compute spectral diagnostics:
+    - Slope: fit linear trend to ⟨S⟩ over selected wavelength range.
+    - Absorption depth: measure deviation from continuum.
+    - Feature indices: integrate over bandpass windows.
+Store diagnostics alongside spectrum and taxonomic probabilities.

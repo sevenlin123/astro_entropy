@@ -1,0 +1,102 @@
+pseudo
+INPUT:
+    S_ref[i]            // i = 1..N_ref  : high‑resolution reference spectra (reflectance)
+    F[j]                // j = 1..N_filt : filter transmission curves (effective bandpasses)
+    K                   // number of PCA components (default K = 8)
+    h                    // KDE bandwidth (default h = 0.5)
+    N_aug                // number of synthetic latent samples (default 5000)
+    N_draw               // number of posterior draws per query (default 1000)
+
+OUTPUT:
+    μ_spec              // mean reconstructed spectrum
+    CI_spec             // credible‑interval envelope of reconstructed spectra
+    P_tax               // probability vector over taxonomic classes
+
+--------------------------------------------------------------------
+STEP 0 – Pre‑processing
+--------------------------------------------------------------------
+FOR each reference spectrum S_ref[i]:
+    Normalize to unit flux at a chosen wavelength (optional).
+END FOR
+
+--------------------------------------------------------------------
+STEP 1 – Build Prior: PCA in Spectral Space
+--------------------------------------------------------------------
+1.1 Assemble data matrix X of shape (N_ref, L) where L = number of wavelength bins.
+1.2 Center X by subtracting mean spectrum μ_X.
+1.3 Perform Singular Value Decomposition: X = U Σ Vᵀ.
+1.4 Retain first K columns of V (principal components): PC[1..K].
+1.5 Compute projection of each spectrum onto PCs:
+        z[i][k] = (S_ref[i] - μ_X) · PC[k]      // k = 1..K
+   Store latent vector z[i] ∈ ℝ^K.
+
+--------------------------------------------------------------------
+STEP 2 – Density Estimation in Latent Space
+--------------------------------------------------------------------
+2.1 Fit a multivariate Gaussian Kernel Density Estimate (KDE) to {z[i]} using bandwidth h.
+2.2 Sample N_aug latent vectors {z_syn[m]} from the KDE.
+
+--------------------------------------------------------------------
+STEP 3 – Forward Modeling: Generate Synthetic Photometry
+--------------------------------------------------------------------
+FOR m = 1 .. N_aug:
+    3.1 Reconstruct synthetic spectrum:
+        S_syn[m] = μ_X + Σ_{k=1}^{K} z_syn[m][k] * PC[k]
+    3.2 For each filter j:
+            f_syn[m][j] = ∫ S_syn[m](λ) * F[j](λ) dλ   // numerical integration
+    3.3 Add Gaussian noise:
+            σ_noise = 0.20 * f_syn[m][j]               // 20 % relative uncertainty
+            f_noisy[m][j] = Normal(f_syn[m][j], σ_noise)
+    3.4 Store training pair:
+            (photometry = f_noisy[m][1..N_filt], latent = z_syn[m])
+END FOR
+
+--------------------------------------------------------------------
+STEP 4 – Train Encoder (Photometry → Latent)
+--------------------------------------------------------------------
+4.1 Use an AutoML regressor (e.g., ensemble of Gradient‑Boosted Trees + Neural Nets).
+4.2 Inputs: photometry vectors f_noisy[m][1..N_filt].
+4.3 Targets: latent vectors z_syn[m].
+4.4 Cross‑validate internally to prevent over‑fitting (not part of core output).
+4.5 Retrieve trained model REG.
+
+--------------------------------------------------------------------
+STEP 5 – Train Taxonomy Classifier (Optional)
+--------------------------------------------------------------------
+5.1 For each reference spectrum S_ref[i] assign taxonomy label L[i].
+5.2 Train a second AutoML classifier CLASS on latent vectors z[i] → L[i].
+5.3 Store trained classifier CLASS.
+
+--------------------------------------------------------------------
+STEP 6 – Inference for a New Observation
+--------------------------------------------------------------------
+Input: Observed photometry y[1..N_filt] with uncertainties σ_y[1..N_filt].
+
+6.1 Predict posterior over latent space using REG:
+        (μ_z, Σ_z) = REG.predict_posterior(y, σ_y)
+        // REG outputs mean vector and covariance of latent distribution.
+
+6.2 Construct Gaussian Copula:
+        a. Estimate marginal cumulative distributions F_k(z_k) from training residuals.
+        b. Define correlation matrix R (from Σ_z or learned separately).
+        c. Sample N_draw latent draws {z_draw[t]} by:
+                i. Draw u_k ~ Uniform(0,1) for each k
+               ii. Transform u_k → v_k = Φ⁻¹(u_k)   // Φ⁻¹ inverse normal CDF
+              iii. Apply Cholesky(R) to v → w
+               iv. Transform back: z_draw[t][k] = F_k⁻¹(w_k)
+
+6.3 Decode spectra:
+        FOR t = 1 .. N_draw:
+            S_draw[t] = μ_X + Σ_{k=1}^{K} z_draw[t][k] * PC[k]
+        END FOR
+
+6.4 Aggregate reconstructions:
+        μ_spec = mean_{t}(S_draw[t])              // element‑wise mean
+        CI_spec = percentile_{t}(S_draw[t], {16,84}) // 68 % credible interval
+
+6.5 Taxonomy probabilities:
+        P_tax = CLASS.predict_probabilities(z_draw[1..N_draw])    // average over draws
+
+--------------------------------------------------------------------
+RETURN:
+    μ_spec, CI_spec, P_tax

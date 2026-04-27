@@ -1,0 +1,67 @@
+pseudocode
+INPUT:
+    - Training spectra set {S_j}  (each S_j is flux vs. λ over Nλ points)
+    - Filter transmission curves {F_i(λ)}  (i = 1 … NF)
+    - New target photometry y = [y_1 … y_NF]ᵀ  (fluxes)
+    - Photometric uncertainties σ = [σ_1 … σ_NF]ᵀ
+
+PARAMETERS:
+    - Desired number of principal components K  (e.g., K = 8)
+
+--------------------------------------------------------------------
+STEP 1 – Preprocess Training Spectra
+--------------------------------------------------------------------
+1.1 Normalize each spectrum S_j to a common reference (e.g., unit area).
+1.2 Assemble data matrix D ∈ ℝ^{Nλ × M}  where M = number of training spectra.
+1.3 Compute mean spectrum μ_s ∈ ℝ^{Nλ}:  μ_s = (1/M) Σ_j S_j.
+
+--------------------------------------------------------------------
+STEP 2 – Principal Component Analysis (PCA)
+--------------------------------------------------------------------
+2.1 Center data:  D_c = D – μ_s  (broadcast μ_s across columns).
+2.2 Perform singular value decomposition:  D_c = U Σ Vᵀ.
+2.3 Select first K left singular vectors:  PC = U[:,1:K]  (size Nλ × K).
+2.4 Store principal component basis matrix PC.
+2.5 Compute latent coefficient matrix W_latent = Σ(1:K) * Vᵀ(:,1:K).
+2.6 Estimate prior covariance of latent space:
+        C_prior = (1/(M-1)) * (W_latent * W_latentᵀ).
+
+--------------------------------------------------------------------
+STEP 3 – Build Observation Matrix
+--------------------------------------------------------------------
+3.1 For each filter i:
+        a_i = ∫ λ PC(λ) * F_i(λ) dλ   (vector of length K).
+3.2 Assemble observation matrix A ∈ ℝ^{NF × K}  with rows a_iᵀ.
+
+--------------------------------------------------------------------
+STEP 4 – Bayesian Inference of Latent Coefficients
+--------------------------------------------------------------------
+4.1 Define diagonal weight matrix W = diag(1/σ²).
+4.2 Compute posterior precision:
+        P_post = Aᵀ * W * A + C_prior⁻¹
+4.3 Compute posterior covariance:
+        Σ_post = inverse(P_post)
+4.4 Compute posterior mean:
+        μ_post = Σ_post * Aᵀ * W * y
+
+--------------------------------------------------------------------
+STEP 5 – Forward Sampling & Spectrum Reconstruction
+--------------------------------------------------------------------
+5.1 Set number of posterior samples N_samp (e.g., 1000).
+5.2 For s = 1 to N_samp:
+        a. Draw latent vector w_s ~ Normal(μ_post, Σ_post).
+        b. Reconstruct full spectrum:
+               S_s = μ_s + PC * w_s          (length Nλ).
+5.3 Compute point estimate spectrum:
+        S_mean = μ_s + PC * μ_post
+5.4 Estimate uncertainty band:
+        For each wavelength λ_k:
+            collect {S_s[λ_k]} over all samples.
+            derive percentile bounds (e.g., 2.5th and 97.5th) → credible interval.
+
+--------------------------------------------------------------------
+OUTPUT
+--------------------------------------------------------------------
+- Reconstructed mean spectrum S_mean (λ)
+- Credible‑interval envelope across wavelengths
+- Posterior statistics of latent coefficients (μ_post, Σ_post)

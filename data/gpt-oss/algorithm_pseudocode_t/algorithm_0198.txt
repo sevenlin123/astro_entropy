@@ -1,0 +1,113 @@
+INPUT:
+    D = { (obj_id, m_i, σ_i, λ_i, filt_i) }          // photometry of all objects
+    SUN_FLUX[λ]                                     // solar spectrum
+    FILTER_TRANSMISSION[f][λ]                       // response of each filter f
+    BASIS_SPECTRA[k][λ]                             // k basis spectra (e.g. PCA components or taxonomic templates)
+    PRIOR_MEAN[α]                                    // prior mean of basis coefficients
+    PRIOR_COV[α]                                     // prior covariance of basis coefficients
+
+OUTPUT:
+    RESULTS[obj_id] = {
+        α_hat                  // posterior mean of basis coefficients
+        Σ_α                    // posterior covariance of basis coefficients
+        R_grid[λ]              // posterior mean reflectance spectrum on wavelength grid
+        C_grid[λ]              // posterior variance of reflectance spectrum
+        CLASS_PROBS            // probability vector over taxonomic classes
+        OUTLIER_SCORE          // Mahalanobis distance of α_hat from class prior
+    }
+
+-------------------------------------------------------------------------------
+FUNCTION PREPROCESS_FILTER_RESPONSES():
+    // Compute effective reflectance of each basis in every filter
+    FOR each basis index k:
+        FOR each filter f:
+            // Integrate basis spectrum over filter bandpass
+            B_f[k] = ∫ (BASIS_SPECTRA[k][λ] * FILTER_TRANSMISSION[f][λ]) dλ /
+                     ∫ FILTER_TRANSMISSION[f][λ] dλ
+    RETURN B_f   // matrix of shape (n_filters, n_basis)
+
+-------------------------------------------------------------------------------
+FUNCTION CONVERT_MAG_TO_REFLECTANCE(m_i, σ_i, λ_i, filt_i):
+    // Convert magnitude to reflectance relative to Sun
+    R_i     = 10^( -0.4 * ( m_i - M_SUN(filt_i) ) )
+    σ_R_i   = R_i * ln(10)/2.5 * σ_i                     // error propagation
+    RETURN (R_i, σ_R_i)
+
+-------------------------------------------------------------------------------
+FUNCTION BAYESIAN_LINEAR_RECONSTRUCTION(R_obs, σ_R, X):
+    // X : design matrix (n_filters × n_basis) with entries B_f
+    W = diag( 1 / σ_R^2 )                                // weight matrix
+    // Posterior covariance
+    Σ_α = inverse( Xᵀ * W * X + inverse(PRIOR_COV) )
+    // Posterior mean
+    α_hat = Σ_α * ( Xᵀ * W * R_obs + inverse(PRIOR_COV) * PRIOR_MEAN )
+    RETURN (α_hat, Σ_α)
+
+-------------------------------------------------------------------------------
+FUNCTION PREDICT_SPECTRUM(α_hat, Σ_α, BASIS_SPECTRA):
+    // Predict reflectance on fine wavelength grid
+    R_grid_mean = BASIS_SPECTRA * α_hat                   // matrix multiplication
+    C_grid      = diag( BASIS_SPECTRA * Σ_α * BASIS_SPECTRAᵀ )  // variances per λ
+    RETURN (R_grid_mean, C_grid)
+
+-------------------------------------------------------------------------------
+FUNCTION CLASSIFY_OBJECT(R_grid_mean):
+    // Assume predefined class prototypes C_k[λ]
+    FOR each class k:
+        dist_k = Σ_over_λ ( (R_grid_mean[λ] - C_k[λ])^2 / C_grid[λ] )
+        prob_k = exp( -0.5 * dist_k )
+    NORMALIZE prob_k so Σ prob_k = 1
+    RETURN prob_vector
+
+-------------------------------------------------------------------------------
+FUNCTION OUTLIER_DETECTION(α_hat):
+    // Mahalanobis distance to nearest class prior
+    FOR each class k:
+        μ_k  = PRIOR_MEAN_k
+        Σ_k  = PRIOR_COV_k
+        MD_k = sqrt( (α_hat - μ_k)ᵀ * inverse(Σ_k) * (α_hat - μ_k) )
+    OUTLIER_SCORE = min_k MD_k
+    RETURN OUTLIER_SCORE
+
+-------------------------------------------------------------------------------
+MAIN PIPELINE:
+
+1. Compute filter–basis response matrix:
+       B_f = PREPROCESS_FILTER_RESPONSES()
+
+2. FOR each object obj in D:
+       R_obs   = []
+       σ_R_obs = []
+       X_obj   = []
+
+       FOR each photometric point p in obj:
+           (R_i, σ_R_i) = CONVERT_MAG_TO_REFLECTANCE(p.m_i, p.σ_i, p.λ_i, p.filt_i)
+           R_obs.append(R_i)
+           σ_R_obs.append(σ_R_i)
+           X_obj.append( B_f[p.filt_i] )      // row corresponding to this filter
+
+       X_obj = matrix(X_obj)                 // shape (n_filters, n_basis)
+
+       // Posterior over basis coefficients
+       (α_hat, Σ_α) = BAYESIAN_LINEAR_RECONSTRUCTION(R_obs, σ_R_obs, X_obj)
+
+       // Predicted full spectrum
+       (R_grid, C_grid) = PREDICT_SPECTRUM(α_hat, Σ_α, BASIS_SPECTRA)
+
+       // Taxonomic classification
+       CLASS_PROBS = CLASSIFY_OBJECT(R_grid)
+
+       // Outlier scoring
+       OUTLIER_SCORE = OUTLIER_DETECTION(α_hat)
+
+       // Store results
+       RESULTS[obj.obj_id] = {
+           α_hat,
+           Σ_α,
+           R_grid,
+           C_grid,
+           CLASS_PROBS,
+           OUTLIER_SCORE
+       }
+
+3. Return RESULTS

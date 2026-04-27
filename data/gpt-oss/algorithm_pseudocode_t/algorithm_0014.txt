@@ -1,0 +1,126 @@
+INPUT
+    P = { (i, j, m_ij, σ_ij) }   // photometric measurements
+           i = target index (1 … M)
+           j = filter index (1 … N)
+           m_ij = measured magnitude in filter j for target i
+           σ_ij = measurement error
+    T_j(λ)   // transmission curve for filter j
+    B_k(λ)   // k = 1 … K basis spectra (e.g., PCA components or known templates)
+    Solar(λ) // solar spectrum used for reflectance normalization
+    Hyperpriors
+        μ_prior   // prior mean of coefficients
+        Σ_prior   // prior covariance of coefficients
+        κ0, ν0    // parameters for inverse‑Wishart prior on Σ_α
+
+OUTPUT
+    Posterior samples of coefficient vectors {α_i}
+    Reconstructed reflectance S_i(λ) for each target
+    Derived colors and taxonomic class per target
+    Flagged outliers
+
+----------------------------------------------------
+STEP 0 – PRE‑COMPUTATION
+----------------------------------------------------
+FOR each filter j = 1 … N
+    FOR each basis component k = 1 … K
+        Compute A[j, k] = ∫_λ B_k(λ) * T_j(λ) dλ
+                      / ∫_λ Solar(λ) * T_j(λ) dλ
+    END
+    Store zero‑point offset ZP_j (e.g., from standard star calibration)
+END
+
+// A is an N×K matrix, ZP is an N‑vector
+
+----------------------------------------------------
+STEP 1 – DEFINE MODEL
+----------------------------------------------------
+For each target i
+    α_i  : K‑dimensional coefficient vector (latent)
+    Predictive magnitude for filter j:
+        m̂_ij(α_i) = -2.5 * log10( A[j,:] ⋅ α_i ) + ZP_j
+    Likelihood for all measurements of i:
+        L_i(α_i) = Π_{j} Normal( m_ij | m̂_ij(α_i), σ_ij )
+End
+
+Hierarchical priors:
+    μ_α ~ Normal( μ_prior , Σ_prior )
+    Σ_α ~ InverseWishart( κ0 , ν0 )
+
+    For each target i
+        α_i ~ Normal( μ_α , Σ_α )
+    End
+
+Posterior:
+    p( {α_i}, μ_α, Σ_α | P ) ∝
+        [Π_i L_i(α_i)]  ×
+        [Π_i Normal(α_i | μ_α, Σ_α)]  ×
+        Normal( μ_α | μ_prior , Σ_prior )  ×
+        InverseWishart( Σ_α | κ0 , ν0 )
+
+----------------------------------------------------
+STEP 2 – SAMPLING (MCMC)
+----------------------------------------------------
+Initialize {α_i} (e.g., zeros), μ_α, Σ_α
+FOR iteration = 1 … NUM_ITERS
+    // --- Update hyperparameters ---
+    // Sample μ_α | {α_i}, Σ_α
+    μ_α ← Normal(
+              mean = (Σ_prior^{-1} + M Σ_α^{-1})^{-1}
+                     * ( Σ_prior^{-1} μ_prior + Σ_α^{-1} Σ_i α_i ),
+              cov  = (Σ_prior^{-1} + M Σ_α^{-1})^{-1}
+          )
+
+    // Sample Σ_α | {α_i}, μ_α
+    κ_n  = κ0 + M
+    ν_n  = ν0 + M
+    S_n  = κ0 Σ_prior + Σ_i (α_i - μ_α)(α_i - μ_α)^T
+    Σ_α  ← InverseWishart( κ_n , ν_n, S_n )
+
+    // --- Update individual coefficients ---
+    FOR each target i
+        // Propose new α_i' via e.g., random walk normal
+        α_i' ← α_i + Normal(0, step_size * I_K)
+        Compute m̂_ij(α_i') for all j
+        Compute likelihood ratio:
+            r = [Π_j Normal(m_ij | m̂_ij(α_i'), σ_ij)]
+                / [Π_j Normal(m_ij | m̂_ij(α_i ), σ_ij)]
+        Compute prior ratio:
+            r *= Normal(α_i' | μ_α, Σ_α) / Normal(α_i | μ_α, Σ_α)
+        Accept α_i' with probability min(1, r); else keep α_i
+    END
+END
+
+Collect samples after burn‑in and thinning.
+
+----------------------------------------------------
+STEP 3 – POST‑PROCESSING
+----------------------------------------------------
+FOR each target i
+    // Posterior mean of coefficients
+    ᾱ_i = mean( {α_i} over retained samples )
+
+    // Reconstruct reflectance spectrum
+    S_i(λ) = Σ_k ᾱ_i[k] * B_k(λ)
+
+    // Compute colors from S_i(λ) or directly from A and ᾱ_i
+    FOR any pair of filters (p, q)
+        color_pq_i = m̂_ip(ᾱ_i) - m̂_iq(ᾱ_i)
+    END
+
+    // Taxonomic classification
+    // Cluster all ᾱ_i (e.g., k‑means, DBSCAN) to assign class labels
+
+    // Outlier detection
+    FOR each measurement (i, j)
+        residual r_ij = m_ij - m̂_ij(ᾱ_i)
+        IF |r_ij| > OUTLIER_THRESH THEN
+            flag (i, j) as outlier
+        END
+    END
+END
+
+RETURN
+    - Posterior mean spectra S_i(λ) for all targets
+    - Derived colors
+    - Taxonomic labels
+    - Outlier flags

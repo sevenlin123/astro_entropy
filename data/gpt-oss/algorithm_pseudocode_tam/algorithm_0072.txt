@@ -1,0 +1,78 @@
+Inputs
+-------
+- S_real : {s_1 … s_N}   # real spectra (wavelength × flux)   N ≈ 50
+- L_real : {l_1 … l_N}   # known taxonomy labels for S_real
+- Filters  : {F_1 … F_M}  # instrumental bandpasses (effective throughputs)
+- K        : int          # desired number of principal components (default 5–10)
+- B        : int          # number of synthetic latent samples per real spectrum
+- h_kde    : float        # KDE bandwidth (≈ 0.5)
+- σ_phot   : float        # relative photometric noise (≈ 0.20)
+
+Outputs
+-------
+- Posterior sample of high‑resolution spectra p(S | m)
+- Taxonomy probability vector P(tax | m)
+
+Procedure
+---------
+
+1. **Principal Component Basis (Prior Construction)**  
+   1.1. Center spectra:  S_c = S_real – mean(S_real)  
+   1.2. Compute covariance matrix C = cov(S_c)  
+   1.3. Eigen‑decompose:  [U, λ] = eig(C)  
+   1.4. Select first K eigenvectors: U_K = U[:, 1…K]  
+   1.5. Project real spectra into latent space:  
+         Z_real = U_Kᵀ · S_cᵀ   # shape: K × N  
+
+2. **Density Estimation & Augmentation (KDE)**  
+   2.1. Fit multivariate KDE to Z_real with bandwidth h_kde  
+   2.2. Generate synthetic latent vectors:  
+         Z_syn = KDE.sample(N_syn = N × B)   # shape: K × N_syn  
+   2.3. (Optional) Label synthetic vectors by nearest real label  
+         L_syn = argmin_j ||Z_syn – Z_real||₂ over j  
+   2.4. Combine:  
+         Z_train = concat(Z_real, Z_syn)  
+         L_train = concat(L_real, L_syn)  
+
+3. **Synthetic Photometry Generation (Forward Model)**  
+   For each latent vector z in Z_train:  
+      3.1. Recover high‑resolution spectrum:  
+           s = U_K · z  + mean(S_real)   # inverse PCA  
+      3.2. For each filter F_m:  
+           r_m = ∫ s(λ) · F_m(λ) dλ / ∫ F_m(λ) dλ   # reflectance in band m  
+      3.3. Add Gaussian noise:  
+           r_m_noisy = r_m · (1 + Normal(0, σ_phot))  
+      3.4. Store photometry vector m = [r_1_noisy … r_M_noisy]  
+   Result: training pairs (m_i , z_i) for i=1…|Z_train|
+
+4. **Regressor Training (Encoder)**  
+   4.1. Train an AutoML ensemble (e.g., Gradient‑Boosted Trees + NN)  
+         regressor = AutoMLTrain(features = {m_i}, targets = {z_i})  
+   4.2. Evaluate predictive uncertainty (e.g., ensemble variance)  
+         var_z = regressor.predict_variance(m_i)  
+
+5. **Classifier Training (Latent‑space Taxonomy)**  
+   5.1. Train a second AutoML model on latent vectors and labels:  
+         classifier = AutoMLTrain(features = {z_i}, targets = {L_train})  
+
+6. **Inference for a New Observation**  
+   Given new photometry m_new:  
+      6.1. Predict posterior mean and covariance of latent vector:  
+           μ_z = regressor.predict_mean(m_new)  
+           Σ_z = regressor.predict_covariance(m_new)  
+      6.2. Draw samples from N(μ_z, Σ_z):  
+           Z_samples = sample_normal(μ_z, Σ_z, n_samples)  
+      6.3. Decode each sample to a spectrum:  
+           S_samples = [ U_K · z + mean(S_real)  for z in Z_samples ]  
+      6.4. Taxonomy probabilities:  
+           P_tax = classifier.predict_proba(μ_z)   # single point estimate  
+      6.5. Return:  
+           - Posterior predictive spectrum distribution {S_samples}  
+           - Taxonomy probability vector P_tax  
+
+7. **Optional Calibration / Validation**  
+   (Not required for core algorithm; for completeness only)  
+   - Perform leave‑one‑out cross‑validation on real spectra.  
+   - Compute empirical coverage and reconstruction error.  
+
+End

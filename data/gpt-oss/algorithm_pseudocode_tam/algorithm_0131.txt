@@ -1,0 +1,91 @@
+INPUT:
+    - Reference spectra set R = {S_i}  (reflectance vectors, length L)
+    - Filter throughput curves {T_f}  (for each filter f)
+    - Photometric measurement of new object P = {p_f, σ_f}  (flux or reflectance, uncertainty)
+
+PARAMETERS:
+    - K            : number of principal components to retain (e.g., 5–10)
+    - h            : KDE bandwidth (≈0.5)
+    - N_aug        : number of synthetic latent samples to generate (e.g., 5000)
+    - noise_level  : relative photometric noise to inject (0.20 = 20 %)
+
+OUTPUT:
+    - Posterior samples of high‑resolution spectrum S_post
+    - Taxonomy probability vector T_post
+
+--------------------------------------------------------------------
+STEP 1: PREPARATION – BUILD PRIOR AND TRAINER
+--------------------------------------------------------------------
+
+1.1  PCA BASIS ESTIMATION
+    - Center R: subtract mean spectrum μ_R from every S_i.
+    - Compute covariance matrix C = cov(R_centered).
+    - Perform eigen‑decomposition of C → eigenvalues λ_k, eigenvectors e_k.
+    - Select first K eigenvectors → PCA matrix E_K (L × K).
+    - Project each centered spectrum onto PCA basis:
+          z_i = E_K^T * (S_i – μ_R)      // latent coefficient vector (K‑dim)
+
+1.2  KDE OF LATENT COEFFICIENTS
+    - Fit a multivariate kernel density estimate KDE on {z_i} using bandwidth h.
+    - Sample N_aug latent vectors {z_j^syn} from KDE.
+
+1.3  SYNTHETIC SPECTRA FROM LATENT VECTORS
+    For each j in 1..N_aug:
+        - Reconstruct high‑res spectrum:
+              S_j^syn = μ_R + E_K * z_j^syn
+        - Store pair (z_j^syn , S_j^syn).
+
+1.4  FORWARD MODELLING TO PHOTOMETRY
+    For each synthetic spectrum S_j^syn:
+        For each filter f:
+            - Convolve S_j^syn with throughput curve T_f:
+                  p_j,f = ∫ S_j^syn(λ) * T_f(λ) dλ   // (reflectance in band f)
+            - Inject Gaussian noise:
+                  σ_j,f = noise_level * p_j,f
+                  p_j,f_noisy ~ Normal(p_j,f, σ_j,f)
+        - Build noisy photometry vector m_j = {p_j,f_noisy}.
+        - Store training tuple (m_j , z_j^syn).
+
+1.5  AUTO‑ML REGRESSOR TRAINING
+    - Train a gradient‑boosted decision tree (GBDT) regressor Rg
+      to predict latent coefficients z from photometry m.
+      Training data = {(m_j , z_j^syn)}_{j=1}^{N_aug}.
+    - Use 5‑fold cross‑validation to tune hyper‑parameters (max_depth, n_estimators, etc.).
+
+1.6  LATENT‑SPACE TAXONOMY CLASSIFIER
+    - Label each reference spectrum S_i with its known taxonomic class c_i.
+    - Compute latent vector z_i for every S_i (from step 1.1).
+    - Train a second GBDT classifier Rc to map z → class probabilities.
+      Training data = {(z_i , c_i)}_{i=1}^{|R|}.
+
+--------------------------------------------------------------------
+STEP 2: INFERENCE – RECONSTRUCT SPECTRUM & TAXONOMY
+--------------------------------------------------------------------
+
+2.1  PREPROCESS NEW PHOTOMETRY
+    - If photometry includes flux uncertainties σ_f, normalize by σ_f if desired.
+    - Assemble input vector m_new = {p_f}.
+
+2.2  PREDICT LATENT COEFFICIENT DISTRIBUTION
+    - Use regressor Rg to predict a point estimate:
+          ẑ = Rg.predict(m_new)     // vector length K
+    - Optionally obtain prediction interval by bootstrapping or
+      using the ensemble of trees to generate multiple draws:
+          {ẑ_ℓ}_{ℓ=1}^{L}  (e.g., L = 100).
+
+2.3  DECODING TO HIGH‑RESOLUTION SPECTRA
+    For each sampled latent vector ẑ_ℓ:
+        - Reconstruct spectrum:
+              S_ℓ = μ_R + E_K * ẑ_ℓ
+        - Store S_ℓ as a posterior sample.
+
+    - Return posterior distribution S_post = {S_ℓ}_{ℓ=1}^{L}.
+
+2.4  TAXONOMY PROBABILITY
+    - Feed ẑ into classifier Rc to obtain class probabilities:
+          T_post = Rc.predict_proba(ẑ)
+
+--------------------------------------------------------------------
+RETURN:
+    - High‑resolution spectral posterior samples S_post
+    - Taxonomy probability vector T_post

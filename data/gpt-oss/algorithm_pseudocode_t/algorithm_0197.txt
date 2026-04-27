@@ -1,0 +1,46 @@
+Input:
+    - N objects with sparse photometric measurements:
+        * For each object i: magnitudes m_i,f and uncertainties σ_i,f in filters f = 1…F
+    - Filter transmission curves R_f(λ) for all filters
+    - A fixed set of K spectral basis functions {φ_k(λ)}_{k=1..K}
+    - Prior covariance matrix Σ_prior (K×K) for coefficient vector a
+
+Output:
+    - For each object i:
+        * Posterior mean coefficient vector μ_i (K×1)
+        * Posterior covariance matrix S_i (K×K)
+        * Sampled spectra S_i_samples(t) for t = 1…T
+
+Algorithm:
+
+1. Pre‑compute Basis–Filter Integrals
+   For each filter f and basis function k:
+        I_f,k ← ∫ φ_k(λ) * R_f(λ) dλ
+   Store matrix I (F×K).
+
+2. For each object i = 1 … N do
+   2.1 Build Observation Vector and Noise Covariance
+        y_i ← [m_i,1 , m_i,2 , … , m_i,F]^T      // observed magnitudes
+        C_i ← diag([σ_i,1² , σ_i,2² , … , σ_i,F²])  // measurement noise
+
+   2.2 Compute Design Matrix for Object i
+        X_i ← I                                 // (same for all objects if basis fixed)
+
+   2.3 Bayesian Linear Inference
+        // Prior: a ~ N(0, Σ_prior)
+        // Likelihood: y_i | a ~ N(X_i a , C_i)
+        // Posterior: a | y_i ~ N(μ_i , S_i)
+
+        // Compute posterior covariance
+        S_i ← (Σ_prior⁻¹ + X_i^T C_i⁻¹ X_i)^(-1)
+
+        // Compute posterior mean
+        μ_i ← S_i (X_i^T C_i⁻¹ y_i)
+
+   2.4 Spectrum Sampling (optional)
+        For t = 1 … T do
+            Draw coefficient sample a_i,t ~ N(μ_i , S_i)
+            Compute sampled spectrum:
+                S_i_samples(t)(λ) ← Σ_{k=1}^K a_i,t[k] * φ_k(λ)
+
+3. Return {μ_i, S_i, S_i_samples} for all objects.

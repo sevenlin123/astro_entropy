@@ -1,0 +1,88 @@
+Input:  
+    - Reference spectra {S_i}   // i = 1…N_ref  (reflectance vs wavelength)  
+    - Wavelength grid λ_k       // k = 1…K_spec  
+    - Photometric filter set {F_j}   // j = 1…N_filt  
+    - Desired number of PCs, K_pca (e.g. 8–10)  
+
+Procedure:
+1.1  Standardise each spectrum S_i to unit mean (or normalise by visible albedo).  
+1.2  Compute the mean spectrum μ_S = mean({S_i}).  
+1.3  Subtract μ_S from every spectrum → centred data X_i = S_i – μ_S.  
+1.4  Perform Singular Value Decomposition (SVD) on the centred data matrix X  
+      (size N_ref × K_spec) → U Σ Vᵀ.  
+1.5  Select the first K_pca columns of Vᵀ → PC_basis (matrix K_pca × K_spec).  
+1.6  Project each centred spectrum onto the PCs:  
+      α_i = X_i · PC_basisᵀ          // α_i : vector of length K_pca  
+1.7  Store the set of coefficient vectors {α_i}.
+
+Input: {α_i} , KDE bandwidth h (≈0.5)  
+
+Procedure:
+2.1  For each dimension d = 1…K_pca compute the marginal KDE kernel:  
+      K_d(α) = Σ_{i=1}^{N_ref} N(α; α_{i,d}, h²) / N_ref  
+2.2  Combine marginals to form the full joint KDE density p_prior(α).  
+2.3  Sample M synthetic latent vectors {α_syn} from p_prior  
+      (e.g. M = 5 000).
+
+Input: {α_syn}, PC_basis, μ_S, filter curves {F_j}, noise level σ_noise (20%)
+
+Procedure:
+3.1  For each synthetic latent vector α_syn:
+        a)  Reconstruct high‑resolution spectrum:  
+            S_rec = μ_S + α_syn · PC_basis   // shape (K_spec,)  
+        b)  For each filter F_j compute modelled reflectance:  
+            m_j = ∫ S_rec(λ)·T_j(λ) dλ / ∫ T_j(λ) dλ  
+           where T_j is the transmission curve of filter j.  
+        c)  Add Gaussian noise:  
+            m_j_noisy = m_j + Normal(0, σ_noise·m_j).  
+        d)  Store pair (m_noisy, α_syn).  
+3.2  Assemble the training dataset D = {(m_noisy, α_syn)}.
+
+Input: Dataset D, AutoML framework (e.g. AutoGluon)
+
+Procedure:
+4.1  Split D into training/validation subsets (e.g. 80/20).  
+4.2  Train an ensemble regressor R to minimise RMSE between  
+      predicted α̂ and true α_syn on the training set.  
+4.3  Tune hyper‑parameters automatically; retain the best‑performing model.  
+4.4  Save the trained encoder R.
+
+Input: {α_i} with known taxonomy labels L_i
+
+Procedure:
+5.1  Train a second AutoML classifier C on ({α_i}, L_i).  
+5.2  Output class probability vector P(L | α̂) for any α̂.
+
+Input: Trained encoder R, measured photometry m_obs (length N_filt)
+
+Procedure:
+6.1  Use R to predict the mean latent vector α̂_mean = R(m_obs).  
+6.2  Estimate the predictive covariance Σ_pred of R at m_obs 
+      (e.g. via bootstrapping or ensemble variance).  
+6.3  Construct Gaussian Copula:
+        a)  Sample N_post draws z ~ N(0, Σ_pred).  
+        b)  Transform to latent space: α_post = α̂_mean + z.  
+6.4  For each α_post, reconstruct spectrum:  
+        S_post = μ_S + α_post · PC_basis.  
+6.5  Return the collection {S_post} as the posterior sample set.
+
+Input: New photometric measurements m_new (vector of size N_filt)
+
+Procedure:
+7.1  α_pred = R(m_new)                         // Encoder prediction  
+7.2  P_tax = C(α_pred)                          // Taxonomy probabilities  
+7.3  Generate posterior spectrum samples {S_post} via steps 6.  
+7.4  Compute summary statistics:
+        - Posterior mean spectrum  S_mean = mean({S_post})
+        - Credible intervals per wavelength  
+        - Spectral diagnostics (slopes, band depths) from {S_post}  
+7.5  Output:
+        • Taxonomy probability vector P_tax
+        • Posterior mean spectrum S_mean
+        • Credible‑interval envelope
+
+For each reference spectrum S_k:
+    a) Remove S_k from the reference set.  
+    b) Repeat steps 1–5 to build models without S_k.  
+    c) Apply step 7 to m_k derived from S_k.  
+    d) Compare recovered posterior {S_post} to true S_k (RMSE, coverage).

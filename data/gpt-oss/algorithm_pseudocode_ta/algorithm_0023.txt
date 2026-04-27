@@ -1,0 +1,75 @@
+Input:
+    - Training spectra set S_train = {s_i(λ)}  // high‑resolution near‑IR spectra
+    - Photometric measurements for target object O:
+        * Filters:   {F_k} , k = 1…K
+        * Fluxes:    y_k
+        * Uncertainties: σ_k
+    - Number of principal components to retain: n_pc  (≈ 4–10)
+
+Output:
+    - Reconstructed full spectrum Ŝ(λ) for O
+    - Credible interval (e.g., 95 %) for Ŝ(λ)
+
+--------------------------------------------------------------------
+1. TRAINING PHASE
+--------------------------------------------------------------------
+
+1.1 Compute mean spectrum μ(λ) over S_train.
+1.2 Center training spectra: 𝑠̃_i(λ) = s_i(λ) – μ(λ).
+1.3 Construct data matrix X ∈ ℝ^{N_spec × N_λ} where rows = 𝑠̃_i(λ).
+1.4 Perform Singular Value Decomposition:
+        X = U Σ Vᵀ
+    where U contains left singular vectors (principal component scores),
+          V contains right singular vectors (basis spectra).
+1.5 Select first n_pc columns of V → basis matrix B ∈ ℝ^{N_λ × n_pc}.
+1.6 Store:
+        - Mean spectrum μ(λ)
+        - Basis matrix B
+        - Prior covariance for coefficients: Σ_prior = diag(σ^2_j)
+          (σ_j² taken as variance of PC j scores over training set).
+
+--------------------------------------------------------------------
+2. MODEL‑BUILDING FOR TARGET OBJECT
+--------------------------------------------------------------------
+
+For each filter F_k (k = 1…K):
+
+    2.1 Compute synthetic response vector R_k ∈ ℝ^{n_pc}:
+            R_k(j) = ∫ B(:,j)(λ) · T_k(λ) dλ
+        where T_k(λ) is the throughput curve of filter F_k.
+    2.2 Assemble design matrix M ∈ ℝ^{K × n_pc} whose k‑th row = R_kᵀ.
+
+--------------------------------------------------------------------
+3. BAYESIAN INFERENCE OF COEFFICIENTS
+--------------------------------------------------------------------
+
+3.1 Define observation vector y ∈ ℝ^K with elements y_k.
+3.2 Observation noise covariance:
+        Σ_noise = diag(σ_k²).
+3.3 Likelihood:  p(y | c) = N(y | M c, Σ_noise)
+3.4 Prior:       p(c) = N(c | 0, Σ_prior)
+3.5 Posterior (Gaussian):
+        Σ_post = (Mᵀ Σ_noise⁻¹ M + Σ_prior⁻¹)⁻¹
+        μ_post = Σ_post (Mᵀ Σ_noise⁻¹ y)
+    (Derivation from standard Bayesian linear regression.)
+
+--------------------------------------------------------------------
+4. RECONSTRUCT SPECTRUM
+--------------------------------------------------------------------
+
+4.1 Posterior mean spectrum:
+        Ŝ_mean(λ) = μ(λ) + B · μ_post
+4.2 Posterior variance spectrum:
+        Var[Ŝ(λ)] = B · Σ_post · Bᵀ
+    (Element‑wise variance for each wavelength λ.)
+4.3 Construct 95 % credible interval:
+        CI_95(λ) = Ŝ_mean(λ) ± 1.96 * sqrt(Var[Ŝ(λ)])
+
+--------------------------------------------------------------------
+5. OUTPUT
+--------------------------------------------------------------------
+
+Return:
+    - Reconstructed spectrum Ŝ_mean(λ)
+    - 95 % credible interval CI_95(λ)
+    - Posterior coefficient distribution (μ_post, Σ_post)

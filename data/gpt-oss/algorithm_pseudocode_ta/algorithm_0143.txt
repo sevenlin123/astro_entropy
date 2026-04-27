@@ -1,0 +1,68 @@
+Input:
+    - Spectral library S[1…N]      // each S[i] = {λ_j, F_ij} for j=1…M wavelengths
+    - Photometric filter set  {k}   // each filter k has transmission T_k(λ)
+    - Target photometry P       // vector of observed fluxes p_k and uncertainties σ_k
+    - Desired number of principal components K  (e.g., K=5 for taxonomy, K=9 for full reconstruction)
+
+Output:
+    - Posterior mean spectrum μ̂(λ)
+    - Posterior covariance Σ̂(λ,λ')  (spectral uncertainty)
+    - Posterior distribution of PC coefficients 𝑧 ~ N(μ_z, Σ_z)
+
+--------------------------------------------------------------------
+STEP 0 – PREPROCESSING
+--------------------------------------------------------------------
+0.1  Resample all spectra onto a common wavelength grid λ[1…M].
+0.2  Compute the mean spectrum μ_λ = (1/N) Σ_i S[i](λ).
+0.3  Center the library:  S_c[i](λ) = S[i](λ) – μ_λ.
+
+--------------------------------------------------------------------
+STEP 1 – PRINCIPAL COMPONENT ANALYSIS
+--------------------------------------------------------------------
+1.1  Assemble data matrix D of shape (M, N):  D[:, i] = S_c[i](λ).
+1.2  Compute covariance matrix C = (1/(N-1)) * D * Dᵀ .
+1.3  Eigen‑decompose C → eigenvalues λ_e[1…M], eigenvectors U[1…M].
+1.4  Sort eigenpairs descending by λ_e.
+1.5  Select first K eigenvectors: U_K = U[:, 1…K].
+1.6  Project centered spectra onto PCs: 
+        Z[i] = U_Kᵀ * S_c[i]     // Z[i] is a K‑dimensional coefficient vector.
+
+--------------------------------------------------------------------
+STEP 2 – FILTER RESPONSE MATRIX
+--------------------------------------------------------------------
+2.1  For each filter k (k=1…L):
+        R_k[j] = ∫ T_k(λ_j) * U_K[:,j] dλ          // project each PC onto filter
+        (Implement by trapezoidal integration over λ grid.)
+2.2  Assemble response matrix A of shape (L, K):
+        A[k, :] = R_k                                    
+
+--------------------------------------------------------------------
+STEP 3 – PRIOR ON COEFFICIENTS
+--------------------------------------------------------------------
+3.1  Set prior mean μ_z = 0 (K‑vector).
+3.2  Set prior covariance Σ_z = diag(λ_e[1…K])           // variance along each PC.
+
+--------------------------------------------------------------------
+STEP 4 – BAYESIAN INFERENCE OF COEFFICIENTS
+--------------------------------------------------------------------
+4.1  Observation vector y = p (length L).
+4.2  Observation noise covariance C_y = diag(σ_k²).
+4.3  Compute posterior covariance:
+        Σ_z_post = ( Σ_z⁻¹ + Aᵀ * C_y⁻¹ * A )⁻¹
+4.4  Compute posterior mean:
+        μ_z_post = Σ_z_post * ( Aᵀ * C_y⁻¹ * y )
+        // (Aᵀ * C_y⁻¹ * y is K‑vector)
+--------------------------------------------------------------------
+STEP 5 – RECONSTRUCT SPECTRUM
+--------------------------------------------------------------------
+5.1  Construct posterior mean spectrum:
+        μ̂(λ) = μ_λ + U_K * μ_z_post
+5.2  Construct posterior covariance of spectrum:
+        Σ̂_spectrum(λ_a, λ_b) = Σ_z_post_rowcol * 
+                                (U_K[a,:] · U_K[b,:]ᵀ)
+        // where a,b index wavelengths, and Σ_z_post_rowcol is element
+        // of Σ_z_post for the two PC indices used in a,b.
+--------------------------------------------------------------------
+STEP 6 – OUTPUT
+--------------------------------------------------------------------
+6.1  Return μ̂(λ), Σ̂_spectrum(λ,λ'), μ_z_post, Σ_z_post

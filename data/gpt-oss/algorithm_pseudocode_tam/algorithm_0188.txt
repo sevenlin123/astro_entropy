@@ -1,0 +1,57 @@
+text
+--------------------------------------------------------------------
+# 1. TRAINING PHASE
+--------------------------------------------------------------------
+
+Input:
+    Spec      = {S_i | i = 1 … N}          # High‑resolution spectra (vector length L)
+    Filters   = {F_j | j = 1 … M}          # Throughput curves of the photometric bands
+    Labels    = {ℓ_i | i = 1 … N}          # Taxonomic class for each spectrum
+    K         = number of principal components  (e.g. 8–10)
+    h_KDE     = KDE bandwidth (≈ 0.5)
+    M_aug     = number of synthetic samples to draw (e.g. 5000)
+
+Output:
+    PCA_mean          # μ  – mean spectrum
+    PCA_basis         # P  – L × K matrix of eigenvectors
+    Regressor_R       # maps photometry → latent coefficients
+    Classifier_C      # maps latent coefficients → class probabilities
+
+Procedure:
+
+1.  // ---- 1.1  PCA on the training spectra ---------------------------------
+2.  S_centered = { S_i – mean(S_i) for all i }
+3.  Cov        = (1/(N–1)) * (S_centered)^T  ·  S_centered
+4.  [eig_vals, eig_vecs] = eig(Cov)
+5.  Sort eig_vecs by decreasing eig_vals
+6.  P          = eig_vecs[:, 1:K]          # first K columns
+7.  μ          = mean(Spec)                # global mean vector
+
+8.  // ---- 1.2  Project spectra onto the latent space -----------------------
+9.  Z_true[i]  = P^T · (S_i – μ)           # i = 1 … N   →  N × K matrix
+
+10. // ---- 1.3  Estimate density in latent space (KDE) ---------------------
+11. KDE_model = fit_KDE(Z_true, bandwidth = h_KDE)
+12. Z_syn[j]   = sample_from_KDE(KDE_model) for j = 1 … M_aug
+
+13. // ---- 1.4  Forward model to obtain synthetic photometry ----------------
+14. For each j in 1 … M_aug
+15.     S_syn   = μ + P · Z_syn[j]          # reconstruct full spectrum
+16.     For each filter k in 1 … M
+17.         m_k   = integral_over_lambda( S_syn(λ) * F_k(λ) )  
+18.     m_syn   = (m_1 , … , m_M)
+19.     noise   = random_normal(0, 0.2 * m_syn)   # 20 % relative Gaussian noise
+20.     m_noisy = m_syn + noise
+21.     Store pair (m_noisy , Z_syn[j])  // training example for regressor
+22.     Store label ℓ_true[j]  // inherited from the closest real spectrum
+23. EndFor
+
+24. // ---- 1.5  Train AutoML regressor (encoder) -----------------------------
+25. R = AutoML.train_regressor(  inputs  = {m_noisy},
+                                outputs = {Z_syn} )
+
+26. // ---- 1.6  Train AutoML classifier --------------------------------------
+27. C = AutoML.train_classifier( inputs  = {Z_syn},
+                                outputs = {ℓ_true} )
+
+28. Return (μ, P, R, C)

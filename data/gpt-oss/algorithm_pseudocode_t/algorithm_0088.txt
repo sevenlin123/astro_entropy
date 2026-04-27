@@ -1,0 +1,170 @@
+Input:
+  N_objects
+  For each object o:
+      Observations: filter indices {i}, magnitudes m_o,i, errors σ_o,i
+  Basis set of spectra: B_k(λ), k=1..K
+  Filter transmission curves: T_i(λ)
+  Zero-points: ZP_i
+
+Output:
+  Posterior samples of coefficient vectors a_o for each object
+  Reconstructed spectra S_o(λ) = Σ_k a_o,k B_k(λ)
+
+Procedure:
+  Precompute synthetic flux matrix:
+    For each filter i:
+        For each basis k:
+            F[i,k] = ∫ B_k(λ) * T_i(λ) dλ  // integrated flux of basis through filter
+    For each filter i:
+        Z[i] = ZP_i
+
+  For each object o:
+    Define vector of observed magnitudes y_o (size M_o)
+    Define weight matrix W_o = diag(1/σ_o,i^2)
+
+    Define forward model: 
+      For any coefficient vector a:
+        f_pred_i(a) = -2.5*log10( Σ_k a_k * F[i,k] ) + Z[i]
+
+    Define log-likelihood:
+      L(a) = -0.5 * (y_o - f_pred(a))^T * W_o * (y_o - f_pred(a))
+
+    Define prior on a: a ~ N(0, Λ^-1) with precision matrix Λ
+
+    Define log-posterior:
+      logP(a) = L(a) + log prior
+
+    Use optimization to find MAP estimate a_MAP:
+      Initialize a = zeros(K)
+      Iterate until convergence:
+        Compute gradient g = ∇_a logP(a)
+        Compute Hessian H = ∇∇_a logP(a) (or approximate)
+        Update a ← a - H^-1 * g   // Newton-Raphson
+
+    After obtaining a_MAP, generate posterior samples via:
+      - Draw from multivariate normal with mean a_MAP and covariance Σ = (-H)^-1
+      - Or run MCMC (Metropolis-Hastings):
+          Initialize a = a_MAP
+          For iter in 1..N_iter:
+              Propose a' = a + Normal(0, step_size)
+              Compute acceptance ratio r = exp(logP(a') - logP(a))
+              Accept with probability min(1, r)
+
+    Store posterior samples for a_o
+    Compute reconstructed spectra S_o(λ) = Σ_k a_o,k B_k(λ)
+
+Return all results
+
+INPUT
+  N_obj                      # number of objects
+  N_filter                   # number of photometric filters
+  N_basis                    # number of basis spectra
+  FOR each object o = 1 .. N_obj
+      obs[o].mag[M_o]        # observed magnitudes in M_o filters
+      obs[o].err[M_o]        # measurement uncertainties
+      obs[o].idx[M_o]        # indices of filters used (values 1..N_filter)
+  END
+  filt[1..N_filter].trans(λ) # transmission curve of each filter
+  filt[1..N_filter].ZP       # zero‑point magnitude for each filter
+  basis[1..N_basis](λ)       # spectral basis functions
+  prior_prec[1..N_basis]     # diagonal prior precision matrix Λ (inverse variance)
+
+PRECOMPUTE
+  # Integrated flux of each basis through each filter
+  FOR i = 1 .. N_filter
+      FOR k = 1 .. N_basis
+          F[i][k] = ∫_λ  basis[k](λ) * filt[i].trans(λ) dλ
+      END
+  END
+
+  # Log‑likelihood helper
+  DEFINE log_likelihood(o, a):
+      χ² = 0
+      FOR j = 1 .. M_o
+          i = obs[o].idx[j]
+          pred_flux = Σ_{k=1}^{N_basis} a[k] * F[i][k]
+          pred_mag  = -2.5 * log10(pred_flux) + filt[i].ZP
+          residual  = obs[o].mag[j] - pred_mag
+          χ² += (residual / obs[o].err[j])^2
+      END
+      RETURN -0.5 * χ²
+
+  # Prior log‑density (Gaussian, zero mean)
+  DEFINE log_prior(a):
+      RETURN -0.5 * Σ_{k=1}^{N_basis} prior_prec[k] * a[k]^2
+
+  # Total log‑posterior
+  DEFINE log_posterior(o, a):
+      RETURN log_likelihood(o, a) + log_prior(a)
+
+ALGORITHM
+  FOR each object o = 1 .. N_obj
+
+      # 1. Initial guess for coefficient vector
+      a = zeros(N_basis)
+
+      # 2. MAP estimation by Newton–Raphson
+      REPEAT
+          # Compute gradient ∇_a logP
+          grad = zeros(N_basis)
+          hess = zeros(N_basis, N_basis)
+          FOR j = 1 .. M_o
+              i = obs[o].idx[j]
+              pred_flux = Σ_{k} a[k] * F[i][k]
+              d_pred_flux_d_a = [F[i][1], ..., F[i][N_basis]]   # vector
+              resid = obs[o].mag[j] - (-2.5*log10(pred_flux) + filt[i].ZP)
+              weight = 1/(obs[o].err[j]^2)
+              # Gradient contribution
+              grad += weight * resid * ( -2.5 / (ln10 * pred_flux) ) * d_pred_flux_d_a
+              # Hessian contribution (approximate)
+              hess += weight * (d_pred_flux_d_a @ d_pred_flux_d_a.T) *
+                      ( (2.5/(ln10*pred_flux))^2 + (2.5/(ln10*pred_flux^2))*resid )
+          END
+          # Add prior contributions
+          grad -= prior_prec .* a
+          hess += diag(prior_prec)
+
+          # Newton update
+          Δa = solve(hess, grad)      # solve linear system hess * Δa = grad
+          a_new = a + Δa
+          IF norm(Δa) < tolerance THEN BREAK
+          a = a_new
+      UNTIL convergence
+
+      a_map = a
+
+      # 3. Posterior sampling (Metropolis–Hastings)
+      n_samples = N_SAMPLES
+      step_scale = INITIAL_STEP
+      a_current = a_map
+      samples = []
+      FOR s = 1 .. n_samples
+          a_proposed = a_current + Normal(0, step_scale)    # independent normal for each coeff
+          accept_ratio = exp( log_posterior(o, a_proposed) -
+                              log_posterior(o, a_current) )
+          u = Uniform(0,1)
+          IF u < accept_ratio THEN
+              a_current = a_proposed
+          END
+          APPEND a_current TO samples
+      END
+
+      # 4. Spectrum reconstruction for each sample
+      recon_spec = []   # list of reconstructed spectra per sample
+      FOR each a_sample IN samples
+          spec(λ) = Σ_{k=1}^{N_basis} a_sample[k] * basis[k](λ)
+          APPEND spec TO recon_spec
+      END
+
+      # 5. Store results
+      result[o].coeff_samples = samples
+      result[o].spectrum_samples = recon_spec
+      result[o].coeff_MAP = a_map
+
+  END
+
+OUTPUT
+  result[1..N_obj] containing:
+      - Posterior samples of coefficients
+      - Posterior samples of reconstructed spectra
+      - MAP coefficient vector

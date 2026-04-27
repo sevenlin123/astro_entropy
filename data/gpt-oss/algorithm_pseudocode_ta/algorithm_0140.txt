@@ -1,0 +1,81 @@
+text
+Inputs
+-------
+S_train   : matrix of N_spec × N_wave training spectra  
+F_obs     : vector of K photometric fluxes for the target TNO  
+σ_obs     : vector of K measurement uncertainties  
+R_k(λ)    : transmission curve for filter k (k = 1 … K)  
+
+Parameters
+----------
+K_pca     : number of principal components to retain (e.g. 4–10)  
+N_draw    : number of posterior draws (e.g. 2000)  
+
+Outputs
+-------
+S_mean(λ): mean reconstructed spectrum  
+S_CI_low(λ), S_CI_high(λ): 95 % credible‑interval envelopes  
+c_post      : posterior samples of PCA coefficients  
+
+--------------------------------------------------------------------
+Step 1 – Train PCA on the spectral library
+--------------------------------------------------------------------
+1.1 Center the spectra:  S_bar = S_train – mean(S_train, axis=0)
+1.2 Compute singular value decomposition:
+        S_bar = U_S · Σ · V_T          # U_S: N_spec×N_spec, Σ: diagonal, V_T: N_spec×N_wave
+1.3 Extract first K_pca right singular vectors (columns of V_T):
+        PC_basis = V_T[0:K_pca , :]     # shape K_pca × N_wave
+1.4 Compute eigenvalues λ_i (i = 1…K_pca) from Σ[0:K_pca]
+1.5 Store mean spectrum μ = mean(S_train, axis=0)   # shape N_wave
+--------------------------------------------------------------------
+Step 2 – Define forward model for photometry
+--------------------------------------------------------------------
+For any coefficient vector c ∈ ℝ^K_pca:
+    2.1 Reconstructed spectrum:
+            S_c(λ) = μ(λ) + Σ_{i=1}^{K_pca} c_i · PC_basis[i , λ]
+    2.2 Synthetic photometry in filter k:
+            f_k(c) = ∫ S_c(λ) · R_k(λ) dλ / ∫ R_k(λ) dλ
+   (Numerical integration performed on the discrete wavelength grid.)
+
+--------------------------------------------------------------------
+Step 3 – Set up the Bayesian inference problem
+--------------------------------------------------------------------
+3.1 Likelihood (Gaussian):
+        L(c) ∝ Π_{k=1}^{K} exp{ - [F_obs(k) – f_k(c)]² / (2 σ_obs(k)²) }
+3.2 Prior on coefficients:
+        p(c) = N(0, diag(λ_1,…,λ_K_pca))          # zero‑mean normal with PC variances
+3.3 Posterior:
+        p(c | F_obs) ∝ L(c) · p(c)
+
+--------------------------------------------------------------------
+Step 4 – Compute posterior analytically (linear–Gaussian case)
+--------------------------------------------------------------------
+Because f_k(c) is linear in c, the posterior is also Gaussian:
+    4.1 Construct design matrix A (K × K_pca):
+        A(k,i) = ∂f_k / ∂c_i evaluated at c = 0
+        (Compute by differentiating the integral expression or numerically.)
+    4.2 Observation noise covariance:  Σ_obs = diag(σ_obs²)
+    4.3 Posterior covariance:
+        Σ_post = (Aᵀ Σ_obs⁻¹ A + diag(1/λ_i))⁻¹
+    4.4 Posterior mean:
+        μ_post = Σ_post · Aᵀ Σ_obs⁻¹ · F_obs
+--------------------------------------------------------------------
+Step 5 – Draw samples from posterior for uncertainty propagation
+--------------------------------------------------------------------
+5.1 For j = 1 … N_draw:
+        Sample c^(j) ~ N( μ_post , Σ_post )
+        Store c^(j)
+--------------------------------------------------------------------
+Step 6 – Reconstruct spectra and compute statistics
+--------------------------------------------------------------------
+6.1 For each draw j:
+        S_j(λ) = μ(λ) + Σ_{i=1}^{K_pca} c^(j)_i · PC_basis[i , λ]
+6.2 After all draws:
+        S_mean(λ)  = mean over j of S_j(λ)
+        S_CI_low(λ)= percentile 2.5% over j of S_j(λ)
+        S_CI_high(λ)= percentile 97.5% over j of S_j(λ)
+--------------------------------------------------------------------
+Output
+------
+Return S_mean, S_CI_low, S_CI_high, and optionally the collection {c^(j)} or
+any diagnostic quantities required for further analysis.

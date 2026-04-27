@@ -1,0 +1,88 @@
+Input:
+    D = { (i, λ_i, R_i(λ), m_i, σ_mi) }   // i = 1 … N_obs
+        λ_i          – effective wavelength of filter i
+        R_i(λ)       – transmission curve of filter i
+        m_i          – observed apparent magnitude in filter i
+        σ_mi         – measurement uncertainty (mag)
+    B = { T_k(λ) }                         // k = 1 … K spectral templates
+        T_k(λ)       – reflectance spectrum of template k
+
+Constants:
+    m_ref = 0.0                            // reference magnitude (e.g. Vega)
+
+--------------------------------------------------------------------
+Step 1.  Convert magnitudes to relative fluxes
+--------------------------------------------------------------------
+for each i in 1…N_obs do
+    f_i     ← 10^(-0.4 * (m_i - m_ref))          // flux (relative units)
+    σ_fi    ← (ln(10)/2.5) * f_i * σ_mi          // propagated error
+end for
+
+Let  f  = [f_1, …, f_N_obs]^T
+Let  Σ_f = diag(σ_f1^2, …, σ_fN_obs^2)          // observation covariance
+
+--------------------------------------------------------------------
+Step 2.  Generate synthetic photometry for all templates
+--------------------------------------------------------------------
+for each i in 1…N_obs do
+    for each k in 1…K do
+        // Synthetic flux in filter i for template k
+        A_ik ← ∫ T_k(λ) · R_i(λ) dλ   /   ∫ R_i(λ) dλ
+    end for
+end for
+
+Let  A  be the N_obs × K matrix with entries A_ik
+
+--------------------------------------------------------------------
+Step 3.  Specify probabilistic model
+--------------------------------------------------------------------
+Model:           f  =  A · x  + ε
+                ε ~ N(0 , Σ_f)                  // Gaussian noise
+Prior on coefficients:
+                x_k ≥ 0  for all k            // non‑negativity
+                p(x) ∝ exp( -½ x^T Λ x )      // optional weak quadratic
+                (Λ may be zero for an uninformative prior)
+
+--------------------------------------------------------------------
+Step 4.  Compute the posterior (MAP estimate)
+--------------------------------------------------------------------
+Define objective function:
+    J(x) = ½ (A·x – f)^T Σ_f⁻¹ (A·x – f)  +  ½ x^T Λ x
+Subject to:        x_k ≥ 0   for all k
+
+Solve the convex quadratic program:
+    x̂  =  argmin_{x≥0}  J(x)
+
+This can be done with any NNLS/QP routine.
+
+--------------------------------------------------------------------
+Step 5.  Estimate coefficient covariance
+--------------------------------------------------------------------
+If Λ = 0 (flat prior) the Hessian of J at x̂ is
+    H = A^T Σ_f⁻¹ A
+Estimate covariance:
+    Σ_x = H⁻¹
+
+--------------------------------------------------------------------
+Step 6.  Predict fluxes and compute residuals
+--------------------------------------------------------------------
+f̂   = A · x̂                           // best–fit fluxes
+r   = f – f̂                            // residual vector
+
+--------------------------------------------------------------------
+Step 7.  Flag outlier filters
+--------------------------------------------------------------------
+For each i in 1…N_obs do
+    if |r_i| > k_outlier * σ_fi then
+        flag filter i as an outlier
+    end if
+end for
+// k_outlier is chosen (e.g. 3) for a 3σ rejection criterion
+
+--------------------------------------------------------------------
+Output:
+    x̂            – most probable mixture of spectral templates
+    Σ_x           – coefficient covariance matrix
+    f̂            – predicted fluxes per filter
+    r             – residuals
+    outlier_flags – list of flagged filters

@@ -1,0 +1,91 @@
+# ------------------------------------------------------------------
+# 1. TRAINING PHASE (once per dataset)
+# ------------------------------------------------------------------
+
+Input:
+    S  : Matrix of N_s spectra (rows) sampled at common wavelengths λ[1..L]
+    K  : Number of principal components to retain (e.g. 8–10)
+
+Procedure:
+    1.1 Compute mean spectrum μ(λ):
+        μ[ℓ] = mean_{i=1}^{N_s} S[i,ℓ]          for ℓ = 1..L
+
+    1.2 Center spectra:
+        C[i,ℓ] = S[i,ℓ] – μ[ℓ]
+
+    1.3 Perform Singular Value Decomposition (SVD):
+        [U, Σ, Vᵀ] = SVD(C)                      # C = U Σ Vᵀ
+
+    1.4 Principal components (eigen‑spectra):
+        PC_k(λ) = V[k, :]                        for k = 1..K
+
+    1.5 Eigenvalues (variance explained by each PC):
+        λ_k = Σ[k,k]²                            for k = 1..K
+
+    1.6 Store {μ, PC_k, λ_k}
+
+--------------------------------------------------------------------
+# 2. PRECOMPUTATION OF FILTER RESPONSE MATRICES
+# --------------------------------------------------------------------
+
+Input:
+    Filters {F_j, j=1..N_f}                     # e.g. JWST/NIRCam filters
+    Response curves R_j(λ)                      # normalized transmission
+
+Precompute for each filter j:
+    μ_j      = ∑_{ℓ=1}^{L} μ[ℓ]   * R_j[ℓ] * Δλ[ℓ]
+    M[j,k]   = ∑_{ℓ=1}^{L} PC_k[ℓ] * R_j[ℓ] * Δλ[ℓ]    for k=1..K
+
+Store matrices:
+    μ_vec  = [μ_1,…,μ_Nf]^T
+    M_mat  = [M[j,k]]  (size N_f × K)
+
+--------------------------------------------------------------------
+# 3. RECONSTRUCTION FOR ONE OBJECT
+# --------------------------------------------------------------------
+
+Input:
+    Photometric measurements:
+        f_obs[j]   : observed flux in filter j
+        σ_obs[j]   : measurement uncertainty in filter j
+
+Procedure:
+    3.1 Build weight matrix W:
+        W[j,j] = 1 / σ_obs[j]²                      # diagonal
+
+    3.2 Define prior on PC coefficients a:
+        Prior mean μ_prior = 0 vector (size K)
+        Prior covariance Λ = diag(λ_k)              # based on training variance
+
+    3.3 Compute posterior covariance Σ_post:
+        A = M_matᵀ · W · M_mat + Λ⁻¹                # size K×K
+        Σ_post = inverse(A)                        # analytic solution
+
+    3.4 Compute posterior mean a_hat:
+        b = M_matᵀ · W · f_obs + Λ⁻¹ · μ_prior
+        a_hat = Σ_post · b
+
+    3.5 Reconstruct full spectrum:
+        For each wavelength λ[ℓ]:
+            s_rec[ℓ] = μ[ℓ] + ∑_{k=1}^{K} a_hat[k] * PC_k[ℓ]
+
+    3.6 Compute spectral uncertainty:
+        For each λ[ℓ]:
+            var_rec[ℓ] = ∑_{k=1}^{K}∑_{l=1}^{K}
+                          Σ_post[k,l] * PC_k[ℓ] * PC_l[ℓ]
+            σ_rec[ℓ]  = sqrt(var_rec[ℓ])
+
+Output:
+    s_rec(λ)      – reconstructed spectrum (mean)
+    σ_rec(λ)      – one‑sigma uncertainty band
+    a_hat         – posterior coefficient vector
+    Σ_post        – posterior covariance (optional)
+
+--------------------------------------------------------------------
+# 4. BATCH PROCESSING FOR MANY OBJECTS
+# --------------------------------------------------------------------
+
+For each target object:
+    Run Step 3 (reconstruction) using its photometric data.
+
+End

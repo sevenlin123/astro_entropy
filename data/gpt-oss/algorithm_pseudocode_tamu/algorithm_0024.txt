@@ -1,0 +1,124 @@
+text
+--------------------------------------------------------------------
+INPUTS
+--------------------------------------------------------------------
+SEED_SPECTRA      : list of observed TNO spectra           # shape (Ns, Nλ)
+FILTER_CURVES     : list of JWST NIRCam filter transmissions   # shape (Nf, Nλ)
+TAXON_LABELS      : taxonomy label for each SEED_SPECTRA      # length Ns
+PHOTOMETRY_OBS    : observed photometry for a new target      # shape (Nf,)
+PHOTOMETRY_ERR    : 1‑σ uncertainties for PHOTOMETRY_OBS
+
+--------------------------------------------------------------------
+PARAMETERS
+--------------------------------------------------------------------
+K_COMP            : number of principal components to keep      # 5–10
+KDE_BANDWIDTH     : bandwidth for kernel density estimation     # ≈ 0.5
+N_AUGMENT         : number of synthetic latent samples          # e.g. 5000
+NOISE_LEVEL       : relative noise to inject into synthetic photometry  # 0.20
+N_PRED_SAMPLES    : number of latent draws for posterior          # e.g. 200
+
+--------------------------------------------------------------------
+STEP 1 – PCA TRAINING
+--------------------------------------------------------------------
+1.1  Fit PCA on SEED_SPECTRA:
+        μ_spectrum,  E_vecs,  var_explained = PCA_SEED(SEED_SPECTRA, K_COMP)
+
+1.2  Project seed spectra onto PCs:
+        C_seed = PCA_TRANSFORM(SEED_SPECTRA, μ_spectrum, E_vecs)   # shape (Ns, K_COMP)
+
+--------------------------------------------------------------------
+STEP 2 – KDE AUGMENTATION
+--------------------------------------------------------------------
+2.1  Fit Gaussian KDE on C_seed:
+        kde_model = KDE(C_seed, bandwidth=KDE_BANDWIDTH)
+
+2.2  Sample synthetic latent vectors:
+        C_syn = kde_model.sample(N_AUGMENT)                      # shape (N_AUGMENT, K_COMP)
+
+2.3  For each synthetic latent vector c in C_syn:
+        a. Reconstruct synthetic spectrum:
+               S_syn = PCA_INVERSE(c, μ_spectrum, E_vecs)       # shape (Nλ,)
+        b. Generate noiseless photometry:
+               p_syn = CONVOLVE_FILTER(S_syn, FILTER_CURVES)    # shape (Nf,)
+        c. Inject Gaussian noise:
+               p_noisy = p_syn + Normal(0, NOISE_LEVEL * p_syn)
+        d. Store training pair (p_noisy, c)
+
+2.4  Build training set:
+        X_train = {p_noisy}  ;   Y_train = {c}
+
+--------------------------------------------------------------------
+STEP 3 – ENCODER TRAINING
+--------------------------------------------------------------------
+3.1  Train AutoML regressor (e.g. XGBoost ensemble) to map photometry → latent coefficients:
+        reg_enc = AUTO_REGRESSOR(X_train, Y_train)
+
+--------------------------------------------------------------------
+STEP 4 – TAXONOMY CLASSIFIER
+--------------------------------------------------------------------
+4.1  Train AutoML classifier on latent coefficients and TAXON_LABELS:
+        cls_tax = AUTO_CLASSIFIER(C_seed, TAXON_LABELS)
+
+--------------------------------------------------------------------
+STEP 5 – INFERENCE ON NEW PHOTOMETRY
+--------------------------------------------------------------------
+Input: PHOTOMETRY_OBS, PHOTOMETRY_ERR
+
+5.1  Predict latent coefficient distribution:
+        μ_pred, Σ_pred = reg_enc.predict_with_uncertainty(PHOTOMETRY_OBS)
+        # μ_pred: mean latent vector (K_COMP,)
+        # Σ_pred: covariance matrix (K_COMP×K_COMP) or ensemble spread
+
+5.2  Construct correlation matrix:
+        R_corr = ESTIMATE_CORRELATION(reg_enc, PHOTOMETRY_OBS)
+        # If unavailable, use identity matrix.
+
+5.3  Sample latent draws from joint posterior via Gaussian copula:
+        C_draws = GAUSSIAN_COUPLE_SAMPLE(μ_pred, Σ_pred, R_corr, N_PRED_SAMPLES)
+
+5.4  For each draw c in C_draws:
+        a. Reconstruct spectrum:
+               S_draw = PCA_INVERSE(c, μ_spectrum, E_vecs)
+        b. Store S_draw
+
+5.5  Aggregate reconstructions:
+        S_mean      = MEAN(S_draws)                # shape (Nλ,)
+        S_cred_int  = QUANTILES(S_draws, [0.025, 0.975])   # 95% CI per λ
+
+5.6  Predict taxonomy probabilities:
+        tax_probs = cls_tax.predict_proba(μ_pred)
+
+--------------------------------------------------------------------
+OUTPUTS
+--------------------------------------------------------------------
+Reconstructed spectrum: S_mean ± S_cred_int
+Taxonomy probability distribution: tax_probs
+
+text
+PCA_SEED(spectra, K):
+    # Center spectra, compute covariance, eigen-decomposition
+    # Return mean, first K eigenvectors, variance explained.
+
+PCA_TRANSFORM(spectrum, μ, E):
+    return (spectrum - μ) · E   # projection onto PCs
+
+PCA_INVERSE(coeffs, μ, E):
+    return coeffs · E.T + μ
+
+CONVOLVE_FILTER(spectrum, filters):
+    # For each filter: integrate spectrum * filter / integral(filter)
+    return photometry_vector
+
+AUTO_REGRESSOR(X, Y):
+    # AutoML pipeline (e.g., AutoGluon) with gradient‑boosted trees
+    # Trains to minimize mean‑squared error; outputs mean & variance.
+
+AUTO_CLASSIFIER(features, labels):
+    # Trains probabilistic classifier (e.g., RandomForest) on latent space.
+
+ESTIMATE_CORRELATION(reg, phot):
+    # Use ensemble predictions or a dedicated model to estimate latent correlations.
+
+GAUSSIAN_COUPLE_SAMPLE(mu, Sigma, R, n):
+    # Draw n samples from multivariate normal with mean mu, covariance Sigma,
+    # then apply Gaussian copula to enforce target correlation R.

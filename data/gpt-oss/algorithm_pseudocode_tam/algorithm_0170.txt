@@ -1,0 +1,86 @@
+INPUT:
+    S_real   – array of N_real high‑resolution spectra (wavelength × reflectance)
+    λ_spec   – wavelengths of spectra
+    F        – list of M_filter throughput curves (wavelength × transmission)
+    σ_phot   – photometric uncertainty factor (e.g., 0.20)
+    K_pca    – number of principal components (e.g., 5–10)
+    h_kde    – KDE bandwidth (e.g., 0.5)
+    N_aug    – number of synthetic samples to draw (e.g., 5000)
+
+OUTPUT:
+    Reg_model   – trained regressor p(coefficients | photometry)
+    Class_model – trained classifier p(class | coefficients)
+    InvPCA      – matrix of principal components (λ_spec × K_pca)
+    Mean_spect  – mean spectrum (λ_spec)
+
+--------------------------------------------------------------------
+Step 1 – Build Prior (Latent Manifold)
+--------------------------------------------------------------------
+1.1   // Center spectra
+      S_center = S_real - mean(S_real, axis=0)
+
+1.2   // Perform PCA
+      U, Σ, Vt = SVD(S_center)                // S_center ≈ U Σ Vt
+      PC_basis = Vt[:K_pca, :]                 // K_pca columns → InvPCA
+      coeff_true = U[:, :K_pca] * Σ[:K_pca]     // PCA coefficients of real spectra
+
+1.3   // Estimate density in coefficient space with KDE
+      kde = KDE(coeff_true, bandwidth=h_kde)
+
+1.4   // Draw synthetic latent coefficients
+      coeff_aug = kde.sample(N_aug)             // shape (N_aug, K_pca)
+
+1.5   // Generate synthetic spectra via inverse PCA
+      S_aug = coeff_aug @ PC_basis + mean(S_real, axis=0)   // shape (N_aug, n_λ)
+
+--------------------------------------------------------------------
+Step 2 – Generate Synthetic Photometry
+--------------------------------------------------------------------
+2.1   // Convolve spectra with filter throughputs
+      For each synthetic spectrum s in S_aug:
+          For each filter f in F:
+              R_f = ∫ s(λ) * f(λ) dλ / ∫ f(λ) dλ          // reflectance in band
+          Store vector R = [R_f1, …, R_fM]
+
+2.2   // Add Gaussian noise per band
+      For each R_f:
+          σ_f = σ_phot * R_f
+          R_f_noisy = R_f + Normal(0, σ_f)
+
+2.3   // Assemble training data
+      X_train = {R_noisy}                     // shape (N_aug, M)
+      Y_train = coeff_aug                    // shape (N_aug, K_pca)
+
+--------------------------------------------------------------------
+Step 3 – Train Encoder (Reconstructor)
+--------------------------------------------------------------------
+3.1   Use AutoML framework to train regressor:
+      Reg_model = AutoML_Regressor.fit(X_train, Y_train)
+      // regressor maps photometry → PCA coefficients
+
+--------------------------------------------------------------------
+Step 4 – Train Classifier (Optional)
+--------------------------------------------------------------------
+4.1   // Labels for real spectra (if available)
+      labels = taxonomic_labels_of(S_real)    // length N_real
+
+4.2   // Train classifier on real PCA coefficients
+      Class_model = AutoML_Classifier.fit(coeff_true, labels)
+
+--------------------------------------------------------------------
+Step 5 – Inference on New Observation
+--------------------------------------------------------------------
+Function ReconstructAndClassify(phot_obs):
+    Input: phot_obs – vector of M measured reflectances (possibly with errors)
+    Output: spectrum_recon, class_probs
+
+    5.1   // Predict PCA coefficients
+          coeff_pred = Reg_model.predict(phot_obs)
+
+    5.2   // Inverse PCA to obtain full spectrum
+          spectrum_recon = coeff_pred @ PC_basis + Mean_spect
+
+    5.3   // Optional classification
+          class_probs = Class_model.predict_proba(coeff_pred)
+
+    Return spectrum_recon, class_probs

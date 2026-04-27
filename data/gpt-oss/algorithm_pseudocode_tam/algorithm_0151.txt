@@ -1,0 +1,74 @@
+INPUT: Spectral library L = {S_i | i = 1 … N}   // reflectance spectra, λ‑grid same for all
+PARAMETERS: K (number of PCs to retain, e.g. 5–10), h (KDE bandwidth)
+
+1.1  Standardise spectra:  
+      For each S_i compute mean μ_i and std σ_i per wavelength channel.  
+      Store normalised spectra N_i = (S_i – μ_i)/σ_i.
+
+1.2  Compute Principal Components:  
+      Perform PCA on {N_i}.  
+      Let U ∈ ℝ^(λ×K) be the matrix of the first K eigenvectors.  
+      Let C_i = Uᵀ (N_i – mean(N))   // latent coefficient vector for spectrum i
+
+1.3  Estimate density in latent space:  
+      Fit a non‑parametric Kernel Density Estimate (KDE) to {C_i} using bandwidth h.  
+      Store KDE model P_lat(C).
+
+1.4  Sample synthetic latent vectors:  
+      Draw M synthetic samples {C̃_j} from KDE P_lat(C).  
+      For each C̃_j generate a synthetic spectrum:  
+          Ñ_j = mean(N) + U C̃_j  
+          S̃_j = Ñ_j ⊙ σ + μ   // undo standardisation (⊙ element‑wise product)
+
+INPUT: Synthetic spectra {S̃_j}, filter set F = {F_k | k = 1 … K_f}, photometric noise level ε (e.g. 20%)
+
+2.1  Convolve each synthetic spectrum with every filter:  
+      For each j, k compute ideal photometry p_jk = ∫ S̃_j(λ) * F_k(λ) dλ / ∫ F_k(λ) dλ
+
+2.2  Add Gaussian noise:  
+      For each p_jk draw noise δ ~ N(0, ε * p_jk)  
+      Set m_jk = p_jk + δ
+
+2.3  Assemble training pairs:  
+      Each training example = (input vector m_j = [m_j1,…,m_jK_f], target latent C̃_j)
+
+INPUT: Training pairs {(m_j, C̃_j)}
+
+3.1  Choose an AutoML framework (e.g., AutoGluon).  
+3.2  Define regression task: predict K‑dimensional vector C from m.  
+3.3  Train ensemble model (GBDT + NN) until convergence.  
+3.4  Store trained encoder E(m) → Ĉ
+
+INPUT: Real spectra {S_i} with known taxonomic labels L_i
+
+4.1  Compute latent coefficients for real spectra: C_i = Uᵀ (N_i – mean(N))
+4.2  Define multi‑class classification task on {C_i, L_i}.  
+4.3  Train AutoML classifier C(C) → P(class|C).  
+4.4  Store classifier C
+
+INPUT: Observed photometry m_obs = [m_obs,1 … m_obs,K_f] with uncertainties σ_obs
+
+5.1  Encode:  
+      Predict latent coefficient vector Ĉ = E(m_obs)
+
+5.2  Decode:  
+      Reconstruct spectrum:  
+        N̂ = mean(N) + U Ĉ  
+        Ŝ = N̂ ⊙ σ + μ
+
+5.3  Classify:  
+      Compute class probabilities P̂ = C(Ĉ)
+
+5.4  Uncertainty propagation (optional):  
+      Sample N times from predictive distribution of encoder (e.g., via bootstrap or Monte‑Carlo dropout)  
+      For each sample k:  
+          Ĉ_k = E_k(m_obs)  
+          Ŝ_k = mean(N) + U Ĉ_k  
+          Store Ŝ_k  
+      Compute per‑wavelength mean and variance from {Ŝ_k} as posterior predictive mean and credible intervals.
+
+OUTPUT: Reconstructed spectrum Ŝ(λ), taxonomic probability vector P̂, optional uncertainty band.
+
+6.1  For each training example (real) compute distance d_i = ||C_i – Ĉ||_2  
+6.2  Identify those with d_i > τ (threshold, e.g., 95th percentile of distances).  
+6.3  Flag object as potential outlier or novel taxonomic candidate.

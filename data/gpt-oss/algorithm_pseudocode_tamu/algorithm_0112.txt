@@ -1,0 +1,86 @@
+Input:
+    S_ref   – reference near‑IR spectra of N ≈ 50 TNOs
+    filt    – list of filter transmission curves
+    phot_in – observed photometry vector (M bands) with uncertainties
+
+Output:
+    Spec_rec   – reconstructed high‑resolution reflectance spectrum
+    Spec_cov   – posterior covariance matrix for Spec_rec
+    Tax_prob   – probability vector over taxonomy classes
+
+--------------------------------------------------------------------
+1. Build Latent Manifold (Prior)
+--------------------------------------------------------------------
+1.1   Perform PCA on S_ref
+        pca = PCA(n_components = K)      # K ≈ 5–8
+        Z_ref = pca.project(S_ref)       # latent coefficients of real spectra
+
+1.2   Estimate density of Z_ref with KDE
+        kde = KernelDensity(kernel='gaussian', bandwidth = h)  # h ≈ 0.5
+        kde.fit(Z_ref)
+
+1.3   Generate synthetic latent samples
+        Z_syn = kde.sample(Nsyn)          # Nsyn ≫ N (e.g., 5000)
+
+1.4   Reconstruct synthetic spectra
+        S_syn = pca.inverse_transform(Z_syn)
+
+--------------------------------------------------------------------
+2. Forward‑Model Synthetic Photometry (Implicit Likelihood)
+--------------------------------------------------------------------
+2.1   Convolve each synthetic spectrum with filter curves
+        for each z in Z_syn:
+              s = pca.inverse_transform(z)
+              m_clean = integrate(s * filt)     # noiseless magnitudes/reflectances
+
+2.2   Add Gaussian noise to emulate measurement errors
+        for each m in m_clean:
+              sigma = 0.20 * m                  # 20 % relative uncertainty
+              m_noisy = m + Normal(0, sigma)
+              store (m_noisy , z)                # training pair
+
+--------------------------------------------------------------------
+3. Train Encoder (Photometry → Latent Coefficients)
+--------------------------------------------------------------------
+3.1   Split training pairs into features X (photometry) and targets Y (latent z)
+
+3.2   Use AutoML to build ensemble regressor
+        regressor = AutoML_Regressor()
+        regressor.train(X, Y)                 # e.g., Gradient‑Boosted Trees + NN
+
+--------------------------------------------------------------------
+4. Train Classifier (Latent → Taxonomy)
+--------------------------------------------------------------------
+4.1   Label each real spectrum in Z_ref with known taxonomy
+4.2   Train AutoML classifier on (Z_ref , labels)
+        classifier = AutoML_Classifier()
+        classifier.train(Z_ref, labels)
+
+--------------------------------------------------------------------
+5. Inference on New Observation
+--------------------------------------------------------------------
+5.1   Prepare photometry vector x_in (apply same preprocessing as training)
+
+5.2   Predict posterior over latent space
+        z_mean, z_std = regressor.predict_with_uncertainty(x_in)
+        # If regressor provides a predictive distribution, use that.
+        # Otherwise, form approximate Gaussian posterior N(z_mean, diag(z_std²))
+
+5.3   Sample from posterior using Gaussian copula
+        C = estimate_correlation_matrix(z_mean, z_std)   # optional: from training
+        for i in 1…Nsamp:
+              u ~ Uniform(0,1)^K
+              v = Φ⁻¹(u)                                 # inverse normal
+              z_i = μ + L * v                            # L from Cholesky(C)
+              S_i = pca.inverse_transform(z_i)
+              store S_i
+
+5.4   Compute mean spectrum and covariance
+        Spec_rec  = mean(S_i over i)
+        Spec_cov  = cov(S_i over i)
+
+5.5   Taxonomy probabilities
+        Tax_prob = classifier.predict_proba(z_mean)      # or use samples z_i
+
+--------------------------------------------------------------------
+Return Spec_rec, Spec_cov, Tax_prob

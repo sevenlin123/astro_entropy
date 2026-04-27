@@ -1,0 +1,103 @@
+Input:
+    X_train   – matrix (N_spec × N_wave) of calibrated spectra
+    F_filters – list of filter transmission curves
+    P         – desired number of principal components (e.g. 8–10)
+    phot_list – list of objects; each entry contains:
+                  f_obs[j]      – measured flux in filter j
+                  σ_f[j]        – 1σ photometric uncertainty
+
+Output:
+    For every object:
+        s_rec[λ]          – reconstructed spectrum (length N_wave)
+        cov_s[λ,λ]        – spectral covariance matrix
+        cred_int[λ]       – 95 % credible interval bounds
+
+--------------------------------------------------------------------
+1.  TRAINING PHASE – PCA on the spectral library
+--------------------------------------------------------------------
+1.1  Compute mean spectrum:
+        μ_spec ← mean(X_train, axis=0)                     # vector length N_wave
+
+1.2  Center spectra:
+        X_centered ← X_train – μ_spec (broadcast)
+
+1.3  Compute covariance matrix:
+        C_spec ← (X_centeredᵀ · X_centered) / (N_spec – 1)
+
+1.4  Eigen‑decomposition:
+        (eig_vals, eig_vecs) ← eig(C_spec)
+        Sort eig_vals descending → λ_k, eig_vecs accordingly
+
+1.5  Select top P components:
+        V_P   ← eig_vecs[:, 0:P]               # N_wave × P matrix
+        σ_k²  ← λ_k[0:P]                       # variances of principal coefficients
+
+1.6  Store training results:
+        STORE μ_spec, V_P, σ_k²
+
+--------------------------------------------------------------------
+2.  PRECOMPUTE FILTER RESPONSE MATRICES
+--------------------------------------------------------------------
+2.1  For each filter j, evaluate its effective response at all wavelengths:
+        R_j[λ] ← ∫ S_λ(λ)·T_j(λ)dλ   (or discrete dot product)
+
+2.2  Assemble linear mapping from spectrum to filter fluxes:
+        M_filter[ j , λ ] ← R_j[λ] / ∫ T_j(λ)dλ
+        # M_filter is (N_filters × N_wave)
+
+--------------------------------------------------------------------
+3.  INFERENCE FOR ONE OBJECT
+--------------------------------------------------------------------
+FUNCTION RECONSTRUCT_OBJECT(f_obs, σ_f):
+    # f_obs : vector length N_filters
+    # σ_f   : vector length N_filters
+
+    # 3.1  Compute mean flux vector in filter space
+    M_mean ← M_filter · μ_spec                 # vector length N_filters
+
+    # 3.2  Map PCs into filter space
+    M_V ← M_filter · V_P                       # N_filters × P matrix
+
+    # 3.3  Define diagonal covariance matrices
+    C_noise ← diag(σ_f²)                       # N_filters × N_filters
+    Σ_prior ← diag(σ_k²)                       # P × P
+
+    # 3.4  Compute posterior covariance of coefficients
+    A ← M_Vᵀ · C_noise⁻¹ · M_V + Σ_prior⁻¹     # P × P
+    Σ_post ← inverse(A)                        # P × P
+
+    # 3.5  Compute posterior mean of coefficients
+    b ← M_Vᵀ · C_noise⁻¹ · (f_obs – M_mean)    # P × 1
+    μ_post ← Σ_post · b                       # P × 1
+
+    # 3.6  Reconstruct full spectrum
+    s_rec ← μ_spec + V_P · μ_post             # N_wave vector
+
+    # 3.7  Propagate coefficient uncertainty to spectrum
+    cov_s ← V_P · Σ_post · V_Pᵀ                # N_wave × N_wave
+
+    # 3.8  Credible intervals (±1.96σ for 95 % CI)
+    std_s ← sqrt(diag(cov_s))                  # N_wave
+    cred_low  ← s_rec – 1.96 · std_s
+    cred_high ← s_rec + 1.96 · std_s
+    cred_int ← (cred_low, cred_high)
+
+    RETURN s_rec, cov_s, cred_int
+END FUNCTION
+
+--------------------------------------------------------------------
+4.  PROCESS ALL OBJECTS
+--------------------------------------------------------------------
+FOR each object in phot_list:
+    s_rec_obj, cov_s_obj, cred_int_obj ← RECONSTRUCT_OBJECT(f_obs, σ_f)
+    STORE results (s_rec_obj, cov_s_obj, cred_int_obj)
+
+--------------------------------------------------------------------
+5.  OPTIONAL: MULTI‑OBJECT ANALYSIS
+--------------------------------------------------------------------
+# The above inference is linear Gaussian; batch processing can be
+# vectorised by stacking f_obs and σ_f into matrices and solving
+# for all objects simultaneously (matrix inversion once per batch).
+
+--------------------------------------------------------------------
+END

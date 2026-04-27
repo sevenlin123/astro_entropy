@@ -1,0 +1,101 @@
+pseudocode
+--------------------------------------------------------------------
+PRE‑TRAINING PHASE
+--------------------------------------------------------------------
+
+1. INPUT:
+   - Seed spectra set  S_real = {s_i(λ)}  for i = 1 … N  (N ≈ 50)
+   - Wavelength grid λ = {λ_j}  (high‑resolution)
+   - Instrument throughput curves {T_k(λ)} for desired filters k = 1 … K
+
+2. NORMALISE & REFLECTANCE:
+   For each s_i in S_real:
+        r_i(λ) ← s_i(λ) / SolarSpectrum(λ)   // convert to reflectance
+
+3. PRINCIPAL COMPONENT ANALYSIS (PCA):
+   - Assemble matrix R (N × M) where each row = r_i(λ) sampled at M wavelengths.
+   - Compute mean spectrum μ_R = mean(R, axis=0).
+   - Center data: R_centered = R – μ_R.
+   - Perform SVD or eigen‑decomposition of covariance matrix C = (R_centeredᵀ · R_centered)/N.
+   - Select first K_PCA eigenvectors V = [v_1 … v_K] (K_PCA ≤ 10, usually 5–8).
+   - Project real spectra onto PCA basis:
+         coeff_real_i = Vᵀ · (r_i – μ_R)      // shape (K_PCA,)
+   - Store (coeff_real_i, r_i) pairs.
+
+4. KERNEL‑DENSITY ESTIMATION (KDE) IN LATENT SPACE:
+   - Treat {coeff_real_i} as samples from latent distribution p(θ).
+   - Choose bandwidth h (default 0.5).
+   - Define KDE density:
+         p(θ) = (1 / (N * (2πh²)^(K_PCA/2))) *
+                Σ_i exp( -||θ – coeff_real_i||² / (2h²) )
+   - SAMPLE synthetic latent vectors:
+         For n = 1 … N_SYNTH (e.g. 5000):
+              Draw θ_n ∼ KDE(p(θ)).
+   - FOR EACH synthetic latent θ_n:
+         a. RECONSTRUCT synthetic spectrum:
+                r_syn_n = μ_R + V · θ_n          // linear combination
+         b. CONVOLVE with filter responses:
+                m_syn_n(k) = ∫ r_syn_n(λ) * T_k(λ) dλ   ∀ k
+         c. ADD Gaussian noise:
+                σ_noise = 0.20 * m_syn_n(k)    // 20 % relative uncertainty
+                m_noisy_n(k) = Normal(m_syn_n(k), σ_noise)
+         d. STORE training pair (m_noisy_n, θ_n)
+
+5. TRAIN PHOTOMETRY → LATENT COEFFICIENT REGRESSOR:
+   - Use an AutoML ensemble (Gradient‑Boosted Trees + Neural Nets).
+   - Input features: photometric vector m_noisy (length K).
+   - Target outputs: latent vector θ (length K_PCA).
+   - Train until convergence (validation RMSE minimal).
+   - Save trained regressor R_model.
+
+6. TRAIN LATENT COEFFICIENT → TAXONOMY CLASSIFIER:
+   - Label each coeff_real_i with its known class (Water, CO₂, Organic‑Methanol, Organic‑NonMethanol).
+   - Train AutoML classifier C_model on {coeff_real_i, label_i}.
+   - Save trained classifier C_model.
+
+--------------------------------------------------------------------
+INFERENCE PHASE
+--------------------------------------------------------------------
+
+Input: New object photometry vector m_obs (length K)
+
+1. PREPROCESS m_obs:
+   - Scale or normalize if required by the regressor (match training scaling).
+   - Estimate measurement uncertainties σ_m_obs.
+
+2. PREDICT LATENT COEFFICIENT POSTERIOR:
+   - Use R_model to obtain point prediction θ̂ = R_model(m_obs).
+   - OPTIONAL: Generate posterior samples via Monte‑Carlo dropout or ensemble variance:
+        For t = 1 … N_SAMPLES:
+            θ_t = R_model_dropout(m_obs)   // stochastic forward pass
+   - Compute mean μ_θ and covariance Σ_θ over samples (posterior statistics).
+
+3. DECODING TO HIGH‑RESOLUTION SPECTRUM:
+   - Reconstruct spectrum:
+        r_pred = μ_R + V · μ_θ
+   - IF posterior samples used:
+        For each θ_t:
+             r_t = μ_R + V · θ_t
+        // aggregate to obtain mean spectrum and uncertainties per wavelength.
+
+4. CLASSIFY TAXONOMY:
+   - Apply C_model to μ_θ (or to each θ_t) to obtain class probabilities P(class | m_obs).
+   - Optionally compute entropy or confidence intervals.
+
+5. OUTPUT:
+   - Reconstructed spectrum r_pred (wavelength vs reflectance).
+   - Uncertainty band if posterior samples available.
+   - Taxonomic probability distribution.
+   - (Optional) Residuals between reconstructed and photometry if needed.
+
+--------------------------------------------------------------------
+POST‑PROCESSING & QUALITY CHECKS
+--------------------------------------------------------------------
+
+- Verify that r_pred lies within physically plausible bounds (e.g., 0 ≤ reflectance ≤ 1).
+- Optionally re‑project r_pred onto PCA basis to check residual energy < ε.
+- Store full chain: m_obs → θ̂ → r_pred, along with metadata.
+
+--------------------------------------------------------------------
+END OF ALGORITHM
+--------------------------------------------------------------------

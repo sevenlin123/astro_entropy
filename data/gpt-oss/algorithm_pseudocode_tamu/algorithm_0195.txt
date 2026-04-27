@@ -1,0 +1,74 @@
+Input
+  m_observed      // Vector of photometric measurements (length N_filt)
+  σ_m             // Associated uncertainties (length N_filt)
+  F_filters       // List of filter throughput curves {T_i(λ)}
+  S_ref           // Reference high‑resolution spectra (N_ref × L_wavelength)
+
+Parameters
+  K               // Number of principal components (≈8–10)
+  h_KDE           // KDE bandwidth (≈0.5)
+  M_sample        // Number of synthetic latent samples (≈5000)
+  N_post          // Number of posterior samples for inference (≈1000)
+
+Output
+  S_mean          // Mean reconstructed spectrum (length L_wavelength)
+  S_CI_lower, S_CI_upper   // Credible interval bounds
+  tax_prob        // Probability vector over taxonomic classes
+
+--------------------------------------------------------------------
+Procedure Build_Prior():
+  1. Perform PCA on S_ref → [μ_S, E (L×K), λ (variances)]
+  2. Project S_ref onto PCs: Z_real = (S_ref – μ_S) · E   // shape (N_ref×K)
+  3. Fit KDE to Z_real with Gaussian kernel, bandwidth h_KDE
+     → PDF_Z(z)
+  4. Draw M_sample latent vectors: Z_syn ~ PDF_Z
+  5. Reconstruct synthetic spectra:
+       S_syn = μ_S + Z_syn · Eᵀ                // shape (M_sample×L)
+  Return μ_S, E, Z_syn, S_syn
+--------------------------------------------------------------------
+Procedure Generate_Training_Data(μ_S, E, Z_syn, S_syn, F_filters):
+  For each synthetic spectrum s in S_syn:
+     1. For each filter i:
+          r_i = ∫ s(λ) · T_i(λ) dλ              // model reflectance
+          r_i_noisy = r_i · (1 + Normal(0,0.20))   // 20% Gaussian noise
+     2. Stack r_i_noisy into vector p (length N_filt)
+     3. Store pair (p , corresponding latent z)
+  Return TrainingSet = {(p_j , z_j)}_{j=1}^{M_sample}
+--------------------------------------------------------------------
+Procedure Train_Evaluator(TrainingSet):
+  1. Train AutoML regressor R_enc:
+        Input   : photometry p
+        Target  : latent vector z
+        Output  : predicted mean μ_z and optional dispersion σ_z
+  2. Train AutoML classifier C_tax:
+        Input   : latent vector z
+        Target  : taxonomic label
+  Return R_enc, C_tax
+--------------------------------------------------------------------
+Procedure Inference(m_observed, σ_m, R_enc, C_tax, μ_S, E):
+  1. Normalize input photometry:
+        p0 = (m_observed – mean_over_training)/std_over_training
+  2. Predict latent posterior:
+        μ_z_pred , Σ_z_pred = R_enc.predict(p0)     // mean & covariance
+  3. Sample N_post latent vectors from Gaussian copula:
+        For k = 1 … N_post:
+            z_k = μ_z_pred + L_chol * Normal(0, I_K)   // Cholesky of Σ_z_pred
+            // optionally enforce bounds by clipping
+  4. Reconstruct spectra:
+        For each z_k:
+            S_k = μ_S + z_k · Eᵀ                       // length L
+  5. Aggregate posterior:
+        S_mean = mean_k(S_k)
+        S_CI_lower, S_CI_upper = percentile_k(S_k, [2.5,97.5])
+  6. Taxonomy probabilities:
+        tax_prob = C_tax.predict_proba(μ_z_pred)
+  Return S_mean, S_CI_lower, S_CI_upper, tax_prob
+--------------------------------------------------------------------
+Main Execution:
+  μ_S, E, Z_syn, S_syn = Build_Prior()
+  TrainingSet = Generate_Training_Data(μ_S, E, Z_syn, S_syn, F_filters)
+  R_enc, C_tax = Train_Evaluator(TrainingSet)
+  S_mean, S_CI_lower, S_CI_upper, tax_prob = 
+        Inference(m_observed, σ_m, R_enc, C_tax, μ_S, E)
+--------------------------------------------------------------------
+End

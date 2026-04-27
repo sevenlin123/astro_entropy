@@ -1,0 +1,14 @@
+Input:
+  Observed photometry: {m_j, sigma_j} for j in filters
+  Filter response curves: R_j(λ)
+  Template spectra: {S_i(λ)} for i in templates
+  Prior weights: w_i
+
+Output:
+  Posterior probabilities P_i for each template
+  Best-fit taxonomy label
+  Outlier flag
+
+Add possibility of linear mixing: but skip.
+
+Ok produce final pseudocode.assistantfinal**Pseudocode – Probabilistic Spectral Reconstruction**

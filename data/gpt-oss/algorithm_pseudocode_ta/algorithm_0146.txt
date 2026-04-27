@@ -1,0 +1,48 @@
+INPUT:
+    S            # Matrix of training spectra (N_spec × N_λ)
+    R            # Filter response functions (N_filt × N_λ)
+    y_obs        # Observed photometry for target (N_filt × 1)
+    σ_y          # Measurement uncertainties for target (N_filt × 1)
+    K            # Number of principal components to retain
+
+OUTPUT:
+    s_recon      # Reconstructed spectrum (N_λ × 1)
+    cov_s        # Spectral covariance matrix (N_λ × N_λ)
+
+ALGORITHM:
+
+1. // Data preparation
+2. μ = mean(S, axis=0)                         # Mean spectrum
+3. X = S - μ                                   # Centered training spectra
+
+4. // Principal Component Analysis
+5. C = (Xᵀ · X) / (N_spec – 1)                 # Empirical covariance
+6. [eig_vals, eig_vecs] = eig(C)                # Eigen decomposition
+7. idx = argsort(eig_vals)[::-1]               # Descending order
+8. V = eig_vecs[:, idx]                        # Sorted eigenvectors
+9. PC = V[:, :K]                               # First K principal components
+
+10. // Latent representation of training spectra
+11. Z_train = PCᵀ · X.T                         # (K × N_spec)
+
+12. // Forward photometry operator
+13. for each filter f in 1 … N_filt:
+14.     a0[f] = integral( μ(λ) * R[f, λ] )      # Mean contribution
+15.     for each component j in 1 … K:
+16.         a_fj[f, j] = integral( PC[j, λ] * R[f, λ] )
+17. A = a_fj                                      # (N_filt × K)
+
+18. // Bayesian linear regression
+19. Λ = diag(σ_y²)                                # Noise covariance
+20. Σ_prior = I_K                                 # Identity prior covariance
+21. Σ_post_inv = Aᵀ · Λ⁻¹ · A + Σ_prior⁻¹
+22. Σ_post = inverse(Σ_post_inv)
+23. μ_post = Σ_post · (Aᵀ · Λ⁻¹ · (y_obs – a0))
+
+24. // Spectrum reconstruction
+25. s_recon = μ + PC · μ_post                    # (N_λ × 1)
+
+26. // Predictive spectral covariance
+27. cov_s = PC · Σ_post · PCᵀ                    # (N_λ × N_λ)
+
+28. RETURN s_recon, cov_s

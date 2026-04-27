@@ -1,0 +1,76 @@
+Input:
+    S_train[1..N][1..L]      # training spectra (N objects, L wavelength points)
+    K                       # desired number of basis components
+
+Steps:
+1. Compute mean spectrum μ[1..L] = mean(S_train, axis=1)
+2. Center spectra: X = S_train – μ
+3. Perform eigen‑decomposition of covariance(X):
+       [V, Λ] = eig(cov(X))
+   Select the first K eigenvectors → Basis matrix B[1..L][1..K]
+4. Project centered spectra onto basis:
+       C_train = transpose(B) * X         # K × N matrix of coefficients
+5. Fit a Gaussian Mixture Model (GMM) to C_train:
+       GMM = fit_GMM(C_train, n_components=M)
+   Store GMM parameters: {π_m, μ_m, Σ_m} for m = 1..M
+6. Save:
+       μ, B, GMM
+
+Given:
+    Filter responses F_i(λ) for i = 1..B    # B photometric bands
+    Integration function I(⋅) over λ
+
+Precompute (once per filter):
+    w_i[1..K]   = I(F_i(λ) * B[λ, :])      # projection of basis into band i
+    b_i         = I(F_i(λ) * μ)            # contribution of mean spectrum
+Store W[1..B][1..K] = w_i, and b[1..B] = b_i
+
+Input:
+    Observed fluxes f[1..B]
+    Flux uncertainties σ[1..B]
+    Precomputed μ, B, GMM, W, b
+
+Output:
+    Posterior samples {c_s} of coefficient vector (length K)
+    Reconstructed spectra {S_s}
+    Mean spectrum μ_hat, covariance Σ_hat
+    Taxonomic label (optional)
+
+Steps:
+1. Define likelihood function:
+       L(c) = Π_i N(f_i | W[i] · c + b[i], σ_i^2)
+
+2. Define prior from GMM:
+       p(c) = Σ_{m=1}^{M} π_m * N(c | μ_m, Σ_m)
+
+3. Define unnormalized posterior:
+       p_post(c) = p(c) * L(c)
+
+4. Sample from p_post(c) using MCMC:
+       • Initialize c_0 = argmin_c ||W·c + b – f||^2   (least‑squares solution)
+       • For s = 1 to S_samples:
+             propose c' ~ proposal(c_{s-1})          # e.g., random walk Gaussian
+             α = min(1, p_post(c') / p_post(c_{s-1}))
+             if rand() < α:
+                  c_s = c'
+             else:
+                  c_s = c_{s-1}
+
+5. For every accepted sample c_s:
+       S_s = μ + B · c_s                     # reconstruct full spectrum
+
+6. After discarding burn‑in and thinning:
+       μ_hat = mean({S_s})
+       Σ_hat = covariance({S_s})
+
+7. (Optional) Taxonomic assignment:
+       For each taxonomy class t:
+           compute distance d_t = min_s distance(S_s, prototype_t)
+       Assign class with smallest d_t
+
+Return μ_hat, Σ_hat, and (optionally) taxonomy label.
+
+For each reconstructed object:
+    - Mean spectral reflectance μ_hat(λ)
+    - Uncertainty spectrum derived from Σ_hat(λ, λ')
+    - Optional taxonomic class

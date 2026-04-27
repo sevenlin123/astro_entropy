@@ -1,0 +1,69 @@
+INPUT:
+    - Photometric measurements for an object:
+        * Fluxes  F_i  (i = 1…N_filters)
+        * Uncertainties σ_i
+        * Filter transmission curves T_i(λ)   (continuous or discretised)
+    - Wavelength grid Λ = {λ_1 … λ_M}  covering all filters
+    - Prior parameters:
+        * Mean reflectance μ_0(λ)   (e.g., flat or solar‐scaled)
+        * Covariance kernel K(λ, λ') with hyperparameters θ
+    - MCMC settings:
+        * Number of iterations I
+        * Burn‑in B
+        * Proposal scale σ_prop
+
+OUTPUT:
+    - Posterior samples {R^(k)(λ)}_{k=1}^{I-B}
+    - Derived quantities (e.g., colors, taxonomic probabilities)
+
+PROCEDURE:
+
+1. **Pre‑processing**
+   1.1 For each filter i, normalise its transmission curve:
+            T̃_i(λ) = T_i(λ) / ∫ T_i(λ) dλ
+   1.2 Build a matrix A of size N_filters × M where  
+            A_{i,m} = T̃_i(λ_m)
+
+2. **Define GP Prior**
+   2.1 Construct mean vector μ_0 = [μ_0(λ_1), … , μ_0(λ_M)]^T
+   2.2 Compute covariance matrix K (M×M) using chosen kernel and hyperparameters θ
+
+3. **Initial Sample**
+   3.1 Draw initial reflectance vector R_0 ~ Normal(μ_0, K)
+   3.2 Compute synthetic fluxes:
+            F_syn,i = (A_i · R_0)   for each filter i
+   3.3 Compute initial log‑posterior:
+            lnπ_0 = Σ_i ln N(F_i | F_syn,i, σ_i)
+
+4. **MCMC Sampling**
+   FOR iter = 1 TO I DO
+       4.1 Propose new reflectance:
+                R_pro = R_current + Normal(0, σ_prop * I_M)
+       4.2 Compute synthetic fluxes for proposal:
+                F_syn,i^pro = (A_i · R_pro)
+       4.3 Evaluate log‑likelihood:
+                lnL_pro = Σ_i ln N(F_i | F_syn,i^pro, σ_i)
+       4.4 Evaluate log‑prior:
+                lnπ_pro = −½ (R_pro−μ_0)^T K⁻¹ (R_pro−μ_0) 
+                           − ½ ln|K| − (M/2) ln(2π)
+       4.5 Compute acceptance probability:
+                α = min(1, exp[(lnL_pro+lnπ_pro) − (lnL_curr+lnπ_curr)])
+       4.6 With probability α accept:
+                IF rand() < α THEN
+                    R_current ← R_pro
+                    lnL_curr ← lnL_pro
+                    lnπ_curr ← lnπ_pro
+                ENDIF
+       4.7 If iter > B store R_current as a posterior sample
+   END FOR
+
+5. **Post‑processing**
+   5.1 From stored samples compute:
+            * Mean spectrum: ȆR(λ) = (1/(I-B)) Σ_k R^(k)(λ)
+            * Standard deviation: σ_R(λ) = sqrt((1/(I-B-1)) Σ_k (R^(k)(λ)−ȆR(λ))²)
+   5.2 Compute derived colors:
+            * For any two filters (p,q): colour_k = log10(∫R^(k)(λ) T_p(λ)dλ / ∫R^(k)(λ) T_q(λ)dλ)
+   5.3 Optional taxonomic classification by comparing colours to library thresholds.
+
+RETURN:
+    Posterior samples of reflectance spectra and derived photometric quantities.

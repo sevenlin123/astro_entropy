@@ -1,0 +1,108 @@
+1.1  Load reference spectra set {S_i}  (i = 1…N_obs; N_obs ≈ 50).
+     Each S_i is a high‑resolution reflectance vector of length L (e.g. 200–400 λ‑bins).
+
+1.2  Standardize spectra:
+        * Subtract mean spectrum μ_S across all pixels.
+        * Divide by standard deviation σ_S per pixel.
+     Store standardized spectra {S'_i}.
+
+1.3  Compute Principal Component Analysis (PCA):
+        * Form data matrix X = [S'_1 … S'_N_obs]ᵀ (size N_obs × L).
+        * Compute eigen‑decomposition of covariance(X) → eigenvectors V_k and eigenvalues λ_k.
+        * Choose number of components K (e.g. K = 8–10 to capture >90 % variance).
+        * Project each spectrum onto the first K components:
+              c_i = V_Kᵀ · (S'_i – μ_S)            (latent coefficient vector, size K×1).
+        * Store latent coefficient set C_obs = {c_i}.
+
+1.4  Estimate continuous latent prior:
+        * Use Kernel Density Estimation (KDE) on C_obs:
+              p_prior(c) ∝ Σ_{j=1}^{N_obs} K_h(c – c_j),
+          where K_h is a Gaussian kernel with bandwidth h ≈ 0.5.
+        * Sample M synthetic latent vectors {c̃_m} from p_prior (M ≫ N_obs, e.g. M = 5 000).
+
+1.5  Reconstruct synthetic spectra:
+        * For each synthetic latent vector c̃_m, recover high‑resolution spectrum:
+              S̃_m = μ_S + V_K · c̃_m
+          (inverse PCA transform).
+        * Store synthetic spectra set {S̃_m}.
+
+1.6  Forward‑model synthetic photometry:
+        * For each filter f in the desired instrument set (e.g. JWST NIRCam),
+          compute throughput integral:
+              m_f(S) = ∫ T_f(λ) · S(λ) dλ   (reflectance units).
+        * Apply solar spectrum normalization if needed.
+        * Assemble photometric vector m̃_m = [m_f₁, …, m_f_F] for each S̃_m.
+
+1.7  Inject observational noise:
+        * For each photometric entry m̃_m,f, add Gaussian noise:
+              m_noisy,m,f = m̃_m,f + 𝒩(0, σ_noise²),
+          where σ_noise = 0.20 · m̃_m,f (≈20 % relative uncertainty).
+        * Store noisy photometry matrix M_noisy = {m_noisy,m} (size M × F).
+
+1.8  Create training pairs for encoder:
+        * Input: noisy photometry rows of M_noisy.
+        * Target: corresponding latent vectors {c̃_m}.
+        * Denote training set T_enc = {(m_noisy,m, c̃_m)}.
+
+1.9  Train photometry‑to‑latent encoder:
+        * Use an automated machine‑learning (AutoML) regressor
+          (e.g. ensemble of Gradient‑Boosted Decision Trees, XGBoost).
+        * Optimize hyper‑parameters automatically on T_enc.
+        * Output model ENC(m) → predicted latent vector ĥ_c.
+        * Save ENC.
+
+1.10  Train latent‑space classifier:
+        * Use original latent vectors C_obs and their taxonomic labels
+          (e.g. H₂O, CO₂, Organics, Methanol).
+        * Train another AutoML model CLS(c) → probability vector over classes.
+        * Save CLS.
+
+2.1  Receive new sparse photometric observation:
+        * m_obs = [m_f₁, …, m_f_F] (F bands, may be 2–6).
+
+2.2  Predict latent posterior distribution:
+        * Pass m_obs through encoder:
+              ĥ_c = ENC(m_obs)   (point estimate).
+        * To account for uncertainty, fit a Gaussian mixture
+          or obtain covariance from encoder prediction (if available).
+        * Construct a multivariate Gaussian posterior:
+              p(c | m_obs) ~ N(ĥ_c, Σ_pred).
+
+2.3  Sample latent coefficients from posterior:
+        * Draw N_samp latent vectors {c*_s} (e.g. N_samp = 1000) from p(c | m_obs).
+
+2.4  Preserve physical correlations (optional):
+        * Compute correlation matrix R from training latent set C_obs.
+        * Apply Gaussian copula: transform each c*_s to uniform U via Φ⁻¹,
+          mix with R, then back‑transform to obtain correlated samples.
+
+2.5  Decode sampled latent vectors to spectra:
+        * For each c*_s:
+              S*_s = μ_S + V_K · c*_s
+          (inverse PCA transform, producing high‑resolution spectra).
+
+2.6  Aggregate spectra:
+        * Compute mean reconstructed spectrum:
+              Ŝ = mean_{s}(S*_s).
+        * Compute confidence interval at each wavelength λ:
+              CI_α(λ) = percentile_{s}(S*_s(λ), α/2 , 1–α/2)
+          (e.g. 95 % CI).
+
+2.7  Taxonomic classification:
+        * Pass point estimate ĥ_c through classifier:
+              P_cls = CLS(ĥ_c)   (vector of class probabilities).
+        * Alternatively, average class probabilities over latent samples.
+
+2.8  Output:
+        * Reconstructed spectrum Ŝ with per‑λ credible intervals.
+        * Taxonomy probability vector P_cls.
+
+3.1  Feature extraction from Ŝ:
+        * Compute spectral slope (e.g. linear fit to 1–2 µm range).
+        * Measure absorption depths (e.g. at 1.5 µm, 2.0 µm, 4.26 µm).
+        * Store derived physical diagnostics.
+
+3.2  Flagging outliers:
+        * If any sampled spectrum S*_s lies beyond physically allowed bounds
+          (e.g. negative reflectance), discard or flag.
+        * Compare posterior spread to typical class variances to detect unusual objects.

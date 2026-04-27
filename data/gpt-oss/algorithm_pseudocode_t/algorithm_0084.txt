@@ -1,0 +1,61 @@
+- Photometric measurements M = {m_i}   (i = 1…N_filters)
+- Measurement uncertainties σ = {σ_i}
+- Spectral template library T = {t_k(λ)}   (k = 1…N_templates)
+- Filter transmission curves R_i(λ)
+- Solar spectrum S(λ)
+- Prior distributions:
+    • Template weight prior: Dirichlet(α_k)      (α_k > 0)
+    • Albedo prior: Uniform(a ∈ [0, 1])
+
+- Posterior samples of template weights w = {w_k}
+- Posterior samples of albedo scaling a
+- Posterior mean reconstructed reflectance spectrum R(λ) = a · Σ_k w_k · t_k(λ)
+
+F_ik = ∫ t_k(λ) · R_i(λ) · S(λ) dλ
+
+while iter < MAX_ITER:
+
+    # --------- 3.1 Predictive magnitudes ---------
+    # Expected magnitude in filter i:
+    μ_i = -2.5 * log10( a * Σ_k w_k * F_ik )
+
+    # Residual vector: r_i = m_i – μ_i
+    r = M – μ          (element‑wise subtraction)
+
+    # Log‑likelihood (Gaussian errors):
+    logL = -0.5 * Σ_i ( r_i^2 / σ_i^2 + log(2π σ_i^2) )
+
+    # --------- 3.2 Sample template weights ----------
+    # Proposal: Dirichlet perturbation around current w
+    w_prop ~ Dirichlet(α + λ_w * w)
+    # Compute likelihood for proposal
+    μ_prop_i = -2.5 * log10( a * Σ_k w_prop_k * F_ik )
+    r_prop = M – μ_prop
+    logL_prop = -0.5 * Σ_i ( r_prop_i^2 / σ_i^2 + log(2π σ_i^2) )
+    # Acceptance probability
+    acc_w = min(1, exp(logL_prop - logL))
+    if rand() < acc_w:
+        w = w_prop
+
+    # --------- 3.3 Sample albedo scaling ----------
+    # Proposal: Gaussian perturbation
+    a_prop = a + ε_a * randn()
+    if 0 ≤ a_prop ≤ 1:          # enforce bounds
+        μ_prop_i = -2.5 * log10( a_prop * Σ_k w_k * F_ik )
+        r_prop = M – μ_prop
+        logL_prop = -0.5 * Σ_i ( r_prop_i^2 / σ_i^2 + log(2π σ_i^2) )
+        acc_a = min(1, exp(logL_prop - logL))
+        if rand() < acc_a:
+            a = a_prop
+
+    # --------- 3.4 Store samples ----------
+    if iter ≥ BURN_IN:
+        W_samples.append(w.copy())
+        A_samples.append(a)
+
+    iter += 1
+
+w_bar_k = mean over W_samples of w_k
+a_bar    = mean over A_samples of a
+
+R_bar(λ) = a_bar * Σ_k w_bar_k * t_k(λ)

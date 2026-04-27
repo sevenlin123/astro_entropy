@@ -1,0 +1,78 @@
+pseudo
+INPUT:
+    SpecSet = {S_i(λ)}   // reference spectra (N_ref ≈ 50)
+    Filters  = {F_j(λ)}  // instrument filter transmission curves
+    K        // desired number of principal components (e.g., K = 8)
+    h        // KDE bandwidth (e.g., h = 0.5)
+    M        // number of synthetic latent samples (e.g., M = 5000)
+
+Procedure:
+1.1  Align all spectra to common wavelength grid λ_k (k = 1 … L).
+1.2  Subtract solar spectrum to obtain reflectances R_i(λ_k).
+1.3  Compute mean spectrum μ_R = mean_i(R_i).
+1.4  Centered spectra: C_i = R_i − μ_R.
+1.5  Perform Singular Value Decomposition: [U, Σ, V] = svd(C).
+1.6  Extract first K columns of U → Basis B (L × K).
+1.7  Project each centered spectrum onto basis:  
+         coeff_i = Bᵀ · C_i      // coeff_i ∈ ℝ^K
+1.8  Store latent matrix Z_real = {coeff_i}  // size N_ref × K
+
+pseudo
+2.1  Fit multivariate Gaussian KDE to Z_real with bandwidth h → KDE_Z.
+2.2  Sample M latent vectors from KDE_Z:  
+         {z_synth_m} , m = 1 … M
+
+pseudo
+FOR m = 1 TO M DO
+    3.1  Reconstruct synthetic spectrum:  
+            R_synth_m(λ) = μ_R + B · z_synth_m
+    3.2  FOR each filter j DO
+            3.2.1  Compute noiseless band‑average:  
+                     f_j = ∫ R_synth_m(λ) · F_j(λ) dλ / ∫ F_j(λ) dλ
+    3.3  Assemble photometry vector p_synth_m = [f_1, …, f_N_filters]
+    3.4  Add Gaussian noise to each band:  
+             σ_noise = 0.20 * f_j  // 20 % relative uncertainty  
+             p_noisy_m = p_synth_m + N(0, σ_noise²)
+END FOR
+
+Result: Training set T = {(p_noisy_m, z_synth_m)}   // size M
+
+pseudo
+4.1  Choose AutoML regressor (e.g., Gradient‑Boosted Trees).
+4.2  Train regressor R_enc on T:
+          Input  : p_noisy_m (vector of length N_filters)
+          Target : z_synth_m (vector of length K)
+
+pseudo
+5.1  Map real latent coefficients to taxonomic labels L_i.
+5.2  Train classifier C_tax on pairs (coeff_i, L_i) using AutoML.
+
+pseudo
+Input: Observed photometry p_obs (length N_filters)
+Output: Reconstructed spectrum S_rec(λ) with uncertainty band
+        Taxonomy probabilities P_tax
+
+Procedure:
+6.1  Predict latent coefficients using encoder:
+          z_mean, z_cov = R_enc.predict_with_uncertainty(p_obs)
+          // z_cov is estimated covariance of prediction
+
+6.2  Sample N_samples latent vectors from a multivariate normal:
+          {z_sample_n} ~ N(z_mean, z_cov), n = 1 … N_samples
+
+6.3  (Optional) Apply Gaussian Copula to preserve inter‑component correlations:
+          Adjust {z_sample_n} to respect empirical covariance matrix.
+
+6.4  Decode each sampled latent vector into a spectrum:
+          FOR n = 1 TO N_samples DO
+                S_n(λ) = μ_R + B · z_sample_n
+          END FOR
+
+6.5  Aggregate the N_samples spectra:
+          S_rec(λ) = mean_n(S_n(λ))
+          Uncertainty_band(λ) = percentile(S_n(λ), [2.5%, 97.5%])   // 95 % CI
+
+6.6  Estimate taxonomy probabilities:
+          P_tax = C_tax.predict_proba(z_mean)
+
+RETURN S_rec(λ), Uncertainty_band(λ), P_tax

@@ -1,0 +1,96 @@
+INPUT:
+    P_raw   – set of N_obs observed near‑IR spectra (wavelength array λ_i, reflectance R_i)
+    F_pass  – list of M filter transmission curves {T_m(λ)}
+    Phot_m  – observed sparse photometry vector for a target (M bands, fluxes f_m with σ_m)
+    K       – number of principal components to retain (e.g. 8–10)
+    h_kde   – KDE bandwidth (≈0.5)
+    n_aug   – number of synthetic latent samples per real spectrum (e.g. 10,000)
+    n_post  – number of posterior draws (e.g. 1,000)
+
+OUTPUT:
+    Spectrum_synth  – reconstructed high‑resolution reflectance spectrum
+    Cov_synth        – uncertainty covariance matrix for Spectrum_synth
+    Taxonomy_prob    – probability distribution over taxonomic classes
+
+--------------------------------------------------------------------
+1. PREPARATION PHASE
+--------------------------------------------------------------------
+1.1 Standardise observed spectra:
+        For each spectrum s in P_raw:
+            Subtract mean reflectance μ_s and divide by std σ_s.
+        Store normalised spectra S_norm.
+
+1.2 Compute Principal Component Analysis (PCA):
+        Stack all S_norm into matrix X (N_obs × L, where L = number of wavelength bins).
+        Perform Singular Value Decomposition: X = U Σ Vᵀ.
+        Retain first K columns of Vᵀ → basis B (K × L).
+        Compute projection matrix C = U Σ (first K rows)  → latent coordinates for real spectra
+        (C is N_obs × K).
+
+1.3 Build continuous latent prior via KDE:
+        Fit a multivariate Gaussian kernel density estimator to C:
+            For each point c in C:
+                weight w_c = 1 / (N_obs * (2π)^(K/2) * |Σ_h|^(1/2))
+            where Σ_h = h_kde² * identity (bandwidth scaling).
+        Store KDE density function p_KDE(c).
+
+1.4 Generate synthetic latent training set:
+        For each real spectrum i (i = 1 … N_obs):
+            Sample n_aug latent vectors {z_j} from p_KDE(c)  (reject if far from i)
+            For each z_j:
+                Reconstruct synthetic spectrum s_syn = z_j · B   // inverse PCA
+                Forward‑model photometry:
+                    For m = 1 … M:
+                        f_syn_m = ∫ s_syn(λ) · T_m(λ) dλ   // numeric integration
+                Add Gaussian noise to photometry:
+                    f_syn_m_noisy = f_syn_m + Normal(0, 0.20·f_syn_m)
+                Store tuple (f_syn_m_noisy , z_j) in augmented dataset D_aug
+        End for
+
+--------------------------------------------------------------------
+2. TRAINING PHASE
+--------------------------------------------------------------------
+2.1 Train encoder (regressor) to map noisy photometry → latent coefficients:
+        Use AutoML ensemble (e.g., gradient‑boosted trees + neural nets) on D_aug.
+        Input features: noisy photometry vector f_noisy (dimension M)
+        Target: latent vector z (dimension K)
+        Output model: Encoder(ẑ = Encoder(f_noisy))
+
+2.2 Train taxonomic classifier on latent space:
+        Label each real spectrum i with taxonomic class label L_i.
+        Train a second AutoML model Classify(C_pred) to predict class probabilities from
+        latent coordinates (using the same feature set as the encoder).
+
+--------------------------------------------------------------------
+3. INFERENCE (FOR NEW TARGET)
+--------------------------------------------------------------------
+3.1 Encode observed photometry:
+        Predict latent mean μ_ẑ = Encoder(Phot_m)  // point estimate
+        Obtain predictive variance Σ_ẑ from ensemble (e.g., jackknife of predictions)
+
+3.2 Posterior sampling via Gaussian copula:
+        For n = 1 … n_post:
+            Draw u_n ~ Uniform(0,1)^K
+            Transform to multivariate normal z*_n:
+                z*_n = μ_ẑ + L_ẑ · Φ⁻¹(u_n)     // L_ẑ = Cholesky(Σ_ẑ)
+            Apply copula transformation to preserve empirical dependence:
+                z_n = CopulaTransform(z*_n, p_KDE)   // map to valid region of latent space
+            Store z_n
+        End for
+
+3.3 Reconstruct spectra:
+        For each sampled latent vector z_n:
+            s_n = z_n · B   // inverse PCA
+        Compute mean spectrum Spectrum_synth = mean(s_n over n)
+        Compute covariance Cov_synth = cov(s_n over n)   // gives uncertainty per wavelength
+
+3.4 Taxonomy prediction:
+        For each latent sample z_n:
+            p_class_n = Classify(z_n)   // vector of class probabilities
+        Average over samples:
+            Taxonomy_prob = mean(p_class_n over n)
+
+--------------------------------------------------------------------
+4. RETURN RESULTS
+--------------------------------------------------------------------
+Return Spectrum_synth, Cov_synth, Taxonomy_prob

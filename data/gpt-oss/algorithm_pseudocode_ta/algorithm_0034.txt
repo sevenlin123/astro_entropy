@@ -1,0 +1,47 @@
+Input:
+    - Training spectra matrix S_train [N_spec × N_wave]   // N_spec: number of spectra, N_wave: number of wavelength points
+    - Filter set {F_j} , j = 1 … N_filt                  // each filter has a transmission curve T_j(λ)
+    - Target photometry vector p_obs [N_filt]             // observed fluxes in each filter
+    - Photometric uncertainties σ_p [N_filt]
+
+Parameters:
+    - K   // number of principal components to retain (e.g., 8–10)
+
+Algorithm:
+
+1.  // ---------- Principal Component Analysis ----------
+    1.1  Compute mean spectrum μ[ N_wave ] = (1/N_spec) * Σ_i S_train[i,:]
+    1.2  Center spectra:  X = S_train – μ[ ones(N_spec,1) ]        // X [N_spec × N_wave]
+    1.3  Covariance C = (1/(N_spec-1)) * Xᵀ * X                    // C [N_wave × N_wave]
+    1.4  Eigen‑decompose C → eigenvalues λ_k and eigenvectors e_k
+    1.5  Select first K eigenpairs: λ[1…K], E[ :,1…K ]            // E is N_wave × K matrix
+    1.6  Set basis B = E[ :,1…K ]                                 // K principal components
+
+2.  // ---------- Build Observation Model ----------
+    2.1  For each filter j:
+            a.  Compute synthetic response matrix row m_j[1…K]:
+                m_j[k] = ∫_λ B[:,k] · T_j(λ) dλ      // inner product of kth PC with filter
+            b.  Store in observation matrix M [N_filt × K]
+    2.2  Define weight matrix W = diag( 1 / σ_p² )               // inverse variance weighting
+
+3.  // ---------- Bayesian Linear Inference ----------
+    3.1  Prior on PCA coefficients c:
+            •  Mean μ_c = 0
+            •  Covariance Σ_c_prior = diag( λ[1…K] )     // variances from eigenvalues
+    3.2  Posterior covariance:
+            Σ_c_post = ( Mᵀ W M + Σ_c_prior⁻¹ )⁻¹
+    3.3  Posterior mean:
+            μ_c_post = Σ_c_post * ( Mᵀ W p_obs )
+    3.4  OPTIONAL: Draw N_draw samples {c_samp} from N( μ_c_post , Σ_c_post )
+
+4.  // ---------- Spectrum Reconstruction ----------
+    4.1  For each coefficient realization c (use posterior mean or samples):
+            a.  Reconstruct full spectrum:
+                S_recon = μ + B · c                     // B [N_wave × K], c [K]
+            b.  Store S_recon (and associated uncertainty if samples used)
+
+5.  // ---------- Output ----------
+    Return:
+        • Posterior mean spectrum S_mean = μ + B · μ_c_post
+        • If sampling performed: distribution of spectra {S_recon}
+        • Optional credible intervals per wavelength from sample ensemble

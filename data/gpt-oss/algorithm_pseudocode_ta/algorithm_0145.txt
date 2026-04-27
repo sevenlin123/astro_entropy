@@ -1,0 +1,91 @@
+INPUT
+    - Training spectra:  { S_i(λ) }   for i = 1 … N
+    - Filter response curves: { R_j(λ) }  for j = 1 … J
+    - New object's photometry:   { y_j }  with measurement uncertainties { σ_j }
+
+PARAMETERS
+    - Number of principal components to retain: K  (K ≈ 5 for taxonomy, K ≈ 8‑10 for reconstruction)
+
+--------------------------------------------------------------------
+STEP 1 – Pre‑processing of training spectra
+--------------------------------------------------------------------
+    1.1  Resample all S_i(λ) onto a common wavelength grid λ₁,…,λ_M.
+    1.2  (Optional) Normalize each spectrum (e.g., divide by median flux).
+    1.3  Compute the mean spectrum:
+            μ(λ_m) ← (1/N) Σ_i S_i(λ_m) ,   m = 1…M
+
+--------------------------------------------------------------------
+STEP 2 – Principal Component Analysis (PCA)
+--------------------------------------------------------------------
+    2.1  Center spectra:
+            ΔS_i(λ_m) ← S_i(λ_m) – μ(λ_m)
+    2.2  Compute covariance matrix:
+            C = (1/(N–1)) Σ_i ΔS_i ΔS_iᵀ          (size M×M)
+    2.3  Eigen‑decompose C:
+            C v_k = λ_k v_k ,   k = 1…M
+    2.4  Sort eigenpairs by decreasing λ_k.
+    2.5  Select first K eigenvectors:  V_K = [v_1 … v_K]   (size M×K)
+    2.6  Project training spectra onto latent space:
+            for each i:
+                c_i ← V_Kᵀ ΔS_i      (size K×1)
+
+--------------------------------------------------------------------
+STEP 3 – Forward photometric model
+--------------------------------------------------------------------
+    3.1  For each filter j:
+            • Compute mean photometric contribution:
+                  m_j = ∫ μ(λ) R_j(λ) dλ     (numerical integration over λ)
+            • For each principal component k:
+                  b_jk = ∫ v_k(λ) R_j(λ) dλ
+    3.2  Assemble matrices:
+            B   : J × K matrix with entries B[j,k] = b_jk
+            m   : J‑vector with entries m[j]   = m_j
+    3.3  Define predicted photometry as a linear function of latent coefficients:
+            p(y|c) = m + B c
+
+--------------------------------------------------------------------
+STEP 4 – Bayesian inference for new object
+--------------------------------------------------------------------
+    4.1  Likelihood (assuming Gaussian photometric noise):
+            L(c) ∝ exp( –½ Σ_j ((y_j – (m_j + Σ_k b_jk c_k))/σ_j )² )
+    4.2  Prior over coefficients:
+            • Zero‑mean multivariate normal with diagonal covariance
+              Λ = diag(λ_1,…,λ_K)  (captures variance of each PC in training data)
+            p(c) ∝ exp( –½ cᵀ Λ⁻¹ c )
+    4.3  Posterior (Gaussian due to linearity & Gaussian priors/likelihood):
+            Posterior covariance:
+                Σ_post = ( Bᵀ W B + Λ⁻¹ )⁻¹
+                where W = diag(1/σ_1²,…,1/σ_J²)
+            Posterior mean (MAP estimate):
+                c_MAP = Σ_post ( Bᵀ W (y – m) )
+    4.4  Draw Monte Carlo samples from the posterior:
+            For s = 1 … S:
+                c_s ∼ 𝒩( c_MAP , Σ_post )
+            (Typically S ≈ 1000 for robust credible intervals)
+
+--------------------------------------------------------------------
+STEP 5 – Spectral reconstruction and uncertainty estimation
+--------------------------------------------------------------------
+    5.1  For each posterior sample c_s:
+            Reconstruct spectrum:
+                S_s(λ) = μ(λ) + V_K c_s
+    5.2  Compute pointwise summary statistics:
+            • Posterior mean spectrum:
+                  Ŝ(λ)  = (1/S) Σ_s S_s(λ)
+            • Credible interval at each λ (e.g., 2.5th/97.5th percentiles across {S_s(λ)})
+
+--------------------------------------------------------------------
+STEP 6 – Optional outlier detection (flag rare spectral types)
+--------------------------------------------------------------------
+    6.1  Compute posterior predictive likelihood for each sample:
+            p_pred_s = p(y | c_s)   (from Step 4.1)
+    6.2  Evaluate empirical tail probability:
+            P_outlier = fraction{ s : p_pred_s < threshold }
+    6.3  If P_outlier > α (user‑defined), flag the object as a potential outlier.
+
+--------------------------------------------------------------------
+OUTPUT
+--------------------------------------------------------------------
+    - Reconstructed spectrum Ŝ(λ) with credible intervals.
+    - Latent coefficient posterior samples {c_s}.
+    - Optional outlier flag and diagnostic statistics.

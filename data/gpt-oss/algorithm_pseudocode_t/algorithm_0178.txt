@@ -1,0 +1,83 @@
+Input
+------
+- Observed magnitudes   :  y[1…N]          (in AB system)
+- Magnitude uncertainties:  σ_y[1…N]
+- Filter transmission curves:  T_i(λ) for i = 1 … N
+- Wavelength grid          :  λ[1…L]        (e.g., 400–2500 nm, Δλ ≈ 1 nm)
+
+Output
+------
+- Posterior mean spectrum   :  μ_r[1…L]
+- Posterior covariance      :  Σ_r[L×L]
+
+--------------------------------------------------------------------
+1. Pre‑process observations
+--------------------------------------------------------------------
+1.1 Convert magnitudes to linear fluxes (optional):
+       f[i] = 10^(-0.4 * (y[i] - ZP_i))
+1.2 Keep measurement uncertainties in flux units:
+       σ_f[i] = 0.921 * f[i] * σ_y[i]     // 0.921 ≈ ln(10)/2.5
+
+--------------------------------------------------------------------
+2. Build linear measurement matrix H
+--------------------------------------------------------------------
+For each filter i = 1 … N
+    For each wavelength point j = 1 … L
+        H[i,j] = ∫ T_i(λ) * B_j(λ) dλ            // B_j(λ) is basis (e.g., Dirac at λ_j)
+    // Normalize to account for filter width:
+    H[i,:] = H[i,:] / ∫ T_i(λ) dλ
+
+// H has dimensions N × L
+
+--------------------------------------------------------------------
+3. Define Gaussian‑Process prior over reflectance
+--------------------------------------------------------------------
+Choose a band‑limited kernel (e.g., squared‑exponential + white‑noise):
+    k(λ_a, λ_b; θ) = σ_f^2 * exp( -(λ_a-λ_b)^2 / (2*ℓ^2) ) + σ_n^2 * δ_ab
+Hyper‑parameters θ = {σ_f, ℓ, σ_n} (all > 0)
+
+Compute full covariance matrix K[L×L]:
+    For a = 1 … L
+        For b = 1 … L
+            K[a,b] = k(λ[a], λ[b]; θ)
+
+Set prior mean vector m[L] = zeros(L)   // or use a template if desired
+
+--------------------------------------------------------------------
+4. Hyper‑parameter optimisation (marginal likelihood)
+--------------------------------------------------------------------
+Define noise covariance S = diag(σ_f[1]^2, …, σ_f[N]^2)
+
+Objective: log marginal likelihood
+    L(θ) = -½ (f - H*m)^T (H*K*H^T + S)^(-1) (f - H*m)
+           -½ log|H*K*H^T + S|
+           -½ N log(2π)
+
+Use a numerical optimizer (e.g., L‑BFGS) to find θ_opt = argmax_θ L(θ).
+Repeat steps 3 and 4 until convergence.
+
+--------------------------------------------------------------------
+5. Compute posterior over reflectance
+--------------------------------------------------------------------
+5.1 Compute posterior covariance:
+        Σ_r = ( K^(-1) + H^T * S^(-1) * H )^(-1)
+
+5.2 Compute posterior mean:
+        μ_r = Σ_r * ( K^(-1)*m + H^T * S^(-1) * f )
+
+--------------------------------------------------------------------
+6. Normalise reconstructed spectrum
+--------------------------------------------------------------------
+Normalise so that the mean reflectance equals unity:
+    scale = 1 / mean(μ_r)
+    μ_r = μ_r * scale
+    Σ_r = Σ_r * scale^2
+
+--------------------------------------------------------------------
+7. Return results
+--------------------------------------------------------------------
+Return μ_r (reconstructed reflectance at each λ_j) and Σ_r (uncertainty).
+
+--------------------------------------------------------------------
+End of algorithm
+--------------------------------------------------------------------

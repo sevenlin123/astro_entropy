@@ -1,0 +1,98 @@
+text
+--------------------------------------------------------------------
+INPUT
+    SPECTRA = {s_i(λ)}   // high‑resolution reference spectra (i = 1..N)
+    FILTERS  = {F_j(λ)}  // transmission curves of NIRCam filters (j = 1..M)
+    K        = number of principal components to retain (e.g., 5–10)
+    h        = KDE bandwidth (≈ 0.5)
+    N_aug    = number of synthetic latent vectors to draw (e.g., 5 000)
+    σ_phot   = photometric noise level (relative, e.g., 0.20)
+--------------------------------------------------------------------
+OUTPUT
+    For any new photometry vector m_new:
+        p(S | m_new)   // posterior distribution over spectra (via samples)
+        TAXONOMY(m_new)   // posterior probabilities for each class
+--------------------------------------------------------------------
+STEP 1 – Build the Prior (latent manifold)
+
+1.1  Perform PCA on SPECTRA
+        [E, Λ, μ] = PCA(SPECTRA, K)
+        // E : K×K matrix of eigenvectors (principal components)
+        // Λ : diagonal matrix of eigenvalues
+        // μ : mean spectrum (length L)
+
+1.2  Project each reference spectrum to latent space
+        z_i = Eᵀ · (s_i - μ)          // z_i ∈ ℝ^K
+
+1.3  Estimate probability density in latent space using KDE
+        f(z) = KDE({z_i}, bandwidth = h)
+
+1.4  Generate synthetic latent vectors by sampling from f(z)
+        Z_syn = {z*^(ℓ)}_{ℓ=1}^{N_aug}
+        // Each z*^(ℓ) is a K‑dimensional point
+
+1.5  Reconstruct synthetic spectra from latent vectors
+        s*_ℓ = μ + E · z*^(ℓ)      // ℓ = 1..N_aug
+
+--------------------------------------------------------------------
+STEP 2 – Prepare training data for the encoder (photometry → latent)
+
+2.1  For each synthetic spectrum s*_ℓ
+        // Forward‑model photometry
+        for j = 1..M:
+            m*_ℓ[j] = ∫ s*_ℓ(λ) · F_j(λ) dλ / ∫ F_j(λ) dλ
+        // Add Gaussian noise
+        for j = 1..M:
+            ε ~ Normal(0, σ_phot * m*_ℓ[j])
+            m*_ℓ[j] ← m*_ℓ[j] + ε
+
+2.2  Assemble training pairs
+        TRAIN_DATA = { (m*_ℓ , z*^(ℓ)) }   // ℓ = 1..N_aug
+
+--------------------------------------------------------------------
+STEP 3 – Train the encoder (AutoML regressor)
+
+3.1  Use an AutoML framework (e.g., AutoGluon) to fit a model
+        ENC_MODEL = AutoML_Regression(TRAIN_DATA)
+        // ENC_MODEL predicts a K‑dimensional vector from M‑dimensional photometry
+
+--------------------------------------------------------------------
+STEP 4 – Train the classifier (latent → taxonomy)
+
+4.1  For each reference spectrum s_i
+        Assign label L_i ∈ {H₂O, CO₂, Organic, Methanol}
+        Compute latent coefficient z_i (from STEP 1.2)
+
+4.2  Assemble classification training set
+        CLASS_DATA = { (z_i , L_i) }   // i = 1..N
+
+4.3  Train a classifier
+        CLF_MODEL = AutoML_Classifier(CLASS_DATA)
+        // Outputs posterior probability over classes
+
+--------------------------------------------------------------------
+STEP 5 – Forward inference on new photometric observations
+
+Function RECONSTRUCT(m_new):
+
+    INPUT: m_new ∈ ℝ^M  // observed photometry (with noise)
+
+    5.1  Predict latent coefficients
+            z_hat = ENC_MODEL.predict(m_new)   // z_hat ∈ ℝ^K
+
+    5.2  Sample latent uncertainties (optional)
+            // e.g., draw N_samp samples from Gaussian centred at z_hat
+            // with covariance estimated from ENC_MODEL
+            // Here we simply use the point estimate
+
+    5.3  Decode to spectrum
+            s_hat = μ + E · z_hat              // reconstructed spectrum
+
+    5.4  Compute taxonomy posterior
+            p_class = CLF_MODEL.predict_proba(z_hat)
+
+    5.5  Return
+            return s_hat, p_class
+
+--------------------------------------------------------------------
+END

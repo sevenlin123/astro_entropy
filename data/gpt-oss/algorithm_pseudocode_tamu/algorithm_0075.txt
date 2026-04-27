@@ -1,0 +1,91 @@
+--------------------------------------------------------------------
+PROCEDURE TRAIN_PIPELINE(
+            spectra_list,          //  {S_i}   i = 1 … N  (high‑res reflectance)
+            filter_curves,         //  {F_j}   j = 1 … J  (effective throughputs)
+            K,                     //  number of principal components to retain
+            h_KDE,                 //  KDE bandwidth
+            N_aug,                 //  number of synthetic latent samples
+            N_regress_samples )    //  number of regressor training examples
+
+    /* 1. Build the latent manifold ------------------------------------- */
+    1.1  Compute mean spectrum μ_S  ← mean(spectra_list)
+    1.2  Center spectra → X_centered  ← spectra_list – μ_S
+    1.3  Perform PCA on X_centered:
+           [E, Λ] ← eig(X_centeredᵀ · X_centered)           // eigenvectors, eigenvalues
+        Keep first K eigenvectors → E_K   (columns of E)
+    1.4  Project training spectra onto the K‑dimensional space:
+           latent_true[i] ← E_Kᵀ · (spectra_list[i] – μ_S)     // i = 1 … N
+
+    /* 2. Augment the latent distribution ------------------------------ */
+    2.1  Fit Gaussian KDE to latent_true with bandwidth h_KDE
+    2.2  Draw N_aug samples from the KDE → latent_augmented[1 … N_aug]
+
+    /* 3. Generate synthetic spectra ----------------------------------- */
+    3.1  For each l ∈ latent_augmented:
+            synthetic_spec[l] ← μ_S + E_K · l               // inverse PCA
+    3.2  For each synthetic_spec[l]:
+            synthetic_phot[l] ← ∑_j  (synthetic_spec[l] * F_j)  // band integration
+            Add Gaussian noise:
+                σ_noise ← 0.20 * synthetic_phot[l]            // 20 % relative
+                noisy_phot[l] ← synthetic_phot[l] + N(0, σ_noise²)
+        Store training pair:
+            X_train.append(noisy_phot[l])   // J‑dimensional photometry
+            Y_train.append(l)              // K‑dimensional latent vector
+
+    /* 4. Train the photometry → latent regressor ---------------------- */
+    4.1  Use an AutoML regressor (e.g., ensemble of GBDTs) to learn:
+            f_reg: ℝ^J → ℝ^K
+        Train on {(X_train[n], Y_train[n]) , n = 1 … N_aug}
+    4.2  Save f_reg
+
+    /* 5. Train the latent → taxonomy classifier ----------------------- */
+    5.1  Gather taxonomy labels for the original N spectra:
+            labels[i]  ← class_of( spectra_list[i] )
+    5.2  Train an AutoML classifier (e.g., gradient‑boosted tree) on:
+            g_cls: ℝ^K → categorical
+        Train on {(latent_true[i], labels[i]), i = 1 … N}
+    5.3  Save g_cls
+
+    /* 6. Store ancillary items ---------------------------------------- */
+    6.1  Save PCA mean μ_S, basis E_K
+    6.2  Return {f_reg, g_cls, μ_S, E_K, filter_curves}
+END PROCEDURE
+--------------------------------------------------------------------
+PROCEDURE RECONSTRUCT(
+            observed_photometry,   // J‑dimensional vector
+            f_reg, g_cls,
+            μ_S, E_K, filter_curves,
+            N_samples )            // number of posterior draws
+
+    /* 1. Map photometry to latent posterior --------------------------- */
+    1.1  Predict latent mean and covariance:
+            [μ_lat, Σ_lat] ← f_reg.predict_with_uncertainty(observed_photometry)
+        // f_reg returns a multivariate normal estimate
+
+    /* 2. Sample the latent posterior (Gaussian Copula if needed) ------- */
+    2.1  For m = 1 … N_samples:
+            draw u_m ∼ Uniform(0,1)^K
+            z_m ← Φ⁻¹(u_m)                     // standard normal via inverse CDF
+            l_m ← μ_lat + L · z_m               // Cholesky of Σ_lat: Σ_lat = L·Lᵀ
+            latent_samples[m] ← l_m
+
+    /* 3. Decode sampled latents to full spectra --------------------- */
+    3.1  For each l_m:
+            spec_m ← μ_S + E_K · l_m             // inverse PCA
+            spectra_samples[m] ← spec_m
+    3.2  Compute statistics over spectra_samples:
+            mean_spec ← mean(m, spectra_samples[m])
+            lower_band ← percentile(16, spectra_samples)
+            upper_band ← percentile(84, spectra_samples)
+
+    /* 4. Estimate taxonomy probabilities ----------------------------- */
+    4.1  taxonomy_probs ← g_cls.predict_proba(μ_lat)
+
+    /* 5. Return results ------------------------------------------------ */
+    Return {
+        mean_spectrum : mean_spec,
+        credible_interval : (lower_band , upper_band),
+        taxonomy_distribution : taxonomy_probs
+    }
+END PROCEDURE
+--------------------------------------------------------------------

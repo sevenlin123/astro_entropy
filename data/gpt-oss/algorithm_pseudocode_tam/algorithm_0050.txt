@@ -1,0 +1,85 @@
+text
+// -----------------------------------------------------------------------------
+// 1. PRE‑PROCESSING & LATENT SPACE DEFINITION
+// -----------------------------------------------------------------------------
+INPUT:
+    S_ref   : matrix of N_ref reference spectra (shape [N_ref, M_wav])
+    R_filt  : list of Q filter response curves (each shape [M_wav])
+    K       : number of PCA components to retain
+    h_KDE   : KDE bandwidth (≈0.5 recommended)
+
+OUTPUT:
+    V        : PCA component matrix (shape [K, M_wav])
+    mu_S     : mean spectrum of reference set (length M_wav)
+    KDE      : fitted KernelDensity object over latent space
+    model_latent  : trained regressor (photometry → latent coeffs)
+    model_class   : trained classifier (latent coeffs → taxonomy)
+
+// -----------------------------------------------------------------------------
+// 1.1 Compute PCA basis of the reference spectra
+// -----------------------------------------------------------------------------
+mu_S   ← mean(S_ref, axis=0)                        // mean spectrum
+S_cen  ← S_ref – mu_S                               // centered spectra
+[V, Λ] ← PCA(S_cen, n_components=K)                 // eigenvectors & eigenvalues
+C_ref  ← S_cen · V^T                                 // latent coefficients of refs
+
+// -----------------------------------------------------------------------------
+// 1.2 Build a continuous prior over latent space with KDE
+// -----------------------------------------------------------------------------
+KDE ← KernelDensity(kernel='gaussian', bandwidth=h_KDE).fit(C_ref)
+
+// -----------------------------------------------------------------------------
+// 1.3 Generate synthetic training examples by sampling the KDE
+// -----------------------------------------------------------------------------
+N_syn ← 5000                                         // number of synthetic samples
+C_syn ← KDE.sample(N_syn)                            // shape [N_syn, K]
+S_syn ← μ_S + C_syn · V                              // reconstruct spectra
+
+// -----------------------------------------------------------------------------
+// 1.4 Forward‑model synthetic photometry for each synthetic spectrum
+// -----------------------------------------------------------------------------
+FOR i IN 1 … N_syn:
+    FOR q IN 1 … Q:                                 // for each filter
+        m_syn[i,q] ← ∫ S_syn[i,:] · R_filt[q,:] dλ / ∫ R_filt[q,:] dλ
+    END FOR
+    // Inject conservative photometric noise (20 % relative)
+    σ_syn ← 0.20 · m_syn[i,:]
+    m_syn[i,:] ← m_syn[i,:] + Normal(0, σ_syn)
+END FOR
+
+// -----------------------------------------------------------------------------
+// 2. TRAINING PHOTOMETRY → LATENT REGRSSOR
+// -----------------------------------------------------------------------------
+X_train ← m_syn          // input: noisy photometry (shape [N_syn, Q])
+Y_train ← C_syn          // target: latent coefficients (shape [N_syn, K])
+model_latent ← AutoML_TrainRegressor(X_train, Y_train)   // e.g., AutoGluon GBDT
+
+// -----------------------------------------------------------------------------
+// 3. TRAINING LATENT → TAXONOMY CLASSIFIER
+// -----------------------------------------------------------------------------
+labels_ref ← taxonomy_labels_of_reference_spectra      // length N_ref
+model_class ← AutoML_TrainClassifier(C_ref, labels_ref) // returns probability
+
+// -----------------------------------------------------------------------------
+// 4. FORWARD INFERENCE ON NEW OBSERVATIONS
+// -----------------------------------------------------------------------------
+FUNCTION ReconstructSpectrum(m_obs):
+    // m_obs: observed photometry vector (length Q)
+
+    // 4.1 Predict latent coefficients (posterior mean)
+    C_pred ← model_latent.predict(m_obs)                // shape [K]
+
+    // 4.2 Reconstruct full spectrum
+    S_recon ← μ_S + C_pred · V                          // length M_wav
+
+    // 4.3 Taxonomy prediction
+    tax_probs ← model_class.predict_proba(C_pred)       // vector over classes
+
+    RETURN S_recon, tax_probs
+END FUNCTION
+
+// -----------------------------------------------------------------------------
+// Example usage:
+// -----------------------------------------------------------------------------
+m_new   ← observed_photometry_vector                // from JWST/NIRCam etc.
+S_final , probs ← ReconstructSpectrum(m_new)

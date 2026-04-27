@@ -1,0 +1,200 @@
+Algorithm SpectralReconstruction
+
+Input:
+    Observations O = {(f_k, m_k, σ_k)} for k=1..K (filters, magnitudes, uncertainties)
+    Filter transmission curves {S_f(λ)} for all filters f
+    Zero point magnitudes ZP_f
+    Basis spectra {B_j(λ)} j=1..J
+    Number of MCMC iterations N_iter, burn_in B
+
+Output:
+    Posterior samples {θ^(i)} i=1..N_samples
+    Posterior predictive magnitudes for missing filters
+
+Procedure:
+1. PreprocessObservations():
+    For each observed filter f:
+        Convert magnitude m_f to flux density F_f using ZP_f
+    EndFor
+
+2. DefineForwardModel(θ):
+    // θ contains coefficients a_j for basis spectra
+    Reflectance R(λ; θ) = Σ_{j=1}^J a_j * B_j(λ)
+    For each filter f:
+        SyntheticFlux_f(θ) = ∫ R(λ; θ) * S_f(λ) * λ dλ / ∫ S_f(λ) * λ dλ
+        SyntheticMag_f(θ) = -2.5 * log10(SyntheticFlux_f(θ)) + ZP_f
+    Return {SyntheticMag_f(θ)}
+
+3. DefineLikelihood(θ):
+    synthetic = DefineForwardModel(θ)
+    L = 1
+    For each observed filter f:
+        diff = m_f_obs - synthetic[f]
+        L *= exp(-diff^2 / (2 * σ_f^2))
+    Return L
+
+4. DefinePrior(θ):
+    // Example: independent normals
+    P = 1
+    For each coefficient a_j in θ:
+        P *= NormalPDF(a_j | μ=0, σ=σ_prior)
+    Return P
+
+5. Posterior(θ) = Likelihood(θ) * Prior(θ)
+
+6. RunMCMC():
+    Initialize θ_0 randomly within bounds
+    For t = 1 to N_iter:
+        Propose θ' = θ_{t-1} + δ  // δ sampled from proposal distribution
+        Compute acceptance ratio α = Posterior(θ') / Posterior(θ_{t-1})
+        Accept with probability min(1, α):
+            If accepted: θ_t = θ'
+            Else: θ_t = θ_{t-1}
+    Discard first B samples as burn‑in
+    Store remaining θ_t as posterior samples
+
+7. PosteriorPredictive():
+    For each posterior sample θ:
+        For each missing filter f_m:
+            Compute SyntheticMag_f_m(θ) via ForwardModel
+            Store value
+    Return predictive distribution for each missing filter
+
+8. SummaryStatistics():
+    For each missing filter f_m:
+        Compute mean, standard deviation, credible interval from predictive samples
+    Return summary
+
+End Algorithm
+
+pseudocode
+ALGORITHM SpectralReconstruction
+
+INPUT
+    O          ← list of observed photometric measurements  
+                each element = (filter f, magnitude m_f, uncertainty σ_f)  
+    S_f(λ)     ← transmission curve for every filter f  
+    ZP_f       ← zero‑point magnitude for every filter f  
+    B_j(λ)     ← set of J basis spectra (j = 1 … J)  
+    N_iter     ← total number of MCMC iterations  
+    BurnIn     ← number of iterations to discard as burn‑in  
+    σ_prior    ← prior standard deviation for each coefficient a_j  
+
+OUTPUT
+    Θ_samples          ← posterior samples of coefficient vector Θ = (a₁,…,a_J)  
+    PredictiveFlux      ← posterior predictive fluxes/magnitudes for all filters  
+    PredictiveStats     ← mean, std‑dev, 68 % CI for each missing filter  
+
+--------------------------------------------------------------------
+1. PREPROCESS OBSERVATIONS
+--------------------------------------------------------------------
+FOR each observation (f, m_f, σ_f) IN O DO
+    // Convert magnitude to flux density relative to zero‑point
+    Flux_f ← 10 ^ ( -0.4 * (m_f – ZP_f) )
+    STORE (f, Flux_f, σ_f) AS Obs_f
+END FOR
+
+--------------------------------------------------------------------
+2. DEFINE FORWARD MODEL
+--------------------------------------------------------------------
+FUNCTION ForwardModel(Θ):
+    // Reflectance as weighted sum of basis spectra
+    R(λ) ← Σ_{j=1}^{J} Θ[j] * B_j(λ)
+
+    FOR each filter f DO
+        Numerator   ← ∫ R(λ) * S_f(λ) * λ dλ
+        Denominator ← ∫ S_f(λ) * λ dλ
+        SynFlux_f   ← Numerator / Denominator
+        SynMag_f    ← –2.5 * log10(SynFlux_f) + ZP_f
+        STORE SynMag_f
+    END FOR
+
+    RETURN {SynMag_f for all f}
+END FUNCTION
+
+--------------------------------------------------------------------
+3. LIKELIHOOD
+--------------------------------------------------------------------
+FUNCTION Likelihood(Θ):
+    SynMagnitudes ← ForwardModel(Θ)
+
+    LogL ← 0
+    FOR each observed (f, Flux_f, σ_f) IN Obs_f DO
+        SynFlux_f ← 10 ^ ( –0.4 * (SynMagnitudes[f] – ZP_f) )
+        Residual ← Flux_f – SynFlux_f
+        LogL ← LogL – ( Residual² ) / (2 * σ_f²)
+    END FOR
+
+    RETURN exp(LogL)           // returns L(Θ)
+END FUNCTION
+
+--------------------------------------------------------------------
+4. PRIOR
+--------------------------------------------------------------------
+FUNCTION Prior(Θ):
+    LogP ← 0
+    FOR j = 1 TO J DO
+        LogP ← LogP – 0.5 * (Θ[j] / σ_prior)²
+    END FOR
+    RETURN exp(LogP)           // returns P(Θ)
+END FUNCTION
+
+--------------------------------------------------------------------
+5. POSTERIOR
+--------------------------------------------------------------------
+FUNCTION Posterior(Θ):
+    RETURN Likelihood(Θ) * Prior(Θ)
+END FUNCTION
+
+--------------------------------------------------------------------
+6. MCMC SAMPLING (Metropolis–Hastings)
+--------------------------------------------------------------------
+INITIALIZE Θ₀ randomly within reasonable bounds
+SET Θ_current ← Θ₀
+INITIALIZE empty list Samples
+
+FOR t = 1 TO N_iter DO
+    // Propose new state
+    Θ_proposal ← Θ_current + RandomNormal(0, proposal_std)
+
+    // Compute acceptance ratio
+    α ← Posterior(Θ_proposal) / Posterior(Θ_current)
+    u ← Uniform(0, 1)
+
+    IF u < min(1, α) THEN
+        Θ_current ← Θ_proposal
+    END IF
+
+    IF t > BurnIn THEN
+        APPEND Θ_current TO Samples
+    END IF
+END FOR
+
+SET Θ_samples ← Samples
+//--------------------------------------------------------------------
+7. POSTERIOR PREDICTIVE FOR ALL FILTERS
+//--------------------------------------------------------------------
+FOR each sample Θ_k IN Θ_samples DO
+    SynMagnitudes_k ← ForwardModel(Θ_k)
+    FOR each filter f DO
+        SynFlux_k[f] ← 10 ^ ( –0.4 * (SynMagnitudes_k[f] – ZP_f) )
+    END FOR
+    STORE SynFlux_k
+END FOR
+
+// Organise predictive fluxes per filter
+FOR each filter f DO
+    PredictiveFlux[f] ← list of SynFlux_k[f] across all samples
+END FOR
+
+//--------------------------------------------------------------------
+8. SUMMARY STATISTICS
+//--------------------------------------------------------------------
+FOR each filter f DO
+    PredictiveStats[f].mean       ← mean(PredictiveFlux[f])
+    PredictiveStats[f].std_dev    ← std_dev(PredictiveFlux[f])
+    PredictiveStats[f].CI_68      ← percentile(PredictiveFlux[f], [16, 84])
+END FOR
+
+RETURN Θ_samples, PredictiveFlux, PredictiveStats
+END ALGORITHM

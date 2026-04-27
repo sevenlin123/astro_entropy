@@ -1,0 +1,84 @@
+# Step 0: Preprocess
+Load reference spectra: array of shape (N_ref, M_wavelengths)
+Load filter response functions: array of shape (N_filters, M_wavelengths)
+Normalize spectra (e.g., divide by solar spectrum or mean reflectance)
+
+# Step 1: Construct PCA prior
+Compute mean_spectrum = mean(reference_spectra, axis=0)
+Center spectra: centered = reference_spectra - mean_spectrum
+Perform PCA on centered: get eigenvectors V (M_wavelengths x K), eigenvalues lambda
+Select K components capturing desired variance (~95%)
+Project reference onto PCs: latent_ref = centered @ V  # shape (N_ref, K)
+
+# Step 2: Augment latent space via KDE
+Define KDE bandwidth h
+Fit KDE to latent_ref
+Sample N_aug synthetic latent vectors: latent_aug = KDE.sample(N_aug)  # shape (N_aug, K)
+
+# Step 3: Generate synthetic spectra and photometry
+For each latent vector c in latent_aug:
+    # Reconstruct high-res spectrum
+    spectrum = mean_spectrum + c @ V.T   # shape (M_wavelengths,)
+    # Convolve with each filter:
+    photometry_clean = []
+    For each filter j:
+        response = filter_response[j]  # shape (M_wavelengths,)
+        photometry_j = sum(spectrum * response) / sum(response)  # simple throughput integral
+        photometry_clean.append(photometry_j)
+    photometry_clean = array(photometry_clean)  # shape (N_filters,)
+
+    # Add noise
+    noise_std = 0.20 * photometry_clean
+    photometry_noisy = photometry_clean + Normal(0, noise_std)
+    # Store training pair (photometry_noisy, c)
+
+Collect all training pairs into arrays X_train (photometry), Y_train (latent).
+
+# Step 4: Train AutoML regressor
+Use AutoML framework to train model R predicting latent coefficients from photometry:
+    model = AutoML_Regressor.fit(X_train, Y_train)
+
+# Optional Step 5: Train classifier on latent space
+Train separate model C to predict taxonomic label from latent coefficients:
+    labels = assign_taxonomy(reference_spectra)  # known labels
+    classifier = AutoML_Classifier.fit(latent_ref, labels)
+
+# Step 6: Inference
+Function reconstruct(photometry_input):
+    # photometry_input: vector of length N_filters (observed)
+    # Predict latent coefficients:
+    c_pred = model.predict(photometry_input)   # shape (K,)
+    # Reconstruct spectrum:
+    spectrum_pred = mean_spectrum + c_pred @ V.T
+    # Predict taxonomy:
+    taxonomy_probs = classifier.predict_proba(c_pred)   # optional
+    return spectrum_pred, taxonomy_probs
+
+plaintext
+1. Load reference_spectra
+2. Load filter_curves
+3. mean_S = average(reference_spectra)
+4. centered_S = reference_spectra - mean_S
+5. PCs, evs = PCA(centered_S, n_components=K)
+6. coeffs = centered_S · PCs          # projection onto PCs
+
+7. KDE = fit_KDE(coeffs, bandwidth=h)
+8. synthetic_coeffs = KDE.sample(N_aug)
+
+9. FOR each c in synthetic_coeffs:
+       S_recon = mean_S + c · PCs^T
+       m_clean  = forward_model(S_recon, filter_curves)
+       m_noisy = m_clean + N(0, 0.2*m_clean)
+       STORE (m_noisy, c)
+   END FOR
+
+10. Train regressor R on stored pairs (m_noisy, c)
+
+11. (Optional) Train classifier C on coeffs → labels
+
+12. FUNCTION reconstruct(m_obs):
+        c_hat = R.predict(m_obs)
+        S_hat = mean_S + c_hat · PCs^T
+        IF classifier exists:
+             P_cls = C.predict_prob(c_hat)
+        RETURN S_hat, (P_cls if available)

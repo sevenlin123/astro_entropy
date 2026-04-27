@@ -1,0 +1,75 @@
+INPUT:
+    – Training spectra matrix X of size (N_spec × N_wave):
+          X[i,k] = flux of spectrum i at wavelength λ_k.
+    – Filter response curves R[b][k] for each band b (size N_band × N_wave).
+    – New target photometry y[b] and uncertainties σ_y[b] for bands b=1…N_band.
+    – Desired number of principal components N_pc (e.g., 5 or 8).
+
+OUTPUT:
+    – Reconstructed spectrum Ŝ(λ) on the common wavelength grid.
+    – Credible interval envelopes (e.g., 95 %) from posterior samples.
+
+--------------------------------------------------------------------
+1. Spectral Pre‑processing
+--------------------------------------------------------------------
+1.1. Align all spectra to a common wavelength grid {λ_k}.
+1.2. Mask/remove any missing or flagged values; fill gaps by linear interpolation.
+1.3. Normalize each spectrum (e.g., divide by its mean or by flux at a reference λ).
+
+--------------------------------------------------------------------
+2. Principal Component Analysis (PCA)
+--------------------------------------------------------------------
+2.1. Compute mean spectrum μ[λ] = (1/N_spec) Σ_i X[i,:].
+2.2. Zero‑center: Z[i,:] = X[i,:] – μ[λ].
+2.3. Perform Singular Value Decomposition (SVD):
+        Z = U Σ Vᵀ
+    The rows of Vᵀ are orthonormal eigenvectors; columns of V are principal components.
+2.4. Select first N_pc components:
+        PC[j,:] = V[j,:]   for j = 1…N_pc.
+2.5. Project training spectra onto PCs to obtain coefficient matrix A (size N_spec × N_pc):
+        A[i,j] = PC[j,:] · Z[i,:]ᵀ
+2.6. Estimate prior statistics of coefficients:
+        – Prior mean  μ_a = 0 (coefficients centered).
+        – Prior covariance Σ_a = (Aᵀ A) / (N_spec – 1).
+
+--------------------------------------------------------------------
+3. Forward Photometric Model
+--------------------------------------------------------------------
+3.1. For each filter b, compute linear mapping M[b,j]:
+        M[b,j] = Σ_k PC[j,k] * R[b,k] Δλ_k
+    This is the predicted flux contribution of component j in filter b.
+    Assemble into matrix M of size (N_band × N_pc).
+
+--------------------------------------------------------------------
+4. Bayesian Inference of Coefficients
+--------------------------------------------------------------------
+4.1. Construct weight matrix W = diag( 1/σ_y[b]² ).
+4.2. Compute posterior covariance:
+        Σ_post = ( Σ_a⁻¹ + Mᵀ W M )⁻¹
+4.3. Compute posterior mean:
+        μ_post = Σ_post * ( Mᵀ W y )
+    (Here y is the column vector of observed fluxes).
+
+--------------------------------------------------------------------
+5. Spectrum Reconstruction
+--------------------------------------------------------------------
+5.1. Reconstructed spectrum on wavelength grid:
+        Ŝ[λ] = μ[λ] + Σ_{j=1}^{N_pc} μ_post[j] * PC[j,λ]
+
+--------------------------------------------------------------------
+6. Uncertainty Propagation (Credible Intervals)
+--------------------------------------------------------------------
+6.1. Draw K ≫ 1 samples from multivariate normal:
+        a_samp[k] ~ N( μ_post , Σ_post )
+6.2. For each sample, synthesize a spectrum:
+        Ŝ_samp[k][λ] = μ[λ] + Σ_j a_samp[k][j] * PC[j,λ]
+6.3. At each λ, collect the K values Ŝ_samp[:,λ] and compute desired percentiles
+    (e.g., 2.5 % and 97.5 %) to form a credible interval envelope.
+
+--------------------------------------------------------------------
+7. Output
+--------------------------------------------------------------------
+Return Ŝ(λ) and its credible interval envelope; optionally return μ_post and Σ_post for diagnostics.
+
+--------------------------------------------------------------------
+END OF ALGORITHM

@@ -1,0 +1,78 @@
+INPUT:
+    - Photometric measurements M = {m_k ± σ_k} for k = 1 … K_f (K_f ≈ 2–6)
+    - Pre‑computed Principal Component Basis B = {b_1 … b_K}   (K ≈ 8–10)
+    - Kernel Density Estimate (KDE) model of latent coefficient distribution
+    - Forward‑model filter responses R_f(λ) for each band f
+    - Noise model: Gaussian with relative stddev ε = 0.20
+
+OUTPUT:
+    - Reconstructed high‑resolution spectrum Ŝ(λ)  (λ grid of reference spectra)
+    - Uncertainty band [S_low(λ), S_high(λ)]  (e.g., 95 % credible interval)
+    - Taxonomic class probabilities P(type)
+
+--------------------------------------------------------------------
+STEP 0 – PRECOMPUTATION (once, offline)
+--------------------------------------------------------------------
+0.1  Acquire reference spectra {S_i(λ)} for i = 1 … N_seed (≈ 50).
+0.2  Center each spectrum: S̄_i(λ) = S_i(λ) – μ(λ)   (μ = mean spectrum).
+0.3  Perform PCA on centered spectra → eigenvectors {b_j(λ)} and
+     eigenvalues λ_j.  Retain first K eigenvectors (K chosen by variance
+     criterion: ≈ 80–90 % of total variance).
+0.4  Project each centered spectrum onto basis:
+        c_i = [⟨S̄_i, b_1⟩, …, ⟨S̄_i, b_K⟩]ᵀ
+0.5  Fit KDE to {c_i} → pdf_p(c).
+0.6  Sample M_synth latent vectors {c_synth} from pdf_p (e.g., 10 000 draws).
+0.7  For each c_synth, reconstruct synthetic spectrum:
+        S_synth(λ) = μ(λ) + Σ_{j=1..K} c_synth[j] * b_j(λ)
+0.8  Forward‑model each S_synth to obtain synthetic photometry:
+        m_f,synth = ∫ S_synth(λ) * R_f(λ) dλ / ∫ S_⊙(λ)*R_f(λ)dλ
+        (S_⊙ = solar spectrum; reflectance normalization)
+0.9  Add Gaussian noise:
+        m_f,synth_noisy = m_f,synth + N(0, ε * m_f,synth)
+1.0  Store pairs (m_f,synth_noisy , c_synth) as training set for encoder.
+
+--------------------------------------------------------------------
+STEP 1 – ENCODER TRAINING (offline)
+--------------------------------------------------------------------
+2.0  Use AutoML framework (e.g., AutoGluon) to train regression model
+      E: ℝ^{K_f} → ℝ^{K}
+   Input: noisy photometry vector m_noisy
+   Target: latent coefficients c
+   Loss: mean squared error (MSE) over training pairs
+2.1  Optionally augment training with cross‑validation to avoid overfit.
+2.2  Export trained encoder E.
+
+--------------------------------------------------------------------
+STEP 2 – TAXONOMY CLASSIFIER (offline)
+--------------------------------------------------------------------
+3.0  Label each seed spectrum with taxonomic class (H₂O, CO₂, ORGANIC,
+      METHANOL).
+3.1  Train classifier C: ℝ^{K} → categorical distribution over classes
+      using same AutoML framework.
+3.2  Export trained classifier C.
+
+--------------------------------------------------------------------
+STEP 3 – INFERENCE FOR A NEW OBJECT (online)
+--------------------------------------------------------------------
+4.0  Acquire observed photometry M_obs = {m_k ± σ_k}.
+4.1  Standardize/normalize M_obs to match training scale.
+4.2  Predict latent coefficient distribution via encoder E:
+      - Option A (point estimate): ĉ = E(M_obs)
+      - Option B (posterior sampling):
+          • Draw N_draw samples {c̃_n} from Gaussian
+            N(ĉ, Σ_est)  (Σ_est obtained from encoder uncertainty or
+            bootstrapping).
+          • Optionally apply Gaussian copula to preserve correlations.
+4.3  Decode each latent vector to obtain spectrum:
+      S̃_n(λ) = μ(λ) + Σ_{j=1..K} c̃_n[j] * b_j(λ)
+4.4  Aggregate ensemble {S̃_n} to compute:
+      - Mean spectrum Ŝ(λ) = mean_n S̃_n(λ)
+      - Credible interval: e.g., 95 % percentile bounds
+        S_low(λ), S_high(λ)
+4.5  Pass mean latent vector ĉ (or sampled {c̃_n}) to classifier C
+      → class probability vector P(type).
+4.6  Return Ŝ(λ), [S_low(λ), S_high(λ)], P(type).
+
+--------------------------------------------------------------------
+END
+--------------------------------------------------------------------

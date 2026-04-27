@@ -1,0 +1,83 @@
+INPUT
+  – Reference spectra S_ref  (N_ref × N_wav)   # reflectance values per wavelength
+  – Filter throughput curves T_f (N_filt × N_wav)
+  – Photometry of target object m_obs (N_filt)   # measured reflectance or magnitude
+  – Desired number of PCA components K
+  – KDE bandwidth h
+  – AutoML regressor R (e.g., gradient‑boosted tree ensemble)
+  – AutoML classifier C (e.g., ensemble of decision trees)
+
+OUTPUT
+  – Reconstructed spectrum S_rec (N_wav)
+  – Uncertainty band (e.g., 95 % credible interval) for each wavelength
+  – Taxonomy probability vector p_tax (length = number of classes)
+
+--------------------------------------------------------------------
+1.  TRAINING PHASE
+--------------------------------------------------------------------
+1.1  Dimensionality Reduction (Prior Construction)
+      • Center S_ref by subtracting mean spectrum μ_S.
+      • Compute covariance matrix Σ = cov(S_ref).
+      • Perform eigenvalue decomposition: Σ = U Λ Uᵀ.
+      • Select top K eigenvectors U_K (N_wav × K).
+      • Project each reference spectrum onto PCs:
+            z_i = U_Kᵀ · (S_ref[i] – μ_S)        # i = 1 … N_ref
+      • Store the K‑dimensional latent vectors Z_ref (N_ref × K).
+
+1.2  Kernel Density Estimation (Data Augmentation)
+      • Fit a multivariate KDE to Z_ref using bandwidth h.
+      • Draw M synthetic latent samples {z_j} from KDE
+            (M ≫ N_ref, e.g. M = 10 000).
+      • For each z_j:
+            – Reconstruct synthetic spectrum:
+                  s_j = U_K · z_j + μ_S
+            – Store s_j in array S_syn.
+
+1.3  Synthetic Photometry Generation
+      • For every synthetic spectrum s_j:
+            – Convolve with each filter throughput:
+                  p_j[k] = ∫ s_j(λ) · T_f[k](λ) dλ   # k = 1 … N_filt
+            – Add Gaussian noise at 20 % relative uncertainty:
+                  p_noisy[j][k] = p_j[k] * (1 + 𝒩(0, 0.2))
+      • Build training dataset:
+            X_train = {p_noisy[j]}              # shape (M × N_filt)
+            Y_train = {z_j}                     # shape (M × K)
+
+1.4  Train Encoder (Regression)
+      • Feed X_train, Y_train to AutoML regressor R.
+      • R learns mapping f_enc : ℝ^{N_filt} → ℝ^{K}.
+
+1.5  Train Taxonomy Classifier
+      • Label each reference spectrum with class label c_i.
+      • Project labeled spectra to latent space: Z_ref.
+      • Train AutoML classifier C on pairs (Z_ref, c_i).
+      • C outputs probability vector over classes.
+
+--------------------------------------------------------------------
+2.  INFERENCE PHASE
+--------------------------------------------------------------------
+2.1  Forward Modeling of Target Photometry
+      • Given m_obs (N_filt), possibly with measurement errors,
+        form input vector x_obs.
+
+2.2  Predict Latent Coefficients
+      • Compute z_pred = R(x_obs)          # single point estimate
+      • Optionally, obtain predictive distribution
+            – e.g., sample multiple predictions or use ensemble variance.
+
+2.3  Decode to Full Spectrum
+      • Reconstruct spectrum:
+            S_rec = U_K · z_pred + μ_S
+      • To obtain uncertainty band:
+            – Sample N_samp latent vectors from R’s predictive posterior.
+            – Decode each to spectrum → {S_k}.
+            – At each wavelength λ_i, compute quantiles (2.5 %, 97.5 %) over {S_k[λ_i]}.
+
+2.4  Taxonomy Prediction
+      • Input z_pred (or its predictive distribution) to classifier C:
+            p_tax = C(z_pred)                # probability vector over classes
+
+--------------------------------------------------------------------
+3.  RETURN
+--------------------------------------------------------------------
+Return S_rec, uncertainty band, p_tax.

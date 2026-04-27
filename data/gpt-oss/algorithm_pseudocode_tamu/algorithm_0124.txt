@@ -1,0 +1,124 @@
+INPUT
+    S_orig[1..N]        // N observed TNO spectra, each a vector of L wavelength points
+    λ_grid[1..L]        // Common wavelength grid
+    F_filters[1..M]     // M photometric filter transmission curves
+    h_KDE               // KDE bandwidth (e.g. 0.5)
+    K_PCA               // Number of principal components to keep (e.g. 8–10)
+    n_aug              // Number of synthetic latent vectors to generate (e.g. 5000)
+    n_noise            // Noisy photometry samples per synthetic spectrum (e.g. 10)
+    rel_err            // Relative photometric noise level (e.g. 0.20)
+
+OUTPUT
+    S_hat_mean[1..L]    // Mean reconstructed spectrum
+    S_hat_CI_low[1..L]  // Lower 95 % confidence bound
+    S_hat_CI_high[1..L] // Upper 95 % confidence bound
+    Taxa_probs          // Probability vector over taxonomy classes (H₂O, CO₂, Org, Met)
+
+--------------------------------------------------------------------
+STEP 1 –  Build Latent Manifold (Prior)
+--------------------------------------------------------------------
+1.1  // Interpolate all spectra onto the common wavelength grid
+      For i = 1 to N:
+          S_int[i] ← interpolate( S_orig[i] , λ_grid )
+
+1.2  // Center spectra
+      μ_spec ← mean( S_int[1..N] )            // vector of length L
+      S_centered[i] ← S_int[i] – μ_spec       // for all i
+
+1.3  // Principal Component Analysis
+      [U, Σ, V] ← SVD( S_centered )          // U: L×L, V: N×N
+      PC_basis ← first K_PCA columns of U     // L×K_PCA matrix
+      coeffs[i] ← transpose( PC_basis ) * S_centered[i]   // K_PCA vector for each spectrum
+
+1.4  // Kernel Density Estimation in latent space
+      // Use multivariate Gaussian kernels with bandwidth h_KDE
+      KDE_model ← fit_KDE( coeffs[1..N] , bandwidth=h_KDE )
+
+1.5  // Sample synthetic latent vectors
+      For j = 1 to n_aug:
+          z_j ← sample_from_KDE( KDE_model )   // K_PCA‑dimensional vector
+          S_aug[j] ← μ_spec + PC_basis * z_j   // Reconstruct synthetic spectrum
+          label_aug[j] ← None                  // No taxonomy label
+
+--------------------------------------------------------------------
+STEP 2 –  Generate Synthetic Photometry (Implicit Likelihood)
+--------------------------------------------------------------------
+2.1  For each synthetic spectrum j = 1 to n_aug:
+          // Forward model: convolve with each filter
+          For k = 1 to M:
+              m_true[k] ← integrate( S_aug[j] * F_filters[k] ) /
+                           integrate( F_filters[k] )
+          // Add Gaussian noise n_times
+          For t = 1 to n_noise:
+              For k = 1 to M:
+                  ε_k ← normal( mean=0 , std=rel_err * m_true[k] )
+                  m_noisy[t][k] ← m_true[k] + ε_k
+              Record training pair:
+                  X_train.append( m_noisy[t] )          // vector length M
+                  Y_train.append( z_j )                 // vector length K_PCA
+          EndFor
+      EndFor
+
+--------------------------------------------------------------------
+STEP 3 –  Train Encoder (Photometry → Latent)
+--------------------------------------------------------------------
+3.1  R ← AutoML_Regression( X_train , Y_train )
+      // AutoML selects ensemble of gradient‑boosted trees, neural nets, etc.
+      // Returns a model that maps an M‑dimensional photometry vector
+      // to a K_PCA‑dimensional latent coefficient vector.
+
+--------------------------------------------------------------------
+STEP 4 –  Train Taxonomy Classifier
+--------------------------------------------------------------------
+4.1  // Prepare labelled latent set from the original spectra
+      For i = 1 to N:
+          X_cls[i] ← coeffs[i]
+          Y_cls[i] ← taxonomy_label( S_orig[i] )   // e.g. H₂O, CO₂, Org, Met
+
+4.2  C ← AutoML_Classifier( X_cls , Y_cls )
+      // Maps K_PCA vector to probability distribution over classes.
+
+--------------------------------------------------------------------
+STEP 5 –  Forward Inference on New Observation
+--------------------------------------------------------------------
+5.1  // Input: observed photometry m_obs[1..M] with measurement errors σ_obs
+      // (Assume σ_obs already supplied; if not, use nominal rel_err)
+      
+5.2  // Predict latent mean and optionally covariance
+      z_pred ← R.predict( m_obs )            // returns K_PCA vector (mean)
+
+5.3  // Posterior sampling via Gaussian Copula
+      // Estimate marginal posteriors from R (e.g. by perturbing input with σ_obs)
+      // For simplicity, assume Gaussian marginals with mean=z_pred and std derived
+      // from R's internal uncertainty estimates or from a generic σ_lat.
+      σ_lat ← estimate_latent_uncertainty( R , m_obs )
+      // Construct correlation matrix Σ_copula from training latent covariances
+      Σ_c ← empirical_covariance( coeffs[1..N] )
+      // Sample N_post latent vectors
+      For s = 1 to N_post:
+          u ← random_uniform(0,1,K_PCA)                     // uniform variates
+          z_sample[s] ← Φ⁻¹(u)  // inverse Gaussian CDF -> standard normal
+          z_sample[s] ← μ_z + L * z_sample[s]                // μ_z=z_pred, L lower‑triangular of Σ_c
+          // Ensure physical bounds if needed
+      EndFor
+
+5.4  // Decode each sampled latent vector to a full spectrum
+      For s = 1 to N_post:
+          S_rec[s] ← μ_spec + PC_basis * z_sample[s]         // length L
+      EndFor
+
+5.5  // Compute mean and 95 % CI per wavelength
+      For l = 1 to L:
+          values ← [ S_rec[s][l]  for s = 1 .. N_post ]
+          S_hat_mean[l] ← mean(values)
+          S_hat_CI_low[l] ← percentile(values , 2.5 )
+          S_hat_CI_high[l] ← percentile(values , 97.5 )
+      EndFor
+
+5.6  // Taxonomy prediction
+      Taxa_probs ← C.predict_proba( z_pred )                // probability vector
+
+--------------------------------------------------------------------
+RETURN
+--------------------------------------------------------------------
+Return S_hat_mean, S_hat_CI_low, S_hat_CI_high, Taxa_probs

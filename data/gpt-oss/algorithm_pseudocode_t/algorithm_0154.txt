@@ -1,0 +1,69 @@
+INPUT:
+    PHOTOMETRY  = {(band_i, mag_i, σ_i)} for i = 1..Nbands
+    FILTERS     = {T_band(λ)}   # transmission curves
+    DISTANCES   = {Δ_i}         # heliocentric & geocentric distances
+    PHASE_ANGLES= {α_i}
+    TEMPLATE_SDS = {S_j(λ)}    # library of surface spectra j = 1..M
+    PHASE_LAW   = linear or HG (with parameters G)
+    PRIOR_DIST  = priors on composition coefficients and scaling
+
+OUTPUT:
+    POSTERIOR_SAMPLES  # samples of composition fractions, scaling, etc.
+    BEST_FIT_SPECTRUM
+    CONFIDENCE_INTERVALS
+
+ALGORITHM:
+
+1. PRECOMPUTE MODEL FLUXES
+   FOR each template j in 1..M:
+       FOR each band k in 1..Nbands:
+           F_jk = ∫ S_j(λ) * T_k(λ) dλ          # synthetic flux
+           M_jk = -2.5*log10(F_jk) + ZP_k      # synthetic magnitude
+           STORE M_jk
+
+2. DEFINE PHASE-CORRECTED MAGNITUDE FUNCTION
+   FUNCTION model_magnitude(params):
+        # params = {c_j} (composition fractions), s (overall scaling)
+        COMPOSITE_S = Σ_j c_j * S_j(λ)
+        FOR each band k:
+            F_comp_k = ∫ COMPOSITE_S * T_k(λ) dλ
+            M_comp_k = -2.5*log10(F_comp_k) + ZP_k
+            Δm_k = phase_correction(PHASE_LAW, α_k, G)   # e.g., 0.04 * α_k
+            M_model_k = M_comp_k + Δm_k + s
+        RETURN {M_model_k}
+
+3. LOG-LIKELIHOOD
+   FUNCTION log_likelihood(params):
+        M_model = model_magnitude(params)
+        χ² = Σ_k [(mag_k - M_model_k)/σ_k]²
+        RETURN -0.5*χ²
+
+4. LOG-PRIORS
+   FUNCTION log_prior(params):
+        IF any c_j < 0 OR Σ_j c_j ≠ 1: RETURN -∞
+        IF s outside reasonable bounds: RETURN -∞
+        RETURN log(PriorDist(c_j)) + log(PriorDist(s))
+
+5. LOG-POSITIVE FUNCTION
+   FUNCTION log_posterior(params):
+        lp = log_prior(params)
+        IF lp == -∞: RETURN -∞
+        RETURN lp + log_likelihood(params)
+
+6. SETUP MCMC SAMPLER
+   INITIALIZE chain positions {θ_t} with random draws from prior
+   FOR iteration t = 1 .. Nsteps:
+        PROPOSE new θ' by drawing from proposal distribution q(θ'|θ_t)
+        ACCEPT with probability min(1, exp(log_posterior(θ') - log_posterior(θ_t)))
+        IF accepted: θ_{t+1} = θ'; ELSE θ_{t+1} = θ_t
+        STORE θ_{t+1}
+        (Optional: adapt proposal covariance after burn‑in)
+
+7. POST‑PROCESS SAMPLING RESULTS
+   DISCARD initial burn‑in fraction
+   COMPUTE marginal posterior PDFs for each c_j and s
+   SELECT MAP or mean composition vector {c*_j}
+   RECONSTRUCT BEST_FIT_SPECTRUM = Σ_j c*_j * S_j(λ)
+
+8. OUTPUT
+   RETURN POSTERIOR_SAMPLES, BEST_FIT_SPECTRUM, CONFIDENCE_INTERVALS

@@ -1,0 +1,80 @@
+--------------------------------------------------------------------
+INPUT
+    1. Seed spectra set  S_seed = { (λ, R_i(λ)) | i = 1 … N }      // N ≈ 50
+    2. Filter response curves  F = { f_k(λ) | k = 1 … K }          // e.g. JWST/NIRCam
+    3. Number of desired principal components  nPC (e.g., 8–10)
+    4. KDE bandwidth h (≈ 0.5)
+    5. Training‑set photometric noise level σ_noise (e.g., 20 %)
+    6. Optional number of synthetic samples M (e.g., 10⁴)
+
+OUTPUT
+    • Reconstructed spectrum S_rec(λ) for any new photometric vector
+    • Taxonomy probability vector P_tax
+    • (Optional) Posterior distribution over spectra via sampling
+
+--------------------------------------------------------------------
+PHASE 1 – LATENT‑SPACE PREPARATION
+--------------------------------------------------------------------
+
+1.1   Compute mean spectrum μ(λ) over S_seed.
+1.2   Center each seed spectrum:
+          X_i = R_i(λ) – μ(λ)        // matrix X of size N × L (L = #wavelength bins)
+1.3   Perform Singular Value Decomposition (SVD) on X:
+          X = U · Σ · Vᵀ
+    Keep first nPC columns of Vᵀ → principal‑component basis B (size nPC × L).
+1.4   Project seed spectra onto basis:
+          a_i = B · X_iᵀ            // a_i ∈ ℝⁿPC  for each i
+    Store coefficient matrix A = [a_1 … a_N]ᵀ.
+
+--------------------------------------------------------------------
+PHASE 2 – GENERATIVE PRIOR (KDE) AND SYNTHETIC TRAINING SET
+--------------------------------------------------------------------
+
+2.1   Fit multivariate Kernel Density Estimate (KDE) to A:
+          p_KDE(a)  ← KDE(A, bandwidth = h)
+2.2   Sample M latent vectors from KDE:
+          {a_j} = { a_j | j = 1 … M }  ~ p_KDE
+2.3   For each sampled a_j:
+          2.3.1  Reconstruct high‑resolution spectrum:
+                    R_j(λ) = μ(λ) + Bᵀ · a_j          // inverse PCA
+          2.3.2  Compute noiseless photometry in each filter:
+                    m_j,k = ∫ R_j(λ) · f_k(λ) dλ / ∫ f_k(λ) dλ
+                    (normalise by solar spectrum if required)
+          2.3.3  Inject Gaussian photometric noise:
+                    m_j,k ← m_j,k + N(0, σ_noise · m_j,k)
+          2.3.4  Store pair (m_j, a_j) as a training example.
+    Result: training set T = { (m_j, a_j) | j = 1 … M }.
+
+--------------------------------------------------------------------
+PHASE 3 – TRAINING AUTOML REGRESSOR & CLASSIFIER
+--------------------------------------------------------------------
+
+3.1   Train photometry‑to‑latent regressor:
+          Reg = AutoMLRegressor.fit( {m_j} , {a_j} )
+3.2   Assign taxonomic labels L_i to seed spectra (optional).
+3.3   Train classifier in latent space:
+          Clf = AutoMLClassifier.fit( {a_i} , {L_i} )
+
+--------------------------------------------------------------------
+PHASE 4 – INFERENCE ON NEW PHOTOMETRY
+--------------------------------------------------------------------
+
+Function RECONSTRUCT_AND_CLASSIFY( m_new ) :
+
+    4.1   Predict latent coefficient vector:
+              â = Reg.predict( m_new )                // point estimate
+    4.2   Reconstruct spectrum:
+              R̂(λ) = μ(λ) + Bᵀ · â
+    4.3   Obtain taxonomy probabilities:
+              P_tax = Clf.predict_proba( â )
+    4.4   (Optional) POSTERIOR SAMPLING:
+              repeat N_sample times:
+                  ã ~ Reg.posterior_sample( m_new )  // draw from regressor's predictive distribution
+                  R̃^(s)(λ) = μ(λ) + Bᵀ · ã
+              Return collection {R̃^(s)} as posterior spectral ensemble.
+
+    4.5   Return R̂(λ), P_tax (and optional posterior set).
+
+--------------------------------------------------------------------
+END OF ALGORITHM
+--------------------------------------------------------------------

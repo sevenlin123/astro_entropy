@@ -1,0 +1,77 @@
+Input:
+    - S_real = {s_i : i = 1..N}   // high‑resolution reference spectra (reflectance vs λ)
+    - FilterList = {F_j : j = 1..M}   // effective throughput curves of desired photometric filters
+    - PhotometryObs = {m_k : k = 1..K}   // measured sparse photometry for a target object
+    - NoiseFrac = 0.20                // relative photometric uncertainty to simulate
+
+Parameters:
+    - K_PCA          // number of principal components retained (≈5–10)
+    - KDE_bandwidth  // kernel bandwidth for density estimation in latent space (≈0.5)
+    - N_synth        // number of synthetic latent samples to generate (e.g., 10,000)
+
+Procedure:
+
+1. **Pre‑processing of Reference Spectra**
+   1.1 Interpolate all s_i onto a common wavelength grid λ_grid.
+   1.2 Optional: normalize spectra (e.g., divide by mean or by solar spectrum).
+
+2. **Principal Component Analysis (PCA)**
+   2.1 Assemble data matrix X ∈ ℝ^{N×L} where each row is a spectrum on λ_grid.
+   2.2 Center X by subtracting column means.
+   2.3 Compute covariance matrix C = (Xᵀ X)/(N−1).
+   2.4 Perform eigen‑decomposition of C → eigenvectors V = [v_1 … v_L], eigenvalues Λ.
+   2.5 Select first K_PCA eigenvectors → V_K.
+   2.6 Project each reference spectrum onto V_K:
+           z_i = V_Kᵀ (s_i − μ)    // μ is the column mean of X
+       Store latent coefficient vector z_i ∈ ℝ^{K_PCA}.
+
+3. **Latent‑Space Density Estimation (KDE)**
+   3.1 Fit a multivariate Gaussian kernel density estimate to the set {z_i}.
+   3.2 Use bandwidth h = KDE_bandwidth (scalar or diagonal).
+   3.3 Sample N_synth latent vectors {z'_t} from the KDE.
+   3.4 For each sampled z'_t, reconstruct a synthetic spectrum:
+           s'_t = μ + V_K z'_t
+
+4. **Forward Photometry Simulation**
+   4.1 For each synthetic spectrum s'_t:
+          For each filter F_j:
+              Compute noiseless band flux:
+                  f_j = ∫ s'_t(λ) * F_j(λ) dλ / ∫ F_j(λ) dλ
+          Assemble vector f_t = {f_j}.
+   4.2 Add Gaussian noise to each band:
+          m_j = f_j + ε_j,  where ε_j ~ N(0, (NoiseFrac * f_j)^2)
+      Store noisy photometry m_t = {m_j}.
+
+5. **Training Data Assembly**
+   5.1 Pair each noisy photometry m_t with its latent target z'_t.
+   5.2 Assemble training set T = {(m_t , z'_t)} over t = 1..N_synth.
+
+6. **Encoder – Photometry → Latent Regression**
+   6.1 Instantiate an AutoML regression model (e.g., ensemble of GBMs).
+   6.2 Train the model on T to learn mapping:
+          Encoder(m) ≈ z_hat
+      where z_hat is the predicted latent coefficient vector.
+
+7. **Classifier – Latent → Taxonomy**
+   7.1 For each reference spectrum s_i, assign taxonomy label L_i.
+   7.2 Train a second AutoML classifier on { (z_i , L_i) } to learn
+          Classifier(z) → P(L | z).
+
+8. **Inference on New Observation**
+   8.1 Input PhotometryObs → vector m_new.
+   8.2 Predict latent coefficients:
+          z_hat = Encoder(m_new)
+   8.3 Obtain taxonomic probabilities:
+          P_tax = Classifier(z_hat)
+   8.4 Reconstruct spectrum:
+          s_hat = μ + V_K z_hat
+   8.5 (Optional) Sample uncertainty ensemble:
+          a) Draw M latent samples from a Gaussian Copula centered at z_hat
+             with covariance estimated from Encoder’s prediction uncertainty.
+          b) For each sample, reconstruct s_sample = μ + V_K z_sample.
+          c) Compute per‑wavelength mean and percentile bounds → credible intervals.
+
+Output:
+    - s_hat            // reconstructed high‑resolution spectrum
+    - P_tax            // probability vector over taxonomy classes
+    - (optional) s_samples, credible intervals

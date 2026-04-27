@@ -1,0 +1,89 @@
+INPUT: 
+    - High‑resolution spectra S_real[1…N]   // e.g., 51 TNO spectra
+    - JWST/NIRCam filter transmission curves {F_k}
+    - Desired PCA dimension K (≈5–10)
+    - KDE bandwidth h (≈0.5)
+    - Number of synthetic latent samples M (≈10⁴)
+    - Noise level σ_rel (≈0.20)
+
+PROCEDURE:
+
+1.  PCA Transformation
+    a. Compute mean spectrum μ_S = mean(S_real)
+    b. Subtract mean: S_centered = S_real – μ_S
+    c. Compute singular value decomposition or covariance matrix
+       → Obtain eigenvectors (principal components) U[1…K]
+    d. Project each real spectrum to latent space:
+           L_real[i] = Uᵀ · (S_real[i] – μ_S)          // i = 1…N
+
+2.  KDE Augmentation
+    a. Fit multivariate Gaussian kernel density estimator on {L_real}
+         KDE(x) ∝ Σ_i exp( -½ (x – L_real[i])ᵀ Σ⁻¹ (x – L_real[i]) ) / (h²)
+        (Σ is diagonal if independent kernels are used)
+    b. Draw M random latent vectors {ℓ_j} from KDE
+
+3.  Synthetic Spectrum Generation
+    FOR j = 1 … M
+        a. Reconstruct spectrum:
+               S_syn[j] = μ_S + U · ℓ_j
+        b. Forward model photometry:
+               m_syn[j][k] = ∫ S_syn[j](λ) · F_k(λ) dλ     // k = 1…K_filters
+        c. Add Gaussian noise:
+               m_noisy[j][k] = m_syn[j][k] * (1 + N(0,σ_rel))
+    END FOR
+
+4.  Encoder Training (AutoML Ensemble)
+    a. Input features X_enc = {m_noisy[j]}      // size M × K_filters
+    b. Target labels Y_enc = {ℓ_j}              // size M × K
+    c. Train an ensemble regressor R_enc (e.g., GBDT + NN)
+       minimizing mean squared error between R_enc(X_enc) and Y_enc
+    d. Store trained model R_enc
+
+5.  Taxonomy Classifier
+    a. Labels C = {class_id[i]} for each real spectrum i
+    b. Train a second ensemble classifier R_cls on latent vectors {L_real}
+       with targets C
+    c. Store trained model R_cls
+
+INPUT:
+    - Observed photometry vector m_obs[1…K_filters]
+    - Optional per‑band uncertainties σ_obs[1…K_filters]
+
+PROCEDURE:
+
+1.  Latent Prediction
+    a. Use encoder to obtain predicted mean latent vector:
+           ℓ̂ = R_enc(m_obs)
+    b. Estimate covariance Σ̂ of latent prediction:
+           // e.g., from ensemble variance or posterior samples
+           // (if encoder outputs distribution, use it directly)
+
+2.  Posterior Sampling (Gaussian Copula)
+    a. Construct multivariate normal with mean ℓ̂ and covariance Σ̂
+    b. Sample N_post latent vectors {ℓ_t} (t = 1…N_post, typical 100–500)
+    c. (Optional) Enforce physical bounds using a Gaussian Copula
+        – compute correlation matrix R from training data
+        – transform samples to maintain dependencies
+
+3.  Spectrum Reconstruction
+    FOR t = 1 … N_post
+        a. Reconstruct spectrum:
+               S_rec[t] = μ_S + U · ℓ_t
+    END FOR
+    b. Aggregate spectra:
+        - Point estimate: mean over {S_rec[t]}
+        - Uncertainty band: percentile intervals (e.g., 16th–84th)
+
+4.  Taxonomy Probability
+    a. Pass ℓ̂ (or each ℓ_t) to classifier R_cls
+    b. Obtain class probability vector P_cls
+    c. Report most probable class and associated confidence
+
+OUTPUT:
+    - Reconstructed spectrum (mean + uncertainty)
+    - Taxonomy probabilities
+
+- Compute diagnostic spectral indices (slope, band depth) from mean spectrum.
+- Flag objects whose reconstructed spectra lie in low‑density regions of latent space
+  (possible outliers).
+- Store full posterior samples for downstream analyses (e.g., population statistics).

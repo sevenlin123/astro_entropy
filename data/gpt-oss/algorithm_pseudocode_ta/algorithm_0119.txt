@@ -1,0 +1,71 @@
+INPUT:
+    S      : training spectra array [N_samples × N_wavelengths]
+    R      : filter‑response matrix [N_filters × N_wavelengths]
+    y_obs  : observed photometry vector [N_filters]
+    σ_obs  : photometric uncertainties vector [N_filters]
+    k      : number of principal components to retain
+
+OUTPUT:
+    s_rec          : reconstructed full spectrum [N_wavelengths]
+    s_uncertainty  : per‑wavelength standard deviation of reconstruction
+    z_post_mean    : posterior mean of latent coordinates [k]
+    z_post_cov     : posterior covariance matrix [k × k]
+
+--------------------------------------------------------------------
+STEP 0 – Pre‑processing -------------------------------------------------
+    • Center training spectra:
+        μ = mean(S, axis=0)                     # shape [N_wavelengths]
+        S_centered = S - μ                      # shape [N_samples × N_wavelengths]
+
+--------------------------------------------------------------------
+STEP 1 – Principal Component Analysis -----------------------------------
+    • Compute covariance matrix:
+        C = (S_centered.T @ S_centered) / (N_samples - 1)   # shape [N_wavelengths × N_wavelengths]
+
+    • Eigendecomposition (or SVD):
+        eigenvals, eigenvecs = eig(C)          # eigenvecs columns are PCs
+        Sort eigenvalues descending.
+
+    • Select first k PCs:
+        U_k = eigenvecs[:, 0:k]                # shape [N_wavelengths × k]
+
+--------------------------------------------------------------------
+STEP 2 – Forward photometric model --------------------------------------
+    • Transform filters into latent space:
+        A = R @ U_k                            # shape [N_filters × k]
+        b = R @ μ                              # shape [N_filters]
+
+--------------------------------------------------------------------
+STEP 3 – Bayesian inference for latent coordinates ---------------------
+    • Define measurement precision matrix:
+        Σ_prec = diag(1.0 / (σ_obs ** 2))      # shape [N_filters × N_filters]
+
+    • Compute posterior covariance:
+        K = A.T @ Σ_prec @ A                   # shape [k × k]
+        z_post_cov = inv(K + eye(k))           # shape [k × k]
+
+    • Compute posterior mean:
+        residual = y_obs - b                  # shape [N_filters]
+        z_post_mean = z_post_cov @ A.T @ Σ_prec @ residual   # shape [k]
+
+--------------------------------------------------------------------
+STEP 4 – Spectrum reconstruction ---------------------------------------
+    • Point estimate:
+        s_rec = μ + U_k @ z_post_mean          # shape [N_wavelengths]
+
+--------------------------------------------------------------------
+STEP 5 – Uncertainty propagation ---------------------------------------
+    • Draw M random samples from posterior:
+        z_samples = multivariate_normal(mean=z_post_mean,
+                                        cov=z_post_cov,
+                                        size=M)            # shape [M × k]
+
+    • Reconstruct spectra for each sample:
+        s_samples = μ + z_samples @ U_k.T        # shape [M × N_wavelengths]
+
+    • Compute per‑wavelength mean & std:
+        s_uncertainty = std(s_samples, axis=0)   # shape [N_wavelengths]
+
+--------------------------------------------------------------------
+RETURN:
+    s_rec, s_uncertainty, z_post_mean, z_post_cov

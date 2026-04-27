@@ -1,0 +1,102 @@
+PROCEDURE RECONSTRUCT_SPECTRUM(
+           OBS_FLUX[1..M],          // measured fluxes in M filters
+           ERR[1..M],               // 1‑σ uncertainties per filter
+           TEMPLATE[1..N][1..L],   // N template spectra sampled at L wavelengths
+           FILTER[1..M][1..L],      // transmission curves for each filter
+           NUM_SAMPLES              // number of posterior samples
+          ) → (S_MEAN[1..L], 
+               S_CI_LOW[1..L],
+               S_CI_HIGH[1..L],
+               ALPHA_SAMPLES[NUM_SAMPLES][1..N],
+               TAXON_PROBS[1..N])
+
+  // ------------------------------------------------------------------
+  // 1. Build the forward model matrix A  (M × N)
+  // ------------------------------------------------------------------
+  FOR i = 1 TO M DO
+     FOR j = 1 TO N DO
+        // Normalised flux of template j through filter i
+        NUM = Σ_{k=1}^{L}  TEMPLATE[j][k] * FILTER[i][k] * Δλ[k]
+        DEN = Σ_{k=1}^{L}  FILTER[i][k] * Δλ[k]
+        A[i][j] = NUM / DEN
+     END FOR
+  END FOR
+
+  // ------------------------------------------------------------------
+  // 2. Assemble data vectors and covariance
+  // ------------------------------------------------------------------
+  Y   = OBS_FLUX                     // length M
+  COV = diag(ERR[1]^2, … , ERR[M]^2) // measurement covariance
+
+  // ------------------------------------------------------------------
+  // 3. Prior on mixing coefficients α
+  // ------------------------------------------------------------------
+  // Dirichlet(1,…,1)  – equivalent to uniform on simplex:
+  //   α_j ≥ 0  and  Σ α_j = 1
+  PRIOR_MEAN  = [1/N, … , 1/N]                 // uninformative
+  PRIOR_WD    = 1                               // concentration parameter
+
+  // ------------------------------------------------------------------
+  // 4. Posterior mean & covariance (Gaussian approximation)
+  // ------------------------------------------------------------------
+  ATA_inv = inverse( Aᵀ * COV⁻¹ * A )
+  MU_POST = ATA_inv * ( Aᵀ * COV⁻¹ * Y )
+  SIG_POST = ATA_inv
+
+  // ------------------------------------------------------------------
+  // 5. Draw NUM_SAMPLES samples of α respecting the simplex constraint
+  // ------------------------------------------------------------------
+  ALPHA_SAMPLES = empty list
+  WHILE length(ALPHA_SAMPLES) < NUM_SAMPLES DO
+     // Sample from the Gaussian approximation
+     α_candidate = random_normal(MU_POST, sqrt(SIG_POST))
+     
+     // Enforce non‑negativity
+     IF ANY(α_candidate < 0) THEN CONTINUE
+     
+     // Enforce sum = 1 (within tolerance ε)
+     SUM_α = Σ α_candidate
+     IF |SUM_α - 1| > ε THEN CONTINUE
+     
+     // Normalize exactly to unit sum
+     α_candidate = α_candidate / SUM_α
+     
+     APPEND α_candidate TO ALPHA_SAMPLES
+  END WHILE
+
+  // ------------------------------------------------------------------
+  // 6. Reconstruct spectra for each sample
+  // ------------------------------------------------------------------
+  FOR k = 1 TO NUM_SAMPLES DO
+     α_k = ALPHA_SAMPLES[k]                // vector length N
+     FOR l = 1 TO L DO
+        S_k[l] = Σ_{j=1}^{N} α_k[j] * TEMPLATE[j][l]
+     END FOR
+     STORE S_k
+  END FOR
+
+  // ------------------------------------------------------------------
+  // 7. Compute posterior summary statistics for the spectrum
+  // ------------------------------------------------------------------
+  FOR l = 1 TO L DO
+     // Collect all sample values at wavelength λ_l
+     VALUES_l = [ S_k[l] for k in 1..NUM_SAMPLES ]
+     
+     S_MEAN[l]      = mean(VALUES_l)
+     S_CI_LOW[l]    = percentile(VALUES_l, 16)   // 1‑σ lower bound
+     S_CI_HIGH[l]   = percentile(VALUES_l, 84)   // 1‑σ upper bound
+  END FOR
+
+  // ------------------------------------------------------------------
+  // 8. Taxonomic probabilities (posterior weights)
+  // ------------------------------------------------------------------
+  TAXON_PROBS = zeros(N)
+  FOR k = 1 TO NUM_SAMPLES DO
+     α_k = ALPHA_SAMPLES[k]
+     TAXON_PROBS += α_k          // vector addition
+  END FOR
+  TAXON_PROBS = TAXON_PROBS / NUM_SAMPLES
+
+  RETURN (S_MEAN, S_CI_LOW, S_CI_HIGH,
+          ALPHA_SAMPLES, TAXON_PROBS)
+END PROCEDURE

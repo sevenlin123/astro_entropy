@@ -1,0 +1,63 @@
+INPUT:
+    - N_TNO          : number of Trans‑Neptunian Objects to process
+    - K              : number of template spectra in library
+    - Filters        : list of photometric filters {f₁,…,f_F}
+    - FilterZP[f]    : photometric zero‑point for each filter
+    - ObsMag[t][f]   : observed magnitude of TNO t in filter f
+    - ObsErr[t][f]   : measurement uncertainty (σ) for ObsMag[t][f]
+    - TemplateSpec[k] : reflectance spectrum of template k (λ array)
+    - FilterTrans[f] : transmission curve of filter f (λ array)
+
+PRE‑COMPUTE (once per filter & template):
+
+    1. For every template k and filter f
+          • Compute synthetic flux:
+                F_kf = ∫ TemplateSpec[k](λ) * FilterTrans[f](λ) dλ
+          • Convert to synthetic magnitude (relative to zero‑point):
+                M_kf = –2.5*log10(F_kf) + FilterZP[f]
+
+    2. Choose one template (e.g., solar) as reference:
+          RefTemplate = k_ref
+          For each filter f:
+                RefMag[f] = M_{k_ref,f}
+
+    3. Compute color offsets for each template relative to reference:
+          For every k, f:
+                C_kf = M_kf – RefMag[f]      // color of template k in filter f
+
+--------------------------------------------------------------------
+FOR each TNO t = 1 … N_TNO:
+
+    1. Build data vectors (length F):
+          • y_f   = ObsMag[t][f] – RefMag[f]          // observed color relative to ref
+          • σ_f   = ObsErr[t][f]                      // errors
+
+    2. Assemble design matrix X (size F × K):
+          For each filter f and template k:
+                X[f, k] = C_kf
+
+    3. Solve the weighted, non‑negative least‑squares problem:
+          Minimize   || W (X w – y) ||₂²
+          Subject to w_k ≥ 0   for all k
+          Where:
+                W[f] = 1/σ_f     // diagonal weighting matrix
+
+       This yields a coefficient vector w_t = {w₁,…,w_K}.
+
+    4. Estimate absolute magnitude H_t:
+          • Compute weighted mean of template magnitudes:
+                μ_ref = Σ_f (y_f / σ_f²) / Σ_f (1/σ_f²)
+          • Compute weighted mean of color contribution:
+                μ_colors = Σ_k w_k * ( Σ_f (C_kf / σ_f²) ) / Σ_f (1/σ_f²)
+          • H_t = μ_ref + μ_colors
+
+    5. Reconstruct spectral reflectance R_t(λ):
+          • For every λ value in common wavelength grid:
+                R_t(λ) = Σ_k w_k * TemplateSpec[k](λ)
+
+    6. Store results for TNO t:
+          • Coefficients w_t
+          • Absolute magnitude H_t
+          • Reconstructed spectrum R_t(λ)
+
+END FOR

@@ -1,0 +1,73 @@
+pseudocode
+INPUT:
+    - SPECTRA_SET  : {S_i(λ)}  // Reference near‑IR spectra (i = 1 … N_ref)
+    - FILTER_CURVES: {F_j(λ)}  // Effective throughput curves of chosen filters (j = 1 … M)
+    - K            : Integer   // Number of principal components to retain (e.g., 5–10)
+    - H            : Float     // KDE bandwidth (e.g., 0.5)
+    - NOISE_LEVEL  : Float     // Relative reflectance uncertainty (e.g., 0.20)
+
+OUTPUT:
+    - For any new photometric observation m_new(λ_eff,j):
+        * RECONSTRUCTED_SPECTRUM  : S_hat(λ)
+        * TAXONOMY_PROBABILITIES : P_taxon[ t ]  (for each taxonomy class t)
+
+--------------------------------------------------------------------
+STEP 0: Pre‑processing -------------------------------------------------
+    1. Align all reference spectra to a common wavelength grid λ_grid.
+    2. Normalize each S_i(λ) to unit mean or remove solar spectrum if required.
+
+--------------------------------------------------------------------
+STEP 1: Build Latent Space (Prior) ------------------------------------
+    1.1 Compute mean spectrum μ(λ) = average of S_i(λ).
+    1.2 Center spectra: S'_i(λ) = S_i(λ) – μ(λ).
+    1.3 Perform Singular Value Decomposition (SVD) or Eigen‑decomposition
+          of covariance matrix of {S'_i} to obtain eigenvectors {E_k(λ)}.
+    1.4 Select first K eigenvectors → PCA basis B = {E_1,…,E_K}.
+    1.5 Project each centered spectrum onto basis:
+          c_i[k] = ⟨ S'_i , E_k ⟩  for k = 1…K.
+          Store coefficient matrix C_ref (size N_ref × K).
+
+--------------------------------------------------------------------
+STEP 2: Augment Prior with KDE ----------------------------------------
+    2.1 Fit multivariate kernel density estimate (KDE) to coefficient matrix C_ref
+          using bandwidth H.
+    2.2 Sample N_aug synthetic coefficient vectors {c_synth[j]} from KDE,
+          where N_aug >> N_ref (e.g., 5000).
+    2.3 For each synthetic coefficient vector:
+          a) Reconstruct synthetic spectrum:
+                S_synth(λ) = μ(λ) + Σ_{k=1}^{K} c_synth[j][k] * E_k(λ).
+          b) Compute synthetic photometry:
+                p_synth[j] = ∫ S_synth(λ) * F_j(λ) dλ / ∫ F_j(λ) dλ   for j=1..M.
+          c) Add Gaussian noise to each photometric band:
+                p_noisy[j] = p_synth[j] * (1 + Normal(0, NOISE_LEVEL)).
+          d) Store pair (p_noisy, c_synth[j]) in TRAINING_SET.
+
+--------------------------------------------------------------------
+STEP 3: Train Encoder (Regressor) --------------------------------------
+    3.1 Use an AutoML framework (e.g., AutoGluon) to train a regression model R
+          that maps photometry vector p ∈ ℝ^M to coefficient vector c ∈ ℝ^K:
+                R(p) ≈ c.
+    3.2 Input: TRAINING_SET pairs (p_noisy, c_synth).
+    3.3 Output: Trained regressor R and its predictive uncertainty model.
+
+--------------------------------------------------------------------
+STEP 4: Train Classifier (Latent‑space Taxonomy) -----------------------
+    4.1 Label each reference spectrum S_i with its taxonomy class t_i.
+    4.2 Use the coefficient matrix C_ref and labels {t_i} to train a classifier C
+          (e.g., RandomForest or GBDT) that predicts class probabilities:
+                C(c) → P(t | c).
+    4.3 Output: Trained classifier C.
+
+--------------------------------------------------------------------
+STEP 5: Forward Inference ------------------------------------------------
+    Given a new observation with measured photometry m_new = {m_j}:
+    5.1 Predict coefficient vector:
+          c_pred = R(m_new)      // optionally obtain predictive variance σ_c
+    5.2 Decode spectrum:
+          S_hat(λ) = μ(λ) + Σ_{k=1}^{K} c_pred[k] * E_k(λ).
+    5.3 Compute taxonomy probabilities:
+          P_taxon = C(c_pred).
+    5.4 Return S_hat(λ) and P_taxon.
+
+--------------------------------------------------------------------
+END OF ALGORITHM

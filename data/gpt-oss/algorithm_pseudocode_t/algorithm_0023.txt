@@ -1,0 +1,70 @@
+INPUT
+    N_obs                     # number of photometric measurements
+    {λ_i, F_i, σ_i}           # wavelength, observed flux, measurement error
+    Filters                    # list of filter bandpasses (response curves)
+    S_lib = {S_k(λ)}_{k=1}^{N_tpl}  # library of template spectra
+
+OUTPUT
+    ĉ_k                       # posterior mean coefficients for each template
+    Cov_c                      # posterior covariance matrix of coefficients
+    S_rec(λ)                   # reconstructed spectrum
+    χ²_cls                     # χ² values for taxonomic classes
+    Outliers                   # indices of detected outliers (if any)
+
+------------------------------------------------------------
+STEP 0 –  Pre‑processing ----------------------------------------------------
+   1. For each filter j, pre‑compute synthetic photometry of every
+      template: 
+          P_{jk} = ∫_λ S_k(λ) * R_j(λ) dλ
+      where R_j(λ) is the transmission curve of filter j.
+   2. Build design matrix A of size (N_obs × N_tpl):
+          A_{ij} = P_{filter(i), j}
+      (associate each observation i with its filter index.)
+   3. Store vector of observed fluxes:  F_vec = [F_1,…,F_N]^T
+      and inverse variance weights:  w_i = 1/σ_i²,  W = diag(w_i)
+
+------------------------------------------------------------
+STEP 1 –  Prior specification -----------------------------------------------
+   4. Choose a Gaussian prior on coefficients:
+          p(c) ∝ exp[ -½ (c – μ₀)^T Λ⁻¹ (c – μ₀) ]
+      where μ₀ is typically zero and Λ is prior covariance
+      (e.g., Λ = λ_prior⁻² I).
+
+------------------------------------------------------------
+STEP 2 –  Posterior estimation -----------------------------------------------
+   5. Compute the posterior precision matrix:
+          Q = Aᵀ W A + Λ⁻¹
+   6. Compute the posterior mean vector:
+          ĉ = Q⁻¹ Aᵀ W F_vec
+   7. Compute the posterior covariance:
+          Cov_c = Q⁻¹
+
+------------------------------------------------------------
+STEP 3 –  Spectrum reconstruction -------------------------------------------
+   8. For each wavelength λ in desired grid:
+          S_rec(λ) = Σ_{k=1}^{N_tpl} ĉ_k * S_k(λ)
+
+------------------------------------------------------------
+STEP 4 –  Residual analysis & outlier detection -----------------------------
+   9. Predict fluxes:  F_pred = A ĉ
+  10. Residuals: r_i = F_i – F_pred_i
+  11. For each i:
+          if |r_i| > α * σ_i        # α = e.g. 3
+                mark i as outlier
+  12. If any outliers found:
+          Remove corresponding rows from A and entries from F_vec, w_i
+          Go back to STEP 2 (refit without outliers)
+   13. Record final set of outliers.
+
+------------------------------------------------------------
+STEP 5 –  Taxonomic classification -----------------------------------------
+   14. For each taxonomic class m with prototype spectrum S_m(λ):
+          a. Compute synthetic photometry through all filters:
+                 P_mj = ∫_λ S_m(λ) * R_j(λ) dλ
+          b. Form vector P_m = [P_mj]_{j=1}^{N_filters}
+          c. Compute χ²_m = Σ_i (F_i – P_m(filter(i)))² / σ_i²
+   15. Select class with minimum χ² as best‑fit taxonomy.
+
+------------------------------------------------------------
+RETURN
+    ĉ, Cov_c, S_rec(λ), {χ²_m}, Outliers

@@ -1,0 +1,79 @@
+Input: Spectral set {S_i(λ)}   // i = 1 … N_spectra, λ = wavelength grid
+Normalize each spectrum (e.g., unit area or median ≈ 1)
+
+Compute mean spectrum:
+    μ(λ) ← (1/N_spectra) Σ_i S_i(λ)
+
+Center spectra:
+    R_i(λ) ← S_i(λ) – μ(λ)
+
+Build data matrix R (N_spectra × L_wavelength):
+    R[i, l] = R_i(λ_l)
+
+Compute covariance matrix C = (1/(N_spectra‑1)) Rᵀ R   // L×L
+
+Eigen‑decompose C:
+    C = V Λ Vᵀ
+    V columns are eigenvectors e_k(λ)   // k = 1 … L
+    Λ diagonal eigenvalues
+
+Sort PCs by descending eigenvalue
+
+Select K (e.g., K = 5 for taxonomy, K = 9 for reconstruction)
+Truncate to first K PCs:
+    E_k(λ) ← e_k(λ),  k = 1 … K
+
+Let T_j(λ) be the normalized throughput curve of filter j
+For each PC k:
+    b_jk ← ∫ T_j(λ) * E_k(λ) dλ          // scalar projection
+For each filter j:
+    m̄_j ← ∫ T_j(λ) * μ(λ) dλ            // mean filter flux
+Form matrices:
+    B (J_filters × K)  where B[j,k] = b_jk
+    m̄ (J)              where m̄[j] = m̄_j
+
+Input: Photometry vector m_obs (J elements)
+        Measurement error vector σ (J elements)
+
+Define weight matrix:
+    W = diag(1/σ²)                      // J×J
+
+Prior on coefficients a:
+    a_prior ~ N(0_K, α² I_K)           // α chosen large → weak prior
+
+Posterior covariance:
+    Σ_post = (Bᵀ W B + (1/α²) I_K)⁻¹
+
+Posterior mean:
+    μ_post = Σ_post Bᵀ W (m_obs – m̄)
+
+Result:
+    Posterior distribution of coefficients:
+        a | m_obs ~ N(μ_post, Σ_post)
+
+For each wavelength λ_l:
+    // Predictive mean
+    μ_pred(λ_l) = μ(λ_l) + Σ_{k=1}^K μ_post[k] * E_k(λ_l)
+
+    // Predictive variance
+    σ²_pred(λ_l) = Σ_{i=1}^K Σ_{j=1}^K E_i(λ_l) * Σ_post[i,j] * E_j(λ_l)
+
+Construct full posterior predictive spectrum:
+    S_pred(λ) ~ N( μ_pred(λ), σ²_pred(λ) )
+
+Optional: Draw samples
+    For s = 1 … N_samples:
+        a_sample_s ~ N(μ_post, Σ_post)
+        S_sample_s(λ) = μ(λ) + Σ_k a_sample_s[k] * E_k(λ)
+
+If K_taxonomy = 5:
+    Use μ_post (first 5 PCs) as taxonomic feature vector
+    Cluster or classify using chosen method (e.g., GMM, k‑means)
+
+For each target t in catalog:
+    Retrieve photometry m_obs_t and errors σ_t
+    Run Steps 3–4 to obtain S_pred_t(λ) and uncertainties
+    Store:
+        μ_post_t, Σ_post_t,
+        μ_pred_t(λ), σ_pred_t(λ)
+End

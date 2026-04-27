@@ -1,0 +1,63 @@
+pseudocode
+Input:
+    y        := vector of measured magnitudes in K filters
+    σ        := vector of measurement uncertainties in those filters
+    B        := pre‑computed basis matrix (K × J)
+    Σ_c      := prior covariance for coefficients (J × J)
+
+Procedure:
+
+1. Weight matrix
+    W = diag( 1 / σ[1]^2, 1 / σ[2]^2, …, 1 / σ[K]^2 )   // K × K
+
+2. Compute precision matrices
+    A = B                                   // K × J
+    Λ = W                                     // K × K
+    Π = Σ_c^{-1}                               // J × J
+
+3. Posterior mean of coefficients
+    M = (Aᵀ · Λ · A + Π)^{-1} · (Aᵀ · Λ · y)   // J × 1
+
+4. Posterior covariance of coefficients
+    C = (Aᵀ · Λ · A + Π)^{-1}                 // J × J
+
+5. Predictive spectrum at wavelength grid λ_p
+    For each λ_p:
+        S_pred(λ_p) = Σ_{j=1}^{J} M[j] * S_j(λ_p)
+    EndFor
+
+6. Uncertainty band
+    For each λ_p:
+        Var(λ_p) = Σ_{j=1}^{J} Σ_{l=1}^{J}
+                   C[j,l] * S_j(λ_p) * S_l(λ_p)
+    EndFor
+
+Output:
+    S_pred(λ_p)      // reconstructed spectrum
+    sqrt(Var(λ_p))   // 1‑σ uncertainty as function of λ
+    M                // posterior mean coefficients
+    C                // posterior covariance
+
+pseudocode
+Input:
+    N objects, each with vectors y_n and σ_n
+
+Procedure:
+    For n = 1 to N:
+        Call Reconstruction Procedure with (y_n, σ_n, B, Σ_c)
+        Store S_pred_n, uncertainty band, M_n, C_n
+    EndFor
+
+pseudocode
+Given:
+    Class prototypes {C_t} with known coefficient priors μ_t, Σ_t
+
+For each object n:
+    For each class t:
+        Compute log‑posterior:
+            logP_t = -0.5 * (M_n - μ_t)ᵀ Σ_t^{-1} (M_n - μ_t)
+                     - 0.5 * log|Σ_t|
+        Store logP_t
+    EndFor
+    Assign class with maximum logP_t
+EndFor

@@ -1,0 +1,100 @@
+INPUT
+    OBJ_LIST          // list of TNOs
+        ID_i                // identifier
+        PHOT_i[1..K]        // K measured magnitudes in filters {f1,…,fK}
+        ERR_i[1..K]         // photometric uncertainties
+    SPEC_LIB          // spectral template library
+        T_j(λ)              // j = 1…M discrete spectra (already flux‑normalized)
+    FILTERS           // transmission curves
+        R_k(λ)              // k = 1…K filter response functions
+
+PARAMETERS
+    N_SAMPLES          // number of MCMC draws per object (e.g. 5000)
+    BURN_IN            // number of initial draws to discard (e.g. 1000)
+    ALPHA              // Dirichlet prior hyper‑parameters (vector of size M)
+    SCALE_PRIOR_MIN    // minimum albedo scaling
+    SCALE_PRIOR_MAX    // maximum albedo scaling
+
+PRE‑PROCESSING
+    1. For every spectrum T_j(λ):
+           interpolate onto common wavelength grid λ_grid
+    2. For every filter R_k(λ):
+           normalize so that ∫ R_k(λ) dλ = 1
+
+FOR EACH OBJECT i IN OBJ_LIST DO
+    --------------------------------------------------------------------
+    1. CONVERT magnitudes → fluxes
+           FOR k = 1 TO K
+               f_obs[k]  = 10^(−0.4 * (PHOT_i[k] − ZP_k))
+               σ_f[k]    = ln(10)/2.5 * f_obs[k] * ERR_i[k]      // Gaussian error on flux
+           END FOR
+
+    2. PRECOMPUTE BAND‑AVERAGED TEMPLATE FLUXES
+           // A[j][k] = expected flux of template j in filter k
+           FOR j = 1 TO M
+               FOR k = 1 TO K
+                   A[j][k] = ∑_λ T_j(λ) * R_k(λ) Δλ
+               END FOR
+           END FOR
+
+    3. DEFINE MODEL
+           Model flux in filter k:
+               f_mod[k] = S * Σ_{j=1}^{M} c[j] * A[j][k]
+           where
+               c[ ]  – non‑negative mixing weights (Σ c[j] = 1)
+               S     – global albedo scaling factor
+
+    4. DEFINE LIKELIHOOD
+           L(c,S) = Π_{k=1}^{K} Normal( f_obs[k] | f_mod[k], σ_f[k] )
+
+    5. DEFINE PRIORS
+           Prior on c : Dirichlet(α)   // α[j] > 0 for all j
+           Prior on S : Uniform(SCALE_PRIOR_MIN , SCALE_PRIOR_MAX)
+
+    6. SAMPLING (Metropolis–Hastings)
+           Initialise: c^(0) = α / Σα          // mean of Dirichlet
+                       S^(0) = (SCALE_PRIOR_MIN+SCALE_PRIOR_MAX)/2
+           FOR n = 1 TO N_SAMPLES
+               // Propose new coefficients
+               u = SampleDirichlet(α)                 // propose c'
+               c' = ε * u + (1−ε) * c^(n−1)            // ε ∈ (0,1) mixing
+               // Propose new scale
+               S' = Uniform(SCALE_PRIOR_MIN , SCALE_PRIOR_MAX)
+
+               // Compute model fluxes for proposal
+               FOR k = 1 TO K
+                   f_mod'[k] = S' * Σ_{j=1}^{M} c'[j] * A[j][k]
+               END FOR
+
+               // Evaluate likelihood ratio
+               ℓ'  = LogL(c', S')
+               ℓ0 = LogL(c^(n−1), S^(n−1))
+
+               // Acceptance probability
+               α_accept = min(1 , exp(ℓ'−ℓ0) *
+                                   [DirichletPDF(c^(n−1) | α) /
+                                    DirichletPDF(c' | α)])
+
+               IF Uniform(0,1) < α_accept THEN
+                   c^(n) = c'
+                   S^(n) = S'
+               ELSE
+                   c^(n) = c^(n−1)
+                   S^(n) = S^(n−1)
+               END IF
+           END FOR
+
+    7. POST‑PROCESS
+           Discard first BURN_IN samples
+           posterior_mean_c = mean{ c^(n) }  for n > BURN_IN
+           posterior_mean_S = mean{ S^(n) }  for n > BURN_IN
+           posterior_mean_spectrum[λ] =
+               Σ_{j=1}^{M} posterior_mean_c[j] * T_j(λ)
+
+    8. OUTPUT FOR OBJECT i
+           ID_i
+           posterior_mean_c
+           posterior_mean_S
+           posterior_mean_spectrum
+           (Optional) χ² = Σ_k (f_obs[k]−f_mod_best[k])²/σ_f[k]²
+END FOR

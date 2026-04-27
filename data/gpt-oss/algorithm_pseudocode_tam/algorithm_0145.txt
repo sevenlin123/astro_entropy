@@ -1,0 +1,63 @@
+INPUT:
+    RefSpectra   – N_ref × L matrix of high‑resolution reference spectra  
+    RefLabels    – N_ref vector of taxonomic labels (optional for training)
+    Filters      – list of filter transmission curves (F_1 … F_M)
+    K            – number of principal components to retain (default 8–10)
+    h            – KDE bandwidth (default 0.5)
+    N_synth      – number of synthetic latent samples to generate (default 5000)
+    NoiseFrac    – fractional reflectance noise to inject (default 0.20)
+    AutoMLParams – hyper‑parameters for AutoML regressor/classifier
+
+OUTPUT:
+    ReconstructedSpectrum   – high‑resolution spectrum estimate
+    TaxonomyProbabilities   – probability distribution over taxonomic classes
+    LatentCoefficients     – inferred PCA coefficients (posterior mean)
+
+ALGORITHM:
+
+1.  // ---------- 1. Prior construction ----------
+2.  Compute mean spectrum µ_S ← mean(RefSpectra, axis=0)
+3.  Subtract mean:  D ← RefSpectra – µ_S
+4.  Perform Singular Value Decomposition:  U, Σ, Vt ← svd(D, full_matrices=False)
+5.  Select first K columns of U → U_K   (principal component eigenvectors)
+6.  Project reference spectra onto PCs:
+        Z_real ← D · U_K          // shape N_ref × K
+7.  Fit Kernel Density Estimate (KDE) to Z_real with bandwidth h:
+        kde ← KDE(Z_real, bandwidth=h)
+8.  Draw N_synth synthetic latent vectors:
+        Z_syn ← kde.sample(N_synth)    // shape N_synth × K
+9.  Reconstruct synthetic spectra:
+        SynSpectra ← Z_syn · U_Kᵀ + µ_S   // shape N_synth × L
+
+10. // ---------- 2. Forward photometry ----------
+11. For each synthetic spectrum s in SynSpectra:
+12.     For each filter F_m:
+13.         Compute synthetic reflectance:
+                R_m = ∫ s(λ) · F_m(λ) dλ / ∫ F_m(λ) dλ
+14.     Store vector r = [R_1 … R_M]
+15.     Add Gaussian noise:
+                r_noisy = r + Normal(0, NoiseFrac·r)
+16.     Append pair (r_noisy, Z_syn[:,i]) to training dataset D_reg
+
+17. // ---------- 3. Train AutoML regressor ----------
+18. regressor ← AutoMLTrain(D_reg.features, D_reg.targets,
+                          AutoMLParams.regressor_settings)
+
+19. // ---------- 4. Train AutoML classifier ----------
+20. // Use only the real reference latent vectors and their labels
+21. D_cls.features ← Z_real
+22. D_cls.targets  ← RefLabels
+23. classifier ← AutoMLTrain(D_cls.features, D_cls.targets,
+                            AutoMLParams.classifier_settings)
+
+24. // ---------- 5. Inference for a new object ----------
+25. Function Infer(new_photometry):
+26.     // 5.1 Encode photometry to latent space
+27.     z_mean, z_std ← regressor.predict_with_uncertainty(new_photometry)
+28.     // 5.2 Decode to full spectrum
+29.     ReconSpec ← z_mean · U_Kᵀ + µ_S
+30.     // 5.3 Taxonomy probabilities
+31.     probs ← classifier.predict_proba(z_mean)
+32.     Return ReconSpec, probs, z_mean, z_std
+
+END

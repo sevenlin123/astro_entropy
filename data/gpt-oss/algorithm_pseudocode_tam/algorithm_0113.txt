@@ -1,0 +1,94 @@
+Input:
+    S_real[1..N]          // High‑resolution reflectance spectra (n_wavelength points)
+    λ[1..n_wavelength]    // Wavelength array
+    Filters[j][λ]         // Transmission curves of m filters
+    K_pca                 // Desired number of PCA components (≈4–10)
+    h_kde                  // KDE bandwidth (≈0.5)
+    n_aug                  // Number of synthetic latent samples (e.g., 5 000)
+    σ_noise = 0.20        // Relative photometric noise (20%)
+
+Output:
+    For any new photometric vector m_new[1..m]:
+        - Posterior distribution over latent vector z_pred
+        - Reconstructed spectrum S_rec[1..n_wavelength]
+        - Taxonomy probability vector P_tax[1..C]
+
+--------------------------------------------------------------------
+STEP 0: PREPARATION – LOAD DATA
+--------------------------------------------------------------------
+1. Load S_real and λ.
+2. Normalize each spectrum (e.g., divide by mean reflectance or by solar spectrum).
+3. Store filter transmission curves Filters[j] on λ.
+
+--------------------------------------------------------------------
+STEP 1: DEFINE PRIOR – PCA BASIS
+--------------------------------------------------------------------
+4. Compute mean spectrum μ_S = mean(S_real, axis=1).
+5. Center spectra: X = S_real - μ_S.
+6. Perform Singular Value Decomposition: X = U Σ Vᵀ.
+7. Select first K_pca columns of Vᵀ → PCs[1..K_pca, 1..n_wavelength].
+8. Project real spectra into latent space:
+       z_real[i] = PCs ⋅ (S_real[i] - μ_S)   // shape (N, K_pca)
+
+--------------------------------------------------------------------
+STEP 2: AUGMENT MANIFOLD – KDE
+--------------------------------------------------------------------
+9. Fit multivariate KDE to {z_real[1..N]} with bandwidth h_kde.
+10. Sample n_aug latent vectors:
+        z_aug[k] ~ KDE     // shape (n_aug, K_pca)
+
+--------------------------------------------------------------------
+STEP 3: GENERATE SYNTHETIC SPECTRA
+--------------------------------------------------------------------
+11. For each sampled z_aug[k]:
+        S_syn[k] = μ_S + PCsᵀ ⋅ z_aug[k]   // shape (n_aug, n_wavelength)
+
+--------------------------------------------------------------------
+STEP 4: FORWARD MODEL PHOTOMETRY
+--------------------------------------------------------------------
+12. For each synthetic spectrum S_syn[k]:
+        For each filter j:
+            m_syn[k][j] = ∫ S_syn[k](λ) * Filters[j](λ) dλ / ∫ Filters[j](λ) dλ
+        // Resulting in a vector m_syn[k] of length m.
+13. Add Gaussian noise:
+        m_noisy[k][j] = m_syn[k][j] * (1 + Normal(0, σ_noise))
+14. Assemble training pairs:
+        Input X_train = {m_noisy[k]}     // shape (n_aug, m)
+        Target Y_train = {z_aug[k]}     // shape (n_aug, K_pca)
+
+--------------------------------------------------------------------
+STEP 5: TRAIN ENCODER (AUTOML REGRESSOR)
+--------------------------------------------------------------------
+15. Choose AutoML framework (e.g., AutoGluon Tabular).
+16. Configure regressor to map m (m dims) → z (K_pca dims).
+17. Train regressor on (X_train, Y_train).
+18. Store trained model Reg.
+
+--------------------------------------------------------------------
+STEP 6: TRAIN CLASSIFIER IN LATENT SPACE
+--------------------------------------------------------------------
+19. For each real spectrum i:
+        Label[i] ← taxonomy class (e.g., H₂O, CO₂, Organic, Methanol).
+20. Train a separate AutoML classifier on (z_real, Label).
+21. Store trained classifier Class.
+
+--------------------------------------------------------------------
+STEP 7: INFERENCE – GIVEN NEW PHOTOMETRY m_new
+--------------------------------------------------------------------
+22. Predict latent vector:
+        z_pred_mean, z_pred_cov = Reg.predict_with_uncertainty(m_new)
+23. Optionally sample multiple draws from posterior:
+        z_samples = MultivariateNormal(z_pred_mean, z_pred_cov).sample(N_samp)
+24. Reconstruct spectra for each draw:
+        For each s in z_samples:
+            S_rec_s = μ_S + PCsᵀ ⋅ s
+25. Aggregate reconstructed spectra:
+        S_rec_mean = mean(S_rec_s over draws)
+        S_rec_CI = confidence_interval(S_rec_s, 95%)   // e.g., percentiles
+26. Classify taxonomy:
+        P_tax = Class.predict_proba(z_pred_mean)
+
+Return:
+    - Posterior latent distribution (z_pred_mean ± sqrt(diag(z_pred_cov)))
+    - Reconstructed spectrum (mean and credible interval)
+    - Taxonomy probability vector P_tax

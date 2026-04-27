@@ -1,0 +1,109 @@
+Input:
+    F_obs[1..N]          # observed fluxes in N photometric bands
+    σ_F[1..N]            # measurement uncertainties
+    R_band[1..N](λ)      # filter response curves
+    S_templates[M][λ]    # library of M template spectra
+    prior_S             # prior distribution over template indices (optional)
+    k                   # number of spectral basis components (if using PCA)
+    n_samples           # number of MCMC samples
+
+Output:
+    posterior_mean_spectrum[λ]
+    posterior_covariance[λ, λ]
+    taxonomic_classification
+    outlier_probability
+
+--------------------------------------------------------------------
+Step 0 – Pre‑processing
+--------------------------------------------------------------------
+for each band b in 1..N:
+    normalize F_obs[b] to consistent units
+    propagate σ_F[b] accordingly
+
+--------------------------------------------------------------------
+Step 1 – Forward Modeling of Spectra
+--------------------------------------------------------------------
+# Option A: Template‑based forward model
+for each template t in 1..M:
+    for each band b in 1..N:
+        F_model[t][b] = integral_over_λ( S_templates[t][λ] * R_band[b](λ) ) / integral_over_λ( R_band[b](λ) )
+
+# Option B: Basis‑function expansion (e.g., PCA)
+# Compute orthogonal basis vectors {B_i(λ)} for i=1..k from training set
+# For each coefficient vector c = (c1,…,ck):
+#     S(c)[λ] = Σ_i c_i * B_i(λ)
+#     For each band b: F_model[c][b] = integral_over_λ( S(c)[λ] * R_band[b](λ) ) / ...
+# Here we illustrate the template approach; basis approach is analogous.
+
+--------------------------------------------------------------------
+Step 2 – Likelihood Function
+--------------------------------------------------------------------
+# Assume independent Gaussian errors
+L(t | F_obs, σ_F) = Π_b exp( - (F_obs[b] - F_model[t][b])^2 / (2 σ_F[b]^2) )
+                     / sqrt(2π σ_F[b]^2)
+
+--------------------------------------------------------------------
+Step 3 – Prior Assignment
+--------------------------------------------------------------------
+# If prior knowledge exists (e.g., uniform over all templates)
+P_prior(t) = prior_S[t]          # e.g., 1/M for flat prior
+# For continuous coefficient space: Gaussian prior on coefficients c
+
+--------------------------------------------------------------------
+Step 4 – Posterior Sampling (MCMC)
+--------------------------------------------------------------------
+Initialize chain at random template t0
+for i = 1 to n_samples:
+    propose new template t' (or coefficient vector c')
+    compute L' = L(t' | …)
+    compute acceptance ratio:
+        α = min(1, [L' * P_prior(t')] / [L_current * P_prior(current)])
+    draw u ~ Uniform(0,1)
+    if u < α:
+        accept proposal: current ← t', L_current ← L'
+    record current as sample S[i]
+
+--------------------------------------------------------------------
+Step 5 – Posterior Summaries
+--------------------------------------------------------------------
+# Convert template samples to spectra:
+for each sample s in S:
+    S_sample[s][λ] = S_templates[s][λ]      # or synthesize from coefficients
+
+Compute posterior mean spectrum:
+    posterior_mean_spectrum[λ] = (1/n_samples) * Σ_s S_sample[s][λ]
+
+Compute posterior covariance:
+    posterior_covariance[λ, λ'] = (1/(n_samples-1)) *
+                                 Σ_s (S_sample[s][λ] - posterior_mean_spectrum[λ]) *
+                                     (S_sample[s][λ'] - posterior_mean_spectrum[λ'])
+
+--------------------------------------------------------------------
+Step 6 – Taxonomic Classification
+--------------------------------------------------------------------
+# Define taxonomy thresholds on color indices (e.g., (g–r), (r–i))
+for each sample s:
+    compute color_indices[s] from S_sample[s]
+    assign class[s] based on thresholds
+
+posterior_class_prob[class] = (# of samples assigned to class) / n_samples
+select dominant class as taxonomic_classification
+
+--------------------------------------------------------------------
+Step 7 – Outlier Detection
+--------------------------------------------------------------------
+# Predictive residuals:
+for each band b:
+    residual_b = F_obs[b] - posterior_mean_flux[b]   # where posterior_mean_flux derived from posterior_mean_spectrum
+    standardized_residual_b = residual_b / σ_F[b]
+
+outlier_probability = product_over_b( 1 - Φ(|standardized_residual_b|) )
+# where Φ is standard normal CDF
+# High outlier_probability → potential data inconsistency
+
+--------------------------------------------------------------------
+Return:
+    posterior_mean_spectrum
+    posterior_covariance
+    taxonomic_classification
+    outlier_probability

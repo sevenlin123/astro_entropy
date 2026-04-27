@@ -1,0 +1,90 @@
+Input:
+    - Observation set O = { (obj_id, filter_j, mag_j, err_j) } for all objects
+    - Filter transmission curves { R_j(λ) }
+    - Spectral basis { φ_k(λ) }  (e.g., PCA components or class templates)
+    - Prior hyper‑parameters for coefficients { μ_k, σ_k² }
+
+Output:
+    - Reconstructed spectra S_obj(λ) for each object
+    - Posterior samples {a_k} for each object
+    - Classification probabilities P(class | data)
+
+------------------------------------------------------------------
+Step 1 – Pre‑processing
+------------------------------------------------------------------
+For each object obj in O:
+    1.1 Group all measurements belonging to obj → Obs_obj
+    1.2 Convert magnitudes to fluxes:
+            F_j = 10^(−0.4 * (mag_j − ZP_j))
+        where ZP_j is the zero‑point of filter j.
+    1.3 Store flux uncertainties:
+            σ_Fj = ln(10)/2.5 * F_j * err_j
+
+------------------------------------------------------------------
+Step 2 – Forward Model Construction
+------------------------------------------------------------------
+Define spectral model for object obj:
+    S_obj(λ) = Σ_k a_k * φ_k(λ)          (linear combination)
+    Predicted flux in filter j:
+        F̂_j(a) = [∫ S_obj(λ) * R_j(λ) dλ] / [∫ R_j(λ) dλ]
+
+------------------------------------------------------------------
+Step 3 – Likelihood and Prior Specification
+------------------------------------------------------------------
+Likelihood for all measurements of obj:
+    L(a) = Π_j Normal( F̂_j(a) ; F_j , σ_Fj² )
+
+Prior on coefficients a = (a_1,…,a_K):
+    p(a) = Π_k Normal( a_k ; μ_k , σ_k² )
+
+Posterior:
+    p(a | Obs_obj) ∝ L(a) * p(a)
+
+------------------------------------------------------------------
+Step 4 – Posterior Sampling (MCMC)
+------------------------------------------------------------------
+Initialize a^(0) = μ (prior mean)
+For iter = 1 … N_iter:
+    4.1 Propose new a' = a^(iter-1) + η,  η ~ Normal(0, Σ_proposal)
+    4.2 Compute acceptance ratio:
+            α = min(1, [p(a'|Obs_obj) / p(a^(iter-1)|Obs_obj)])
+    4.3 With probability α accept a^(iter)=a'; else a^(iter)=a^(iter-1)
+After burn‑in, collect M samples {a^(m)}.
+
+------------------------------------------------------------------
+Step 5 – Spectrum Reconstruction
+------------------------------------------------------------------
+For each wavelength λ in desired grid:
+    Compute mean spectrum:
+        S_hat_obj(λ) = (1/M) Σ_m Σ_k a_k^(m) * φ_k(λ)
+    Compute uncertainty:
+        σ_S_obj(λ) = sqrt( (1/(M-1)) Σ_m [ Σ_k a_k^(m) φ_k(λ) - S_hat_obj(λ) ]² )
+
+Store S_hat_obj(λ), σ_S_obj(λ).
+
+------------------------------------------------------------------
+Step 6 – Taxonomic Classification
+------------------------------------------------------------------
+Pre‑compute class template spectra C_c(λ) for each class c.
+For each object obj:
+    6.1 Compute distance to each class:
+        d_c = Σ_λ [ S_hat_obj(λ) - C_c(λ) ]² / σ_S_obj(λ)²
+    6.2 Convert distances to probabilities (soft‑max):
+        P(c | obj) = exp(−d_c/2) / Σ_{c'} exp(−d_c'/2)
+
+Store P(c | obj) for all classes.
+
+------------------------------------------------------------------
+Step 7 – Outlier Detection
+------------------------------------------------------------------
+For each object obj:
+    7.1 Compute log‑likelihood of data under posterior:
+            ℓ = (1/M) Σ_m log L( a^(m) )
+    7.2 Flag object as outlier if ℓ < threshold τ (pre‑chosen by domain knowledge).
+
+------------------------------------------------------------------
+Return:
+    - Reconstructed spectra S_hat_obj(λ) with uncertainties
+    - Posterior coefficient samples {a^(m)}
+    - Class probabilities P(c | obj)
+    - Outlier flag for each object

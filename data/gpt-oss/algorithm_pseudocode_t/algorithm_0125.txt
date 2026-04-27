@@ -1,0 +1,56 @@
+Input:
+    O = {O₁,…,O_N}          # set of target objects
+    For each object O_k:
+        P_k = {(λ_b, m_b, σ_b)}  # list of sparse photometry points  
+            λ_b : effective wavelength of band b
+            m_b : measured apparent magnitude
+            σ_b : photometric uncertainty
+
+    B = {B₁,…,B_M}          # basis spectra defined on fine wavelength grid Λ
+    F = {F₁,…,F_L}          # broadband filter response functions
+    λ_grid = [λ₁,…,λ_L]     # fine spectral grid used for reconstruction
+
+Pre‑processing:
+    1. For every basis spectrum B_j and filter F_l compute band‑integrated flux:
+           f_{j,l} = ∫ B_j(λ) · F_l(λ) dλ   /   ∫ F_l(λ) dλ
+       Store matrix Φ[j,l] = f_{j,l}
+    2. For each filter l compute central wavelength λ_l (optional)
+
+For each object O_k in O:
+    1. Convert magnitudes to relative fluxes:
+           y_b = 10^{-0.4·m_b}          # arbitrary zero‑point cancels out
+           s_b = (ln(10)/5) · y_b · σ_b   # propagate error
+    2. Assemble observation vector y  and weight matrix W:
+           y = [y_1, …, y_{n_k}]ᵀ
+           W = diag(1/s²)                 # inverse variance weighting
+    3. Build design matrix X for this object:
+           For each band b:
+               X[b, :] = [Φ[1, b], Φ[2, b], …, Φ[M, b]]   # basis contributions
+    4. Choose regularisation parameter λ (e.g., from prior covariance)
+    5. Solve the MAP estimate for coefficient vector c_k:
+           c_k = argmin_c  (y – Xc)ᵀ W (y – Xc) + λ cᵀ c
+           This is a linear system:
+                (Xᵀ W X + λ I) c_k = Xᵀ W y
+           Solve using Cholesky decomposition or equivalent.
+    6. Compute predicted fluxes:
+           ŷ = X c_k
+    7. Evaluate residuals and χ²:
+           r = y – ŷ
+           χ² = Σ (r_b / s_b)²
+    8. Detect outliers:
+           For each band b:
+               if |r_b| > k · s_b   # k ≈ 3
+                   flag O_k, band b as potential outlier
+    9. Reconstruct full‑resolution spectrum:
+           S_k(λ) = Σ_j c_{k,j} · B_j(λ)      # linear combination on λ_grid
+    10. Optionally apply Gaussian‑process smoothing:
+           a. Treat S_k(λ) as training data for GP with kernel k(λ,λ′)
+           b. Predict smoothed spectrum S_k_sm(λ) on λ_grid
+    11. Store results for O_k:
+           coefficients c_k
+           χ² value
+           outlier flags
+           reconstructed spectrum S_k (or S_k_sm)
+
+Output:
+    For each object O_k: {c_k, χ²_k, outlier_flags_k, S_k(λ_grid)}

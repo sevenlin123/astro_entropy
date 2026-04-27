@@ -1,0 +1,73 @@
+# ------------------------------------------------------------------
+# 1. TRAINING – Build Principal‑Component Basis
+# ------------------------------------------------------------------
+Input:  Spectral data matrix X[N, L]          # N spectra, L wavelength points
+        Desired number of PCs K (e.g. 8–10)
+
+1.1   Normalize each spectrum (e.g. divide by value at 1.5 µm)
+1.2   Compute mean spectrum μ[λ] = mean(X, axis=0)
+1.3   Center data: Y = X - μ
+1.4   Compute covariance Σ = (Yᵀ Y) / (N-1)
+1.5   Eigen‑decompose Σ → eigenvalues λ_k, eigenvectors e_k
+1.6   Sort by descending λ_k; keep first K eigenvectors
+1.7   Store PC matrix PC[K, L]  (rows = PCs, columns = wavelengths)
+
+# ------------------------------------------------------------------
+# 2. PRECOMPUTE PHOTOMETRIC PROJECTIONS
+# ------------------------------------------------------------------
+Input:  Filter transmission curves T_j(λ)   # j = 1…M
+        Normalization factor N_j = ∫ T_j(λ) dλ
+
+2.1   For each filter j:
+        μ_j     = (∫ μ(λ) * T_j(λ) dλ) / N_j
+        For each PC k:
+            P[j,k] = (∫ PC[k,λ] * T_j(λ) dλ) / N_j
+# P is an M×K matrix, μ_j is an M‑vector
+
+# ------------------------------------------------------------------
+# 3. BAYESIAN INFERENCE – Posterior over PC Coefficients
+# ------------------------------------------------------------------
+Input:  Observed photometry y[M] with uncertainties σ[M]
+        Prior: a ~ N(0, I_K)          # independent standard normals
+
+Define:
+    Forward model f(a)[j] = μ_j + Σ_k P[j,k] * a_k
+
+Likelihood:
+    L(a) = Π_j  Normal( y[j] | f(a)[j], σ[j]^2 )
+
+Posterior:
+    p(a | y) ∝ exp( -½ aᵀ a ) * L(a)
+
+3.1   Use MCMC (e.g. HMC) to draw S samples {a^(s)} from p(a|y)
+      (S ≈ 10⁴ or until convergence diagnostics satisfied)
+
+# ------------------------------------------------------------------
+# 4. RECONSTRUCT FULL SPECTRUM AND UNCERTAINTIES
+# ------------------------------------------------------------------
+For each sample s = 1 … S:
+    4.1   Reconstruct spectrum:
+            s_spectrum[λ] = μ[λ] + Σ_k a_k^(s) * PC[k,λ]
+    4.2   Store s_spectrum[λ] into matrix S_recon[S, L]
+
+After sampling:
+    4.3   For each wavelength λ:
+            mean_spec[λ]   = mean( S_recon[:,λ] )
+            lower95[λ]     = percentile( S_recon[:,λ], 2.5 )
+            upper95[λ]     = percentile( S_recon[:,λ], 97.5 )
+# mean_spec is the point‑estimate spectrum; lower95–upper95 give a 95 % credible interval.
+
+# ------------------------------------------------------------------
+# 5. OPTIONAL OUTLIER CHECK
+# ------------------------------------------------------------------
+Compute posterior density value at mode a_mode = argmax p(a|y)
+If log(p(a_mode)) < threshold → flag object as potential outlier
+
+# ------------------------------------------------------------------
+# 6. OUTPUT
+# ------------------------------------------------------------------
+Return:
+    mean_spec[λ]           # reconstructed spectrum
+    lower95[λ], upper95[λ] # 95 % credible band
+    S_recon                # full posterior sample matrix (optional)
+    outlier_flag           # Boolean

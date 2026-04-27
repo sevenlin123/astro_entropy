@@ -1,0 +1,97 @@
+Algorithm SpectralReconstruction(photometry, filters, basisSpectra, priorParams, nSamples):
+    # photometry: array of observed magnitudes or fluxes with errors
+    # filters: corresponding filter transmission curves
+    # basisSpectra: matrix of reference spectra
+    # priorParams: parameters for prior distribution on coefficients
+    # nSamples: number of posterior samples
+
+    # Preprocess:
+    convert magnitudes to fluxes if needed
+    normalize fluxes
+
+    # Build forward model:
+    For each filter f:
+        compute modelFlux_f = sum_k c_k * integral(basisSpec_k * filter_f)
+    This gives linear mapping from coefficients to fluxes
+
+    # Define likelihood:
+    Likelihood(c) = product over f of N(observedFlux_f | modelFlux_f, sigma_f^2)
+
+    # Define prior:
+    Prior(c) = product over k of Exp( -lambda * c_k )   // nonnegative exponential prior
+    Also enforce c_k >= 0
+
+    # Posterior sampling via Metropolis-Hastings:
+    Initialize c = uniform positive values
+    For i in 1..nSamples:
+        Propose c' = c + normal(0, stepSize)
+        If any c'_k < 0: reject
+        Compute acceptance ratio r = min(1, [Likelihood(c')*Prior(c')] / [Likelihood(c)*Prior(c)])
+        Draw u ~ Uniform(0,1)
+        If u < r: c = c'
+        Store c as sample
+
+    # Estimate mean spectrum:
+    Spectrum = sum_{samples} (c_sample * basisSpectra) / nSamples
+
+    # Estimate uncertainty:
+    For each wavelength lambda:
+        compute standard deviation over samples of spectrum(lambda)
+
+    return Spectrum, Uncertainty
+
+INPUT:
+    P = { (λf , μf , σf) }          // Sparse photometric measurements
+    T = { Tf(λ) }                   // Transmission curves of filters
+    B = { Bk(λ) }                   // Library of k reference spectra
+    α, β                          // Hyper‑parameters of prior on coefficients
+    Nsim                           // Number of Monte‑Carlo samples
+
+OUTPUT:
+    S_est(λ)   // Estimated reflectance spectrum
+    U(λ)       // Uncertainty envelope (e.g., ±1σ)
+
+ALGORITHM:
+
+1.  Pre‑processing
+    1.1 Convert magnitudes μf to fluxes Ff:
+            Ff ← 10^(–0.4 * μf)
+    1.2 Compute measurement variances Vf ← σf²
+    1.3 Normalize each flux so that Σk Bk(λ₀) = 1 at a reference wavelength λ₀
+
+2.  Forward model construction
+    2.1 For every filter f:
+            M_f(c) = Σk ck · ∫[ Bk(λ) · Tf(λ) ] dλ
+        Here ck are the unknown spectral weights.
+
+3.  Likelihood function
+    3.1 For a weight vector c = {ck}:
+            L(c) = Πf  N( Ff  |  M_f(c),  Vf )
+        (product over all filters)
+
+4.  Prior distribution
+    4.1 Assume independent exponential priors with scale β:
+            π(c) = Πk  β · exp(–β·ck)      for ck ≥ 0
+    4.2 Set 0 probability for any ck < 0
+
+5.  Posterior sampling (Metropolis‑Hastings)
+    5.1 Initialize ck^(0) ← max(0, uniform(0,1))
+    5.2 For i = 1 to Nsim:
+            a) Propose ck* = ck^(i–1) + ε,   ε ~ Normal(0, σstep)
+            b) If any ck* < 0 → reject, set ck^(i) = ck^(i–1); continue
+            c) Compute acceptance ratio:
+                    r = min{1,
+                            [ L(ck*)·π(ck*) ] / [ L(ck^(i–1))·π(ck^(i–1)) ] }
+            d) Draw u ~ Uniform(0,1)
+            e) If u < r  → accept: ck^(i) ← ck*
+               else       → reject: ck^(i) ← ck^(i–1)
+
+6.  Spectrum estimation
+    6.1 For each sampled weight vector ck^(i):
+            S_i(λ) = Σk ck^(i)_k · Bk(λ)
+    6.2 Compute mean spectrum:
+            S_est(λ) = (1/Nsim) · Σi S_i(λ)
+    6.3 Compute standard deviation (uncertainty):
+            U(λ) = sqrt( (1/(Nsim–1)) · Σi [S_i(λ) – S_est(λ)]² )
+
+7.  Return S_est(λ), U(λ)

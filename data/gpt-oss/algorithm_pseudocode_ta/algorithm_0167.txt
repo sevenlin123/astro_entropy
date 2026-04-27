@@ -1,0 +1,74 @@
+INPUT:
+    S_ref[ N_spectra × N_wavelength ]          # Reference near‑IR spectra (already flux‑calibrated)
+    λ_ref[ N_wavelength ]                     # Wavelength grid of the reference spectra
+    Filters[ N_filters ]                      # List of broadband filter transmission curves T_f(λ)
+    Photometry[ N_filters ]                   # Observed photometric fluxes f_f
+    Errors[ N_filters ]                       # Measurement uncertainties σ_f
+    K                                       # Number of principal components to keep (e.g. 5–10)
+
+OUTPUT:
+    Spectrum_recon[ N_wavelength ]           # Reconstructed spectrum
+    Spectrum_cov[ N_wavelength × N_wavelength ]   # Posterior covariance of the spectrum
+    Coeff_posterior[ K ]                     # Posterior mean & covariance of PC coefficients
+
+--------------------------------------------------------------------
+STEP 0 : PRE‑PROCESSING OF REFERENCE SPECTRA
+--------------------------------------------------------------------
+1.   Compute mean spectrum μ(λ) = mean(S_ref, axis=0)
+2.   Center spectra:  X_centered = S_ref – μ
+3.   Perform Singular Value Decomposition:
+        U, Σ, Vt = svd(X_centered, full_matrices=False)
+        PCs = Vt[0:K, :]                # first K rows → K principal components
+4.   Store eigenvalues λ_i = Σ[i]² / (N_spectra-1)   # variances explained by each PC
+
+--------------------------------------------------------------------
+STEP 1 : FORWARD MODEL: FROM PC COEFFICIENTS TO PHOTOMETRY
+--------------------------------------------------------------------
+Define function ForwardModel(a[1…K]):
+    # a is a vector of PC coefficients
+    spectrum_hat(λ) = μ(λ) + Σ_{k=1}^{K} a_k * PCs[k, :]
+    for each filter f in Filters:
+        # Numerical integration of spectrum weighted by filter transmission
+        f_hat[f] = ∫ spectrum_hat(λ) * T_f(λ) dλ   # e.g. trapezoidal rule
+    return f_hat
+
+--------------------------------------------------------------------
+STEP 2 : DEFINE LIKELIHOOD AND PRIOR
+--------------------------------------------------------------------
+Likelihood:  L(a) = Π_f  N(Photometry[f] | ForwardModel(a)[f],  σ_f²)
+Prior on coefficients:  a ~ N(0, diag(p_var))
+    where p_var[k] = λ_k   # use explained variance as prior variance
+
+--------------------------------------------------------------------
+STEP 3 : POSTERIOR INFERENCE (GAUSSIAN CASE)
+--------------------------------------------------------------------
+Because both prior and likelihood are Gaussian (linear forward model),
+the posterior for a is also Gaussian. Compute analytically:
+
+1.   Compute Jacobian J[ f, k ] = ∂ForwardModel/∂a_k evaluated at a=0
+        J[f,k] = ∫ PCs[k, :] * T_f(λ) dλ
+
+2.   Observation noise covariance:  C_obs = diag(σ_f²)
+
+3.   Prior covariance:              C_prior = diag(p_var)
+
+4.   Posterior covariance of a:
+        C_post = inv( J^T * C_obs⁻¹ * J + C_prior⁻¹ )
+
+5.   Posterior mean of a:
+        a_mean = C_post * J^T * C_obs⁻¹ * (Photometry – ForwardModel(0))
+
+--------------------------------------------------------------------
+STEP 4 : RECONSTRUCT FULL SPECTRUM
+--------------------------------------------------------------------
+1.   Spectrum_recon(λ) = μ(λ) + Σ_{k=1}^{K} a_mean[k] * PCs[k, :]
+
+2.   Spectrum covariance:
+        C_spec = Σ_{i=1}^{K} Σ_{j=1}^{K}
+                 C_post[i,j] * PCs[i,:]^T * PCs[j,:]
+    (Matrix multiplication over wavelength dimension)
+
+--------------------------------------------------------------------
+STEP 5 : OUTPUT
+--------------------------------------------------------------------
+Return Spectrum_recon, Spectrum_cov, a_mean, C_post

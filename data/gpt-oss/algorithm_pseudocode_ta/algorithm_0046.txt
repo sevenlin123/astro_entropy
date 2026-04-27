@@ -1,0 +1,77 @@
+INPUT:
+    S   = {s_k(λ)}  : training set of N_s spectra (wavelength grid λ)
+    P   = {p_i}     : set of N_p photometric bands (filter response curves)
+    F_k = {f_k,i}   : measured fluxes for each target object k in band i
+    σ_k = {σ_k,i}   : corresponding measurement uncertainties
+    N_pc : number of principal components to retain
+
+OUTPUT:
+    ŝ_k(λ)          : posterior mean reconstructed spectrum for object k
+    Σ̂_k(λ, λ')      : posterior covariance matrix of reconstructed spectrum
+    θ̂_k              : posterior mean of PC coefficients for object k
+    Cov_θk            : posterior covariance of PC coefficients
+
+--------------------------------------------------------------------
+1. PREPROCESS TRAINING SPECTRA
+   1.1. Resample all s_k(λ) onto common wavelength grid λ_j (j=1…N_λ).
+   1.2. Compute mean spectrum μ(λ) = (1/N_s) Σ_k s_k(λ).
+   1.3. Center spectra: s'_k(λ) = s_k(λ) – μ(λ).
+
+2. PRINCIPAL COMPONENT ANALYSIS (PCA)
+   2.1. Construct data matrix X ∈ ℝ^(N_s × N_λ):
+           X_{k,j} = s'_k(λ_j).
+   2.2. Compute singular value decomposition (SVD):
+           X = U Σ V^T.
+   2.3. Extract first N_pc right-singular vectors (columns of V):
+           v_n(λ),  n=1…N_pc   (principal components).
+   2.4. Project centered training spectra onto PCs:
+           a_{k,n} = (s'_k · v_n)   (dot product over λ).
+   2.5. Store a_k = [a_{k,1}, …, a_{k,N_pc}] as training coefficient vectors.
+
+3. FILTER RESPONSE MODEL
+   3.1. For each band i, discretize filter transmission R_i(λ).
+   3.2. Compute basis functions B_i(n):
+           B_i(n) = ∫ R_i(λ) * v_n(λ) dλ   (numerical integration over λ).
+   3.3. Compute mean flux in band i from mean spectrum:
+           f̄_i = ∫ R_i(λ) * μ(λ) dλ.
+
+4. BAYESIAN INFERENCE FOR A SINGLE OBJECT k
+   For each target object k with measured flux vector f_k = [f_k,1,…,f_k,N_p]
+   and uncertainties σ_k = [σ_k,1,…,σ_k,N_p]:
+
+   4.1. Define linear forward model:
+           f_k ≈ f̄ + B * θ_k
+       where:
+           f̄      = [f̄_1,…,f̄_Np]^T
+           B       = matrix with entries B_i(n)
+           θ_k     = [a_{k,1},…,a_{k,Npc}]^T   (PC coefficients)
+
+   4.2. Prior on θ_k:
+           θ_k ~ N(0, Λ_prior)
+       where Λ_prior = diag(λ_1^2,…,λ_Npc^2) with λ_n^2 from variance of a_{·,n}
+                     (obtained from training set).
+
+   4.3. Likelihood:
+           p(f_k | θ_k) = N(f̄ + Bθ_k , Σ_obs)
+       where Σ_obs = diag(σ_k,1^2,…,σ_k,Np^2).
+
+   4.4. Compute posterior (Gaussian analytic solution):
+           Σ_post = (Λ_prior^{-1} + B^T Σ_obs^{-1} B)^{-1}
+           θ̂_k  = Σ_post * (B^T Σ_obs^{-1} (f_k – f̄))
+       (All matrix operations over R^Npc.)
+
+   4.5. Reconstruct spectrum:
+           ŝ_k(λ) = μ(λ) + Σ_{n=1}^{N_pc} θ̂_k[n] * v_n(λ)
+
+   4.6. Propagate uncertainty to spectrum:
+           For any two wavelengths λ_a, λ_b:
+               Cov_θk[a,b] = Σ_post[a,b]
+           Spectrum covariance:
+               Σ̂_k(λ_a, λ_b) = Σ_{m,n=1}^{N_pc} Cov_θk[m,n] * v_m(λ_a) * v_n(λ_b)
+
+--------------------------------------------------------------------
+5. OUTPUT ALL OBJECTS
+   For each object k, store:
+       - θ̂_k and Cov_θk
+       - ŝ_k(λ) and Σ̂_k(λ, λ')
+   End

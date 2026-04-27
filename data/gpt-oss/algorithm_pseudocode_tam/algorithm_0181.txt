@@ -1,0 +1,59 @@
+INPUT: High‑resolution TNO spectra {S_i}  (i = 1 … N_ref, N_ref ≈ 51)
+FOR each S_i:
+    Normalize to reflectance (divide by solar spectrum)
+    Interpolate onto common wavelength grid λ_j  (j = 1 … M)
+END FOR
+
+X = [S_1; S_2; … ; S_N_ref]   # matrix of shape (N_ref × M)
+Compute mean spectrum μ = mean(X, axis=0)
+Center X: X_c = X – μ
+Compute covariance Σ = (X_cᵀ · X_c) / (N_ref – 1)
+Eigen-decompose Σ → eigenvalues λ_k, eigenvectors v_k  (k = 1 … M)
+Select first K PCs (K ≈ 5–10) → V_K = [v_1 … v_K]
+Project spectra onto PCs:
+    C_i = X_c[i] · V_K          # latent vector for spectrum i (dimension K)
+
+Fit KDE to {C_i} with bandwidth h ≈ 0.5  (Gaussian kernel)
+Sample synthetic latent vectors {C_syn} from KDE  (size ≈ 5000)
+FOR each C_syn:
+    Reconstruct synthetic spectrum S_syn = μ + C_syn · V_Kᵀ
+    Store (C_syn, S_syn)
+END FOR
+
+For each synthetic spectrum S_syn:
+    FOR each filter f in JWST/NIRCam set:
+        Compute theoretical reflectance m_f = ∫ S_syn(λ) * T_f(λ) dλ
+        (T_f = filter transmission curve)
+    END FOR
+    Stack into vector m_syn = [m_f1, m_f2, … , m_fF]      # F = number of filters
+
+Define relative uncertainty σ_rel = 0.20  (20 %)
+FOR each element m_syn[f]:
+    Sample noise ε_f ~ Normal(0, σ_rel * m_syn[f])
+    Set noisy photometry m_noisy[f] = m_syn[f] + ε_f
+END FOR
+Store pair (m_noisy, C_syn)
+
+Input:  noisy photometry vectors {m_noisy}  (dimension F)
+Target: latent coefficients {C_syn}         (dimension K)
+Use AutoML framework (AutoGluon) to:
+    - Search over ensemble of models (GBDT, RandomForest, NN)
+    - Optimize hyperparameters via cross‑validation on training split
+Train final regressor R_enc : ℝ^F → ℝ^K
+Save R_enc
+
+Input: latent coefficients {C_syn}
+Label: taxonomy class of corresponding synthetic spectrum
+Train AutoML classifier C_cls : ℝ^K → categorical probabilities
+Save C_cls
+
+INPUT: New observed photometry m_obs (dimension F)
+Optionally normalize/scale to match training distribution
+
+C_pred = R_enc(m_obs)       # vector of dimension K
+
+S_rec = μ + C_pred · V_Kᵀ   # high‑resolution spectrum (dimension M)
+
+P_tax = C_cls(C_pred)       # probability distribution over classes
+
+Return: S_rec, P_tax, C_pred

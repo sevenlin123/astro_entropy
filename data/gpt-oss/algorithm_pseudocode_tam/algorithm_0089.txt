@@ -1,0 +1,86 @@
+INPUT:
+    - SeedSpectra[] : array of N_ref spectra (wavelength × reflectance)
+    - FilterSet[]   : list of M filter transmission curves
+    - PhotometryObs : vector of observed photometry (length P ≤ M) with uncertainties
+    - K             : number of principal components to retain (≈4–10)
+    - h             : KDE bandwidth (≈0.5)
+
+OUTPUT:
+    - ReconSpectrum[] : reconstructed high‑resolution spectrum (length L)
+    - TaxonomyProb    : probability distribution over taxonomic classes
+    - LatentMean[]    : mean latent coefficient vector (length K)
+
+--------------------------------------------------------------------
+STEP 1 – BUILD PRIMITIVE PRIOR (PCA)
+--------------------------------------------------------------------
+1.1. Align all SeedSpectra to common wavelength grid (length L).
+1.2. Compute mean spectrum μ_spec = mean(SeedSpectra, axis=0).
+1.3. Center spectra:  X_centered = SeedSpectra – μ_spec.
+1.4. Perform Singular Value Decomposition: X_centered = U Σ Vᵀ.
+1.5. Select first K columns of Vᵀ → PC_basis (K × L matrix).
+1.6. Project each seed spectrum to latent space:
+        Latent_seed[i] = PC_basis · (SeedSpectra[i] – μ_spec)ᵀ   for i = 1…N_ref
+    Result: Latent_seed (N_ref × K).
+
+--------------------------------------------------------------------
+STEP 2 – AUGMENT PRIOR WITH KDE
+--------------------------------------------------------------------
+2.1. Fit multivariate KDE to Latent_seed with bandwidth h → KDE_model.
+2.2. Sample N_aug synthetic latent vectors: Latent_aug[j] ~ KDE_model
+    (choose N_aug ≈ 5000–10000).
+2.3. For each Latent_aug[j]:
+        Reconstruct synthetic spectrum:
+            Spec_aug[j] = μ_spec + PC_basisᵀ · Latent_aug[j]
+    Store Spec_aug[].
+
+--------------------------------------------------------------------
+STEP 3 – GENERATE NOISY PHOTOMETRY FOR TRAINING
+--------------------------------------------------------------------
+3.1. For each synthetic spectrum Spec_aug[j]:
+        For each filter f in FilterSet:
+            Flux_f = ∫ Spec_aug[j] * Transmission_f dλ / ∫ Transmission_f dλ
+        Build photometry vector Phot_aug[j] = [Flux_1 … Flux_M].
+3.2. Inject Gaussian noise:
+        Phot_aug_noisy[j][i] = Phot_aug[j][i] * (1 + Normal(0, 0.20))
+3.3. Store pairs (Phot_aug_noisy[j], Latent_aug[j]) as training examples.
+
+--------------------------------------------------------------------
+STEP 4 – TRAIN AUTO‑ML REGRESSOR (Encoder)
+--------------------------------------------------------------------
+4.1. Input: Phot_aug_noisy[j] (size P or M), Output: Latent_aug[j] (size K).
+4.2. Use AutoML framework (e.g., AutoGluon) to select ensemble of
+     gradient‑boosted trees and/or neural nets.
+4.3. Train model EncModel on training set.
+4.4. Validate by hold‑out split; compute RMSE on latent coefficients.
+
+--------------------------------------------------------------------
+STEP 5 – TRAIN TAXONOMY CLASSIFIER (Latent Space)
+--------------------------------------------------------------------
+5.1. For each seed spectrum:
+        Label = taxonomic class (H₂O, CO₂, Organic, Methanol, …)
+5.2. Build feature matrix Latent_seed (N_ref × K) with corresponding Labels.
+5.3. Train AutoML classifier ClfModel on (Latent_seed, Labels).
+5.4. Evaluate accuracy on cross‑validation.
+
+--------------------------------------------------------------------
+STEP 6 – INFERENCE ON NEW OBSERVATIONS
+--------------------------------------------------------------------
+Input: PhotometryObs[1…P] with uncertainties σ_obs[1…P].
+
+6.1. Preprocess PhotometryObs:
+        Normalize or standardize using same scaling as training.
+6.2. Predict latent coefficients:
+        Latent_mean = EncModel.predict(PhotometryObs)
+        Optionally, obtain predictive variance Cov_lat from ensemble outputs.
+6.3. Decode to spectrum:
+        ReconSpectrum = μ_spec + PC_basisᵀ · Latent_mean
+6.4. Classify taxonomy:
+        TaxonomyProb = ClfModel.probability(Latent_mean)
+6.5. Return ReconSpectrum, TaxonomyProb, Latent_mean.
+
+--------------------------------------------------------------------
+STEP 7 – OPTIONAL POST‑PROCESSING
+--------------------------------------------------------------------
+7.1. If desired, sample multiple latent vectors from EncModel’s predictive
+     distribution to propagate uncertainty into ReconSpectrum.
+7.2. Compute derived spectral diagnostics (slopes, band depths) from ReconSpectrum.

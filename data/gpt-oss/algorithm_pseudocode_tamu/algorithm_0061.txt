@@ -1,0 +1,98 @@
+# ------------------------------------------------------------
+# 1. DATA PREPARATION
+# ------------------------------------------------------------
+
+Input:
+    S_ref[1..N]          # Reference high‑resolution spectra (reflectance vs λ)
+    F[k][λ]              # Instrument filter response curves (k = 1 … M)
+
+Parameters:
+    K                    # Number of retained principal components (e.g. 8–10)
+    h_KDE                # Bandwidth for kernel density estimation
+    N_synth              # Number of synthetic latent samples (e.g. 10⁴)
+    σ_noise_rel = 0.20   # Relative reflectance noise for forward modeling
+
+Procedure:
+    1.1 Standardise spectra:
+          μ_S = mean(S_ref, axis=λ)                # Mean spectrum
+          Σ_S = std(S_ref, axis=λ, ddof=1)         # Std dev per wavelength
+          S_std[i,λ] = (S_ref[i,λ] - μ_S[λ]) / Σ_S[λ]
+    1.2 Perform PCA on S_std:
+          [U, Λ] = eig(cov(S_std))                # U: eigenvectors, Λ: eigenvalues
+          Select first K columns → U_K            # PCA basis (K × L)
+          Compute latent coefficients for each spectrum:
+              Z[i,k] = U_Kᵀ · (S_ref[i,:] - μ_S)   # (N × K)
+    1.3 Kernel Density Estimation in latent space:
+          KDE = fit_gaussian_kde(Z, bandwidth=h_KDE)   # Non‑parametric KDE
+    1.4 Generate synthetic latent samples:
+          Z_syn[j,k] = sample_from(KDE, size=N_synth)   # (N_synth × K)
+    1.5 Reconstruct synthetic spectra:
+          S_syn[j,λ] = μ_S[λ] + Σ_S[λ] * (U_K · Z_syn[j,:])   # (N_synth × L)
+
+# ------------------------------------------------------------
+# 2. FORWARD MODELING (IMPLICIT LIKELIHOOD)
+# ------------------------------------------------------------
+
+Procedure:
+    2.1 For each synthetic spectrum j:
+            For each filter k:
+                m_true[j,k] = ∫ S_syn[j,λ] * F[k][λ] dλ   # Exact convolution
+            Inject Gaussian noise:
+                m_obs[j,k] = m_true[j,k] * (1 + N(0, σ_noise_rel))
+    2.2 Assemble training dataset:
+            X_train = {m_obs[j,:]}                     # (N_synth × M)
+            Y_train = {Z_syn[j,:]}                     # (N_synth × K)
+
+# ------------------------------------------------------------
+# 3. TRAIN ENCODER (PHOTOMETRY → LATENT)
+# ------------------------------------------------------------
+
+Procedure:
+    3.1 Initialise AutoML framework (e.g., AutoGluon Tabular).
+    3.2 Train regressor R on (X_train, Y_train):
+            R.fit(X_train, Y_train)
+    3.3 Validate regressor (optional cross‑validation on synthetic data).
+
+# ------------------------------------------------------------
+# 4. TRAIN CLASSIFIER (LATENT → TAXONOMY)
+# ------------------------------------------------------------
+
+Inputs:
+    Labels L[1..N]            # Taxonomic class for each reference spectrum
+
+Procedure:
+    4.1 Pair latent coefficients with labels: 
+            (Z[i,:], L[i])
+    4.2 Train classifier C on (Z, L) using AutoML:
+            C.fit(Z, L)
+
+# ------------------------------------------------------------
+# 5. INFERRING FROM NEW PHOTOMETRY
+# ------------------------------------------------------------
+
+Input:
+    m_new[1..M]               # Observed photometry for a target object
+
+Procedure:
+    5.1 Predict latent coefficient distribution:
+            μ_Z_pred, Σ_Z_pred = R.predict_with_uncertainty(m_new)
+            # R returns mean vector and (assumed diagonal) covariance
+    5.2 Build Gaussian copula for joint posterior:
+            Σ_cop = derive_correlation_matrix(μ_Z_pred, Σ_Z_pred)
+            JointPosterior = GaussianCopula(μ_Z_pred, Σ_cop)
+    5.3 Sample N_post latent draws:
+            {z_sample[n,:]} = JointPosterior.sample(N_post)
+    5.4 Decode spectra:
+            For each n:
+                s_sample[n,λ] = μ_S[λ] + Σ_S[λ] * (U_K · z_sample[n,:])
+    5.5 Aggregate samples:
+            S_mean[λ] = mean(s_sample[:,λ])
+            S_CI_lower[λ], S_CI_upper[λ] = percentile_bounds(s_sample[:,λ], [2.5, 97.5])
+    5.6 Classify taxonomy:
+            tax_probs = C.predict_proba(z_sample)        # Averaged over samples
+            tax_class = argmax(tax_probs)
+
+Output:
+    S_mean[λ]                 # Reconstructed spectrum (mean)
+    S_CI_lower[λ], S_CI_upper[λ]   # 95% credible interval per wavelength
+    tax_class, tax_probs       # Most probable taxonomy and probability vector

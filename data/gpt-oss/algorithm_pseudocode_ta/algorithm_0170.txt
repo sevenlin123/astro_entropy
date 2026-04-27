@@ -1,0 +1,47 @@
+INPUT
+    S      : matrix of training spectra (N_spec × N_wave)
+    F      : list of filter transmission functions {T_f(λ)}  (F × N_wave)
+    y_f    : observed photometric fluxes for a target object (length F)
+    σ_f    : observational uncertainties for each filter (length F)
+
+PARAMETERS
+    K      : number of principal components to keep (K ≈ 4–10)
+
+μ_s ← mean_rows(S)          # (1 × N_wave)
+
+S_c ← S – μ_s                # (N_spec × N_wave)
+
+C   ← (S_cᵀ · S_c) / (N_spec – 1)    # (N_wave × N_wave)
+[λ, V] ← eig(C)                     # λ sorted descending, V columns are eigenvectors
+
+PC ← V[:, 1:K]                      # (N_wave × K)
+
+A_train ← S_c · PC                  # (N_spec × K)
+
+b_f ← Σ_λ ( μ_s[λ] * T_f[λ] ) / Σ_λ ( T_f[λ] )
+
+a_f ← Σ_λ ( PC[λ, :] * T_f[λ] ) / Σ_λ ( T_f[λ] )    # (1 × K)
+
+A_filt ← [a_1ᵀ; a_2ᵀ; … ; a_Fᵀ]      # (F × K)
+
+b_vec ← [b_1; b_2; … ; b_F]        # (F × 1)
+
+prior_mean   ← 0_K
+prior_cov    ← diag(λ[1:K])             # eigenvalues as variances
+prior_cov⁻¹  ← inverse(prior_cov)
+
+y ← [y_1; … ; y_F]                     # (F × 1)
+σ² ← diag(σ_f²)                        # (F × F) measurement covariance
+
+p(y | c) ∝ exp( -½ (y – A_filt·c – b_vec)ᵀ · σ⁻² · (y – A_filt·c – b_vec) )
+
+post_cov⁻¹ ← A_filtᵀ · σ⁻² · A_filt + prior_cov⁻¹
+post_cov   ← inverse(post_cov⁻¹)
+post_mean  ← post_cov · ( A_filtᵀ · σ⁻² · (y – b_vec) + prior_cov⁻¹ · prior_mean )
+
+S_rec_centered ← PC · post_mean        # (1 × N_wave)
+
+S_rec ← μ_s + S_rec_centered           # (1 × N_wave)
+
+S_var ← PC · post_cov · PCᵀ            # (N_wave × N_wave)
+σ_S   ← sqrt(diag(S_var))              # one‑sigma band at each wavelength

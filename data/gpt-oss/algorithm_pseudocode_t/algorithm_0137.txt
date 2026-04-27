@@ -1,0 +1,54 @@
+text
+INPUT
+    Photometry set for an object:
+        { (band_i, magnitude_i, error_i) } for i = 1 … N
+    Filter response functions:
+        R[band_i][λ]   // normalized transmission vs. wavelength
+    Spectral template library:
+        S[class_j][λ]  // reflectance spectrum for each class j = 1 … M
+    Prior class weights:
+        w[class_j]     // default: uniform
+
+OUTPUT
+    Posterior class probabilities: P[class_j]
+    Mean reconstructed spectrum: f_mean[λ]
+    Standard‑deviation of spectrum: f_std[λ]
+
+--------------------------------------------------------------------
+# 1. Pre‑process photometry (magnitudes → fluxes)
+FOR each measurement i:
+    F[i]      ← 10 ^ (-0.4 * magnitude_i)                     # flux unit
+    sigma_F[i]← 0.4 * ln(10) * F[i] * error_i                 # propagated error
+
+# 2. Likelihood for each spectral template
+FOR each class j:
+    LOG_L[j] ← 0                                          # initialize log‑likelihood
+    FOR each band i:
+        # Predict flux in band i from template j
+        numerator   ← ∫ S[j][λ] * R[i][λ] dλ
+        denominator ← ∫ R[i][λ] dλ
+        p_ij        ← numerator / denominator            # expected flux
+        # Gaussian likelihood term
+        LOG_L[j] += -0.5 * [ ((F[i] - p_ij)^2) / sigma_F[i]^2
+                             + log(2π * sigma_F[i]^2) ]
+
+# 3. Posterior class probabilities
+FOR each class j:
+    U[j] ← w[j] * exp(LOG_L[j])                          # unnormalised posterior
+NORMALIZE:
+    Z    ← Σ_j U[j]
+    FOR each class j:
+        P[j] ← U[j] / Z                                 # P(class=j | data)
+
+# 4. Reconstructed spectrum (mean and variance)
+DEFINE wavelength grid Λ = {λ_1 … λ_K}
+FOR each λ in Λ:
+    # Mean spectrum
+    f_mean[λ] ← Σ_j P[j] * S[j][λ]
+
+    # Variance of spectrum
+    var[λ] ← Σ_j P[j] * (S[j][λ] - f_mean[λ])^2
+    f_std[λ] ← sqrt(var[λ])
+
+# 5. Return results
+RETURN P, f_mean, f_std

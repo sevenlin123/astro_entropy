@@ -1,0 +1,141 @@
+# ------------------------------------------------------------------
+#  INPUT
+# ------------------------------------------------------------------
+#   OBS: array of objects
+#       each object O has:
+#           bands      : list of filter names [f1,f2,...]
+#           mags       : corresponding apparent magnitudes [m1,m2,...]
+#           err_mags   : magnitude uncertainties [σm1,σm2,...]
+#
+#   TEMPLATES: dictionary keyed by taxonomic class C
+#       each entry contains a list of basis spectra S_C = {s1,s2,...}
+#       each spectrum s is defined as reflectance R(λ) on a wavelength grid
+#
+#   FILTERS: dictionary keyed by filter name F
+#       each entry contains the transmission curve T_F(λ)
+#
+#   PRIOR: hyper‑parameters for the weight prior
+#          e.g., Dirichlet(alpha) with α > 0
+#
+# ------------------------------------------------------------------
+#  OUTPUT
+# ------------------------------------------------------------------
+#   RESULTS: dictionary keyed by object ID
+#       each entry contains:
+#           posterior_samples   : samples of weight vector w
+#           mean_spectrum       : average reconstructed spectrum
+#           class_probabilities : P(C | data) for all taxonomic classes
+# ------------------------------------------------------------------
+
+
+# ------------------------------------------------------------------
+#  Helper functions
+# ------------------------------------------------------------------
+
+FUNCTION IntegratedFlux(spectrum R, filter T):
+    # Numerically integrate R(λ) * T(λ) over λ
+    RETURN ∫ R(λ) * T(λ) dλ
+
+FUNCTION BuildDesignMatrix(C):
+    # For a given taxonomic class C
+    #   For every basis spectrum s in S_C
+    #       For every filter F
+    #           A[F,s] = IntegratedFlux(s, FILTERS[F])
+    RETURN matrix A_C   # dimensions: (#filters) × (#spectra)
+
+FUNCTION LogLikelihood(y, A, w, σ):
+    # y: observed fluxes (converted from magnitudes)
+    # A: design matrix
+    # w: weight vector (non‑negative, sum to 1)
+    # σ: flux uncertainties
+    model = A * w
+    resid = y - model
+    return -0.5 * Σ (resid_i / σ_i)^2  - 0.5 * Σ log(2π σ_i^2)
+
+FUNCTION LogPrior(w, PRIOR):
+    # Dirichlet prior
+    α = PRIOR.alpha   # vector of concentration parameters
+    return Σ (α_i - 1) * log(w_i)   # assuming w_i > 0
+
+FUNCTION PosteriorSamples(A, y, σ, PRIOR, Nsamples):
+    # Simple Metropolis–Hastings sampler
+    Initialize w0 = uniform on simplex
+    For k = 1 … Nsamples:
+        Propose w' from symmetric proposal q(w'|w_k) that keeps w' on simplex
+        Compute log_accept = LogLikelihood(y,A,w',σ)+LogPrior(w',PRIOR)
+                     - (LogLikelihood(y,A,w_k,σ)+LogPrior(w_k,PRIOR))
+        Accept w_{k+1} = w' with probability min(1, exp(log_accept))
+        Else w_{k+1} = w_k
+    Return {w_k}
+
+FUNCTION ReconstructSpectrum(w, S):
+    # Weighted sum of basis spectra
+    spectrum = Σ w_i * S_i
+    RETURN spectrum
+
+FUNCTION ClassProbability(w, CLASS_MAP):
+    # CLASS_MAP associates each basis spectrum index with its taxonomic class
+    # Sum weights belonging to each class
+    P = dict()
+    For each class C:
+        indices = indices where CLASS_MAP[index]==C
+        P[C] = Σ_{i∈indices} w_i
+    RETURN P
+
+# ------------------------------------------------------------------
+#  Main algorithm
+# ------------------------------------------------------------------
+
+FOR each object O in OBS:
+    
+    # 1. Convert magnitudes to fluxes (assuming zero‑point ZP=0 for simplicity)
+    y = []
+    σ_flux = []
+    FOR i = 1 … len(O.bands):
+        m   = O.mags[i]
+        σm  = O.err_mags[i]
+        f   = 10^(-0.4 * m)            # flux proportional to 10^(-0.4*m)
+        sf  = f * ln(10) * 0.4 * σm     # propagate error
+        y.append(f)
+        σ_flux.append(sf)
+
+    # 2. Build overall design matrix A_all by concatenating class matrices
+    A_all = []
+    CLASS_MAP = []   # maps column index -> taxonomic class
+    col_idx = 0
+    FOR each class C in TEMPLATES:
+        S_C = TEMPLATES[C]                 # list of spectra
+        A_C = BuildDesignMatrix(C)         # (#filters) × (#spectra in C)
+        Append columns of A_C to A_all
+        FOR each spectrum in S_C:
+            CLASS_MAP[col_idx] = C
+            col_idx += 1
+
+    # 3. Run Bayesian inference to get posterior samples of weights
+    samples_w = PosteriorSamples(A_all, y, σ_flux, PRIOR, Nsamples=10000)
+
+    # 4. Compute mean reconstructed spectrum
+    mean_spec = 0
+    FOR each sample w in samples_w:
+        mean_spec += ReconstructSpectrum(w, AllSpectraList)
+    mean_spec /= len(samples_w)
+
+    # 5. Estimate class probabilities
+    class_probs_list = []
+    FOR each sample w in samples_w:
+        class_probs_list.append(ClassProbability(w, CLASS_MAP))
+    # Average over samples
+    class_probs = {}
+    FOR each class C:
+        class_probs[C] = average( [p[C] for p in class_probs_list] )
+
+    # 6. Store results
+    RESULTS[O.id] = {
+        'posterior_samples': samples_w,
+        'mean_spectrum': mean_spec,
+        'class_probabilities': class_probs
+    }
+
+END FOR
+
+RETURN RESULTS

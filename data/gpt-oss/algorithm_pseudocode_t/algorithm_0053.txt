@@ -1,0 +1,39 @@
+I_i_f   = ∑_k [ R_i(λ_k) · S(λ_k) · T_f(λ_k) ] · Δλ          // photon‑integral
+m_mod_i_f = -2.5 * log10(I_i_f) + C_f                         // zero‑point constant
+
+L_i = Π_f N( m[i][f] | m_mod_i_f , σ[i][f]^2 )
+
+REPEAT until convergence:
+    FOR each object i = 1 … N:
+        # --------- Sample class label ----------
+        FOR each class k = 1 … K:
+            Compute class‑specific prior weight w_k = π_k
+            Compute class‑specific coefficient prior:
+                prior_k = GaussianPDF( c[i] ; μ_k , Σ_k )
+            Compute model magnitudes m_mod_i_f(k) using c[i]
+            Compute likelihood L_k = Product_f N( m[i][f] | m_mod_i_f(k) , σ[i][f]^2 )
+            Posterior weight prob_k = w_k * prior_k * L_k
+        Normalize prob_k over k → p(z[i]=k | rest)
+        Draw new class label z[i] from categorical(p(z[i]))
+
+        # --------- Sample coefficients ----------
+        Given current class z[i], form the posterior:
+            p(c[i] | data, z[i]) ∝
+                exp[ -0.5 * Σ_f (m[i][f] - m_mod_i_f)^2 / σ[i][f]^2 ]
+                * exp[ -0.5 * (c[i]-μ_{z[i]})^T Σ_{z[i]}^{-1} (c[i]-μ_{z[i]}) ]
+        Since this is Gaussian in c[i], draw exactly:
+            Compute the linearized forward model matrix A_i (size F × K):
+                A_i[f,k] = -2.5 / ln(10) * (1/I_i_f) *
+                           Σ_k [ B_k(λ_k) * S(λ_k) * T_f(λ_k) ] * Δλ
+            Stack measurement equations:
+                y_i = m[i] - const_f
+            Solve for posterior covariance:
+                Σ_post = ( A_i^T W_i A_i + Σ_{z[i]}^{-1} )^{-1}
+            Solve for posterior mean:
+                μ_post = Σ_post * ( A_i^T W_i y_i + Σ_{z[i]}^{-1} μ_{z[i]} )
+            Draw new coefficients:
+                c[i] ~ N( μ_post , Σ_post )
+    END FOR
+END REPEAT
+
+χ²_i = Σ_f ( m[i][f] - m_mod_i_f(⟨c[i]⟩) )^2 / σ[i][f]^2

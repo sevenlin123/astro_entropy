@@ -1,0 +1,90 @@
+INPUT
+    Training spectra {S_j(λ_k)}   j = 1 … M        (spectra sampled at K wavelengths)
+    Filter response curves {R_i(λ_k)}  i = 1 … NF
+    New photometric measurements {y_i , σ_i}      (fluxes and uncertainties)
+
+PARAMETERS
+    Npc  ← number of principal components to retain  (e.g. 8–10)
+    (optionally) prior covariance Λ for coefficients
+
+OUTPUT
+    Reconstructed spectrum  Ŝ(λ_k)
+    Credible‑interval envelope  CI(λ_k)  (e.g. 95 %)
+    Posterior mean coefficient vector  μ_c
+    Posterior covariance  Σ_c
+
+--------------------------------------------------------------------
+STEP 1 – Build the spectral PCA basis
+--------------------------------------------------------------------
+1.1  Compute mean spectrum μ(λ_k) = (1/M) Σ_j S_j(λ_k)
+1.2  Center spectra: X_jk = S_jk – μ_k          for all j,k
+1.3  Compute covariance C = (Xᵀ X) / (M – 1)
+1.4  Eigendecompose C → eigenvalues {λ_t} and eigenvectors {v_t}
+1.5  Order eigenvectors by decreasing λ_t
+1.6  Retain first Npc eigenvectors → form basis matrix
+         B(λ_k , t) = v_t(k)           for t = 1 … Npc
+         (each column of B is a principal component)
+1.7  Store explained variances λ_t   (t=1…Npc)
+
+--------------------------------------------------------------------
+STEP 2 – Forward model: project basis into photometry space
+--------------------------------------------------------------------
+For each filter i = 1 … NF
+    2.1  Compute mean flux in filter:
+            m_i = Σ_k μ_k * R_i(k) / Σ_k R_i(k)
+    2.2  For each component t = 1 … Npc
+            f_it = Σ_k B(k,t) * R_i(k) / Σ_k R_i(k)
+Store:
+    m  ← vector of length NF   (mean photometry)
+    F  ← NF × Npc matrix with entries f_it
+
+--------------------------------------------------------------------
+STEP 3 – Bayesian inference of component coefficients
+--------------------------------------------------------------------
+Given observed photometry y_i and errors σ_i:
+
+3.1  Assemble observation vector y  (length NF)
+3.2  Observation covariance:
+        Σ_y = diag(σ_1², …, σ_NF²)
+
+3.3  Prior on coefficients:
+        p(c) ~ N(0 , Λ)          where Λ = diag(λ_1,…,λ_Npc)
+        (If prior regularization desired, replace Λ with scaled version)
+
+3.4  Compute posterior covariance:
+        Σ_c = ( Fᵀ Σ_y⁻¹ F + Λ⁻¹ )⁻¹
+
+3.5  Compute posterior mean:
+        μ_c = Σ_c  Fᵀ Σ_y⁻¹ ( y – m )
+
+--------------------------------------------------------------------
+STEP 4 – Spectrum reconstruction
+--------------------------------------------------------------------
+4.1  Reconstructed spectrum:
+        Ŝ(λ_k) = μ_k  +  Σ_{t=1}^{Npc} μ_c(t) * B(k,t)
+
+--------------------------------------------------------------------
+STEP 5 – Uncertainty propagation (credible intervals)
+--------------------------------------------------------------------
+5.1  Draw N_samples draws from N( μ_c , Σ_c )
+5.2  For each draw s:
+        Ŝ_s(λ_k) = μ_k + Σ_t s(t) * B(k,t)
+5.3  For each wavelength λ_k:
+        Compute percentiles of {Ŝ_s(λ_k)} across samples
+        Set 95 % credible interval CI_lower(k), CI_upper(k)
+
+--------------------------------------------------------------------
+STEP 6 – (Optional) Outlier flagging
+--------------------------------------------------------------------
+6.1  Evaluate marginal likelihood of y under the model:
+        p(y | data) = ∫ N(y | m + F c , Σ_y) N(c | 0 , Λ) dc
+                 = N( y | m , Σ_y + F Λ Fᵀ )
+6.2  Compare log‑likelihood to distribution of training likelihoods
+        Flag object if likelihood below threshold (e.g., bottom 5 %)
+
+--------------------------------------------------------------------
+RETURN
+    Ŝ(λ_k)            – mean reconstructed spectrum
+    CI_lower(k), CI_upper(k) – credible‑interval envelope
+    μ_c, Σ_c          – posterior coefficient statistics
+    (optional) flag – outlier status

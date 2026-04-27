@@ -1,0 +1,73 @@
+2.1 Compute PCA on Spectra[]
+    - Center spectra: S_centered = S_i – mean(Spectrum)
+    - Covariance matrix C = cov(S_centered)
+    - Eigen decomposition: [evecs, evals] = eig(C)
+    - Sort eigenvectors by decreasing eigenvalues
+    - Select K principal components (e.g., K = 8–10)
+    - Projection matrix W = [evec1 … evecK]   // M × K
+
+2.2 Project each spectrum to latent coordinates
+    - For each i:
+        latent_i = Wᵀ · (S_i – mean(Spectrum))      // K‑vector
+
+2.3 Estimate density in latent space via KDE
+    - Use Gaussian kernels with bandwidth h ≈ 0.5
+    - For any latent point z: p(z) ∝ Σ_k exp( -||z – latent_k||² / (2h²) )
+
+2.4 Sample synthetic latent vectors
+    - Draw N_syn synthetic latents {z_synth} from KDE (e.g., N_syn = 5000)
+
+3.1 Decode synthetic latents to spectra
+    - For each z_synth:
+        S_synth = mean(Spectrum) + W · z_synth         // M‑vector
+
+3.2 Forward‑model photometry for each synthetic spectrum
+    - For each filter j:
+        m_j_synth = integrate( S_synth × F_j ) / integrate( F_j )
+        // Normalization by filter throughput
+
+3.3 Inject Gaussian noise
+    - For each m_j_synth:
+        m_j_noisy = m_j_synth + Normal(0, NoiseLevel × m_j_synth)
+    - Store pair: (m_noisy_vec, z_synth)
+
+4.1 Assemble training dataset
+    - X_train = {m_noisy_vec}   // P‑dimensional photometry vectors
+    - Y_train = {z_synth}       // K‑dimensional latent vectors
+
+4.2 AutoML regression
+    - Use AutoGluon Tabular (ensemble of GBDTs, neural nets, etc.)
+    - Train regressor R: K‑dimensional output
+    - Loss: L2 between predicted and true latent vectors
+    - Validation: internal cross‑validation within AutoML
+
+5.1 Prepare labeled latent set
+    - For each real spectrum S_i:
+        label_i ∈ {H2O, CO2, Organics, Methanol}
+
+5.2 Train AutoML classifier C
+    - Inputs: latent_i
+    - Output: probability vector over classes
+
+6.1 Observe new object: m_obs[1..P]
+
+6.2 Predict latent coordinates
+    - z_pred = R(m_obs)
+
+6.3 Reconstruct full spectrum
+    - S_recon = mean(Spectrum) + W · z_pred
+
+6.4 Classify taxonomy
+    - class_prob = C(z_pred)
+
+6.5 Output
+    - Reconstructed spectrum S_recon (M values)
+    - Class probabilities class_prob
+
+7.1 (If desired) Sample latent posterior
+    - For i = 1 to N_sample:
+        z_sampled ~ Gaussian(mean=z_pred, cov=R_covariance_estimate)
+        S_sampled[i] = mean(Spectrum) + W · z_sampled
+
+7.2 Use ensemble {S_sampled} to estimate spectral uncertainties,
+    confidence intervals, and derived diagnostics (slopes, band depths).

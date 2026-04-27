@@ -1,0 +1,77 @@
+PROCEDURE ProbSpectralReconstruction(
+          observations,   // { (f_i, σ_i, T_i(λ)) } for i = 1 … N
+          λ_grid,         // { λ_j } for j = 1 … M
+          prior_mean,     // vector m_r[1…M]
+          hyperparams     // { σ_p^2, l }    (prior variance & length‑scale)
+       )
+    INPUT:
+        N           = number of photometric points
+        M           = number of wavelength grid points
+        f[1…N]      = measured fluxes   (or magnitudes converted to fluxes)
+        σ[1…N]      = measurement uncertainties
+        T[i][j]     = transmission of filter i at wavelength λ_j
+        Δλ[j]       = spacing of wavelength grid (e.g. λ_{j+1}-λ_j)
+
+    OUTPUT:
+        μ_r[1…M]    = posterior mean reflectance spectrum
+        Σ_r[1…M,1…M] = posterior covariance matrix
+        σ_r[1…M]    = posterior standard deviations (sqrt of diagonal)
+
+    --------------------------------------------------------------------
+    1. Build the filter–response matrix M (size N × M)
+        FOR i = 1 TO N DO
+            FOR j = 1 TO M DO
+                M[i][j] ← T[i][j] * Δλ[j]
+            END FOR
+        END FOR
+
+    2. Assemble the prior covariance matrix K_rr (size M × M)
+        FOR j = 1 TO M DO
+            FOR k = 1 TO M DO
+                diff ← λ_grid[j] – λ_grid[k]
+                K_rr[j][k] ← hyperparams.σ_p^2 *
+                               exp( -diff^2 / ( 2 * hyperparams.l^2 ) )
+            END FOR
+        END FOR
+
+    3. Form the noise covariance matrix Σ_noise (size N × N)
+        Σ_noise ← diag( σ[1]^2 , σ[2]^2 , … , σ[N]^2 )
+
+    4. Compute the inverse of the prior covariance (K_inv)
+        K_inv ← inverse(K_rr)
+
+    5. Compute the intermediate matrix A = M^T · Σ_noise^{-1}
+        A ← transpose(M) × inverse(Σ_noise)
+
+    6. Compute the posterior covariance Σ_r
+        Σ_r ← inverse( K_inv + A × M )
+
+    7. Compute the posterior mean μ_r
+        temp ← A × f                           // size M × 1
+        μ_r ← Σ_r × ( K_inv × prior_mean + temp )
+
+    8. Extract posterior standard deviations
+        FOR j = 1 TO M DO
+            σ_r[j] ← sqrt( Σ_r[j][j] )
+        END FOR
+
+    9. RETURN μ_r , Σ_r , σ_r
+END PROCEDURE
+
+PROCEDURE ClassifySpectra( μ_r , Σ_r , templates )
+    INPUT:
+        μ_r[1…M]    = posterior mean spectrum
+        Σ_r[1…M,1…M] = posterior covariance
+        templates   = list of taxonomy spectra { t_k[1…M] }
+
+    OUTPUT:
+        best_class   = index k of closest taxonomy template
+
+    FOR each template k DO
+        diff[k] ← μ_r – templates[k]
+        χ²[k]   ← transpose(diff[k]) × inverse(Σ_r) × diff[k]
+    END FOR
+
+    best_class ← argmin_k χ²[k]
+    RETURN best_class
+END PROCEDURE

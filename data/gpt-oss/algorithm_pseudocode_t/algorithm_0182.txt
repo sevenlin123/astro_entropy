@@ -1,0 +1,130 @@
+text
+PROCEDURE ReconstructSpectra(objectPhotometry):
+    # ------------------------------------------------------------
+    # 0. LOAD GLOBAL DATA AND CONSTANTS
+    # ------------------------------------------------------------
+    READ filterResponse[]          # Transmission curves for all filters
+    READ solarSpectrum()            # Solar reflectance function
+    READ zeroPointMagnitude[]      # Zero‑point for each filter
+    READ spectralLibrary[]         # Dictionary: taxon -> list of material spectra
+                                   # Each spectrum is a function S(λ)
+    DEFINE nMaterials = total number of distinct material spectra
+    DEFINE nFilters   = number of photometric bands
+
+    # ------------------------------------------------------------
+    # 1. INITIALISE MODEL PARAMETERS
+    # ------------------------------------------------------------
+    FOR each material m in 1..nMaterials:
+        w[m] ← 1 / nMaterials          # Initial weight (mixing fraction)
+    END FOR
+    TAXON_PROB[1..N_TAXA] ← 1/N_TAXA     # Uniform prior over taxonomic classes
+
+    # ------------------------------------------------------------
+    # 2. DEFINE CORE FUNCTIONS
+    # ------------------------------------------------------------
+    FUNCTION Reflectance(w[1..nMaterials]):
+        R(λ) ← Σ_{m=1}^{nMaterials} w[m] * S_m(λ)   # Linear mix of material spectra
+        RETURN R(λ)
+
+    FUNCTION SyntheticFlux(R(λ), filter k):
+        f_k ← ∫ R(λ) * filterResponse[k](λ) dλ      # Convolution with filter
+        RETURN f_k
+
+    FUNCTION SyntheticMagnitude(f_k, zeroPoint_k):
+        m_k ← -2.5 * log10(f_k) + zeroPoint_k
+        RETURN m_k
+
+    FUNCTION Likelihood(observedMagnitudes[], σ[], syntheticMagnitudes[]):
+        χ² ← Σ_{k=1}^{nFilters} ((observedMagnitudes[k] -
+                                  syntheticMagnitudes[k]) / σ[k])²
+        L   ← exp(-0.5 * χ²)                          # Gaussian likelihood
+        RETURN L
+
+    # ------------------------------------------------------------
+    # 3. SET UP MCMC SAMPLER
+    # ------------------------------------------------------------
+    INITIALIZE MarkovChain with state (w[1..nMaterials], TAXON_PROB[1..N_TAXA])
+    SET proposalStdW ← small value
+    SET proposalStdT ← small value
+    SET N_steps ← desired number of MCMC iterations
+    SET burnIn  ← chosen burn‑in period
+    STORE samplesAfterBurnIn ← empty list
+
+    # ------------------------------------------------------------
+    # 4. MAIN MCMC LOOP
+    # ------------------------------------------------------------
+    FOR step = 1 TO N_steps:
+        # 4.1. PROPOSE NEW STATE
+        FOR each material m:
+            w_prop[m] ← w[m] + Normal(0, proposalStdW)
+        END FOR
+        NORMALIZE w_prop so that Σ w_prop = 1                # Mixing fractions must sum to 1
+
+        FOR each taxon t:
+            TAXON_PROB_prop[t] ← TAXON_PROB[t] + Normal(0, proposalStdT)
+        END FOR
+        NORMALIZE TAXON_PROB_prop so that Σ TAXON_PROB_prop = 1
+
+        # 4.2. COMPUTE SYNTHETIC MAGNITUDES
+        R_prop ← Reflectance(w_prop)
+        FOR each filter k:
+            f_k_prop ← SyntheticFlux(R_prop, k)
+            mag_k_prop ← SyntheticMagnitude(f_k_prop, zeroPointMagnitude[k])
+            syntheticMagProp[k] ← mag_k_prop
+        END FOR
+
+        # 4.3. CALCULATE LIKELIHOOD
+        L_prop ← Likelihood(observedMagnitudes, σ, syntheticMagProp)
+
+        # 4.4. ACCEPT/REJECT
+        IF step == 1:
+            L_current ← L_prop
+            w_current ← w_prop
+            TAXON_PROB_current ← TAXON_PROB_prop
+        ELSE:
+            α ← min(1, L_prop / L_current)
+            DRAW u ~ Uniform(0,1)
+            IF u < α:
+                w_current ← w_prop
+                TAXON_PROB_current ← TAXON_PROB_prop
+                L_current ← L_prop
+            END IF
+        END IF
+
+        # 4.5. SAVE SAMPLE AFTER BURN‑IN
+        IF step > burnIn:
+            APPEND (w_current, TAXON_PROB_current) TO samplesAfterBurnIn
+        END IF
+    END FOR
+
+    # ------------------------------------------------------------
+    # 5. POST‑PROCESS SAMPLING RESULTS
+    # ------------------------------------------------------------
+    # 5.1. ESTIMATE POSTERIOR MEAN & CREDIBLE INTERVALS
+    FOR each material m:
+        w_mean[m] ← mean( {w_sample[m]} )
+        w_CI95[m] ← 2.5th & 97.5th percentiles of {w_sample[m]}
+    END FOR
+    FOR each taxon t:
+        TAXON_PROB_mean[t] ← mean( {TAXON_PROB_sample[t]} )
+        TAXON_PROB_CI95[t] ← 2.5th & 97.5th percentiles of {TAXON_PROB_sample[t]}
+    END FOR
+
+    # 5.2. OUTLIER CHECK (OPTIONAL)
+    FOR each filter k:
+        residual[k] ← observedMagnitudes[k] - median( {syntheticMagSample[k]} )
+    END FOR
+    χ²_outlier ← Σ (residual[k]/σ[k])²
+    IF χ²_outlier > threshold:
+        FLAG object as outlier
+    END IF
+
+    # ------------------------------------------------------------
+    # 6. OUTPUT RESULTS
+    # ------------------------------------------------------------
+    RETURN {
+        "materialWeights": {m: (w_mean[m], w_CI95[m])},
+        "taxonomyProbabilities": {t: (TAXON_PROB_mean[t], TAXON_PROB_CI95[t])},
+        "outlierFlag": (χ²_outlier > threshold)
+    }
+END PROCEDURE

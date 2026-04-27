@@ -1,0 +1,75 @@
+text
+Inputs
+-------
+S_ref          : Reference spectra matrix   (M_ref × N_wave)
+F_band         : List of filter transmission curves   (K_filters × N_wave)
+σ_noise        : Relative photometric noise (scalar or vector per band)
+K_pca          : Number of principal components (≤ N_wave)
+N_kde_samples  : Number of synthetic latent samples to generate
+Model_Regressor: AutoML regressor (e.g., Gradient‑Boosted Tree)
+Model_Classifier: AutoML classifier (optional)
+
+Outputs
+-------
+ReconstructSpectrum(m_obs) → S_hat      // high‑resolution spectrum
+ClassifySpectrum(m_obs)   → Prob_Types  // taxonomy probability vector
+
+1.1 Compute mean spectrum μ = mean(S_ref, axis=0)
+1.2 Center spectra: S_centered = S_ref – μ
+1.3 Apply PCA to S_centered
+      → Eigenvalues λ[1…K_pca], Eigenvectors V[1…K_pca] (each of length N_wave)
+1.4 Project reference spectra into latent space:
+      Z_ref = S_centered · V          // shape: M_ref × K_pca
+
+2.1 Fit a multivariate KDE to Z_ref
+2.2 Draw N_kde_samples latent vectors:
+      Z_synth ~ KDE(Z_ref)
+
+3.1 For each synthetic latent vector z in Z_synth:
+       a. Reconstruct spectrum:
+            S_synth = μ + z · Vᵀ      // shape: 1 × N_wave
+       b. Compute noiseless photometry:
+            p_noisy = ∫ S_synth(λ) * F_band(λ) dλ    // vector of length K_filters
+       c. Add Gaussian noise:
+            ε ~ Normal(0, σ_noise * p_noisy)
+            p_obs = p_noisy + ε
+       d. Store (p_obs, z) as a training example
+3.2 Assemble training dataset:
+       X_train = {p_obs[1…N_kde_samples]}          // shape: N_kde_samples × K_filters
+       Y_latent = {z[1…N_kde_samples]}            // shape: N_kde_samples × K_pca
+
+4.1 Fit Model_Regressor on (X_train, Y_latent)
+      // The regressor learns mapping: photometry → latent coefficients
+
+5.1 For each reference spectrum i:
+       Assign taxonomy label L[i]  // e.g., H₂O, CO₂, Organic, Methanol
+5.2 Fit Model_Classifier on (Z_ref, L)      // mapping latent → taxonomy
+
+Input: Observed photometry m_obs (length K_filters)
+
+6.1 Predict latent coefficients:
+       z_pred = Model_Regressor.predict(m_obs)     // shape: K_pca
+6.2 Reconstruct full spectrum:
+       S_hat = μ + z_pred · Vᵀ                    // shape: 1 × N_wave
+6.3 (Optional) Estimate taxonomy probabilities:
+       Prob_Types = Model_Classifier.predict_proba(z_pred)
+Output: S_hat, Prob_Types
+
+PCA(data, k):
+    Center data
+    Compute covariance matrix
+    Obtain top-k eigenvectors V
+    Return V, eigenvalues λ
+
+KDE_fit(samples):
+    Estimate density using kernel bandwidth h (≈0.5 recommended)
+    Return density estimator
+
+KDE_sample(estimator, n):
+    Randomly draw n points from the estimated density
+    Return sampled latent vectors
+
+ConvolveSpectrum(S, F):
+    For each filter f:
+        p_f = ∑ S(λ) * F_f(λ) * Δλ / ∑ F_f(λ) * Δλ
+    Return vector p

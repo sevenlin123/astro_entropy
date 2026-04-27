@@ -1,0 +1,78 @@
+INPUT
+    Photometry:          { (λ_i , m_i , σ_i) }   // i = 1…N_filters
+    Filter curves:       { T_i(λ) }             // transmission for each band
+    Zero‐point fluxes:   { ZP_i }                // to convert mags to flux
+    Wavelength grid:     λ_grid[1…M]            // high‑resolution grid for output
+    Prior template spectra:  S_k(λ_grid)          // k = 1…K (taxonomic classes)
+
+OUTPUT
+    Posterior predictive spectrum:  { (λ_j , μ_j , σ_j) }
+    Taxonomy probabilities:         { P_k }
+
+--------------------------------------------------------------------
+1.  Convert magnitudes to fluxes
+    FOR each i:
+        F_i = 10^(-0.4*(m_i - ZP_i))
+        δF_i = 0.4*ln(10)*σ_i*F_i      // propagate magnitude error
+    END
+
+2.  Define the spectral model
+    Let f(λ) be the reflectance spectrum to recover.
+    Place a Gaussian–Process prior on f(λ):
+        f(λ) ~ GP( m_f(λ),  k_f(λ,λ') )
+    Where:
+        m_f(λ)   = mean function (e.g., weighted average of S_k)
+        k_f      = kernel with hyper‑parameters θ = {α, ℓ}
+                   (α = amplitude, ℓ = correlation length).
+
+3.  Forward model for each filter
+    DEFINE modelFlux(f, T_i, λ_grid):
+        // convolve spectrum with filter transmission
+        num = Σ_j  T_i(λ_j) * f(λ_j) * Δλ_j
+        den = Σ_j  T_i(λ_j) * Δλ_j
+        RETURN num / den
+    END
+
+4.  Likelihood function
+    GIVEN a realization of f(λ_grid):
+        FOR each i:
+            μ_i = modelFlux(f, T_i, λ_grid)
+            L_i = Normal( F_i | μ_i , δF_i^2 )
+        END
+        LOG_L = Σ_i ln(L_i)
+    END
+
+5.  Bayesian inference
+    // Use MCMC to sample from posterior p(f,θ | data)
+    INITIALIZE chain with starting values f_0, θ_0
+    FOR iteration = 1 … N_samples:
+        SAMPLE new f' and θ' from proposal distribution
+        COMPUTE LOG_L' = log-likelihood for f'
+        COMPUTE LOG_PRIOR' = log-prior for f', θ'
+        ACCEPT with probability min(1,
+                    exp[(LOG_L'+LOG_PRIOR')-(LOG_L+LOG_PRIOR)])
+        IF accepted:
+            f_current = f'
+            θ_current = θ'
+            STORE f_current
+        END
+    END
+
+6.  Posterior predictive spectrum
+    FOR each stored sample f_s:
+        FOR each λ_j in λ_grid:
+            μ_s(j) = f_s(λ_j)
+        END
+    END
+    COMPUTE mean spectrum μ(j) = mean_s[ μ_s(j) ]
+    COMPUTE 1‑σ interval σ(j) = std_dev_s[ μ_s(j) ]
+
+7.  Taxonomy classification (optional)
+    FOR each class k:
+        // compare posterior predictive mean to template S_k
+        D_k = Σ_j [ μ(j) - S_k(λ_j) ]^2 / σ(j)^2
+        P_k ∝ exp(-0.5 * D_k)
+    END
+    NORMALIZE {P_k} so Σ_k P_k = 1
+
+RETURN { (λ_j , μ(j) , σ(j)) }, {P_k}

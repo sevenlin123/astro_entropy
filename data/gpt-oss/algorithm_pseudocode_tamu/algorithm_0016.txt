@@ -1,0 +1,86 @@
+text
+/* --------------------------------------------------------------
+   1. TRAINING PHASE
+   -------------------------------------------------------------- */
+
+/* INPUTS */
+S_train      : array[N][M]            // N training spectra, M wavelength bins
+λ_grid       : array[M]               // Corresponding wavelengths
+filters      : list of FilterCurves   // Transmission curves T_k(λ), k = 1..L
+K            : integer                // Number of principal components (e.g. 8)
+h_kde        : float                  // KDE bandwidth (≈ 0.5)
+M_aug        : integer                // Number of synthetic latent samples (e.g. 5000)
+
+/* STEP 1 – Principal‑Component Basis (Prior) */
+μ_S          = mean_over_rows(S_train)                 // Mean spectrum
+S_centered   = S_train – μ_S                           // Centered spectra
+U, Σ, Vt     = svd(S_centered)                         // SVD of centered matrix
+V_K          = Vt[:K,:]                                // Top‑K eigenvectors (M×K)
+c_real       = S_centered @ V_K                        // Projected latent coeffs (N×K)
+
+/* STEP 2 – KDE Augmentation of Latent Space */
+kde_model    = KDE(kernel='gaussian', bandwidth=h_kde) // Fit KDE to c_real
+c_aug        = kde_model.sample(M_aug)                 // Synthetic latent vectors (M_aug×K)
+
+/* STEP 3 – Forward Modelling of Synthetic Photometry */
+for i in 1 .. M_aug:
+    S_aug[i]   = μ_S + V_K @ c_aug[i].T                 // Reconstruct full spectrum
+    for k in 1 .. L:
+        m_true[i,k] = integrate( S_aug[i] * filters[k] ) / 
+                      integrate( SolarSpectrum * filters[k] )
+    m_noisy[i]  = m_true[i] + Normal(0, 0.2 * m_true[i]) // 20 % Gaussian noise
+    store (m_noisy[i], c_aug[i])
+
+/* STEP 4 – Encoder (Photo → Latent) Training */
+encoder = AutoMLRegressor()                            // e.g. AutoGluon GBM + NN
+encoder.train( X = {m_noisy[i] | i=1..M_aug},
+               y = {c_aug[i]   | i=1..M_aug} )
+
+/* STEP 5 – Classifier (Optional) */
+classifier = AutoMLClassifier()
+classifier.train( X = c_real,
+                 y = labels_of_S_train )
+
+/* OUTPUTS */
+save(μ_S, V_K, encoder, classifier)
+
+/* --------------------------------------------------------------
+   2. INFERENCE PHASE
+   -------------------------------------------------------------- */
+
+/* INPUTS FOR A NEW OBJECT */
+m_obs        : array[L]              // Observed photometry in L filters
+σ_obs        : array[L] = 0.2*m_obs  // Adopted 20 % relative uncertainty
+
+/* STEP 1 – Predict Latent Coefficients */
+μ_c_pred     = encoder.predict_mean(m_obs)      // Point estimate (K‑vector)
+Σ_c_pred     = encoder.predict_covariance(m_obs) // Optional: predictive covariance
+/* If covariance not available, approximate by bootstrap over ensemble members */
+
+/* STEP 2 – Sample Posterior in Latent Space */
+N_samples    = 1000
+c_samples    = sample_gaussian_copula( μ_c_pred, Σ_c_pred, N_samples )
+/* Gaussian copula preserves correlations implied by Σ_c_pred */
+
+/* STEP 3 – Reconstruct Spectra */
+for j in 1 .. N_samples:
+    S_recon[j] = μ_S + V_K @ c_samples[j].T
+
+/* STEP 4 – Aggregate Samples */
+S_mean       = mean_over_rows(S_recon)           // Posterior mean spectrum
+S_lower      = percentile(S_recon, 2.5, axis=0)   // 95 % lower bound
+S_upper      = percentile(S_recon, 97.5, axis=0) // 95 % upper bound
+
+/* STEP 5 – Taxonomic Probability (Optional) */
+tax_prob     = classifier.predict_proba( μ_c_pred )
+
+/* --------------------------------------------------------------
+   3. RETURN RESULTS
+   -------------------------------------------------------------- */
+
+return {
+    "posterior_mean_spectrum" : S_mean,
+    "posterior_CI_95"         : (S_lower, S_upper),
+    "latent_coefficients"     : μ_c_pred,
+    "taxonomy_probability"    : tax_prob
+}

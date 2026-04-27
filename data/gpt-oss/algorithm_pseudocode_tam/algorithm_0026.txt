@@ -1,0 +1,103 @@
+Input:
+    S_ref[1..N]   – Reference spectra (high‑resolution reflectance vectors)
+    λ_ref[1..L]   – Wavelength grid for S_ref
+    Filters[F]   – List of photometric filter transmission curves
+    σ_ph          – Relative photometric noise level (default 0.20)
+    K             – Number of principal components to keep (e.g. 8–10)
+
+Output:
+    For any new photometric vector m[1..F]:
+        1. Posterior distribution of latent coefficients z
+        2. Reconstructed spectrum Ŝ[1..L]
+        3. Taxonomic probability vector p_type[1..C]
+
+--------------------------------------------------------------------
+Step 1 – Build the Prior (PCA + KDE)
+--------------------------------------------------------------------
+1.1  Center the reference spectra:
+      μ_S = mean(S_ref over i)
+      X  = S_ref – μ_S          // matrix N × L
+
+1.2  Compute covariance Σ = (Xᵀ X) / (N−1)
+
+1.3  Eigen‑decompose Σ:
+      Σ = U Λ Uᵀ
+      PCs = first K columns of U          // K × L matrix
+      λ_vals = first K eigenvalues
+
+1.4  Project reference spectra onto PCs:
+      Z_real[i] = PCs · (S_ref[i] – μ_S)ᵀ   // length K vector
+
+1.5  Fit a non‑parametric Kernel Density Estimate (KDE) to {Z_real[i]}:
+      Choose bandwidth h ≈ 0.5
+      KDE_model = KDE(Z_real, bandwidth=h)
+
+1.6  Sample M synthetic latent vectors from KDE:
+      Z_synth[j] ~ KDE_model,   j=1..M
+      // M >> N (e.g., 5000) to enrich training set
+
+--------------------------------------------------------------------
+Step 2 – Generate Synthetic Training Data (Forward Modeling)
+--------------------------------------------------------------------
+For each latent vector Z in {Z_real} ∪ {Z_synth}:
+    2.1  Reconstruct high‑res spectrum:
+          S_hat = μ_S + PCsᵀ · Zᵀ
+
+    2.2  Convolve S_hat with each filter:
+          m_true[f] = ∫ S_hat(λ) * T_f(λ) dλ   for f=1..F
+
+    2.3  Perturb photometry with Gaussian noise:
+          m_noisy[f] = m_true[f] * (1 + Normal(0, σ_ph))
+
+    2.4  Store training pair:
+          (m_noisy, Z) → training_set
+
+--------------------------------------------------------------------
+Step 3 – Train the Encoder (Photometry → Latent Coefficients)
+--------------------------------------------------------------------
+3.1  Use an AutoML ensemble (e.g., Gradient‑Boosted Trees + Neural Net):
+      Input dimension = F
+      Output dimension = K
+
+3.2  Fit encoder E to training_set:
+      Minimize mean‑squared error between E(m_noisy) and Z
+
+3.3  Validate encoder on held‑out portion of training_set
+      (optional cross‑validation during development)
+
+--------------------------------------------------------------------
+Step 4 – Train the Classifier (Latent → Taxonomy)
+--------------------------------------------------------------------
+4.1  Label each reference spectrum with its known class label y ∈ {1..C}
+
+4.2  Assemble latent labels:
+      For each i in 1..N:
+          z_i = Z_real[i]
+          y_i = class of S_ref[i]
+
+4.3  Train a second AutoML classifier:
+      Input = z_i (length K)
+      Target = y_i
+
+--------------------------------------------------------------------
+Step 5 – Inference for a New Observation
+--------------------------------------------------------------------
+Given new photometric vector m_obs[1..F]:
+
+5.1  Predict latent coefficients:
+      z_pred = E(m_obs)          // point estimate
+
+5.2  Optionally estimate predictive uncertainty:
+      Use ensemble variance or a probabilistic regressor
+      → obtain distribution p(z | m_obs)
+
+5.3  Reconstruct high‑resolution spectrum:
+      S_rec = μ_S + PCsᵀ · z_predᵀ
+
+5.4  Classify taxonomy:
+      p_type = Classifier(z_pred)   // softmax over C classes
+
+5.5  Return:
+      • Posterior p(z | m_obs) (if estimated)
+      • Reconstructed spectrum S_rec[1..L]
+      • Taxonomic probabilities p_type[1..C]

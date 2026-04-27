@@ -1,0 +1,96 @@
+INPUT:
+    - Reference spectra {S_ref_i(λ)} , i = 1…N  (high‑resolution reflectance)
+    - Wavelength grid λ[1…L]
+    - Filter transmission curves {T_k(λ)} , k = 1…M
+    - Target photometry vector m_obs[1…M]  (new sparse measurements)
+    - Hyper‑parameters:
+        * K          – number of retained principal components
+        * h_KDE      – bandwidth for kernel density estimation
+        * N_aug      – number of synthetic latent samples
+        * σ_noise    – relative photometric noise (e.g. 0.20)
+        * N_post     – number of posterior samples
+
+OUTPUT:
+    - Reconstructed spectrum S_rec(λ)  (mean and percentile intervals)
+    - Taxonomy probability vector P_tax (optional)
+
+--------------------------------------------------------------------
+STEP 1: Pre‑processing
+--------------------------------------------------------------------
+1.1  For each reference spectrum S_ref_i:
+        • Normalize (divide by solar spectrum if needed)
+        • Interpolate onto common grid λ[1…L]
+1.2  Construct data matrix X ∈ ℝ^{N×L} with rows X_i = S_ref_i(λ)
+
+--------------------------------------------------------------------
+STEP 2: Principal Component Analysis
+--------------------------------------------------------------------
+2.1  Compute mean spectrum μ = (1/N) Σ_i X_i
+2.2  Center data: Xc = X − μ
+2.3  Perform SVD on Xc:  Xc = U Σ Vᵀ
+2.4  Select first K right singular vectors → PCA basis V_K ∈ ℝ^{L×K}
+2.5  Project reference spectra onto latent space:
+        c_i = Xc_i · V_K         (c_i ∈ ℝ^K)
+
+--------------------------------------------------------------------
+STEP 3: Latent‑space Density Estimation (KDE)
+--------------------------------------------------------------------
+3.1  Fit Gaussian KDE to {c_i} with bandwidth h_KDE
+3.2  Draw N_aug synthetic latent vectors {c_syn_j} from KDE
+3.3  For each c_syn_j:
+        • Reconstruct synthetic spectrum:
+              S_syn_j = μ + V_K · c_syn_j
+        • Forward‑model synthetic photometry:
+              For each filter k:
+                  m_syn_jk = ∫ S_syn_j(λ) · T_k(λ) dλ / ∫ T_k(λ) dλ
+        • Add Gaussian noise:
+              m_syn_noisy_jk = m_syn_jk + Normal(0, σ_noise·m_syn_jk)
+
+--------------------------------------------------------------------
+STEP 4: AutoML Regressor Training
+--------------------------------------------------------------------
+4.1  Assemble training set:
+        Features  :  M_j = {m_syn_noisy_j1 … m_syn_noisy_jM}
+        Targets   :  c_syn_j
+4.2  Train ensemble regressor R (e.g., GBDT) on (Features, Targets)
+4.3  Optionally train a second regressor R_var to predict variance
+4.4  Estimate correlation matrix C_corr of residuals from training
+     (used later for Gaussian copula)
+
+--------------------------------------------------------------------
+STEP 5: Inference on New Observation
+--------------------------------------------------------------------
+5.1  Predict latent mean:
+        μ_c = R.predict(m_obs)          // vector in ℝ^K
+5.2  Predict latent covariance:
+        diag_var = R_var.predict(m_obs) // vector of variances
+        Σ_c = diag(diag_var)            // diagonal covariance
+5.3  Posterior sampling via Gaussian copula:
+        For s = 1 … N_post:
+             • Draw u_s ~ Uniform(0,1)^K
+             • Transform to normal space: z_s = Φ⁻¹(u_s)   // Φ⁻¹ is inverse CDF of standard normal
+             • Correlate: y_s = μ_c + L_corr · z_s
+                 (L_corr = Cholesky decomposition of C_corr)
+             • Enforce marginal variances: 
+                   c_s = μ_c + (Σ_c^{1/2}) ∘ (y_s − μ_c)   // ∘ element‑wise multiplication
+5.4  For each sampled latent vector c_s:
+        • Reconstruct spectrum:
+              S_s(λ) = μ + V_K · c_s
+
+--------------------------------------------------------------------
+STEP 6: Spectrum Statistics
+--------------------------------------------------------------------
+6.1  Compute mean spectrum:
+        S_mean(λ) = (1/N_post) Σ_s S_s(λ)
+6.2  For each λ compute percentile bounds (e.g., 2.5%, 97.5%) from {S_s(λ)}
+6.3  Output S_rec(λ) = [S_mean(λ), lower_ci(λ), upper_ci(λ)]
+
+--------------------------------------------------------------------
+STEP 7: Optional Taxonomy Classification
+--------------------------------------------------------------------
+7.1  Train classifier C on {c_i} with known taxonomic labels
+7.2  Predict class probabilities:
+        P_tax = C.predict_proba(μ_c)
+
+--------------------------------------------------------------------
+END

@@ -1,0 +1,55 @@
+text
+INPUT
+    N_filters        # number of photometric filters
+    f_obs[1..N_filters]          # observed fluxes for each filter
+    σ_f[1..N_filters]            # measurement uncertainties (1σ)
+    T[1..N_filters][1..N_wave]   # filter transmission curves (same wavelength grid as spectra)
+    μ_s[1..N_wave]               # mean spectrum of training set
+    B[1..N_wave][1..K]           # PCA basis (K principal components)
+
+OUTPUT
+    mean_spectrum[1..N_wave]     # posterior mean reconstructed spectrum
+    credible_interval[1..N_wave] # e.g., 95 % credible interval bounds
+    coeff_samples[1..K][1..N_rep]  # optional random draws from posterior
+
+ALGORITHM
+1.  Construct the **synthetic‑photometry matrix** M of size N_filters × K:
+        for i = 1 to N_filters:
+            for k = 1 to K:
+                M[i,k] = Σ_{λ=1}^{N_wave}  T[i,λ] * B[λ,k]      // inner product over wavelengths
+
+2.  Define the **likelihood** for photometric measurements:
+        f_obs | coeff ∼ Normal( M · coeff , diag(σ_f²) )
+
+3.  Specify the **prior** on the PCA coefficients:
+        coeff ∼ Normal( 0_K , I_K )                         // zero mean, unit covariance
+
+4.  Compute the **posterior** over the coefficient vector using conjugate‐Gaussian update:
+
+        # Precision matrices
+        Λ_likelihood = Mᵀ · diag(1/σ_f²) · M          # K×K
+        Λ_prior      = I_K                            # K×K
+
+        # Posterior precision
+        Λ_post = Λ_likelihood + Λ_prior
+
+        # Posterior covariance (Cholesky for stability)
+        C_post = inverse(Λ_post)                      # K×K
+
+        # Posterior mean
+        μ_post = C_post · ( Mᵀ · diag(1/σ_f²) · f_obs )
+
+5.  (Optional) Generate **posterior samples** of coefficients:
+        For r = 1 to N_rep:
+            coeff_samples[:,r] = μ_post + chol(C_post) · randn(K)
+
+6.  **Reconstruct spectra**:
+        For each wavelength λ:
+            mean_spectrum[λ] = μ_s[λ] + Σ_{k=1}^{K}  B[λ,k] * μ_post[k]
+
+        If samples were drawn:
+            For each λ:
+                sample_vals[λ,r] = μ_s[λ] + Σ_{k=1}^{K}  B[λ,k] * coeff_samples[k,r]
+                credible_interval[λ] = 2.5th and 97.5th percentiles of sample_vals[λ,*]
+
+7.  Return mean_spectrum, credible_interval, (optional) coeff_samples.

@@ -1,0 +1,61 @@
+Input:
+    S_ref[1..N]          // Reference high‑resolution TNO spectra
+    F_filters[1..M]      // Throughput curves for available photometric filters
+    sigma_rel = 0.20     // Relative photometric uncertainty (20%)
+    K_lat                // Desired number of principal components (e.g., 5–10)
+    KDE_bandwidth        // Bandwidth for kernel density estimation (≈0.5)
+
+Output:
+    For each new photometric vector m_new[1..M]:
+        S_rec[1..L]   // Reconstructed high‑resolution spectrum
+        P_taxonomy[1..C]   // Posterior probabilities for C taxonomic classes
+
+Procedure:
+
+1. **Latent Space Construction (Prior)**
+   1.1 Apply Principal Component Analysis (PCA) to S_ref:
+          [U, Lambda, V] = PCA(S_ref, K_lat)
+          // U: eigenvectors (basis), Lambda: eigenvalues
+          // Project spectra: Z_ref = S_ref * U
+   1.2 Estimate density of latent coefficients:
+          KDE_model = KernelDensityEstimate(Z_ref, bandwidth = KDE_bandwidth)
+   1.3 Sample synthetic latent vectors:
+          Z_synth = KDE_model.sample(N_synth)           // e.g., 5000 samples
+   1.4 Reconstruct synthetic spectra:
+          S_synth = Z_synth * U^T                       // Inverse PCA transform
+
+2. **Synthetic Photometry Generation (Likelihood)**
+   2.1 For each synthetic spectrum s in S_synth:
+          m_clean = ConvolveWithFilters(s, F_filters)   // Compute ideal band reflectances
+          m_noisy = m_clean + Normal(0, sigma_rel * m_clean)   // Add Gaussian noise
+          Store pair (m_noisy, Z_synth_corresponding)
+
+3. **Model Training**
+   3.1 Split synthetic dataset into training/validation sets.
+   3.2 Train AutoML Regressor (Encoder):
+          regressor = AutoML_Train(inputs = m_noisy, targets = Z_synth)
+   3.3 Train AutoML Classifier (Taxonomy):
+          // Use latent mean vectors Z_synth as features, known class labels from S_ref
+          classifier = AutoML_Train(inputs = Z_synth, targets = class_labels)
+
+4. **Inference on New Observation**
+   For each new photometric vector m_new:
+       4.1 Predict latent coefficient distribution:
+              Z_pred = regressor.predict(m_new)          // Returns mean and uncertainty
+       4.2 Decode to spectrum:
+              S_rec = Z_pred * U^T                      // High‑resolution reconstructed spectrum
+       4.3 Classify taxonomic type:
+              P_taxonomy = classifier.predict_proba(Z_pred)
+
+5. **Return Outputs**
+   Return S_rec and P_taxonomy for m_new.
+
+ConvolveWithFilters(spectrum, filters):
+    For each filter f in filters:
+        // Integrate product of spectrum and filter throughput over wavelength
+        R_f = ∫ spectrum(λ) * f(λ) dλ / ∫ f(λ) dλ
+    Return vector of R_f values
+
+AutoML_Train(inputs, targets):
+    // Uses an automated ensemble of models (e.g., GBRT, NN)
+    // Hyperparameters tuned automatically; returns trained model

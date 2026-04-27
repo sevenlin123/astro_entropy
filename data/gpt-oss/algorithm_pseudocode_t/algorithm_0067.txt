@@ -1,0 +1,75 @@
+Input
+    - Observations O = { (b, m_b, σ_m,b, R_b(λ)) } for all photometric bands b
+      where m_b = apparent magnitude, σ_m,b = photometric error,
+            R_b(λ) = normalized transmission curve of band b.
+    - Hyper‑parameter priors for the Gaussian Process (GP):
+          θ = { ℓ (length scale), σ_f (signal std), … }
+    - Slope‑penalty weight α (default 1.0)
+
+Output
+    - Posterior samples of the full‑wavelength reflectance spectrum
+      { f_k(λ) } for k = 1…N_samples
+    - Posterior mean spectrum μ(λ) and 1σ confidence interval
+
+Procedure
+
+1. **Flux conversion**
+   1.1 For each band b:
+        f_b_obs = 10^(–0.4 * m_b)                           // Flux corresponding to magnitude
+        σ_f,b = (ln 10 / 2.5) * f_b_obs * σ_m,b             // Propagate magnitude error
+   1.2 Store observed flux vector F_obs = [f_b_obs] and
+       measurement uncertainty matrix Σ_obs = diag(σ_f,b²).
+
+2. **Define wavelength grid**
+   2.1 Choose a dense wavelength array Λ_dense covering
+        the union of all bandpasses (e.g., 400–2000 nm).
+   2.2 For each band b, pre‑compute the convolution weights
+        w_b(λ) = R_b(λ) / ∫ R_b(λ) dλ.
+   2.3 Store the set of weights W = { w_b(λ) }.
+
+3. **Gaussian Process prior on log‑flux**
+   3.1 Define mean function μ_GP(λ) = 0.
+   3.2 Define covariance kernel k(λ, λ′ | θ), e.g.
+          k(λ, λ′) = σ_f² * exp( – (λ – λ′)² / (2 ℓ²) ).
+   3.3 Construct GP prior over log‑flux vector g = ln f(Λ_dense):
+          g ~ Normal(0, K_ΛΛ)   where K_ΛΛ[ij] = k(λ_i, λ_j | θ).
+
+4. **Likelihood of observed fluxes**
+   4.1 For a given sample of g and θ, compute predicted flux in band b:
+          f_b_pred = ∑_{λ∈Λ_dense} w_b(λ) * exp(g(λ)) * Δλ
+   4.2 Assemble predicted flux vector F_pred = [f_b_pred].
+   4.3 Compute likelihood:
+          L(O | g, θ) = Normal( F_obs | F_pred, Σ_obs ).
+
+5. **Slope‑penalty (optional constraint)**
+   5.1 Approximate derivative of log‑flux:
+          dg/dλ ≈ (g_{i+1} – g_i) / (λ_{i+1} – λ_i).
+   5.2 Compute penalty:
+          P_slope = exp( – α * max( |dg/dλ| )² ).
+   5.3 Final target density:
+          p(g, θ | O) ∝ p(θ) * Normal(g | 0, K_ΛΛ) *
+                        L(O | g, θ) * P_slope.
+
+6. **Posterior sampling (MCMC)**
+   6.1 Initialize walkers for parameters θ and latent vector g
+        (e.g., random draws from priors).
+   6.2 Run an affine‑invariant ensemble sampler for N_iter steps,
+        discarding burn‑in iterations.
+   6.3 At each iteration store the current state (g, θ).
+
+7. **Spectral reconstruction**
+   7.1 For each retained MCMC sample k:
+          f_k(λ) = exp( g_k(λ) )   // Convert back to flux
+   7.2 Collect all samples { f_k(λ) }.
+
+8. **Posterior statistics**
+   8.1 Compute posterior mean spectrum:
+          μ(λ) = (1/N_samples) * Σ_k f_k(λ).
+   8.2 Compute 1σ credible interval:
+          σ(λ) = sqrt( (1/(N_samples–1)) * Σ_k (f_k(λ) – μ(λ))² ).
+
+9. **Return results**
+   9.1 Output arrays μ(λ), σ(λ) and optionally the full set of samples
+       for further downstream tasks (taxonomy, survey optimization, outlier detection).
+
+End Algorithm

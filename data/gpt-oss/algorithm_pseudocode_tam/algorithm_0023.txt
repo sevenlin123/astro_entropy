@@ -1,0 +1,68 @@
+Input:
+    - S_ref   :  {S_1, …, S_N}   // Reference high‑resolution TNO spectra (N≈51)
+    - F_set   :  {F_1, …, F_M}   // M instrument filter transmission curves
+    - Phot_obs:  p_obs            // Sparse photometry for a new object (vector of length L≤M)
+
+Parameters:
+    - K       : dimensionality of latent space (e.g. K=5–10)
+    - h_KDE   : bandwidth for kernel density estimation (≈0.5)
+    - σ_noise : relative photometric uncertainty (e.g. 20 %)
+    - n_aug   : number of augmented latent samples (e.g. 10 000)
+
+------------------------------------------------------------------
+1.  **Prior Construction**
+    1.1  Perform PCA on S_ref  
+         [E_vec, E_var] = PCA(S_ref, components=K)  
+         // E_vec: K×W matrix of eigenvectors (W = spectral channels)
+         // E_var: explained variance
+    1.2  Project each reference spectrum onto the PCA basis  
+         C_ref = E_vecᵀ · S_ref           // K×N matrix of latent coefficients
+    1.3  Fit a non‑parametric Kernel Density Estimate (KDE) to C_ref  
+         kde = KDE(C_ref, bandwidth=h_KDE)
+    1.4  Draw synthetic latent vectors from the KDE  
+         C_syn = kde.sample(n_aug)          // K×n_aug matrix
+    1.5  Generate synthetic spectra from latent vectors  
+         S_syn = E_vec · C_syn              // W×n_aug matrix
+------------------------------------------------------------------
+2.  **Synthetic Photometry Generation**
+    2.1  For each synthetic spectrum S_syn(:,i)  
+         For each filter F_j in F_set  
+             R_ij = ∫ S_syn(:,i) · F_j(λ) dλ / ∫ F_j(λ) dλ   // Reflectance in band j
+         Phot_syn(:,i) = [R_i1,…,R_iM]                    // M‑dim vector
+    2.2  Inject Gaussian noise  
+         Noise = Normal(0, σ_noise * Phot_syn)  
+         Phot_syn_noisy = Phot_syn + Noise
+------------------------------------------------------------------
+3.  **Training Data Assembly**
+    3.1  X_train = Phot_syn_noisy      // L‑dim photometry (select subset of bands matching Phot_obs)
+    3.2  Y_train = C_syn               // Corresponding latent coefficients
+    3.3  (Optional) Y_class = taxonomy labels for C_ref (used only for classifier training)
+------------------------------------------------------------------
+4.  **Model Training**
+    4.1  Encoder – regression from photometry to latent space  
+         regressor = AutoML_Regressor()  
+         regressor.train(X_train, Y_train)
+    4.2  Classifier – taxonomy in latent space  
+         classifier = AutoML_Classifier()  
+         classifier.train(C_ref, Y_class)
+------------------------------------------------------------------
+5.  **Inference for New Observation**
+    5.1  Select photometric subset matching available bands in Phot_obs  
+         p_subset = Phot_obs[band_indices]
+    5.2  Predict latent coefficients (posterior mean and optionally covariance)  
+         c_mean = regressor.predict(p_subset)   // K‑dim vector
+         (c_cov  = regressor.predict_cov(p_subset)  // if regressor supports uncertainty)
+    5.3  Reconstruct high‑resolution spectrum  
+         S_rec  = E_vec · c_mean                // W‑dim vector
+    5.4  Taxonomic probabilities  
+         prob = classifier.predict_proba(c_mean) // vector over classes
+    5.5  (Optional) Monte‑Carlo uncertainty propagation  
+         Draw N_samp samples from N(c_mean, c_cov)  
+         For each sample c_s  
+             S_s = E_vec · c_s  
+         Compute mean, variance, confidence intervals of S_s
+------------------------------------------------------------------
+Output:
+    - S_rec        : reconstructed spectrum (W‑dim)
+    - prob         : taxonomic probability distribution
+    - (Optional)  credible intervals or posterior samples of S_rec

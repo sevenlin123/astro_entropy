@@ -1,0 +1,64 @@
+Input:
+    P = { (λ_i, m_i, σ_i) }   // i = 1…N_p photometric measurements (wavelength, magnitude, error)
+    T = { λ_k }                // Wavelength grid for spectrum reconstruction (k = 1…N_λ)
+    R(λ, λ_i)                  // Instrumental response function at each filter λ_i
+    PriorSpecDistribution()    // Prior over spectral shapes (e.g., Gaussian process kernel)
+    n_samples                  // Number of MCMC samples to draw
+
+Output:
+    {S_j(λ_k)}_{j=1}^{n_samples}   // Sampled posterior spectra
+    PosteriorSummary                 // Mean, credible intervals per λ_k
+
+Procedure:
+
+1. Convert magnitudes to observed flux densities:
+   For each measurement i:
+        F_obs_i = 10^(-0.4 * m_i)                // arbitrary linear flux units
+        ε_i    = 0.921 * σ_i * F_obs_i           // convert magnitude error to flux error
+
+2. Define forward model for a candidate spectrum S(λ):
+   Function ForwardModel(S):
+        For each filter i:
+            F_model_i = ∫ S(λ) * R(λ, λ_i) dλ / ∫ R(λ, λ_i) dλ
+        Return {F_model_i}
+
+3. Specify likelihood:
+   For a given candidate spectrum S:
+        Compute F_model = ForwardModel(S)
+        Likelihood L(S) = Π_i N(F_obs_i | F_model_i, ε_i^2)
+   Where N(x|μ,σ²) is Gaussian pdf.
+
+4. Set up prior over spectra:
+   Draw initial spectrum S_0 from PriorSpecDistribution()
+   Example: sample mean μ_prior(λ_k) and covariance Σ_prior(k,l)
+
+5. Initialize Markov chain:
+   θ_0 = parameters describing S_0 (e.g., coefficients in basis expansion)
+   S_0 = Transform(θ_0)    // map parameters to spectral values on T
+   Compute log_post_0 = log(L(S_0)) + log(Prior(θ_0))
+
+6. Run Metropolis–Hastings MCMC:
+   For t = 1 to n_samples:
+        Propose new parameters θ' = θ_{t-1} + η     // η ~ proposal distribution
+        Transform to spectrum S' = Transform(θ')
+        Compute log_post' = log(L(S')) + log(Prior(θ'))
+        Acceptance probability α = min(1, exp(log_post' - log_post_{t-1}))
+        Draw u ~ Uniform(0,1)
+        If u < α:
+             θ_t = θ'
+             log_post_t = log_post'
+        Else:
+             θ_t = θ_{t-1}
+             log_post_t = log_post_{t-1}
+        Store S_t = Transform(θ_t)
+
+7. Post‑processing:
+   Discard burn‑in portion of chain (first B samples).
+   Thin chain if necessary (keep every k-th sample).
+   Compute posterior summary statistics:
+        For each λ_k:
+             mean_S(λ_k) = average over retained samples S_j(λ_k)
+             cred_low(λ_k), cred_high(λ_k) = desired percentiles (e.g., 16th, 84th)
+
+Return:
+    Sampled spectra {S_j(λ_k)} and posterior summaries {mean_S, cred_low, cred_high}.

@@ -1,0 +1,85 @@
+INPUT:
+    S_ref[1..N]   – Reference reflectance spectra (λ‑grid, high resolution)
+    W[1..F]       – Effective throughput curves for the filter set
+    K             – Number of principal components to retain
+    h             – KDE bandwidth (≈0.5)
+    M             – Number of synthetic latent draws (e.g. 5000)
+
+STEP 1 : Principal Component Analysis
+    • Center S_ref by subtracting the mean spectrum μ_S
+    • Compute covariance matrix C = cov(S_ref_centered)
+    • Eigen‑decompose C → eigenvalues λ_i and eigenvectors e_i
+    • Retain first K eigenvectors → PC_basis = [e_1 … e_K]
+    • Project each reference spectrum onto PC_basis:
+          α_j = PC_basisᵀ · (S_ref[j] – μ_S)      (j = 1…N)
+      Store all coefficient vectors α = {α_1 … α_N}
+
+STEP 2 : Kernel Density Estimate of Latent Space
+    • Fit a Gaussian KDE to the set {α_j} with bandwidth h
+    • Sample M latent vectors from the KDE:
+          α_syn[m] ~ KDE     (m = 1…M)
+
+STEP 3 : Generate Synthetic Spectra
+    • For each α_syn[m]:
+          S_syn[m] = μ_S + PC_basis · α_syn[m]
+      (Inverse PCA → full‑resolution spectrum)
+
+STEP 4 : Forward‑Model Photometry
+    • For each synthetic spectrum S_syn[m]:
+          For each filter f in W:
+              p_f[m] = ∫ S_syn[m](λ) · W_f(λ) dλ   /   ∫ W_f(λ) dλ
+          Store photometric vector p[m] = {p_1 … p_F}
+
+STEP 5 : Inject Measurement Noise
+    • For each p[m] and filter f:
+          σ_f = 0.20 · p_f[m]                     (20 % relative error)
+          p_noisy[m,f] = p_f[m] + Normal(0,σ_f)
+    • Training inputs X = {p_noisy[m]} , targets Y = {α_syn[m]}
+
+STEP 6 : Photometry → Latent Coefficient Regressor
+    • Choose an AutoML regressor (e.g., ensemble of GBDTs + NN)
+    • Train on (X, Y) to learn mapping:
+          f_regress : photometry → latent coefficient vector
+    • Store the trained model R
+
+STEP 7 : Latent‑Space Taxonomy Classifier
+    • Assign each reference spectrum a taxonomic label L_j
+      (Water, CO₂, Organic‑Methanol, Organic‑NonMethanol, …)
+    • Train a second AutoML classifier on {α_j} → {L_j}
+    • Store the classifier C
+
+INPUT:
+    p_obs[1..F]   – Observed sparse photometry (with uncertainties)
+    σ_obs[1..F]   – Corresponding measurement errors
+
+STEP 8 : Predict Latent Distribution
+    • Use R to obtain:
+          μ̂ = mean latent vector   (R(p_obs))
+          Σ̂ = covariance / predictive variance of R(p_obs)
+
+STEP 9 : Sample from Posterior (Gaussian Copula)
+    • Draw N_draw samples (e.g., 1000) from a multivariate normal
+          α_samp[i] ~ N(μ̂, Σ̂)    (i = 1…N_draw)
+      If desired, enforce physical bounds by truncation.
+
+STEP 10 : Decode to Full Spectra
+    • For each α_samp[i]:
+          S_samp[i] = μ_S + PC_basis · α_samp[i]
+      (Inverse PCA → reconstructed reflectance)
+
+STEP 11 : Quantify Reconstruction Uncertainty
+    • Compute per‑wavelength statistics over the N_draw spectra:
+          S_median(λ) = median{S_samp[i](λ)}
+          S_low(λ)    = 2.5th percentile
+          S_high(λ)   = 97.5th percentile
+    • Output the 95 % credible interval [S_low, S_high] and S_median
+
+STEP 12 : Taxonomy Probabilities
+    • For each α_samp[i], obtain class probabilities with C:
+          p_class[i] = C.predict_proba(α_samp[i])
+    • Aggregate over all draws:
+          P_class = mean{p_class[i]}  (i = 1…N_draw)
+
+OUTPUT:
+    • Reconstructed spectrum with uncertainty envelope
+    • Posterior taxonomic class distribution

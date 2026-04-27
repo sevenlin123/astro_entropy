@@ -1,0 +1,73 @@
+Input:
+    • Training spectra matrix X_train [N_train × N_wavelength]
+    • Filter set F = {f_j(λ)} for j = 1 … N_filter
+    • Observed photometry vector y_obs [N_filter] and covariance C_obs [N_filter × N_filter]
+    • Desired number of principal components k (e.g., k = 8)
+
+Output:
+    • Posterior mean latent vector μ_z [k]
+    • Posterior covariance Σ_z [k × k]
+    • Sampled reconstructed spectra {x_samp_m} (m = 1 … M)
+
+--------------------------------------------------------------------
+Step 0 – Pre‑processing of training spectra
+--------------------------------------------------------------------
+1.  Compute mean spectrum μ_X = mean(X_train, axis=0).
+2.  Center spectra:  X_centered = X_train - μ_X.
+3.  Compute covariance matrix S = (X_centeredᵀ · X_centered) / (N_train – 1).
+
+--------------------------------------------------------------------
+Step 1 – Principal Component Analysis (PCA)
+--------------------------------------------------------------------
+4.  Perform eigendecomposition:  S = U Λ Uᵀ.
+5.  Select first k eigenvectors:  PCs = U[:, 0:k]          # shape [N_wavelength × k]
+6.  Compute eigenvalues:          λ_k = Λ[0:k].
+
+--------------------------------------------------------------------
+Step 2 – Project training spectra into latent space
+--------------------------------------------------------------------
+7.  z_train = X_centered · PCs      # shape [N_train × k]
+
+--------------------------------------------------------------------
+Step 3 – Forward model of photometry in latent space
+--------------------------------------------------------------------
+8.  For each filter j = 1 … N_filter:
+        a.  Compute filter‑integrated mean flux:
+                μ_fj = ∫ μ_X(λ) * f_j(λ) dλ
+        b.  Compute filter‑integrated PC contributions:
+                For i = 1 … k:
+                    p_ij = ∫ PCs(λ, i) * f_j(λ) dλ
+        c.  Store vector p_j = [p_1j, …, p_kj]ᵀ   # shape [k]
+        d.  Store scalar μ_fj
+
+9.  Assemble design matrix A of shape [N_filter × k]:
+        A[j, i] = p_ij
+
+10.  Assemble mean flux vector b of length N_filter:
+        b[j] = μ_fj
+
+--------------------------------------------------------------------
+Step 4 – Bayesian inference of latent vector z
+--------------------------------------------------------------------
+# Assume Gaussian prior on z:  z ~ N(0, I)
+# Observation model:  y_obs = A · z + b + ε ,   ε ~ N(0, C_obs)
+
+11.  Compute posterior covariance:
+        Σ_z = (Aᵀ · C_obs⁻¹ · A + I)⁻¹            # shape [k × k]
+
+12.  Compute posterior mean:
+        μ_z = Σ_z · Aᵀ · C_obs⁻¹ · (y_obs – b)     # shape [k]
+
+--------------------------------------------------------------------
+Step 5 – Sampling reconstructed spectra
+--------------------------------------------------------------------
+13.  For m = 1 … M:
+        a.  Sample latent vector:
+                z_sample ~ N(μ_z, Σ_z)
+        b.  Reconstruct spectrum:
+                x_sample = μ_X + PCs · z_sample        # shape [N_wavelength]
+        c.  Store x_sample
+
+--------------------------------------------------------------------
+Return:
+    μ_z, Σ_z, {x_sample_m}

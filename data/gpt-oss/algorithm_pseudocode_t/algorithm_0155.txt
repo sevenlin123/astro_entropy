@@ -1,0 +1,63 @@
+Input:
+    - Photometric measurements {m_i} with uncertainties {σ_i}
+    - Corresponding filter transmission curves {T_i(λ)}  (i = 1 … N_filters)
+    - Spectral wavelength grid {λ_j}  (j = 1 … N_wavelengths)
+    - Basis spectra matrix B(λ)  (N_wavelengths × K)  // e.g., principal‑components or template set
+    - Prior hyperparameters for coefficients w_k
+
+Output:
+    - Posterior samples of spectral coefficients {w_k}
+    - Reconstructed spectra S(λ) = Σ_k w_k * B_k(λ) for each sample
+    - Summary statistics (mean spectrum, confidence bands)
+
+Procedure:
+
+1. **Pre‑processing**
+   1.1 For each filter i:
+        1.1.1 Normalize its transmission curve T_i(λ) so that ∫ T_i(λ)dλ = 1.
+   1.2 Build convolution operator C_i such that for any spectrum S(λ),
+        the predicted magnitude m_i_pred = -2.5 log10(∫ S(λ) * T_i(λ) dλ) + ZP_i,
+        where ZP_i is the filter zero‑point (assumed known).
+
+2. **Define Forward Model**
+   2.1 Assume spectrum S(λ) = B(λ) * w, where w = (w_1,…,w_K)^T.
+   2.2 For each filter i, compute predicted magnitude:
+        m_i_pred(w) = -2.5 * log10(∑_{j} B_j(λ) * w * T_i(λ_j) * Δλ) + ZP_i.
+
+3. **Specify Priors**
+   3.1 Choose a prior distribution for w:
+        w_k ~ Normal(μ_k, τ_k^2)   // independent across k
+   3.2 Set μ_k = 0 and τ_k large to be weakly informative, or use domain knowledge.
+
+4. **Define Likelihood**
+   4.1 Assume measurement errors are Gaussian:
+        p({m_i} | w) = Π_{i=1}^{N_filters} Normal(m_i | m_i_pred(w), σ_i^2).
+
+5. **Posterior Sampling (MCMC)**
+   5.1 Initialize w^(0) (e.g., zeros).
+   5.2 For iteration t = 1 … N_iter:
+        5.2.1 Propose new coefficient vector w' = w^(t-1) + η,  
+             where η ~ Normal(0, Σ_proposal) (Σ_proposal chosen adaptively).
+        5.2.2 Compute log-posterior:
+                ln_post(w') = ln_prior(w') + ln_likelihood(w').
+        5.2.3 Accept or reject w' using Metropolis–Hastings criterion:
+                accept with probability min(1, exp(ln_post(w') – ln_post(w^(t-1)))).
+            If accepted: w^(t) = w'; else: w^(t) = w^(t-1).
+   5.3 After burn‑in, collect {w^(t)} as posterior samples.
+
+6. **Reconstruct Spectra**
+   6.1 For each posterior sample w^(t), compute S^(t)(λ) = B(λ) * w^(t).
+   6.2 Store all S^(t)(λ) for later analysis.
+
+7. **Compute Summary Statistics**
+   7.1 Mean spectrum:
+        S_mean(λ) = (1 / N_samples) * Σ_{t} S^(t)(λ).
+   7.2 Credible band (e.g., 68%):
+        For each λ, find 16th and 84th percentiles across {S^(t)(λ)}.
+
+8. **Return Results**
+   8.1 Output posterior samples {w^(t)}.
+   8.2 Output reconstructed spectra {S^(t)(λ)}.
+   8.3 Output summary statistics S_mean(λ) and credible bands.
+
+End.

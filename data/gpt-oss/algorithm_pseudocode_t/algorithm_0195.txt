@@ -1,0 +1,84 @@
+INPUTS
+    F_obs[1..N]          // observed fluxes in N filters
+    σ_obs[1..N]          // measurement uncertainties
+    T[1..N][λ]           // transmission curve of each filter (discretized λ)
+    S[1..K][λ]           // library of K template spectra (discretized λ)
+    PriorParams          // hyper‑parameters for priors on weights
+
+OUTPUTS
+    P_template[1..K]     // posterior probability of each template
+    w_best[1..K]         // best‑fit mixture weights
+    χ²_min               // minimum chi‑square value
+
+--------------------------------------------------------------------
+STEP 0: PRECOMPUTATION – TEMPLATE FLUXES IN EACH FILTER
+--------------------------------------------------------------------
+FOR k = 1 TO K DO
+    FOR i = 1 TO N DO
+        // Compute the flux of template k through filter i
+        // Integral approximated as a weighted sum over λ
+        F_templ[k][i] ← Σ_λ [ S[k][λ] * T[i][λ] ] /
+                        Σ_λ [ T[i][λ] ]
+    END FOR
+END FOR
+
+--------------------------------------------------------------------
+STEP 1: DEFINE MODEL – LINEAR COMBINATION OF TEMPLATES
+--------------------------------------------------------------------
+Define weight vector w[1..K]  // unknown non‑negative weights
+Model flux in filter i:
+    F_mod[i] ← Σ_k w[k] * F_templ[k][i]
+
+--------------------------------------------------------------------
+STEP 2: DEFINE LIKELIHOOD AND PRIOR
+--------------------------------------------------------------------
+Likelihood:
+    L(w) = Π_i  exp[ -½ * ((F_obs[i] - F_mod[i]) / σ_obs[i])² ]
+
+Prior (example: Dirichlet over weights, enforcing non‑negativity & sum=1):
+    π(w) = Dirichlet(α)   // α derived from PriorParams
+
+Posterior:
+    p(w | F_obs) ∝ L(w) * π(w)
+
+--------------------------------------------------------------------
+STEP 3: BAYESIAN INFERENCE – SAMPLE POSTERIOR
+--------------------------------------------------------------------
+Initialize w randomly (e.g., uniform Dirichlet).
+FOR iteration = 1 TO M (M large enough for convergence) DO
+    Propose new weights w' = w + ε   // ε drawn from symmetric proposal (e.g., Gaussian)
+    Enforce constraints: if any w'[k] < 0 set to small epsilon
+    Compute F_mod' and L'
+    Acceptance ratio:
+        r = min(1, (L' * π(w')) / (L * π(w)))
+    Draw u ~ Uniform(0,1)
+    IF u < r THEN
+        w ← w'
+        L ← L'
+    END IF
+    Store current w into chain
+END FOR
+
+--------------------------------------------------------------------
+STEP 4: POST‑PROCESSING – ESTIMATE PASTA AND BEST‑FIT WEIGHTS
+--------------------------------------------------------------------
+From stored chain {w^(m)}:
+
+    // Posterior mean weights
+    w_mean[k] ← (1/M) Σ_m w^(m)[k]
+
+    // For each template k, compute marginal posterior probability
+    // by integrating out other weights:
+    P_template[k] ← (1/M) Σ_m w^(m)[k]
+
+    // Best‑fit weights (e.g., MAP estimate)
+    Identify iteration m* with maximum L
+    w_best ← w^(m*)
+
+--------------------------------------------------------------------
+STEP 5: MODEL QUALITY CHECK
+--------------------------------------------------------------------
+Compute χ² for best‑fit model:
+    χ²_min ← Σ_i [ (F_obs[i] - F_mod_best[i])² / σ_obs[i]² ]
+
+Return P_template, w_best, χ²_min

@@ -1,0 +1,25 @@
+m_i(θ) = –2.5 × log10 [ ∫ S(λ|θ) · R_i(λ) dλ / ∫ R_i(λ) dλ ] + ZP_i
+
+L(D | θ) = Π_{i=1}^{N} N( m_i | m_i(θ) , σ_i^2 )
+
+p(θ, C | D) ∝ L(D | θ) × p(θ | C) × p(C)
+
+Initialize θ^(0), C^(0)
+
+For t = 1 … N_iter:
+    # Class update
+    Compute unnormalized posterior for each class:
+        p_j ∝ L(D | θ^(t-1)) × p(θ^(t-1) | C=j) × p(C=j)
+    Sample new class C^(t) from categorical(p_1,…,p_K)
+
+    # Parameter update given class
+    Propose θ* = θ^(t-1) + ε  (ε drawn from symmetric proposal, e.g., N(0, Σ_prop))
+    Compute acceptance ratio:
+        α = min(1,
+                L(D | θ*) × p(θ* | C=C^(t)) /
+                [ L(D | θ^(t-1)) × p(θ^(t-1) | C=C^(t)) ])
+    With probability α accept: θ^(t) = θ*; else θ^(t) = θ^(t-1)
+
+Ŝ(λ) = (1/M) Σ_{s=1}^{M} S^(s)(λ)
+
+P(C=j | D) ≈ (number of samples with C=j) / M

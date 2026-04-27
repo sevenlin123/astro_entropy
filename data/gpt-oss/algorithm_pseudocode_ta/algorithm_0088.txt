@@ -1,0 +1,59 @@
+1. Compute mean spectrum:
+      μ(λ) = mean(S, axis=0)          // shape (N_wl,)
+
+2. Center spectra:
+      S_centered = S – μ
+
+3. Perform PCA on S_centered:
+      U, Σ, Vt = svd(S_centered, full_matrices=False)
+      V = Vt.T                         // shape (N_wl, N_spec)
+      PCs = V[:, 0:k]                  // first k columns → (N_wl, k)
+      λ = Σ[0:k]**2 / (N_spec-1)        // eigenvalues → variances
+
+4. Store:
+      PCs (basis functions)
+      λ (prior variances for coefficients)
+      μ (mean spectrum)
+      WL (wavelength grid)
+
+5. For each filter j = 1…m:
+      // Integrate each PC and the mean spectrum over the filter response
+      for i = 1…k:
+          A[j, i] = Σ_over_λ ( PCs[:, i] * R_j(λ) ) * Δλ
+      b[j] = Σ_over_λ ( μ * R_j(λ) ) * Δλ
+   // Result:
+      A : (m, k)  – design matrix linking PC coefficients to photometry
+      b : (m,)    – mean‑spectrum contribution
+
+6. Define weights from uncertainties:
+      W = diag( 1 / σ**2 )              // (m, m)
+
+7. Prior covariance for coefficients:
+      Λ = diag( λ )                     // (k, k)
+
+8. Compute posterior covariance:
+      Σ_post = inverse( A.T @ W @ A + inverse(Λ) )
+      // (k, k) matrix
+
+9. Compute posterior mean (MAP / posterior mean):
+      c_post = Σ_post @ ( A.T @ W @ (Y - b) )
+      // (k,) vector
+
+10. Draw N_samp samples from N(c_post, Σ_post):
+      For s = 1…N_samp:
+          c_s[s] = multivariate_normal_sample(c_post, Σ_post)
+
+11. For each sample s:
+      // Reconstruct full spectrum on the wavelength grid
+      S_s[s, :] = μ + PCs @ c_s[s]       // (N_wl,)
+
+12. Aggregate samples:
+      S_mean(λ)   = mean( S_s, axis=0 )
+      S_std(λ)    = std( S_s, axis=0 )
+      Credible bands: e.g., 2.5% & 97.5% percentiles of S_s
+
+13. Return:
+      - Posterior mean spectrum S_mean(λ)
+      - Spectral uncertainty envelope (S_std, percentile bands)
+      - Sampled spectra {S_s} if needed for further analysis
+      - Posterior coefficient samples {c_s}

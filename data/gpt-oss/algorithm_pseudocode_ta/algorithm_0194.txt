@@ -1,0 +1,107 @@
+INPUT:
+    S_train[1…Ns]          // Near‑IR spectra used to train the model
+                           // each spectrum is a vector of fluxes at Nλ wavelengths
+    P_obj[1…Nobj]          // List of objects with sparse photometry
+                           // each entry contains:
+                           //    F_obs[1…Nf]      – observed fluxes in Nf filters
+                           //    σ_obs[1…Nf]      – measurement uncertainties
+                           //    R[1…Nf, 1…Nλ]    – filter response matrices
+    K                      // Number of principal components to keep
+    MCMC_params            // {n_iter, n_burn, step_size, ...}
+
+OUTPUT:
+    For each object:
+        C_samples         // Posterior samples of PC coefficient vector (size K)
+        S_mean[1…Nλ]      // Mean reconstructed spectrum
+        S_ci_low[1…Nλ]    // Lower bound of 95 % credible interval
+        S_ci_high[1…Nλ]   // Upper bound of 95 % credible interval
+
+
+----------------------------------------------------------------------
+STEP 1 – Train Principal‑Component Basis
+----------------------------------------------------------------------
+1.1   Compute mean spectrum μ[1…Nλ]:
+        μ = (1/Ns) * Σ_{i=1}^{Ns} S_train[i]
+1.2   Center training spectra:
+        X[i] = S_train[i] – μ          // for all i
+1.3   Compute covariance matrix C = (1/(Ns−1)) * Xᵀ · X
+1.4   Perform eigen‑decomposition of C:
+        {λ_k, v_k} = eig(C)             // eigenvalues λ_k, eigenvectors v_k
+1.5   Sort eigenpairs by decreasing λ_k
+1.6   Select first K eigenvectors:
+        V[1…K, 1…Nλ] = [v_1 … v_K]      // each row is an eigenvector
+1.7   Store eigenvalues Λ[1…K] = [λ_1 … λ_K]
+
+----------------------------------------------------------------------
+STEP 2 – Pre‑compute Forward Model Matrix
+----------------------------------------------------------------------
+For each filter f = 1…Nf:
+    For each PC k = 1…K:
+        B[f,k] = Σ_{λ=1}^{Nλ} R[f,λ] * V[k,λ]     // integral of PC through filter
+    B_mean[f] = Σ_{λ=1}^{Nλ} R[f,λ] * μ[λ]        // mean flux through filter
+
+// The predicted flux for any coefficient vector c (size K) is:
+    F_pred(f) = B_mean[f] + Σ_{k=1}^{K} B[f,k] * c_k
+
+
+----------------------------------------------------------------------
+STEP 3 – Bayesian Inference for Each Object
+----------------------------------------------------------------------
+For each object Obj in P_obj:
+    ---------------------------------
+    3.1  Define Prior on c:
+           // Zero‑mean multivariate normal with variances proportional to eigenvalues
+           prior_mean = 0_K
+           prior_cov  = diag(Λ)              // diagonal matrix of eigenvalues
+    3.2  Initialize MCMC chain:
+           c_current = 0_K
+           Accept all proposals initially
+    3.3  For iter = 1 … n_iter:
+           // Propose new coefficient vector
+           proposal = c_current + step_size * Normal(0_K, I_K)
+           
+           // Compute predicted fluxes
+           F_prop[f] = B_mean[f] + Σ_k B[f,k] * proposal_k
+           
+           // Compute log‑likelihood under Gaussian errors
+           logL_prop = -0.5 * Σ_f ((F_obs[f] - F_prop[f])^2 / σ_obs[f]^2)
+           
+           // Compute log‑prior (multivariate normal)
+           logP_prop = -0.5 * (proposalᵀ · prior_cov⁻¹ · proposal)
+           
+           // Current state quantities (only if iter > 1)
+           If iter > 1:
+               F_cur[f] = B_mean[f] + Σ_k B[f,k] * c_current_k
+               logL_cur  = -0.5 * Σ_f ((F_obs[f] - F_cur[f])^2 / σ_obs[f]^2)
+               logP_cur  = -0.5 * (c_currentᵀ · prior_cov⁻¹ · c_current)
+           Else:
+               logL_cur = -∞
+               logP_cur = -∞
+           
+           // Acceptance probability
+           α = min(1, exp((logL_prop + logP_prop) - (logL_cur + logP_cur)))
+           
+           // Accept or reject
+           If Uniform(0,1) < α:
+                c_current = proposal
+           
+           // Store after burn‑in
+           If iter > n_burn:
+                Append c_current to C_samples
+    ---------------------------------
+    3.4  Posterior statistics
+           // Compute mean and 95 % credible interval at each wavelength
+           For λ = 1…Nλ:
+                // Generate spectrum samples from coefficient samples
+                S_sample[ℓ] = μ[λ] + Σ_k V[k,λ] * C_samples[ℓ,k]
+                S_mean[λ]   = mean(S_sample[ℓ])
+                S_ci_low[λ] = percentile(S_sample[ℓ], 2.5)
+                S_ci_high[λ]= percentile(S_sample[ℓ], 97.5)
+
+    3.5  Save results for this object:
+           Obj.C_samples = C_samples
+           Obj.S_mean    = S_mean
+           Obj.S_ci_low  = S_ci_low
+           Obj.S_ci_high = S_ci_high
+
+END FOR

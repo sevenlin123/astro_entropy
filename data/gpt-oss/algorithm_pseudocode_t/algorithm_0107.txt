@@ -1,0 +1,48 @@
+Input
+    N              # number of photometric bands
+    D[1…N]         # measured fluxes (or magnitudes converted to flux)
+    err[1…N]       # measurement uncertainties
+    R[i](λ)        # filter transmission curves, i = 1…N
+    λ_grid[1…M]    # common wavelength grid spanning all bands
+    Δλ[1…M]        # grid spacing (possibly variable)
+
+Output
+    μ_post[1…M]    # posterior mean spectrum on λ_grid
+    Σ_post[1…M,1…M]   # posterior covariance matrix (optional)
+    samples[1…S,1…M]  # optional random draws from posterior
+
+Procedure
+1. Construct Design Matrix A (size N × M)
+   For each band i = 1 … N
+        For each wavelength point j = 1 … M
+            A[i, j] ← R[i](λ_grid[j]) * Δλ[j]
+   // A maps spectrum values s[1…M] → predicted band fluxes
+
+2. Define Gaussian‑Process Prior for Spectrum
+   Choose prior mean μ_prior[1…M] (e.g. zeros or solar spectrum)
+   Choose GP hyper‑parameters:
+        ℓ    # length scale
+        σ_f  # signal standard deviation
+   Build covariance matrix K[1…M,1…M]:
+        For all i, j = 1 … M
+            K[i, j] ← σ_f² * exp( -(λ_grid[i] – λ_grid[j])² / (2 ℓ²) )
+
+3. Observation Noise Covariance
+   Σ_noise ← diag(err[1]², …, err[N]²)
+
+4. Posterior Mean and Covariance (Closed‑Form Gaussian Linear Inference)
+   // Compute matrices needed for the update
+   Q ← A * K * Aᵀ + Σ_noise          // size N × N
+   // Invert Q (use Cholesky for numerical stability)
+   Q_inv ← inverse(Q)
+   // Posterior covariance
+   Σ_post ← K – K * Aᵀ * Q_inv * A * K
+   // Posterior mean
+   μ_post ← μ_prior + K * Aᵀ * Q_inv * (D – A * μ_prior)
+
+5. (Optional) Generate Posterior Samples
+   For k = 1 … S
+        sample_spectrum_k ← draw_multivariate_normal( μ_post , Σ_post )
+        Store sample_spectrum_k in samples[k]
+
+6. Return μ_post, Σ_post, (samples if required)

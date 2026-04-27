@@ -1,0 +1,84 @@
+text
+Input
+  - Photometry table: each row contains object ID, filter name,
+    observed magnitude m, measurement error σ_m.
+  - Filter transmission curves: T_f(λ) for every filter f.
+  - Spectral basis library: K basis spectra B_k(λ) (k = 1…K),
+    normalized so that ∫B_k(λ)dλ = 1.
+  - Taxonomic class templates: C_t(λ) for each class t.
+
+Parameters
+  - Prior precision α (scalar, default = 1.0).
+  - Number of posterior samples N_sample (e.g., 10 000).
+
+Output
+  For each object:
+    • Posterior mean of basis coefficients μ_β   (size K).
+    • Posterior covariance Σ_β (K×K).
+    • Posterior sample set {β^(i)}_{i=1}^{N_sample}.
+    • Reconstructed spectral samples {S^(i)(λ)}.
+    • Class membership probabilities P(t|data).
+
+--------------------------------------------------------------------
+Algorithm
+
+1.  Pre‑compute filter integrals for each basis spectrum
+    ----------------------------------------------------------------
+    For each filter f and each basis k:
+        X_fk = ∫ B_k(λ) · T_f(λ) dλ          // expected flux in filter f
+    EndFor
+    // X will be an M × K matrix (M = number of photometric measurements)
+
+2.  Group measurements by object
+    ----------------------------------------------------------------
+    For each unique object ID:
+        Collect its measurements into vectors:
+            y      ← [m_1, m_2, …, m_M]ᵀ           // observed magnitudes
+            σ_y    ← [σ_1, σ_2, …, σ_M]ᵀ           // measurement errors
+            F_row  ← rows of X corresponding to these filters
+        Proceed to step 3.
+
+3.  Bayesian linear–regression update
+    ----------------------------------------------------------------
+    // Weight matrix
+    W = diag(1 / σ_y²)
+
+    // Posterior precision matrix
+    Λ = F_rowᵀ · W · F_row  +  α · I_K
+
+    // Posterior mean
+    μ_β = Λ⁻¹ · F_rowᵀ · W · y
+
+    // Posterior covariance
+    Σ_β = Λ⁻¹
+
+4.  Draw posterior samples of coefficients
+    ----------------------------------------------------------------
+    For i = 1 … N_sample:
+        β^(i) ~ MultivariateNormal(μ_β , Σ_β)
+    EndFor
+
+5.  Reconstruct spectra for each sample
+    ----------------------------------------------------------------
+    For i = 1 … N_sample:
+        S^(i)(λ) = Σ_{k=1}^K  β_k^(i) · B_k(λ)
+    EndFor
+
+6.  Compute class‑membership probabilities
+    ----------------------------------------------------------------
+    For each taxonomic class t:
+        // Compute distance between class template and each sample spectrum
+        d_t^(i) = || S^(i)(λ) – C_t(λ) ||₂    // L2 norm over wavelength grid
+
+        // Convert distances to likelihoods assuming Gaussian spread
+        L_t^(i) = exp( – ½ * (d_t^(i))² / σ_t² )   // σ_t known per class
+
+    // Average over samples to obtain probability
+    P(t | data) = (1 / N_sample) * Σ_i L_t^(i)
+    Normalize {P(t | data)} so that Σ_t P(t | data) = 1.
+
+7.  Store outputs for this object
+    ----------------------------------------------------------------
+    Save μ_β, Σ_β, {β^(i)}, {S^(i)(λ)}, P(t | data).
+
+EndFor

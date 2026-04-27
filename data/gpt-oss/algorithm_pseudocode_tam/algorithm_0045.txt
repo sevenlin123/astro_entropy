@@ -1,0 +1,87 @@
+Input:
+    - Reference spectra set  S_ref   = {s_1 … s_N}        # N ≈ 50
+    - Filter transmission curves  F = {f_1 … f_M}
+    - Desired number of PCA components K       # e.g. K = 8–10
+    - KDE bandwidth h (e.g. 0.5)
+    - Gaussian photometric noise σ_rel (e.g. 20 %)
+    - AutoML framework (e.g. AutoGluon)
+
+Output:
+    - Trained encoder model E            # photometry → latent coefficients
+    - Trained classifier C              # latent → taxonomy probabilities
+    - PCA basis U (K eigenvectors) and mean μ
+
+1.1.1  For each reference spectrum s_i:
+          * Resample s_i to common wavelength grid λ
+          * Normalise (e.g. divide by mean or remove continuum)
+1.1.2  Assemble data matrix X of shape (N, L)  (L = number of wavelength bins)
+1.1.3  Compute mean spectrum μ_X = mean(X)
+1.1.4  Zero‑center X:  X_centered = X – μ_X
+1.1.5  Perform Singular Value Decomposition (SVD):
+          X_centered = U Σ V^T
+1.1.6  Select first K columns of U → PCA basis U_K
+1.1.7  Project reference spectra onto basis:
+          Z_ref = X_centered × U_K                # shape (N, K)
+
+1.2.1  Estimate density p(z) of Z_ref in ℝ^K using Kernel Density Estimation
+          * Choose Gaussian kernel with bandwidth h
+1.2.2  Sample M_aug synthetic latent vectors {z_j} from p(z)
+          * Typical M_aug ≈ 10 000
+
+1.3.1  For each synthetic latent vector z_j:
+          * Reconstruct high‑res spectrum:
+                s̃_j = μ_X + U_K × z_j                # shape (L,)
+          * Forward‑model photometry:
+                For each filter f_m ∈ F:
+                    m_j,m = ∫ s̃_j(λ) · f_m(λ) dλ / ∫ f_m(λ) dλ   # reflectance
+          * Add Gaussian noise:
+                m_j,m ← m_j,m × (1 + 𝒩(0, σ_rel))
+1.3.2  Store pairs (photometry vector m_j, latent vector z_j)
+
+1.4.1  Prepare training data D_enc = {(m_j, z_j)}   # size M_aug
+1.4.2  Split D_enc into training/validation if desired
+1.4.3  Use AutoML to fit regression model E:
+          Input dimension = M (number of filters)
+          Output dimension = K
+          Loss = Mean Squared Error (MSE) between predicted and true z
+          Enforce regularisation (e.g. early stopping) via AutoML
+1.4.4  Save trained model E
+
+1.5.1  Label each reference spectrum s_i with taxonomy class c_i
+1.5.2  Use latent projections Z_ref and labels {c_i} to build training set
+1.5.3  Train classifier C (e.g. Random Forest, GBDT) via AutoML:
+          Input dimension = K
+          Output = probability vector over classes
+1.5.4  Save trained model C
+
+Input:
+    - New sparse photometry vector m_new  (length M)
+    - Trained encoder E
+    - Trained classifier C
+    - PCA basis U_K and mean μ_X
+
+Output:
+    - Posterior distribution over spectra (mean & uncertainty)
+    - Taxonomy probability vector
+
+2.1.1  Apply encoder:
+          z_hat = E(m_new)          # vector of length K
+          # Optionally obtain predictive variance if E provides it
+
+2.2.1  Reconstruct spectrum:
+          s_hat = μ_X + U_K × z_hat
+          # s_hat shape = (L,)  (high‑resolution reflectance)
+
+2.3.1  Run classifier:
+          p_class = C(z_hat)           # vector of probabilities
+
+2.4.1  If encoder provides uncertainty, draw N_samples samples:
+          For i in 1…N_samples:
+              z_i ~ Normal(z_hat, Σ_z)
+              s_i = μ_X + U_K × z_i
+          Compute mean and credible intervals across {s_i}
+
+Return:
+    - Reconstructed high‑resolution spectrum s_hat (and optional uncertainties)
+    - Taxonomy probability vector p_class
+    - (Optional) Credible intervals per wavelength if posterior sampling performed

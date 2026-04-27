@@ -1,0 +1,83 @@
+#--------------------------------------------------------------------
+# INPUTS
+#   SPEC_DATA = {s_1, s_2, …, s_N}      # N high‑res training spectra (reflectance vs λ)
+#   FILTER_SET = {f_1, f_2, …, f_M}      # M filter transmission curves
+#   K          = number of PCA components to keep (e.g., 5–10)
+#   H          = KDE bandwidth (e.g., 0.5)
+#   NOISE_PCT  = relative noise level for synthetic photometry (e.g., 0.20)
+#   N_SAMPLES  = number of synthetic latent vectors to draw (e.g., 10 000)
+#   NEW_PHOT   = observed photometry vector for a target object (size M)
+#
+# OUTPUTS
+#   RECON_SPECTRUM   # reconstructed high‑resolution spectrum
+#   TAX_CLASS_PROBS  # probability vector over taxonomic classes
+#--------------------------------------------------------------------
+
+# 1. TRAINING PHASE
+# -----------------
+# 1.1 Build PCA model
+EIGEN_MEAN, EIGENVECTORS = PCA(SPEC_DATA, n_components=K)
+#    EIGEN_MEAN : 1×K vector of mean coefficients
+#    EIGENVECTORS : K×P matrix (P = number of wavelength bins)
+
+# 1.2 Project training spectra to latent space
+LATENT_TRAIN = []
+for s in SPEC_DATA:
+    coeffs = EIGENVECTORS @ (s - mean_over_spectra(SPEC_DATA))
+    LATENT_TRAIN.append(coeffs)            # each coeffs is a length‑K vector
+
+# 1.3 Estimate latent density with KDE
+KDE_MODEL = KDE(LATENT_TRAIN, bandwidth=H)
+
+# 1.4 Generate synthetic latent vectors
+LATENT_SYNTH = []
+for i in 1…N_SAMPLES:
+    coeffs = SAMPLE(KDE_MODEL)             # draw a K‑D point from KDE
+    LATENT_SYNTH.append(coeffs)
+
+# 1.5 Create synthetic spectra and photometry
+TRAINING_DATA = []                         # list of (photometry, latent_coeffs)
+for coeffs in LATENT_SYNTH:
+    # 1.5.1 Inverse PCA → synthetic spectrum
+    synthetic_spec = EIGENVECTORS.T @ coeffs + mean_over_spectra(SPEC_DATA)
+
+    # 1.5.2 Convolve with filter curves → ideal photometry
+    ideal_phot = []
+    for f in FILTER_SET:
+        flux = INTEGRATE(synthetic_spec * f.transmission, over λ)
+        ideal_phot.append(flux)
+
+    # 1.5.3 Inject Gaussian noise (relative uncertainty)
+    noisy_phot = []
+    for p in ideal_phot:
+        sigma = NOISE_PCT * p
+        noisy_p = RANDOM_GAUSSIAN(mean=p, stddev=sigma)
+        noisy_phot.append(noisy_p)
+
+    # 1.5.4 Store pair for regression training
+    TRAINING_DATA.append((noisy_phot, coeffs))
+
+# 1.6 Train AutoML regressor (ensemble of GBDTs, neural nets, etc.)
+REGRESSOR = AutoMLRegressor(TRAINING_DATA)
+
+# 1.7 OPTIONAL: Train latent‑space classifier
+CLASSIFIER = AutoMLClassifier(
+              X = LATENT_TRAIN,
+              y = CLASS_LABELS_FOR_SPEC_DATA)
+
+#--------------------------------------------------------------------
+# 2. INFERENCE PHASE
+# ------------------
+# 2.1 Predict latent coefficients for target photometry
+predicted_coeffs, coeff_uncertainty = REGRESSOR.predict_with_uncertainty(NEW_PHOT)
+
+# 2.2 Decode to full spectrum
+RECON_SPECTRUM = EIGENVECTORS.T @ predicted_coeffs + mean_over_spectra(SPEC_DATA)
+
+# 2.3 Taxonomic probability
+TAX_CLASS_PROBS = CLASSIFIER.predict_proba(predicted_coeffs)
+
+#--------------------------------------------------------------------
+# 3. RETURN RESULTS
+# -------------------------------------------------------------------
+return RECON_SPECTRUM, TAX_CLASS_PROBS

@@ -1,0 +1,128 @@
+function ProbabilisticSpectralReconstruction(objects):
+    for each obj in objects:
+        # Step 1: Preprocess data
+        obs = obj.photometry  # list of (f, mag, err)
+        ref_filter = choose_reference_filter(obs)  # e.g., R or V
+        # Convert magnitudes to relative reflectance
+        rel_reflectance = {}
+        for (f, mag, err) in obs:
+            rel_reflectance[f] = 10**(-0.4*(mag - mag_ref))
+            # propagate error to flux units
+            rel_err[f] = ln(10)/2.5 * err * rel_reflectance[f]
+        
+        # Step 2: Define likelihood function
+        define log_likelihood(coeffs):
+            spectrum = sum_{i=1}^{N} coeffs[i] * B_i
+            # Normalize to reference band
+            norm_factor = compute_norm(spectrum, ref_filter)
+            spectrum_norm = spectrum / norm_factor
+            logL = 0
+            for (f, r_obs, err) in rel_reflectance.items():
+                r_model = convolve(spectrum_norm, filter_transmission[f])
+                logL += -0.5 * ((r_obs - r_model)**2 / err**2 + log(2*pi*err**2))
+            return logL
+        
+        # Step 3: MCMC sampling
+        initialize coeffs0 = zeros(N)
+        samples = []
+        current_coeffs = coeffs0
+        current_logL = log_likelihood(current_coeffs)
+        for iter in range(num_samples + burn_in):
+            proposal = current_coeffs + Normal(0, proposal_std)
+            proposal_logL = log_likelihood(proposal)
+            acceptance_prob = min(1, exp(proposal_logL - current_logL))
+            if Uniform(0,1) < acceptance_prob:
+                current_coeffs = proposal
+                current_logL = proposal_logL
+            if iter >= burn_in:
+                samples.append(current_coeffs)
+        
+        # Step 4: Posterior analysis
+        coeff_matrix = stack(samples)  # shape (nsamples, N)
+        mean_coeffs = mean(coeff_matrix, axis=0)
+        cov_coeffs = cov(coeff_matrix, rowvar=False)
+        spectrum_samples = [sum(c[i]*B_i for i in range(N)) for c in coeff_matrix]
+        # Compute mean spectrum and credible interval
+        S_mean = mean(spectrum_samples, axis=0)
+        S_lower = percentile(spectrum_samples, 16, axis=0)
+        S_upper = percentile(spectrum_samples, 84, axis=0)
+        
+        # Step 5: Taxonomy probability
+        class_templates = load_class_templates()  # dict class->template_spectrum
+        class_probs = {}
+        for cls, tmpl in class_templates.items():
+            # compute likelihood of sampled spectra under template
+            distances = [distance(sample, tmpl) for sample in spectrum_samples]
+            class_probs[cls] = mean(exp(-0.5 * distances**2 / sigma_cls**2))
+        normalize(class_probs)
+        
+        # Store results
+        obj.spectrum_mean = S_mean
+        obj.spectrum_lower = S_lower
+        obj.spectrum_upper = S_upper
+        obj.taxonomy_probs = class_probs
+    return objects
+
+Algorithm SpectralReconstruction
+Input: 
+  - List of targets with observed magnitudes in available filters and errors.
+  - Filter transmission curves.
+  - Basis spectra or spectral templates (e.g., principal components).
+  - Prior distribution over spectral coefficients.
+Parameters:
+  - Number of MCMC iterations, burn‑in length, step size.
+
+Output:
+  - Posterior mean spectrum for each target.
+  - 1σ credible band.
+  - Probabilities for each taxonomic class.
+
+Procedure:
+1. Pre‑processing
+   a. Select a reference filter (e.g., the filter with smallest error).
+   b. Convert each observed magnitude m_f to a relative reflectance R_f:
+        R_f = 10^(-0.4 * (m_f - m_ref)).
+      Propagate the error σ_m to σ_R.
+   c. Store the set of observed bands {f}.
+
+2. Define the spectral model
+   a. Choose a set of K basis functions {B_k(λ)} spanning the space of plausible TNO spectra.
+   b. Represent any spectrum S(λ) as a linear combination:
+        S(λ) = Σ_{k=1}^{K} c_k B_k(λ).
+   c. Impose a prior p(c) (e.g., multivariate normal with zero mean).
+
+3. Forward modelling
+   For any coefficient vector c:
+     i. Build the model spectrum S_c(λ).
+    ii. Normalise S_c to the reference band:
+          N_c = ∫ S_c(λ) T_ref(λ) dλ
+          S_c^norm(λ) = S_c(λ)/N_c.
+   iii. For every observed band f compute the model reflectance:
+          R_c,f = ∫ S_c^norm(λ) T_f(λ) dλ .
+     iv. Compute the log‑likelihood:
+          ln L(c) = Σ_{f∈{obs}} [ -(R_f - R_c,f)^2/(2σ_{R,f}^2) - ln(σ_{R,f}) ].
+
+4. MCMC sampling
+   a. Initialise c^(0) = 0.
+   b. For n = 1 … N_iter
+        1. Propose c' = c^(n−1) + η, where η ~ Normal(0, Σ_step).
+        2. Evaluate ln L(c').
+        3. Acceptance probability a = min(1, exp( ln L(c') – ln L(c^(n−1)) )).
+        4. Draw u ~ Uniform(0,1).
+           If u < a then c^(n) = c', else c^(n) = c^(n−1).
+   c. Discard first N_burn samples.
+
+5. Post‑processing
+   a. For each retained sample c^(n) construct the corresponding spectrum S^(n)(λ).
+   b. Estimate posterior statistics:
+        S_mean(λ) = mean_n S^(n)(λ).
+        S_lower(λ), S_upper(λ) = 16th and 84th percentiles of {S^(n)(λ)}.
+   c. Taxonomic classification:
+        For each class T with template spectrum S_T(λ):
+             Compute distance d_T,n = || S^(n)(λ) – S_T(λ) ||_w
+             Likelihood_T = mean_n exp( -½ d_T,n^2 / σ_T^2 ).
+        Normalise Likelihoods to obtain P(T|data).
+
+6. Store results for the target and continue to next target.
+
+End Algorithm

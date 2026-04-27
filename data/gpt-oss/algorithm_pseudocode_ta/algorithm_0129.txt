@@ -1,0 +1,79 @@
+Input
+    S_raw[1…N]          # raw near‑IR spectra (wavelength grid λ)
+    F_raw[1…M]          # photometric measurements for an object
+                        # (fluxes or magnitudes with uncertainties σ_F)
+    Filters[1…K]        # transmission curves for K available filters
+    Kp                  # desired number of principal components (4–10)
+
+Output
+    Spectrum_mean[λ]    # reconstructed full spectrum
+    Spectrum_cov[λ×λ]   # covariance matrix of the reconstructed spectrum
+    Coef_samples[1…L]   # draws from posterior of PC coefficients
+
+------------------------------------------------------------------
+# 1. Build the spectral training set
+------------------------------------------------------------------
+1.1  Normalize each spectrum S_raw[n] (e.g., divide by its mean
+      or scale to unit flux over a reference band).
+1.2  Stack normalized spectra into matrix X[λ × N].
+
+------------------------------------------------------------------
+# 2. Train a Principal‑Component (PCA) model
+------------------------------------------------------------------
+2.1  Compute mean spectrum μ[λ] = mean(X, axis=2).
+2.2  Center data: Y = X – μ.
+2.3  Perform Singular Value Decomposition (SVD): Y = U Σ Vᵀ.
+      * U[λ × N] – left singular vectors (principal axes)
+      * Σ[N × N] – singular values (√eigenvalues)
+2.4  Select first Kp columns of U → U_K[λ × Kp]   # retained PCs
+2.5  Retain eigenvalues λ_k = Σ(k,k)² / (N-1) for k=1…Kp.
+
+------------------------------------------------------------------
+# 3. Construct filter projection matrix
+------------------------------------------------------------------
+# For each filter j, compute the response of every PC
+3.1  For j = 1 … K:
+        R_j = ∫ (U_K[:,k] * Filters[j]) dλ      # vector of length Kp
+     End
+3.2  Assemble projection matrix M[K × Kp] where M(j,k) = R_j(k).
+
+------------------------------------------------------------------
+# 4. Set up the probabilistic model
+------------------------------------------------------------------
+4.1  Prior on PC coefficients c ∈ ℝ^{Kp}:
+        p(c) = N(0, diag(σ_prior²))
+        σ_prior[k] = sqrt(λ_k)  # typical scale from PCA variance
+4.2  Likelihood for observed photometry F_raw:
+        For each filter j:
+            μ_j = M(j,:) · c                 # expected flux in filter j
+        Likelihood: p(F_raw | c) = Π_j N(F_raw[j] | μ_j , σ_F[j]²)
+        (Assume Gaussian errors; if magnitudes, convert to flux first.)
+
+------------------------------------------------------------------
+# 5. Analytical Bayesian inference (Gaussian case)
+------------------------------------------------------------------
+5.1  Posterior covariance:
+        Σ_post = ( Mᵀ Σ_noise⁻¹ M + Σ_prior⁻¹ )⁻¹
+        where Σ_noise = diag(σ_F²)
+5.2  Posterior mean:
+        μ_post = Σ_post · Mᵀ Σ_noise⁻¹ · F_raw
+5.3  Optionally, draw L samples from posterior:
+        For l = 1 … L:
+            c_l ~ N(μ_post , Σ_post)
+        End
+
+------------------------------------------------------------------
+# 6. Reconstruct the full spectrum
+------------------------------------------------------------------
+6.1  Mean spectrum: μ[λ]  (from step 2.2)
+6.2  For each posterior sample l (or use μ_post directly):
+        Spectrum_l[λ] = μ[λ] + U_K[λ,:] · c_l
+6.3  Estimate spectrum covariance:
+        Spectrum_cov = U_K · Σ_post · U_Kᵀ
+
+------------------------------------------------------------------
+# 7. Return results
+------------------------------------------------------------------
+Return Spectrum_mean = Spectrum_{l=μ_post}   # same as μ[λ] + U_K·μ_post
+Return Spectrum_cov
+Return Coef_samples = {c_l}

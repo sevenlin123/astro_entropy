@@ -1,0 +1,82 @@
+INPUT
+    Spectral library {S_i(λ)}   // N spectra sampled on common wavelength grid λ
+    Photometric observations { (y_f , σ_f) } for one TNO, f = 1 … F
+    Filter responses {R_f(λ)}   // transmission curves for all filters
+
+PARAMETERS
+    K   // number of principal components to retain (e.g., K = 8–10)
+
+OUTPUT
+    Reconstructed spectrum Ŝ(λ)
+    Credible‑interval envelope σ̂(λ)   // e.g., 95 % interval
+
+------------------------------------------------------------------
+STEP 1 – Build the PCA Basis from the Spectral Library
+------------------------------------------------------------------
+1.1   Compute mean spectrum  
+        μ(λ) ← (1/N) Σ_{i=1}^{N} S_i(λ)
+
+1.2   Center spectra  
+        X_i(λ) ← S_i(λ) – μ(λ)          // for all i
+
+1.3   Perform Singular Value Decomposition (SVD)  
+        X = U Σ Vᵀ                      // X is N × L (L = len(λ))
+        PCs_k(λ) ← columns of V           // k = 1 … L
+        eigenvals_k ← (Σ_k²)/(N – 1)       // variance explained by PC_k
+
+1.4   Truncate to first K components  
+        PC_k(λ) ← PCs_k(λ) for k = 1 … K
+        λ_k      ← eigenvals_k   for k = 1 … K
+
+------------------------------------------------------------------
+STEP 2 – Pre‑compute Filter Projections
+------------------------------------------------------------------
+For each filter f = 1 … F do
+    2.1   Normalize filter  
+            N_f ← ∫ R_f(λ) dλ
+
+    2.2   Baseline prediction  
+            b_f ← (1/N_f) ∫ μ(λ) · R_f(λ) dλ
+
+    2.3   Projection of each PC  
+            For k = 1 … K  
+                P_fk ← (1/N_f) ∫ PC_k(λ) · R_f(λ) dλ
+End
+
+Form matrices:
+    A_(f,k) = P_fk          // Design matrix (F × K)
+    b_f vector  = {b_f}     // Baseline predictions (length F)
+
+------------------------------------------------------------------
+STEP 3 – Bayesian Inference in Coefficient Space
+------------------------------------------------------------------
+3.1   Define data vector  
+        y ← {y_f}          // length F
+        Σ_diag ← {σ_f²}    // error variances
+
+3.2   Prior on coefficients  
+        a_prior ~ Normal(0, Λ)  
+        Λ = diag(λ_1,…,λ_K)    // prior covariance
+
+3.3   Posterior covariance  
+        C_post = (Aᵀ Σ⁻¹ A + Λ⁻¹)⁻¹
+
+3.4   Posterior mean  
+        a_post = C_post · Aᵀ Σ⁻¹ (y – b)
+
+------------------------------------------------------------------
+STEP 4 – Reconstruct Full Spectrum and Uncertainties
+------------------------------------------------------------------
+4.1   Spectrum reconstruction  
+        Ŝ(λ) = μ(λ) + Σ_{k=1}^{K} a_post_k · PC_k(λ)
+
+4.2   Predictive variance at each wavelength  
+        For each λ:
+            σ̂²(λ) = Σ_{k=1}^{K} λ_k · PC_k(λ)²              // prior variance part
+                     + Σ_{k,l=1}^{K} PC_k(λ) · C_post_{kl} · PC_l(λ)
+        σ̂(λ) = sqrt(σ̂²(λ))
+
+------------------------------------------------------------------
+RETURN
+    Reconstructed spectrum Ŝ(λ)
+    Credible‑interval envelope ±1.96·σ̂(λ)   // ≈95 % CI

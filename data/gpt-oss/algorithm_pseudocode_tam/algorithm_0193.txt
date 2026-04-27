@@ -1,0 +1,96 @@
+INPUT
+    S_ref[1…N_ref][1…L]   # Reference spectra (reflectance vs wavelength)
+    F[1…M][λ]             # Filter transmission curves (M filters)
+    U[1…N_ref]            # Known taxonomic labels for each reference spectrum
+    h                      # KDE bandwidth
+    K = number of PCs to retain  # e.g., 5–10
+    N_aug = number of synthetic samples to generate  # e.g., 5000
+    σ_phot                 # Photometric noise level (fractional, e.g., 0.20)
+
+OUTPUT
+    For each new photometric vector m[1…M]:
+        Posterior mean spectrum S_hat[1…L]
+        Posterior covariance Σ_S (optional)
+        Taxonomy probability vector P_tax[1…T]
+
+------------------------------------------------------------------
+STEP 1 – Build Latent Prior (PCA)
+------------------------------------------------------------------
+1.1 Normalize each reference spectrum (e.g., divide by mean reflectance).
+1.2 Perform PCA on the N_ref × L matrix → obtain eigenvectors V[1…K][1…L]
+      and principal component scores C[1…N_ref][1…K].
+1.3 Store:
+      - Mean spectrum μ_s[1…L]
+      - Eigenbasis V
+      - Scores C
+
+------------------------------------------------------------------
+STEP 2 – Generate Augmented Latent Samples
+------------------------------------------------------------------
+2.1 Estimate probability density p(C) in K‑dimensional space using KDE
+      with bandwidth h.
+2.2 Sample N_aug latent vectors {c_i} ~ p(C)  (e.g., random draws from KDE).
+2.3 For each sampled c_i:
+        Reconstruct spectrum s_i = μ_s + Vᵀ · c_i   # inverse PCA
+        Store (c_i , s_i).
+
+------------------------------------------------------------------
+STEP 3 – Forward‑Model Synthetic Photometry
+------------------------------------------------------------------
+3.1 For each augmented spectrum s_i:
+        For each filter j = 1…M:
+            Compute photometric model m_{i,j} = ∫ s_i(λ) · F_j(λ) dλ
+            Add Gaussian noise:  m_{i,j} ← m_{i,j} * (1 + 𝒩(0,σ_phot)).
+3.2 Assemble training set:
+        X_train = { m_i[1…M] }          # M‑dimensional photometry
+        Y_train = { c_i[1…K] }          # K‑dimensional latent targets
+        T_train = { U_i }               # taxonomic label for each c_i
+           (T_train may be inherited from the nearest real spectrum
+            or assigned via nearest‑neighbour in latent space).
+
+------------------------------------------------------------------
+STEP 4 – Train Encoder (Photometry → Latent Coefficients)
+------------------------------------------------------------------
+4.1 Choose an AutoML framework (e.g., AutoGluon, AutoML‑XGBoost).
+4.2 Configure regression task:
+        Input: X_train (M features)
+        Target: Y_train (K outputs)
+4.3 Run AutoML training to obtain an ensemble model R_enc
+        (R_enc: ℝ^M → ℝ^K).
+4.4 (Optional) Capture predictive uncertainty by storing per‑output variance
+        or using probabilistic regression (e.g., quantile regression).
+
+------------------------------------------------------------------
+STEP 5 – Train Taxonomy Classifier (Latent → Label)
+------------------------------------------------------------------
+5.1 Configure classification task:
+        Input: Y_train (K features)
+        Target: T_train (categorical)
+5.2 Train ensemble classifier C_cls (same AutoML framework).
+5.3 Store model C_cls.
+
+------------------------------------------------------------------
+STEP 6 – Inference on New Photometry
+------------------------------------------------------------------
+For each new photometric vector m_new[1…M]:
+
+    6.1 Predict latent coefficients:
+            c_pred = R_enc(m_new)          # deterministic mean
+       (Optional) sample posterior: {c_sample} from predictive distribution.
+
+    6.2 Decode to spectrum:
+            S_hat = μ_s + Vᵀ · c_pred         # size L
+       (Optional) if multiple samples:
+            compute mean and covariance of decoded spectra.
+
+    6.3 Classify taxonomy:
+            P_tax = C_cls.predict_proba(c_pred)  # probability vector over T classes
+
+    6.4 Return:
+            Spectrum S_hat[1…L],
+            Taxonomy probabilities P_tax[1…T],
+            (Optional) Credible intervals if uncertainty sampling performed.
+
+------------------------------------------------------------------
+END
+------------------------------------------------------------------

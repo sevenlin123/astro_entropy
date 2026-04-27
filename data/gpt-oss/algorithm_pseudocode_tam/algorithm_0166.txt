@@ -1,0 +1,124 @@
+pseudocode
+# -------------------------------------------------------------
+# 1. TRAINING PHASE
+# -------------------------------------------------------------
+function TRAIN(reference_spectra, filter_transmissions,
+               K_components,  KDE_bandwidth, N_KDE_samples):
+
+    # 1.1  Prepare spectra
+    wavelengths        ← common wavelength grid of all spectra
+    reflectances       ← matrix [N_spec × N_wave]
+    reflectances_norm  ← normalize(reflectances)          # e.g. unit area or max = 1
+
+    # 1.2  Principal Component Analysis (PCA)
+    μ_spectra         ← mean(reflectances_norm, axis=0)   # mean spectrum
+    centered_spectra  ← reflectances_norm – μ_spectra
+    PCs, λ            ← PCA(centered_spectra, n_components=K_components)
+                          # PCs : matrix [N_wave × K]
+    # Projection of reference spectra into latent space
+    L_ref              ← centered_spectra · PCs           # [N_spec × K]
+
+    # 1.3  Kernel Density Estimation (KDE) on latent space
+    KDE_model ← FIT_KDE(L_ref, bandwidth=KDE_bandwidth)
+
+    # 1.4  Generate synthetic latent vectors
+    L_synth ← SAMPLE(KDE_model, N_KDE_samples)            # [N_KDE × K]
+
+    # 1.5  Forward‑model synthetic photometry
+    training_set ← []  # list of (photometry, latent_target)
+
+    for each latent_vector in L_synth:
+        # Reconstruct full‑resolution spectrum (inverse PCA)
+        S_full ← μ_spectra + PCs · latent_vector          # [N_wave]
+
+        # Convolve with each filter transmission to obtain
+        # theoretical reflectance in that band
+        photometry_clean ← []
+        for each filter_j in filter_transmissions:
+            R_j ← INTEGRATE( S_full * filter_j.transmission )
+                 / INTEGRATE( filter_j.transmission )      # reflectance
+            photometry_clean.append(R_j)
+
+        # Inject realistic photometric noise (20 % relative)
+        photometry_noisy ← []
+        for R_j in photometry_clean:
+            σ_j ← 0.20 * R_j
+            R_j_noisy ← R_j + NORMAL(0, σ_j)
+            photometry_noisy.append(R_j_noisy)
+
+        training_set.append( (photometry_noisy , latent_vector) )
+
+    # 1.6  Train AutoML regressor (encoder)
+    regressor ← AUTOGLUON_TRAIN(
+                     X=[p for p,_ in training_set],
+                     y=[l for _,l in training_set],
+                     task='regression')
+
+    # 1.7  Train AutoML classifier (taxonomy)
+    # Use the *true* latent vectors from the reference spectra
+    classifier ← AUTOGLUON_TRAIN(
+                      X=L_ref,
+                      y=reference_labels,          # H₂O, CO₂, Methanol, Organic
+                      task='classification')
+
+    return { μ_spectra, PCs, regressor, classifier }
+
+# -------------------------------------------------------------
+# 2. PREDICTION (INFERENCE) PHASE
+# -------------------------------------------------------------
+function RECONSTRUCT(m_obs, regressor, μ_spectra, PCs,
+                     n_samples=500, phot_err=None):
+
+    # m_obs : measured photometry (vector of length N_filter)
+    # phot_err : vector of 1σ uncertainties (optional)
+
+    # 2.1  Predict latent coordinates (point estimate)
+    L_hat ← regressor.PREDICT(m_obs)            # [K]
+
+    # 2.2  Optional Monte‑Carlo sampling for posterior uncertainty
+    spectra_samples ← []
+    for i in 1 .. n_samples:
+        if phot_err is not None:
+            m_noisy ← m_obs + NORMAL(0, phot_err)   # perturb input
+        else:
+            m_noisy ← m_obs
+
+        L_i ← regressor.PREDICT(m_noisy)
+        S_i ← μ_spectra + PCs · L_i                # [N_wave]
+        spectra_samples.append(S_i)
+
+    # 2.3  Construct mean spectrum and credible interval
+    S_mean ← MEAN(spectra_samples, axis=0)          # [N_wave]
+    S_std  ← STD(spectra_samples, axis=0)           # 1‑σ envelope
+
+    # 2.4  Taxonomic probability (classification)
+    tax_probs ← CLASSIFIER_PREDICT_PROBA(L_hat)     # dict {class: prob}
+
+    return { spectrum: S_mean,
+             uncertainty: S_std,
+             taxonomy: tax_probs }
+
+# -------------------------------------------------------------
+# 3. USAGE EXAMPLE
+# -------------------------------------------------------------
+# 3.1  Train once
+model = TRAIN(
+          reference_spectra=DiSCo_TNO_spectra,
+          filter_transmissions=NIRCam_filters,
+          K_components=8,
+          KDE_bandwidth=0.5,
+          N_KDE_samples=20000)
+
+# 3.2  Apply to a new object
+result = RECONSTRUCT(
+            m_obs = measured_photometry,
+            regressor = model.regressor,
+            μ_spectra = model.μ_spectra,
+            PCs = model.PCs,
+            n_samples = 1000,
+            phot_err = measured_errors)
+
+# 3.3  Outputs
+full_spectrum  = result.spectrum          # high‑resolution reflectance
+error_bands    = result.uncertainty       # 1‑σ credible interval
+taxonomy_probs = result.taxonomy          # e.g. {'H₂O':0.12, 'CO₂':0.02,…}

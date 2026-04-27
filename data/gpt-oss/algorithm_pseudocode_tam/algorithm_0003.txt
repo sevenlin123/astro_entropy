@@ -1,0 +1,68 @@
+INPUT:
+    SEED_SPECTRA      # N × M matrix (N reference spectra, M wavelength bins)
+    FILTER_CURVES     # F × M matrix (F JWST NIRCam filters, M wavelengths)
+    K                 # Number of principal components to keep
+    H_BANDWIDTH       # KDE bandwidth (≈0.5)
+    NSYNTH            # Number of synthetic latent vectors to generate
+    NOISE_LEVEL       # Relative photometric noise (e.g. 0.20 for 20%)
+
+OUTPUT:
+    PCA_MEAN          # M‑vector (mean spectrum)
+    PCA_EIGENVECTORS  # M × K matrix
+    REGRESSOR         # Trained AutoML regressor:  photometry → latent
+    CLASSIFIER        # Trained AutoML classifier: latent → taxonomy
+
+PCA_MEAN, PCA_EIGENVECTORS, _ = PCA(SEED_SPECTRA, n_components=K)
+   Z_real = (SEED_SPECTRA – PCA_MEAN) @ PCA_EIGENVECTORS          # N × K latent matrix
+
+KDE_MODEL = KDE(Z_real, bandwidth=H_BANDWIDTH)                # fit multivariate KDE
+   Z_synth = KDE_MODEL.sample(NSYNTH)                            # NSYNTH × K synthetic latents
+
+TRAIN_PHOTOMETRY = []          # list of F‑dim vectors
+   TRAIN_LATENT     = []          # list of K‑dim vectors
+   FOR each latent_vector in concatenate([Z_real, Z_synth]) DO
+        # Reconstruct high‑resolution spectrum
+        spectrum = PCA_MEAN + PCA_EIGENVECTORS @ latent_vector
+
+        # Forward model photometry
+        phot_true = convolve_with_filters(spectrum, FILTER_CURVES)  # element‑wise product + sum
+
+        # Inject noise
+        phot_noisy = phot_true * (1 + Normal(0, NOISE_LEVEL))
+
+        APPEND phot_noisy TO TRAIN_PHOTOMETRY
+        APPEND latent_vector TO TRAIN_LATENT
+   END FOR
+
+REGRESSOR = AutoMLRegressor()         # e.g., AutoGluon, default ensemble
+   REGRESSOR.fit(TRAIN_PHOTOMETRY, TRAIN_LATENT)
+
+# OPTIONAL: attach taxonomy labels to each latent vector in Z_real
+   LABELS = assign_taxonomy_labels(SEED_SPECTRA)          # e.g., H2O, CO2, Organic, Methanol
+   CLASSIFIER = AutoMLClassifier()
+   CLASSIFIER.fit(Z_real, LABELS)                         # train only on real latents
+
+INPUT:
+    NEW_PHOTOMETRY   # F‑dim vector (observed photometry for a new TNO)
+
+OUTPUT:
+    RECONSTRUCTED_SPECTRUM  # M‑dim spectrum
+    TAXONOMY_PROBS          # dictionary: class → probability
+
+LATENT_PRED = REGRESSOR.predict(NEW_PHOTOMETRY)           # returns K‑dim vector
+
+RECONSTRUCTED_SPECTRUM = PCA_MEAN + PCA_EIGENVECTORS @ LATENT_PRED
+
+TAXONOMY_PROBS = CLASSIFIER.predict_proba(LATENT_PRED)
+
+LATENT_SAMPLES = REGRESSOR.sample_distribution(NEW_PHOTOMETRY, n_samples=S)
+     SPEC_SAMPLES   = [PCA_MEAN + PCA_EIGENVECTORS @ z for z in LATENT_SAMPLES]
+     ESTIMATE COVARIANCE of SPEC_SAMPLES for credible intervals
+
+function convolve_with_filters(spectrum, filter_curves):
+    # spectrum: 1×M array
+    # filter_curves: F×M array
+    photometry = zeros(F)
+    FOR f in 0..F-1:
+        photometry[f] = sum(spectrum * filter_curves[f]) / sum(filter_curves[f])
+    RETURN photometry

@@ -1,0 +1,82 @@
+TRAIN_PCA(Spectra, K):
+  compute mean mu
+  subtract mu -> X_centered
+  compute covariance Σ = X_centered^T X_centered / (N-1)
+  eigendecompose Σ → eigenvectors U, eigenvalues Λ
+  select first K eigenvectors → L (loadings)
+  compute scores C = X_centered * L
+  return mu, L, C, variances_of_scores = diag(Λ[0:K])
+
+PROJECT_PHOTOMETRY(f_obs, sigma_obs, filter_response, mu, L, score_variances):
+  Nf = len(f_obs); NK = L.shape[1]
+  # Precompute projected filter responses
+  for each filter j:
+      for k in 1..NK:
+          P[j,k] = sum_over_lambda( filter_response[j](λ) * L[:,k] )
+      M[j] = mean_flux_of_mu_in_filter[j]
+  # Build measurement vector m = f_obs - M
+  # Gaussian prior: c ~ N(0, diag(score_variances))
+  # Gaussian likelihood: m | c ~ N(P*c, diag(sigma_obs^2))
+  # Compute posterior analytically
+  inv_prior = diag(1/score_variances)
+  W = diag(1/sigma_obs^2)
+  Posterior_cov = inverse(inv_prior + P.T @ W @ P)
+  Posterior_mean = Posterior_cov @ (P.T @ W @ (f_obs - M))
+  return Posterior_mean, Posterior_cov
+
+RECONSTRUCT_SPECTRUM(mu, L, posterior_mean):
+  s_hat = mu + L @ posterior_mean
+  return s_hat
+
+UNCERTAINTY_SPECTRUM(L, posterior_cov):
+  cov_spectrum = L @ posterior_cov @ L.T
+  return cov_spectrum
+
+text
+     μ[λ] = (1/Ns) Σ_i S[i][λ]
+
+text
+     X[i][λ] = S[i][λ] – μ[λ]
+
+text
+     Σ = (1/(Ns–1)) Xᵀ X            // dimension Nλ×Nλ
+
+text
+     Σ = U Λ Uᵀ                      // U: eigenvectors, Λ: eigenvalues
+
+text
+     C[i][k] = X[i] · L[:,k]        // projection of each spectrum onto PCs
+
+text
+     σ²_pc[k] = Λ[k]                // variance of the k‑th PC over training set
+
+text
+       M[j] = Σ_λ μ[λ] · T_j[λ] Δλ
+
+text
+       P[j,k] = Σ_λ L[λ,k] · T_j[λ] Δλ          // dimension Nf × K
+
+text
+     m = f_o – M
+
+text
+     p(c) ~ N(0, diag(σ²_pc[1…K]))
+
+text
+     p(m | c) ~ N(P·c, diag(σ_o²))
+
+text
+     InvPrior = diag(1/σ²_pc)
+     W         = diag(1/σ_o²)
+
+     PosteriorCov  = inv( InvPrior + Pᵀ · W · P )           // K×K
+     PosteriorMean = PosteriorCov · ( Pᵀ · W · m )           // K×1
+
+text
+     ŝ[λ] = μ[λ] + Σ_k L[λ,k] · PosteriorMean[k]
+
+text
+     Cov_s[λ,λ'] = Σ_{k,l} L[λ,k] · PosteriorCov[k,l] · L[λ',l]
+
+text
+     I = Pᵀ · diag(1/σ_o²) · P

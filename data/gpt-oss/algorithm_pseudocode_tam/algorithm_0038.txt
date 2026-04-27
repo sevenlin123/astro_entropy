@@ -1,0 +1,60 @@
+Input:
+    - Reference spectra S_ref[1..N]  // each a vector of reflectance vs. wavelength
+    - Filter response curves R_filt[1..F]  // transmission vs. wavelength
+    - Desired number of principal components K
+    - KDE bandwidth h
+    - Number of synthetic samples M
+    - Noise level σ_noise (relative reflectance)
+
+Procedure:
+    1.1 Compute mean spectrum μ_S = mean(S_ref)
+    1.2 Center spectra: S_centered[i] = S_ref[i] – μ_S
+    1.3 Perform PCA on {S_centered} → eigenvectors V[1..K], eigenvalues λ[1..K]
+        * Store projection matrix P = V[1..K]^T
+    1.4 Project reference spectra onto PCA basis → latent coordinates C_ref[i] = P · S_centered[i]
+
+Procedure:
+    2.1 Fit a multivariate Kernel Density Estimate (KDE) to {C_ref}
+          KDE = fit_KDE(C_ref, bandwidth=h)
+    2.2 Sample M latent vectors from KDE → C_syn[1..M]
+    2.3 Generate synthetic spectra:
+          For each j in 1..M:
+              S_j = μ_S + V[1..K] · C_syn[j]          // inverse PCA
+
+Procedure:
+    3.1 For each synthetic spectrum S_j:
+          For each filter f in 1..F:
+              m_jf = ∫ S_j(λ) · R_filt[f](λ) dλ      // flux in filter
+          Assemble photometry vector m_j = [m_j1, …, m_jF]
+    3.2 Add Gaussian noise to photometry:
+          For each component of m_j:
+              m_jk ← m_jk + Normal(0, σ_noise * m_jk)
+    3.3 Store training pairs:
+          X_train = {m_j}   // photometry
+          Y_train = {C_syn[j]}   // latent targets
+
+Procedure:
+    4.1 Choose a regression algorithm (e.g., Gradient‑Boosted Trees, Neural Network)
+    4.2 Train model R_pred on (X_train, Y_train):
+          R_pred = train_regressor(X_train, Y_train)
+
+Procedure:
+    5.1 Label each reference spectrum with its taxonomy class label L_ref[i]
+    5.2 Train a classifier C_pred on latent coordinates {C_ref[i]} and labels {L_ref[i]}
+          C_pred = train_classifier(C_ref, L_ref)
+
+Input:
+    - New photometric observation m_new[1..F]
+
+Procedure:
+    6.1 Predict latent coefficients:
+          c_pred = R_pred.predict(m_new)
+    6.2 Reconstruct spectrum:
+          S_recon = μ_S + V[1..K] · c_pred
+    6.3 Classify (optional):
+          taxonomy_prob = C_pred.predict_proba(c_pred)
+          taxonomy_label = argmax(taxonomy_prob)
+
+Output:
+    - Reconstructed high‑resolution spectrum S_recon
+    - (Optional) Taxonomy probabilities and label

@@ -1,0 +1,87 @@
+INPUT:
+    S_train[1..M][1..L]          # M training spectra, L wavelength points
+    λ[L]                          # Corresponding wavelengths
+    Phot_obs[N][F]                # N objects with F filter measurements
+    Flux_err[N][F]                # Observed flux uncertainties
+    Filters[F]                    # Filter transmission curves
+    Ncomp                         # Number of principal‑component modes (4–10)
+
+OUTPUT:
+    Spec_post[N][L]               # Posterior mean spectra for each object
+    Spec_unc[N][L]                # Posterior standard‑deviation spectra
+    Coef_post[N][Ncomp]           # Posterior mean coefficients
+    Coef_unc[N][Ncomp]            # Posterior std‑dev of coefficients
+
+
+--------------------------------------------------------------------
+1.  TRAINING PHASE
+--------------------------------------------------------------------
+1.1   Normalise spectra (zero mean, unit variance per wavelength):
+        μ_S = mean(S_train, axis=0)
+        σ_S = std(S_train, axis=0)
+        S_norm = (S_train - μ_S) / σ_S
+
+1.2   Compute covariance matrix C = (S_norm^T * S_norm) / (M-1)
+
+1.3   Perform eigen‑decomposition:
+        eig_vals, eig_vecs = eig(C)
+        Sort eigenvalues descending → order_asc
+
+1.4   Select first Ncomp eigenvectors:
+        PC_basis = eig_vecs[:, order_asc[:Ncomp]]      # Shape (L, Ncomp)
+
+1.5   Store mean vector μ_S, std vector σ_S, and PC_basis
+
+--------------------------------------------------------------------
+2.  SYNTHETIC PHOTOMETRY FUNCTION
+--------------------------------------------------------------------
+function synthPhotometry(coeffs):
+    # coeffs: array of length Ncomp
+    # Reconstruct spectrum in normalized space
+    spec_norm = μ_S + Σ_{k=1}^{Ncomp} coeffs_k * PC_basis[:,k]
+    # Rescale back to physical units
+    spec_flux = spec_norm * σ_S
+    # Convolve with each filter to obtain synthetic fluxes:
+    for f in 1..F:
+        F_syn[f] = ∫ spec_flux(λ) * Filters[f](λ) dλ
+    return F_syn
+
+--------------------------------------------------------------------
+3.  BAYESIAN INFERENCE FOR ONE OBJECT
+--------------------------------------------------------------------
+for n in 1..N:          # loop over all objects
+    # Define log‑posterior as function of coefficient vector c
+    function logPosterior(c):
+        # Prior: assume independent Gaussian with zero mean, unit variance
+        log_prior = -0.5 * Σ_{k=1}^{Ncomp} c_k^2
+
+        # Likelihood: compare synthetic to observed fluxes
+        F_syn = synthPhotometry(c)
+        log_lik  = -0.5 * Σ_{f=1}^{F} ((Phot_obs[n,f] - F_syn[f]) / Flux_err[n,f])^2
+                   - Σ_{f=1}^{F} log(Flux_err[n,f])
+
+        return log_prior + log_lik
+
+    # Initialise MCMC chain at zeros
+    c_start = zeros(Ncomp)
+    run MCMC (e.g., affine‑invariant ensemble sampler) on logPosterior
+    collect samples {c_s} (s = 1..S_samples)
+
+    # Compute posterior summaries
+    Coef_post[n,:] = mean({c_s}, axis=0)
+    Coef_unc[n,:]  = std({c_s}, axis=0)
+
+    # Generate posterior spectra
+    for s in 1..S_samples:
+        spec_s = μ_S + Σ_{k} c_s[k] * PC_basis[:,k]
+        spec_s = spec_s * σ_S          # back‑transform
+        store spec_s
+
+    # Summary statistics for spectra
+    Spec_post[n,:] = mean(stored specs, axis=0)
+    Spec_unc[n,:]  = std(stored specs, axis=0)
+
+--------------------------------------------------------------------
+4.  RETURN RESULTS
+--------------------------------------------------------------------
+Return Spec_post, Spec_unc, Coef_post, Coef_unc

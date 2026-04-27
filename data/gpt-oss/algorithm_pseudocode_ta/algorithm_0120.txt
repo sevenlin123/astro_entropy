@@ -1,0 +1,106 @@
+INPUT
+  S   : array of N_train spectra (N_train × Nλ)
+  R   : array of J_filter responses (J_filter × Nλ) – 1‑D transmission vectors
+  y   : photometry for a single object (J_filter × 1)
+  σ_y : measurement uncertainties for y (J_filter × 1)
+
+PARAMETERS
+  K_max : maximum number of principal components to try (e.g. 10)
+  K_opt  : chosen number of components (user supplied or determined elsewhere)
+
+--------------------------------------------------------------------
+# 1. Train the principal‑component basis from the spectral library
+--------------------------------------------------------------------
+procedure TRAIN_PCA(S, K_max):
+    μ_spectrum = mean(S, axis=0)                     # (1 × Nλ)
+    X_center   = S - μ_spectrum                      # (N_train × Nλ)
+    C          = (X_center.T @ X_center) / (N_train-1)  # (Nλ × Nλ)
+    [eig_vals, eig_vecs] = eig(C)                   # eig_vecs: (Nλ × Nλ)
+    sort eigenpairs descending by eig_vals
+    U = eig_vecs[:, :K_max]                          # (Nλ × K_max) – principal bases
+    return μ_spectrum, U
+end procedure
+
+--------------------------------------------------------------------
+# 2. Project filter responses onto the principal‑component space
+--------------------------------------------------------------------
+procedure PREPARE_FILTERS(R, U, K):
+    # For each filter j, compute its projection onto the first K bases
+    D = zeros(J_filter, K)
+    for j in 1..J_filter:
+        D[j,:] = R[j,:] @ U[:, :K]                  # (1 × K)
+    end for
+    return D                                        # (J_filter × K)
+end procedure
+
+--------------------------------------------------------------------
+# 3. Compute the mean photometry that would be measured from the mean spectrum
+--------------------------------------------------------------------
+procedure MEAN_PHOTOMETRY(R, μ_spectrum):
+    y_bar = R @ μ_spectrum.T                         # (J_filter × 1)
+    return y_bar
+end procedure
+
+--------------------------------------------------------------------
+# 4. Bayesian inference in the latent (PC) space
+--------------------------------------------------------------------
+procedure INFER_LATENT(y, σ_y, D, y_bar):
+    Σ_y = diag(σ_y ** 2)                             # measurement covariance (J×J)
+    # Prior on latent vector z: N(0, I_K)
+    # Posterior: N(μ_z, Σ_z)
+    Σ_inv = inverse(Σ_y)                              # (J×J)
+    A = D.T @ Σ_inv @ D + eye(K)                       # (K×K)
+    Σ_z = inverse(A)                                   # (K×K)
+    μ_z = Σ_z @ D.T @ Σ_inv @ (y - y_bar)              # (K×1)
+    return μ_z, Σ_z
+end procedure
+
+--------------------------------------------------------------------
+# 5. Reconstruct full spectrum and propagate uncertainties
+--------------------------------------------------------------------
+procedure RECONSTRUCT_SPECTRUM(μ_spectrum, U, μ_z, Σ_z):
+    s_hat      = μ_spectrum + U @ μ_z                  # (1 × Nλ)
+    Σ_spectrum = U @ Σ_z @ U.T                         # (Nλ × Nλ)
+    return s_hat, Σ_spectrum
+end procedure
+
+--------------------------------------------------------------------
+# 6. Main routine for one object, over a chosen number of PCs
+--------------------------------------------------------------------
+procedure RECONSTRUCT_OBJECT(y, σ_y, R, S, K_opt):
+    μ_spectrum, U_full = TRAIN_PCA(S, K_max=K_opt)
+    U                = U_full[:, :K_opt]               # truncate to K_opt
+    D                = PREPARE_FILTERS(R, U, K_opt)
+    y_bar            = MEAN_PHOTOMETRY(R, μ_spectrum)
+    μ_z, Σ_z         = INFER_LATENT(y, σ_y, D, y_bar)
+    s_hat, Σ_s       = RECONSTRUCT_SPECTRUM(μ_spectrum, U, μ_z, Σ_z)
+    return s_hat, Σ_s
+end procedure
+
+--------------------------------------------------------------------
+# 7. Optional: iterate over K to find optimal dimensionality
+--------------------------------------------------------------------
+procedure SELECT_OPTIMAL_K(y, σ_y, R, S, K_range):
+    for K in K_range:
+        s_hat, Σ_s = RECONSTRUCT_OBJECT(y, σ_y, R, S, K)
+        # compute predictive log‑likelihood or another model evidence metric
+        L[K] = log_likelihood(y | s_hat, Σ_y)
+    end for
+    K_opt = argmax_K(L)
+    return K_opt
+end procedure
+
+--------------------------------------------------------------------
+# 8. Batch processing of many objects
+--------------------------------------------------------------------
+procedure PROCESS_COLLECTION(observations, R, S, K_opt):
+    results = []
+    for obs in observations:
+        y   = obs.photometry
+        σ_y = obs.errors
+        s_hat, Σ_s = RECONSTRUCT_OBJECT(y, σ_y, R, S, K_opt)
+        results.append({ "spectrum": s_hat,
+                         "covariance": Σ_s })
+    end for
+    return results
+end procedure

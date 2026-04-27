@@ -1,0 +1,81 @@
+INPUTS
+  S_train[1…N_spec][1…N_wave]   // training spectra (flux vs wavelength)
+  T_filter[1…N_filt][1…N_wave] // filter transmission curves (same wavelength grid as S_train)
+  phot[1…N_filt]                // measured magnitudes or fluxes for target TNO
+  err[1…N_filt]                 // corresponding 1‑σ uncertainties
+  N_pc                           // number of principal components to keep (e.g., 4–10)
+
+OUTPUTS
+  samples[1…N_samp][1…N_wave]   // posterior predictive spectra
+  mean_spec[1…N_wave]           // posterior mean spectrum
+  ci_low[1…N_wave], ci_high[1…N_wave] // 95 % credible interval bounds
+
+--------------------------------------------------------------------
+STEP 1: PRE‑PROCESS TRAINING SPECTRA
+  1.1  Interpolate all S_train onto a common wavelength grid λ[1…N_wave].
+  1.2  Normalise each spectrum (e.g., divide by its flux at a reference wavelength or its integrated flux).
+  1.3  Assemble data matrix D[ N_spec × N_wave ] where each row is a normalised spectrum.
+
+--------------------------------------------------------------------
+STEP 2: PRINCIPAL COMPONENT ANALYSIS (PCA)
+  2.1  Compute mean spectrum µ[1…N_wave] = (1/N_spec) * sum_i D[i,:].
+  2.2  Subtract mean:  X = D - µ (centred data).
+  2.3  Compute covariance C = (Xᵀ X) / (N_spec - 1)   // size N_wave × N_wave
+  2.4  Eigen‑decompose C → eigenvalues λ[1…N_wave], eigenvectors v[1…N_wave][1…N_wave].
+  2.5  Sort eigenpairs by descending λ.
+  2.6  Select first N_pc eigenvectors → basis B[1…N_pc][1…N_wave]   // each column is a PC
+  2.7  Store eigenvalues for selected PCs → λ_pc[1…N_pc].
+
+--------------------------------------------------------------------
+STEP 3: FILTER RESPONSE MATRICES
+  3.1  For each filter k = 1…N_filt:
+        3.1.1  Compute mean flux in filter from mean spectrum:
+               µ_f[k] = ∫ µ(λ) * T_filter[k](λ) dλ / ∫ T_filter[k](λ) dλ
+        3.1.2  For each PC j = 1…N_pc:
+               R[k,j] = ∫ B[j](λ) * T_filter[k](λ) dλ / ∫ T_filter[k](λ) dλ
+  3.2  Assemble response matrix R[ N_filt × N_pc ].
+
+--------------------------------------------------------------------
+STEP 4: SET UP BAYESIAN LINEAR MODEL
+  4.1  Define unknown coefficient vector a[1…N_pc] (PC amplitudes).
+  4.2  Linear prediction for filter k:
+         f_pred[k] = µ_f[k] + Σ_{j=1}^{N_pc} a[j] * R[k,j]
+  4.3  Observed photometric vector y[1…N_filt] = phot[1…N_filt].
+  4.4  Likelihood (Gaussian):
+         L(y | a) ∝ exp( -½ Σ_k (y[k] - f_pred[k])² / err[k]² )
+  4.5  Prior on a (Gaussian with zero mean, covariance diag(λ_pc)):
+         p(a) ∝ exp( -½ aᵀ Λ⁻¹ a )   where Λ = diag(λ_pc).
+
+--------------------------------------------------------------------
+STEP 5: COMPUTE POSTERIOR OVER COEFFICIENTS
+  5.1  Build design matrix X_design = R   // size N_filt × N_pc
+  5.2  Noise covariance Σ_noise = diag(err²)   // size N_filt × N_filt
+  5.3  Compute posterior precision matrix:
+         P = Λ⁻¹ + X_designᵀ Σ_noise⁻¹ X_design
+  5.4  Compute posterior covariance:
+         Σ_post = P⁻¹
+  5.5  Compute residual vector:
+         r = y - µ_f
+  5.6  Compute posterior mean:
+         μ_post = Σ_post * ( X_designᵀ Σ_noise⁻¹ r )
+  5.7  Draw N_samp samples from multivariate normal:
+         a_sample[s] ~ N( μ_post , Σ_post )   for s = 1…N_samp.
+
+--------------------------------------------------------------------
+STEP 6: RECONSTRUCT POSTERIOR SPECTRA
+  6.1  For each sample s = 1…N_samp:
+        6.1.1  Spectrum_s[1…N_wave] = µ[1…N_wave]
+        6.1.2  For each PC j = 1…N_pc:
+                 Spectrum_s += a_sample[s][j] * B[j]
+  6.2  Store all Spectrum_s as samples[1…N_samp][1…N_wave].
+
+--------------------------------------------------------------------
+STEP 7: SUMMARY STATISTICS
+  7.1  For each wavelength λ[ℓ]:
+        7.1.1  Extract values { Spectrum_s[ℓ] } over all samples.
+        7.1.2  Compute mean_spec[ℓ] = mean over samples.
+        7.1.3  Compute 2.5 % and 97.5 % percentiles → ci_low[ℓ], ci_high[ℓ].
+
+--------------------------------------------------------------------
+RETURN
+  samples, mean_spec, ci_low, ci_high

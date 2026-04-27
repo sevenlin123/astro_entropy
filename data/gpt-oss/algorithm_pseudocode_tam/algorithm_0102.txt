@@ -1,0 +1,74 @@
+Input:
+    - Reference spectra R = {s_1,…,s_N}  (high‑resolution reflectance arrays)
+    - Filter throughput curves T = {t_1,…,t_M}
+    - Desired number of principal components K
+    - KDE bandwidth h
+    - Number of synthetic latent samples S (e.g., 5 000)
+    - Photometric uncertainty σ_rel (e.g., 0.20)
+
+Output for each new object:
+    - Reconstructed spectrum Ŝ
+    - Taxonomy probability vector p_tax
+    - Latent coefficient vector ĉ
+
+--------------------------------------------------------------------
+Pre‑processing
+--------------------------------------------------------------------
+1.  Normalize each spectrum s_i to unit mean or divide by solar spectrum → r_i.
+2.  Store all r_i as rows of matrix X ∈ ℝ^{N×L} (L = # wavelength bins).
+
+--------------------------------------------------------------------
+Principal Component Analysis (PCA)
+--------------------------------------------------------------------
+3.  Compute mean spectrum μ = (1/N) Σ_i r_i.
+4.  Center data: X_c = X – μ.
+5.  Perform Singular Value Decomposition: X_c = U Σ Vᵀ.
+6.  Retain first K columns of Vᵀ → PC = [p₁,…,p_K] (each p_k ∈ ℝ^L).
+7.  For each r_i, compute latent coefficients:
+        c_i = PC · (r_i – μ)   // projection onto PCs
+   Store C = {c_i}.
+
+--------------------------------------------------------------------
+Latent‑Space Density Estimation (KDE)
+--------------------------------------------------------------------
+8.  Fit multivariate KDE to {c_i} with bandwidth h → density f(c).
+9.  Sample S latent vectors {ŝ_j} ~ f(c).  // synthetic latent samples
+
+--------------------------------------------------------------------
+Synthetic Spectrum Generation
+--------------------------------------------------------------------
+10. For each ŝ_j:
+        a.  Construct synthetic spectrum:
+                ŝ_s_j = μ + Σ_{k=1}^{K} ŝ_{j,k} * p_k
+        b.  Compute synthetic photometry:
+                m_j = convolution(ŝ_s_j , T)     // integrate over each filter
+        c.  Perturb photometry:
+                m_j' = m_j + Normal(0, σ_rel * m_j)
+        d.  Store pair (m_j', ŝ_j) in training set P.
+
+--------------------------------------------------------------------
+Regressor Training (Encoder)
+--------------------------------------------------------------------
+11.  Split P into training/validation subsets (optional).
+12.  Train an AutoML regressor (e.g., ensemble of GBDTs) to learn mapping:
+            f_enc : photometry → latent coefficients
+        Model:  ŝ_j ≈ f_enc(m_j')
+
+--------------------------------------------------------------------
+Classifier Training (Taxonomy)
+--------------------------------------------------------------------
+13.  For each real reference spectrum r_i, assign taxonomy label L_i.
+14.  Train an AutoML classifier on latent coefficients C with labels L_i:
+            f_cls : latent coefficients → probability over taxonomies
+
+--------------------------------------------------------------------
+Inference
+--------------------------------------------------------------------
+For a new observation with measured photometry m_obs:
+15.  Predict latent coefficients:
+        ĉ = f_enc(m_obs)
+16.  Predict taxonomy probabilities:
+        p_tax = f_cls(ĉ)
+17.  Reconstruct full spectrum:
+        Ŝ = μ + Σ_{k=1}^{K} ĉ_k * p_k
+18.  Return Ŝ, p_tax, ĉ.

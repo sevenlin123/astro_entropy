@@ -1,0 +1,73 @@
+INPUT:  Real near‑IR spectra {S_i}   // i = 1…N_real (≈50)
+        Spectral sampling grid λ_k   // k = 1…K_spec (≈200–400)
+
+STEP 1.1  Compute mean spectrum μ_S = mean(S_i)
+
+STEP 1.2  Center spectra:  X_i = S_i – μ_S
+
+STEP 1.3  Perform Principal Component Analysis (PCA) on {X_i}
+          → Eigenvectors V_j  (j = 1…K_pc, K_pc ≈ 8–10)
+          → Eigenvalues σ_j²
+
+STEP 1.4  Project real spectra into latent space:
+          c_i,j = (X_i · V_j) / σ_j     // Standardised scores
+          Store latent coefficient matrix C_real (N_real × K_pc)
+
+STEP 1.5  Fit a non‑parametric Kernel Density Estimate (KDE) on C_real
+          → Kernel width h (≈0.5)
+          → KDE density p_C(c)
+
+STEP 1.6  Sample M synthetic latent vectors from p_C:
+          C_syn = {c_m}  ,  m = 1…M   (M ≫ N_real, e.g. M = 10 000)
+
+STEP 1.7  Generate synthetic spectra:
+          S_syn_m = μ_S + Σ_{j=1}^{K_pc} c_m,j * σ_j * V_j
+          Store synthetic spectra matrix S_syn (M × K_spec)
+
+FOR each synthetic spectrum S_syn_m:
+    FOR each filter f ∈ {F_1,…,F_Nf}:
+        Compute theoretical reflectance R_f = ∫ S_syn_m(λ) * T_f(λ) dλ
+            // T_f(λ): throughput of filter f
+    END
+    Add Gaussian noise to each R_f:
+        R_f_obs = R_f + N(0, 0.20·R_f)   // 20 % relative noise
+END
+Collect pairs (R_obs, c_true)  → training data for regressor
+
+3.1  Encoder:
+     Input: noisy photometry vector r_obs (dimension N_f)
+     Target: latent coefficients c_true (dimension K_pc)
+     Use AutoML (e.g., AutoGluon) to train an ensemble regressor
+     → Trained model E(r_obs) → Predictive distribution over c
+
+3.2  Classifier (optional):
+     Input: mean predicted latent vector 𝔼[c | r_obs]
+     Target: taxonomic labels (Water, CO₂, Organic, Methanol)
+     Train a secondary AutoML classifier on latent space
+
+INPUT: New photometric measurement r_new (dimension N_f)
+
+STEP 4.1  Use encoder to obtain predictive distribution over latent
+          coefficients:
+              p(c | r_new)  (e.g., Gaussian mean μ_c and std σ_c per component)
+
+STEP 4.2  Draw N_sample latent draws {ĉ_n} from p(c | r_new)
+          Optionally enforce inter‑component correlations via
+          Gaussian Copula derived from KDE covariance.
+
+STEP 4.3  For each draw ĉ_n:
+           Reconstruct spectrum:
+               Ŝ_n = μ_S + Σ_{j=1}^{K_pc} ĉ_n,j * σ_j * V_j
+END
+
+STEP 4.4  Aggregate reconstructions:
+           • Point estimate: mean spectrum  S̄ = mean_n(Ŝ_n)
+           • Uncertainty bands: e.g., 16th/84th percentiles at each λ_k
+           • Optional: compute derived metrics (slopes, band depths)
+
+STEP 4.5  Taxonomic probability:
+           • Pass μ_c to classifier → class probabilities P(class | r_new)
+
+• Reconstructed high‑resolution spectrum S̄(λ) with confidence intervals
+• Posterior samples {Ŝ_n(λ)} for uncertainty propagation
+• Taxonomic class posterior P(class | r_new)

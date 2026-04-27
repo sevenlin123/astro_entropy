@@ -1,0 +1,78 @@
+pseudo
+1. Load reference TNO spectra {S_i}  // i = 1 … N_seed   (high‑resolution reflectance arrays)
+2. Align all spectra to common wavelength grid λ_k  // k = 1 … N_λ
+3. Perform Principal Component Analysis (PCA):
+       • Compute mean spectrum μ_S
+       • Compute covariance matrix C_S
+       • Extract first K eigenvectors E = [e_1 … e_K]   (K ≈ 8–10)
+       • Project each spectrum onto PCs:
+             α_i = Eᵀ · (S_i – μ_S)          // α_i ∈ ℝ^K
+4. Build a continuous prior in latent space:
+       • Fit Gaussian Kernel Density Estimator (KDE) on {α_i}
+           – bandwidth h ≈ 0.5 (chosen empirically)
+       • Draw M synthetic latent vectors {α*_j}  // j = 1 … M  (e.g., M = 5000)
+5. Generate synthetic spectra from latent samples:
+       FOR each α*_j DO
+             S*_j = μ_S + E · α*_j           // inverse PCA → full spectrum
+       END FOR
+6. Forward‑model synthetic spectra to photometric bandpasses:
+       FOR each S*_j DO
+             FOR each filter f in {filters} DO
+                   m*_j,f = ∫ S*_j(λ) * T_f(λ) dλ    // T_f = filter throughput
+             END FOR
+       END FOR
+7. Inject observational noise into photometry:
+       FOR each m*_j,f DO
+             σ_f = 0.20 * m*_j,f            // 20 % relative uncertainty
+             m_noisy_j,f ~ Normal(m*_j,f , σ_f²)
+       END FOR
+8. Assemble training dataset:
+       X_train = {m_noisy_j,f}              // photometry vectors  (size M × #filters)
+       Y_train = {α*_j}                     // latent coefficient vectors  (size M × K)
+9. Train Encoder (photometry → latent coefficients):
+       • Use AutoML framework (e.g., AutoGluon)
+       • Specify regression objective (e.g., MAE or MSE on α)
+       • Allow ensemble of Gradient‑Boosted Trees + Neural Nets
+10. Train Taxonomy Classifier (optional):
+        • Input: α vectors (either observed or predicted)
+        • Output: categorical label (Water, CO₂, Organic, Methanol)
+        • Use AutoML classification pipeline
+
+pseudo
+Input: Observed photometry vector m_obs = [m_f] for filters f ∈ {filters}
+Output: Reconstructed high‑resolution spectrum S_rec(λ)
+        Uncertainty interval (e.g., 68 %, 95 %) per λ
+        Taxonomic probability vector p_tax
+
+1. Preprocess observed photometry:
+       • Convert to reflectance if needed
+       • Normalize/match units to training data
+2. Encode photometry to latent coefficients:
+       a. Use trained Encoder to predict mean latent vector:
+              α_mean = Encoder.predict(m_obs)      // size K
+       b. Obtain predictive variance or ensemble spread:
+              Σ_α = Encoder.predict_variance(m_obs) // size K×K (diagonal or full)
+3. Sample posterior in latent space:
+       a. Define multivariate normal posterior:
+              α ~ N(α_mean, Σ_α)
+       b. Draw N_samples (e.g., 1000) draws: {α^(s)}_{s=1}^{N_samples}
+       c. (Optional) Apply Gaussian Copula to enforce realistic correlations
+4. Decode sampled latents to spectra:
+       FOR s = 1 … N_samples DO
+             S^(s) = μ_S + E · α^(s)              // inverse PCA → full spectrum
+       END FOR
+5. Aggregate spectra to obtain point estimate and uncertainties:
+       a. S_mean(λ) = mean_s S^(s)(λ)              // reconstructed spectrum
+       b. S_std(λ)  = std_s S^(s)(λ)               // 1‑σ uncertainty band
+       c. Credible intervals (e.g., 95 %) from percentile ranks of {S^(s)}
+6. Taxonomic classification:
+       a. Feed α_mean into trained Classifier → probability vector p_tax
+7. Return:
+       • S_mean(λ), S_std(λ) (or CI bands)
+       • p_tax
+
+pseudo
+1. Compute derived spectral diagnostics:
+       • Spectral slopes (linear fit over specified λ ranges)
+       • Band depth metrics (e.g., at 2.0 µm, 3.4 µm, 4.2 µm)
+2. Store or output results in desired format (e.g., FITS, CSV).

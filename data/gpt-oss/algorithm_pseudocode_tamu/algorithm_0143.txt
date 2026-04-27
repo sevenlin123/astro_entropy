@@ -1,0 +1,82 @@
+Inputs:
+    - SpecTrain = {S_i}        # n_real high‑resolution spectra (reflectance vs λ)
+    - Filters   = {F_j}        # m photometric passbands (effective throughputs)
+    - PhotObs   = {m_k}        # photometry for a new object (m ≤ m)
+
+Output:
+    - SpectrumPost = distribution over full‑resolution reflectance S(λ)
+    - TaxonomyProb = probabilities for each taxonomic class
+
+-------------------------------------------------------
+1.  Define the Spectral Latent Manifold (Prior)
+-------------------------------------------------------
+
+1.1  // Principal Component Analysis (PCA)
+     Compute mean spectrum μ_S and PCA basis {p_1,…,p_K} from SpecTrain.
+     Project each real spectrum onto basis:
+         z_i = PCA_project(S_i)      // K‑dimensional coefficient vector
+
+1.2  // Kernel Density Estimation (KDE) in latent space
+     Fit a Gaussian‑kernel KDE to {z_i} with bandwidth h ≈ 0.5.
+     Let KDE(z) denote the estimated density.
+
+1.3  // Generate augmented synthetic latent samples
+     Sample M synthetic latent vectors {z*} from KDE(z).
+     For each z*:
+         S*   = PCA_inverse(z*)                  // reconstructed spectrum
+         m*   = forward_model(S*, Filters)       // convolve with filter throughputs
+         σ_m  = 0.20 * m*                         // 20 % relative noise
+         m*_noisy = m* + Normal(0, σ_m)           // add Gaussian noise
+     Store training pairs {(m*_noisy, z*)}.
+
+-------------------------------------------------------
+2.  Train the Encoder (Photometry → Latent Coefficients)
+-------------------------------------------------------
+
+2.1  Use an AutoML ensemble (e.g., Gradient‑Boosted Trees + Neural Nets)
+     to learn mapping f_enc: m → z.
+     Train on the synthetic training set {(m*_noisy, z*)}.
+
+2.2  Validate the encoder on held‑out real spectra (optional, omitted here).
+
+-------------------------------------------------------
+3.  Train the Taxonomy Classifier
+-------------------------------------------------------
+
+3.1  Assign class labels y_i to each real spectrum S_i (Water, CO₂, Organic, Methanol).
+
+3.2  Train a second AutoML model f_cls: z → P(y|z) 
+     using the real latent vectors {z_i} and labels {y_i}.
+
+-------------------------------------------------------
+4.  Inference for a New Observation
+-------------------------------------------------------
+
+Input: PhotObs = {m_k}  (observed photometry for the target)
+
+4.1  // Encoder prediction
+     Predict mean latent vector:
+         ẑ = f_enc(m_k)
+     Estimate uncertainty on each dimension by, e.g.,
+         σ_z = variance from ensemble predictions
+     Construct joint latent posterior via a Gaussian Copula:
+         - Marginals: Normal(mean=ẑ_j , std=σ_z_j) for j=1…K
+         - Correlation matrix Σ derived from the encoder’s covariance
+         - Sample N_latent latent vectors {z^(n)} from the copula.
+
+4.2  // Decoder – reconstruct spectra
+     For each sampled latent vector z^(n):
+         S^(n)(λ) = PCA_inverse(z^(n))
+     Aggregate samples to obtain:
+         - Mean spectrum μ_S(λ) = average_{n} S^(n)(λ)
+         - Credible intervals (e.g., 68 %, 95 %) from the sample distribution.
+
+4.3  // Taxonomy probability
+     For each z^(n), compute class posterior:
+         p_y^(n) = f_cls(z^(n))
+     Average over samples:
+         TaxonomyProb = (1/N_latent) Σ_n p_y^(n)
+
+Return:
+    - SpectrumPost: μ_S(λ) ± credible intervals
+    - TaxonomyProb

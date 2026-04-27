@@ -1,0 +1,81 @@
+Input:
+    P      – photometric catalog (object_id, filter_id, magnitude, mag_error)
+    F      – filter response curves (filter_id → λ–dependent transmission)
+    S_lib  – spectral library (template_id → reflectance spectrum R(λ))
+    C_lib  – taxonomy classes (class_name → list of template_ids)
+
+Output for each object:
+    c_post          – posterior coefficient vector for templates
+    s_recon(λ)      – reconstructed reflectance spectrum
+    σ_s(λ)          – 68 % credible interval of s_recon
+    P_class         – posterior probability for each taxonomy class
+    χ²              – goodness‑of‑fit statistic
+    outlier_flags   – per‑filter flag if observation is an outlier
+
+--------------------------------------------------------------------
+MAIN LOOP
+--------------------------------------------------------------------
+FOR each object O in P:
+    1. SELECT all measurements {m_i, σ_i} for O (i = 1…N_filters)
+    2. CONVERT magnitudes to flux densities:
+           f_i   ← 10^(–0.4 * (m_i – ZP_i))          # ZP_i = zero point for filter i
+           σ_f_i ← ln(10)/2.5 * f_i * (σ_i / 1.0)    # propagate error
+       BUILD vectors:
+           y = [f_1 … f_N]^T
+           Σ = diag(σ_f_1² … σ_f_N²)
+
+    3. PRECOMPUTE synthetic photometry for every template T_j:
+           FOR each filter i:
+                s_ij = ∫ R_j(λ) * F_i(λ) dλ            # convolution
+           STORE column j of matrix A:  a_j = [s_1j … s_Nj]^T
+       Matrix A = [a_1 … a_M]   (M = number of templates)
+
+    4. MODEL:   y = A · c + ε ,   ε ~ N(0, Σ)
+       PRIOR on coefficients c:
+           • Dirichlet(α)  with α = [1,…,1]  (uniform over simplex)
+           • Enforce c_k ≥ 0, Σ_k c_k = 1
+
+    5. POSTERIOR INFERENCE:
+           (a) COMPUTE MAP estimate c_MAP:
+                   Minimise  χ² = (y – A·c)^T Σ⁻¹ (y – A·c)
+                   subject to c ≥ 0, Σ_k c_k = 1
+               -> use quadratic programming
+           (b) SAMPLE posterior:
+                   Run Metropolis‑Hastings with proposal:
+                       c' = c + δ,   δ ~ N(0, 0.01)
+                       Project onto simplex (renormalise & clip negatives)
+                   Accept with probability min(1, p(c')/p(c))
+                   Collect N_samples draws after burn‑in
+
+    6. RECONSTRUCTED SPECTRUM:
+           FOR each λ on desired grid:
+                s_recon(λ) = Σ_{j=1}^{M}  c_MAP_j * R_j(λ)
+                σ_s(λ)     = sqrt( Σ_{i,k} Cov(c_i,c_k) * R_i(λ) * R_k(λ) )
+           (Covariance obtained from empirical sample covariance of c)
+
+    7. TAXONOMY PROBABILITY:
+           FOR each class ℓ in C_lib:
+                P_class[ℓ] = Σ_{j∈C_lib[ℓ]}  Posterior mass of c_j
+           (mass can be estimated as fraction of samples with c_j > 0)
+
+    8. GOODNESS‑OF‑FIT:
+           χ² = (y – A·c_MAP)^T Σ⁻¹ (y – A·c_MAP)
+           DOF = N_filters – 1   (since coefficients summed to one)
+           χ²_red = χ² / DOF
+
+    9. OUTLIER DETECTION:
+           FOR each filter i:
+                likelihood_i = Normal( f_i | (A·c_MAP)_i , σ_f_i )
+                IF likelihood_i < threshold (e.g. 0.01):
+                     outlier_flags[i] = TRUE
+                ELSE:
+                     outlier_flags[i] = FALSE
+
+   10. STORE results for O:
+            c_post = posterior mean of c (or MAP)
+            s_recon, σ_s
+            P_class
+            χ²_red
+            outlier_flags
+
+END FOR

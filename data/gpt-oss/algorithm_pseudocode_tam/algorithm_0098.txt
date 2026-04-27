@@ -1,0 +1,72 @@
+INPUT:  
+    - Seed spectra S_real = {S_i}   // 51 near‑IR spectra (high‑resolution vectors)  
+    - Filter set F = {F_k}          // JWST NIRCam effective throughput curves  
+    - Desired latent dimension K     // e.g., 5–10 PCs  
+    - KDE bandwidth h                // e.g., 0.5  
+
+OUTPUT:  
+    - PCA model P = (mean μ, eigenvectors V, eigenvalues Λ)  
+    - Augmented latent dataset Z_aug = {z_j} (size ~ few thousand)  
+    - Synthetic photometry M_syn = {m_j} with noise  
+    - Trained regressor R (photometry → latent coeffs)  
+    - Trained classifier C (latent coeffs → taxonomic probs)
+
+μ, V, Λ ← PCA(S_real, K)           // center spectra, keep K PCs  
+   Z_real ← Vᵀ · (S_real – μ)         // project real spectra to latent space
+
+KDE_model ← FitKDE(Z_real, bandwidth = h)  
+   Z_aug ← Sample(KDE_model, N_samples)        // N_samples ≈ 5–10 × |S_real|
+
+for each z in Z_aug:  
+       S_hat ← V · z + μ                      // inverse PCA → synthetic spectrum  
+       m_clean ← Convolve(S_hat, F)           // integrate spectrum with each filter  
+       m_noisy ← m_clean * (1 + Normal(0, σ)) // σ = 0.20 (20 % relative noise)  
+       append m_noisy to M_syn
+
+R ← AutoML_Regression(X = M_syn, y = Z_aug)  
+   // AutoML selects best ensemble (e.g., GBDT, NN) and tunes hyper‑parameters
+
+// Assign taxonomic label t_i to each real spectrum S_i (Water, CO₂, Organics, Methanol)  
+   L_real ← {t_i}  
+   Z_label ← {z_real_i} for i in 1..|S_real|  
+   C ← AutoML_Classifier(X = Z_label, y = L_real)
+
+INPUT:  
+    - New photometric measurements m_new (length = number of available filters)  
+
+OUTPUT:  
+    - Posterior distribution over latent coefficients p(z | m_new)  // approximated by predictive mean & variance  
+    - Reconstructed high‑resolution spectrum S_rec  
+    - Taxonomy probability vector p_taxonomy
+
+z_pred_mean, z_pred_std ← R.predict_with_uncertainty(m_new)  
+   // R outputs mean and predictive variance for each of K dimensions
+
+S_rec ← V · z_pred_mean + μ               // point estimate
+   // Optional: generate multiple draws from N(z_pred_mean, diag(z_pred_std²))
+   // to propagate uncertainty into reconstructed spectrum
+
+p_taxonomy ← C.predict_proba(z_pred_mean)   // softmax over taxonomic classes
+
+return {S_rec, z_pred_mean, z_pred_std, p_taxonomy}
+
+N_draw ← 1000
+samples ← []
+for i in 1..N_draw:
+    z_i ← DrawNormal(mean = z_pred_mean, std = z_pred_std)
+    S_i ← V · z_i + μ
+    append S_i to samples
+Compute mean and percentile bands of {S_i} → empirical credible interval
+
+TRAINING PHASE:
+    1. Compute PCA on seed spectra
+    2. Build KDE in latent space, sample synthetic latents
+    3. Generate synthetic noisy photometry
+    4. Train regressor (photometry → latent)
+    5. Train classifier (latent → taxonomy)
+
+INFERENCE PHASE:
+    1. Predict latent mean & std from new photometry
+    2. Decode to spectrum
+    3. Classify taxonomy
+    4. Optionally sample posterior for uncertainty bands

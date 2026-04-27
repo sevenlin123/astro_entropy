@@ -1,0 +1,80 @@
+Input:
+    - SeedSpectra[1…N]   // N ≈ 50 high‑resolution TNO spectra (reflectance vs λ)
+    - FilterCurves[1…F]  // Throughput functions of chosen photometric filters
+    - PhotometryObs      // New sparse photometry vector (F elements)
+
+Parameters:
+    - K = number of principal components to retain (e.g., 8–10)
+    - Bandwidth h for KDE (≈ 0.5)
+    - NoiseLevel σ_rel = 0.20  // Relative Gaussian noise for training data
+    - NumAugmented  = 5 000    // Number of synthetic latent samples
+    - NumSamplesPost = 1 000   // Posterior samples to generate
+
+Output:
+    - SpectrumRecon[λ]     // Reconstructed high‑res spectrum
+    - ClassProb[Taxon]     // Probabilities for each taxonomy class
+    - PosteriorSamples[λ]  // Optional: ensemble of spectra for uncertainty
+
+--------------------------------------------------------------------
+Phase 1 – Build Prior (Latent Manifold)
+--------------------------------------------------------------------
+1.  # Center spectra and compute PCA
+2.  For each spectrum s ∈ SeedSpectra:
+        s_centered = s – mean(SeedSpectra)
+3.  Compute covariance matrix C = cov({s_centered})
+4.  Eigen‑decompose C → eigenvalues λ_i, eigenvectors e_i
+5.  Select first K eigenvectors {e_1,…,e_K}
+6.  Project each centered spectrum onto the K‑D space:
+        z_real[n] = [ e_1ᵀ·s_centered , … , e_Kᵀ·s_centered ]   // latent coords
+7.  Estimate density of {z_real} using kernel density estimation:
+        KDE(z) ← ∏_{i=1}^{N}  K_h(z – z_real[i])      // h = Bandwidth
+8.  Sample NumAugmented synthetic latent vectors:
+        for j = 1 … NumAugmented:
+            z_aug[j] ← SampleFromKDE(KDE)
+9.  Decode each synthetic latent vector to a full spectrum:
+        for j = 1 … NumAugmented:
+            s_aug[j] = mean(SeedSpectra) + Σ_{k=1}^{K} z_aug[j][k] * e_k
+--------------------------------------------------------------------
+Phase 2 – Generate Training Photometry
+--------------------------------------------------------------------
+10. For each synthetic spectrum s_aug[j]:
+        a.  For each filter f:
+                R_f[j] = ∫ s_aug[j](λ) · FilterCurves[f](λ) dλ
+        b.  Add Gaussian noise:
+                R_f_noisy[j] = R_f[j] * (1 + Normal(0, σ_rel))
+11. Assemble training dataset:
+        X_train = { R_f_noisy[j] }          // F‑dimensional photometry
+        Y_train = { z_aug[j] }              // K‑dimensional latent coeffs
+--------------------------------------------------------------------
+Phase 3 – Train Encoder (Regressor) & Classifier
+--------------------------------------------------------------------
+12. Train an AutoML ensemble regressor on (X_train → Y_train):
+        Regressor = AutoMLTrain(X_train, Y_train)
+13. Label each seed spectrum with taxonomy class (Water, CO₂, Organic,
+        Methanol) → ClassLabel[n]
+14. Train an AutoML classifier on (Y_real → ClassLabel):
+        Classifier = AutoMLTrain(Y_real, ClassLabel)
+--------------------------------------------------------------------
+Phase 4 – Forward Inference on New Observation
+--------------------------------------------------------------------
+15. Normalize PhotometryObs if needed (same scaling as training).
+16. Predict latent vector:
+        z_pred = Regressor.Predict(PhotometryObs)
+17. Decode to spectrum:
+        SpectrumRecon = mean(SeedSpectra) + Σ_{k=1}^{K} z_pred[k] * e_k
+18. Classify:
+        ClassProb = Classifier.PredictProbability(z_pred)
+--------------------------------------------------------------------
+Optional: Posterior Sampling for Uncertainty
+--------------------------------------------------------------------
+19. For s = 1 … NumSamplesPost:
+        a.  Perturb observed photometry:
+                PhotometryPerturbed = PhotometryObs *
+                    (1 + Normal(0, σ_rel))
+        b.  z_s = Regressor.Predict(PhotometryPerturbed)
+        c.  Spectrum_s = mean(SeedSpectra) + Σ_{k=1}^{K} z_s[k] * e_k
+        d.  Store Spectrum_s
+20. PosteriorSamples = {Spectrum_s}   // ensemble of spectra
+--------------------------------------------------------------------
+Return:
+    SpectrumRecon, ClassProb, (optional) PosteriorSamples

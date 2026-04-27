@@ -1,0 +1,100 @@
+# --------------------------------------------------------------------
+# 1. Data Preparation (Training)
+# --------------------------------------------------------------------
+Input:
+    - Seed spectra S_real[i], i = 1..N   # 51 high‑resolution TNO spectra
+    - Filter response curves {T_k(λ)}   # JWST NIRCam or other instrument
+    - Desired number of PCs K            # e.g., K = 5–10
+    - KDE bandwidth h                    # e.g., h = 0.5
+    - Number of synthetic samples M      # e.g., 5000
+
+Procedure:
+
+1.1  Compute PCA basis
+        [U, μ, Λ] = PCA(S_real, K)          # U: K principal vectors,
+                                            # μ: mean spectrum,
+                                            # Λ: eigenvalues
+1.2  Project real spectra onto latent space
+        for each i in 1..N:
+            z_real[i] = Uᵀ · (S_real[i] – μ)   # shape: K×1
+
+1.3  Estimate latent density via KDE
+        KDE_model = FitGaussianKDE({z_real[i]}, bandwidth = h)
+
+1.4  Generate synthetic latent vectors
+        for j in 1..M:
+            z_fake[j] = Sample(KDE_model)     # shape: K×1
+
+1.5  Reconstruct synthetic spectra
+        for j in 1..M:
+            S_fake[j] = μ + U · z_fake[j]
+
+1.6  Forward model synthetic photometry
+        for j in 1..M:
+            for each filter k:
+                m_fake[j][k] = Convolve(S_fake[j], T_k)   # reflectance in band k
+            # Add Gaussian noise (σ = 0.2 * m_fake)
+            for each filter k:
+                m_fake_noisy[j][k] = m_fake[j][k] + Normal(0, 0.2*m_fake[j][k])
+
+1.7  Create training set for regressor
+        X_train = {m_fake_noisy[j]}           # photometry vectors, shape: M×F
+        Y_train = {z_fake[j]}                 # latent coefficient vectors, shape: M×K
+
+1.8  Train photometry→latent regressor (AutoML)
+        Regressor = AutoML_Train(X_train, Y_train)
+        # Output: mapping f_phot_to_lat(ẑ|m) producing mean & covariance
+
+1.9  Train latent→taxonomy classifier (AutoML)
+        Labels = {taxonomic label of each z_fake[j]}
+        Classifier = AutoML_Train(z_fake, Labels)
+
+# --------------------------------------------------------------------
+# 2. Validation (Leave‑One‑Out Cross‑Validation)
+# --------------------------------------------------------------------
+For each i in 1..N:
+    2.1  Remove seed spectrum i from dataset
+    2.2  Repeat steps 1.1–1.9 with N-1 spectra
+    2.3  Predict latent for held‑out photometry m_i:
+            ẑ_i, Σ̂_i = Regressor.predict(m_i)
+    2.4  Reconstruct spectrum:
+            Ŝ_i = μ + U · ẑ_i
+    2.5  Record reconstruction error, coverage, taxonomy probability
+    2.6  Store diagnostics for evaluation
+
+# --------------------------------------------------------------------
+# 3. Inference (Forward Prediction for New Objects)
+# --------------------------------------------------------------------
+Input:
+    - New photometry m_new (length F)
+
+Procedure:
+
+3.1  Predict latent posterior
+        (z_mean, z_cov) = Regressor.predict(m_new)
+        # z_mean: K×1, z_cov: K×K
+
+3.2  Sample latent posterior using Gaussian Copula
+        Draw N_samp samples {z_samp[s]} from multivariate normal
+        Transform samples to preserve empirical marginal distributions
+        (e.g., via rank‑based transformation)
+
+3.3  For each sampled latent vector:
+        3.3.1  Reconstruct spectrum:
+                S_samp[s] = μ + U · z_samp[s]
+        3.3.2  Optionally compute derived spectral metrics (slope, band depth)
+
+3.4  Aggregate sampled spectra:
+        - Compute pointwise mean spectrum S_mean
+        - Compute confidence intervals (e.g., 5th / 95th percentiles)
+        - Derive posterior predictive distribution over spectral features
+
+3.5  Taxonomic classification:
+        probs = Classifier.predict_proba(z_mean)
+        # Return probability vector over classes
+
+Output:
+    - Mean reconstructed spectrum S_mean
+    - Credible interval envelopes
+    - Taxonomy probability distribution probs
+    - Optional: sampled spectra set {S_samp}

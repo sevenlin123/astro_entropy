@@ -1,0 +1,88 @@
+Input:
+    S_train      – N×M matrix of calibrated near‑IR spectra (rows = objects,
+                   columns = wavelengths λ₁ … λ_M)
+    filt_list    – list of K filter transmission curves {F_k(λ)}   (k=1…K)
+    phot_obs     – K × 2 matrix of observed photometry for a target
+                   (column 1 = magnitude m_k, column 2 = 1σ error σ_k)
+    d            – number of principal components to retain  (4 ≤ d ≤ 10)
+
+Output:
+    spec_recon   – reconstructed spectrum at all M wavelengths
+    spec_uncert  – upper/lower bounds of 95 % credible interval per wavelength
+
+--------------------------------------------------------------------
+1. PREPARE TRAINING DATA
+   1.1 Convert all spectra to flux density units (e.g. W m⁻² µm⁻¹).
+   1.2 Compute mean spectrum μ(λ):
+           μ_j = (1/N) Σ_{i=1}^N S_train[i,j]    for each wavelength j
+   1.3 Center spectra:
+           X_centered = S_train – μ
+
+2. PRINCIPAL COMPONENT ANALYSIS (PCA)
+   2.1 Compute covariance matrix C = (1/(N−1)) * (X_centeredᵀ X_centered)
+   2.2 Perform eigen-decomposition:
+           C v_j = λ_j v_j   for j = 1…M
+   2.3 Sort eigenpairs by decreasing λ_j.
+   2.4 Select first d eigenvectors → PC matrix P = [v_1 … v_d] (M×d)
+   2.5 Store eigenvalues Λ = diag(λ_1 … λ_d).
+
+   Note: Any spectrum s(λ) ≈ μ(λ) + P · α , where α (d×1) are PC
+   coefficients.
+
+3. DEFINE PHOTOMETRIC MODEL
+   3.1 For any coefficient vector α, build a full spectrum:
+           s(λ;α) = μ(λ) + P(λ,:) · α
+   3.2 For each filter k, compute predicted integrated flux:
+           f_k(α) = ∫ s(λ;α) · F_k(λ) dλ   (numerical quadrature over λ)
+   3.3 Convert to magnitudes m_pred_k(α) using instrument zero points.
+
+4. BAYESIAN INFERRENCE OF COEFFICIENTS
+   4.1 PRIOR on α:
+           p(α) = Π_{j=1}^d  N(α_j | 0, λ_j)       # Gaussian with variance λ_j
+   4.2 LIKELIHOOD:
+           p(phot_obs | α) =
+               Π_{k=1}^K  N(m_obs_k | m_pred_k(α), σ_k²)
+   4.3 POSTERIOR:
+           p(α | phot_obs) ∝ p(phot_obs | α) · p(α)
+
+   4.4 SAMPLING (Markov Chain Monte Carlo):
+           Initialize α⁰ = 0.
+           For t = 1 … T:
+                Propose α* = α^{t-1} + ε,  ε ~ N(0, Σ_prop)
+                Compute acceptance ratio:
+                    r = min(1,
+                            [p(phot_obs | α*) · p(α*)] /
+                            [p(phot_obs | α^{t-1}) · p(α^{t-1})])
+                Draw u ~ Uniform(0,1)
+                If u < r: α^t = α*
+                Else:      α^t = α^{t-1}
+           Discard first B burn‑in iterations.
+           Collect remaining samples {α^(t)}.
+
+   4.5 ESTIMATE COEFFICIENT POSTERIOR:
+           α_mean   = mean({α^(t)})
+           α_cov    = covariance({α^(t)})
+
+5. RECONSTRUCT SPECTRUM AND UNCERTAINTIES
+   5.1 Point estimate:
+           s_hat(λ) = μ(λ) + P(λ,:) · α_mean
+   5.2 Uncertainty band (95 % credible interval):
+           For each sampled α^(t):
+               s_t(λ) = μ(λ) + P(λ,:) · α^(t)
+           For each λ:
+               lower(λ) = percentile(s_t(λ), 2.5%)
+               upper(λ) = percentile(s_t(λ), 97.5%)
+
+6. OUTPUT
+   Return s_hat(λ) as spec_recon,
+          and the arrays lower(λ), upper(λ) as spec_uncert.
+
+--------------------------------------------------------------------
+Optional Extensions (not implemented here)
+   • Update posterior when additional photometry becomes available.
+   • Select optimal filter set by computing Fisher information of the
+     forward model at different filter combinations.
+   • Detect outliers by evaluating the posterior predictive probability
+     of observing the data under the learned manifold.
+
+End of Algorithm

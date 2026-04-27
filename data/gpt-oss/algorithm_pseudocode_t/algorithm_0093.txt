@@ -1,0 +1,57 @@
+text
+Input:
+  - Photometric catalog  C = { (t, {F_t,i, σ_t,i, filter_i}) }  
+    where t indexes targets, i indexes measured filters.
+  - Filter transmission curves  T_f(λ)  for each filter f.
+  - Basis‑spectra library  S = { S_k(λ) }  for k = 1 … K.
+  - Prior on coefficients  c = (c_1,…,c_K) :
+      p(c)  ~  N(0, Σ_prior)   (Σ_prior is K×K prior covariance).
+
+Output (for every target t):
+  - Posterior mean of coefficients  μ_t  (K‑vector).
+  - Posterior covariance of coefficients  Σ_t  (K×K matrix).
+  - Reconstructed spectrum  R_t(λ) = Σ_k μ_t,k · S_k(λ).
+
+--------------------------------------------------------------------
+1. Pre‑compute filter–basis integrals
+   --------------------------------------------------------------
+   For each filter f and each basis spectrum k:
+       A_fk = ∫_λ  S_k(λ) · T_f(λ)  dλ
+   Store matrix A of shape (N_filters × K).
+
+--------------------------------------------------------------------
+2. Process each target independently
+   --------------------------------------------------------------
+   For each target t in C:
+       
+       2.1 Assemble observed data vectors
+           F_t  ← column vector [F_t,1, F_t,2, …]^T
+           W_t  ← diag( 1 / σ_t,i² )     // N_filters × N_filters weight matrix
+           A_t  ← rows of A corresponding to the filters actually observed for t
+           
+       2.2 Compute the (regularised) normal equations
+           G_t = A_t^T · W_t · A_t + Σ_prior^{-1}          // K × K
+           h_t = A_t^T · W_t · F_t                        // K × 1
+           
+       2.3 Solve for the posterior mean (MAP estimate)
+           μ_t = G_t^{-1} · h_t
+           
+       2.4 Compute posterior covariance
+           Σ_t = G_t^{-1}
+           
+       2.5 (Optional) Generate Monte‑Carlo samples of c
+           For m = 1 … N_samples:
+               c_t,m  = draw from N( μ_t , Σ_t )
+               R_t,m(λ) = Σ_k c_t,m,k · S_k(λ)
+           Use the ensemble {R_t,m} to quantify uncertainty in the spectrum.
+           
+       2.6 Construct the point‑estimate spectrum
+           R_t(λ) = Σ_k μ_t,k · S_k(λ)
+           
+       2.7 Store μ_t, Σ_t, R_t (and optionally the sample set {c_t,m}) for target t.
+
+--------------------------------------------------------------------
+3. Return results
+   --------------------------------------------------------------
+   Output the collection { μ_t , Σ_t , R_t } (and optional samples)
+   for all targets in the catalog.

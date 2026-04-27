@@ -1,0 +1,107 @@
+# ---------------------------------------------------------
+# 1. Pre‑processing & Latent Space Definition
+# ---------------------------------------------------------
+
+1.1 Load Reference Spectra
+    S_ref ← array of shape (N_spec, N_wave)            # N_spec ~ 51
+    W  ← wavelength grid for the spectra
+
+1.2 Mean Spectrum
+    μ_s ← mean(S_ref, axis=0)                           # shape (N_wave,)
+
+1.3 Center Spectra
+    X ← S_ref – μ_s                                     # shape (N_spec, N_wave)
+
+1.4 Principal Component Analysis (PCA)
+    U, Σ, Vt ← svd(X, full_matrices=False)             # U: (N_spec, N_spec)
+    V ← Vt.T                                            # eigenvectors: (N_wave, N_wave)
+    λ ← Σ                                                 # eigenvalues: (N_spec,)
+
+1.5 Select Number of PCs (K)
+    K ← 8   # or tune to 4–10 depending on desired accuracy
+    V_K ← V[:, :K]                                       # shape (N_wave, K)
+
+1.6 Project Reference Spectra onto Latent Space
+    C_ref ← X @ V_K                                       # shape (N_spec, K)
+
+1.7 Kernel Density Estimate (KDE) on Latent Points
+    kde ← KDE(C_ref, bandwidth=h)   # h ≈ 0.5
+
+1.8 Generate Synthetic Latent Sample
+    M ← 5000                                             # number of synthetic points
+    C_syn ← kde.sample(M)                                 # shape (M, K)
+
+1.9 Reconstruct Synthetic Spectra
+    S_syn ← μ_s + C_syn @ V_K.T                            # shape (M, N_wave)
+
+# ---------------------------------------------------------
+# 2. Forward Photometric Modelling
+# ---------------------------------------------------------
+
+2.1 Load Filter Response Curves
+    F ← list of filter transmission arrays, each of length N_wave
+
+2.2 Compute Synthetic Photometry for Each Spectrum
+    For j in [0, M):
+        For each filter f in F:
+            m_j,f ← ∫ S_syn[j,:] * f  / ∫ f                 # reflectance in band f
+        m_j ← vector of m_j,f over all filters              # shape (n_filters,)
+
+2.3 Add Observation Noise
+    σ_rel ← 0.20   # 20 % relative uncertainty
+    For each m_j:
+        n_j ← draw_normal(mean=0, std=σ_rel*m_j)
+        m_j_noisy ← m_j + n_j
+
+# ---------------------------------------------------------
+# 3. Training Data Assembly
+# ---------------------------------------------------------
+
+3.1 Assemble Training Set
+    X_train ← array of all m_j_noisy                # shape (M, n_filters)
+    Y_train ← C_syn                                 # shape (M, K)
+
+3.2 Train Photometry→Latent Regressor (Encoder)
+    regressor ← AutoML_Regression(
+                     training_data=(X_train, Y_train),
+                     target=latent_coefficients)
+    # AutoML internally selects best ensemble (e.g., GBDT, NN)
+
+3.3 Train Taxonomy Classifier on Latent Space
+    Y_labels ← taxonomic labels for C_ref (from reference data)
+    classifier ← AutoML_Classifier(
+                      training_data=(C_ref, Y_labels))
+
+# ---------------------------------------------------------
+# 4. Forward Inference (Spectral Reconstruction)
+# ---------------------------------------------------------
+
+Input: new photometry vector m_new (length n_filters)
+
+4.1 Predict Latent Coefficients
+    c_hat ← regressor.predict(m_new)                # shape (K,)
+
+4.2 Decode to Full Spectrum
+    s_hat ← μ_s + c_hat @ V_K.T                     # shape (N_wave,)
+
+4.3 Taxonomy Probabilities
+    p_tax ← classifier.predict_proba(c_hat)         # dictionary: class → probability
+
+Output:
+    s_hat          # reconstructed reflectance spectrum
+    p_tax          # probability distribution over taxonomic classes
+    c_hat          # optional latent representation
+
+# ---------------------------------------------------------
+# 5. Optional Posterior Sampling (Uncertainty Quantification)
+# ---------------------------------------------------------
+
+5.1 Draw N_samples (e.g., 100) from regressor’s predictive distribution
+    For i in [1, N_samples]:
+        c_sample_i ← regressor.sample(m_new)     # returns a latent vector sample
+        s_sample_i ← μ_s + c_sample_i @ V_K.T
+        store s_sample_i
+
+5.2 Compute Credible Intervals per wavelength:
+    For each wavelength λ_k:
+        interval[λ_k] ← percentile(s_samples[:,k], [2.5, 97.5])

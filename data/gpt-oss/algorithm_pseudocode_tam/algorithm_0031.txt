@@ -1,0 +1,20 @@
+text
+Input:  
+  - S_ref = {s_1 , … , s_N}   // high‑resolution reference spectra (N ≈ 50)  
+  - F_set = {f_1 , … , f_M}   // M filter throughput functions (e.g., NIRCam filters)  
+  - σ_phot = 0.20             // assumed relative photometric noise (20%)  
+
+Output:  
+  - PCA basis V_K ∈ ℝ^(L×K)  // K principal components (L = number of spectral bins)  
+  - Latent mean μ ∈ ℝ^K, std σ ∈ ℝ^K  
+  - KDE density p(z) over latent space (z ∈ ℝ^K)  
+  - Trained encoder E: ℝ^M → ℝ^K  // maps noisy photometry to latent coefficients  
+  - Trained classifier C: ℝ^K → probabilities over taxonomic classes
+
+text
+Input:  
+  - m_obs ∈ ℝ^M            // observed noisy photometry of a new TNO  
+Output:  
+  - s_pred ∈ ℝ^L           // reconstructed high‑resolution spectrum  
+  - p_class                // probability vector over taxonomic classes  
+  - s_uncertainty          // optional spectral uncertainty (if encoder supports uncertainty)

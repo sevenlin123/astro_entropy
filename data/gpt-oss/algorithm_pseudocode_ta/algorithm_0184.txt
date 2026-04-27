@@ -1,0 +1,91 @@
+INPUT
+    Spectral library:
+        S[1 … N_spec][1 … N_λ]          // flux values at discrete wavelengths
+    Filter transmission curves:
+        T[j][1 … N_λ]                   // j = 1 … N_filt
+    Photometry for a target object:
+        y[j]   – observed band fluxes
+        σ[j]   – measurement uncertainties
+
+PARAMETERS
+    K  – number of principal components to keep (e.g., 4–10)
+
+OUTPUT
+    s_rec[1 … N_λ]            // reconstructed spectrum
+    var_s[1 … N_λ]            // posterior variance of spectrum
+
+--------------------------------------------------------------------
+# 1. Train the principal‑component basis
+--------------------------------------------------------------------
+
+1.1  Compute mean spectrum μ(λ):
+        μ[i] = (1/N_spec) * Σ_{n=1}^{N_spec} S[n][i]
+
+1.2  Centered spectra matrix C[1 … N_spec][1 … N_λ]:
+        for n in 1 … N_spec:
+            for i in 1 … N_λ:
+                C[n][i] = S[n][i] – μ[i]
+
+1.3  Covariance matrix R[1 … N_λ][1 … N_λ]:
+        R = (Cᵀ · C) / (N_spec – 1)
+
+1.4  Eigen‑decompose R:
+        {λ_k , v_k[1 … N_λ]}  for k = 1 … N_λ
+        Sort by descending λ_k
+
+1.5  Build projection matrix P[1 … N_λ][1 … K]:
+        for k in 1 … K:
+            for i in 1 … N_λ:
+                P[i][k] = v_k[i]
+
+1.6  Compute training coefficients a[n][1 … K]:
+        for n in 1 … N_spec:
+            diff[i] = S[n][i] – μ[i]
+            a[n]   = transpose(P) · diff    // size K
+
+1.7  Prior moments of coefficients:
+        μ_a[k]      = (1/N_spec) * Σ_{n} a[n][k]
+        Σ_a[K][K]   = (1/(N_spec–1)) * Σ_{n} (a[n] – μ_a)(a[n] – μ_a)ᵀ
+
+--------------------------------------------------------------------
+# 2. Pre‑compute filter responses to PCs
+--------------------------------------------------------------------
+
+For each filter j = 1 … N_filt:
+    For each component k = 1 … K:
+        g[j][k] = Σ_{i=1}^{N_λ} T[j][i] * P[i][k]      // integral ≈ sum
+
+Construct design matrix G[N_filt][K] with rows g[j].
+
+--------------------------------------------------------------------
+# 3. Bayesian inference of coefficients for the target
+--------------------------------------------------------------------
+
+3.1  Weight matrix W = diag( 1/σ[j]² )   // size N_filt × N_filt
+
+3.2  Posterior precision:
+        Λ = Gᵀ · W · G  +  Σ_a⁻¹               // size K × K
+
+3.3  Posterior covariance:
+        Σ_post = inverse(Λ)
+
+3.4  Posterior mean:
+        m_post = Σ_post · ( Gᵀ · W · y  +  Σ_a⁻¹ · μ_a )
+
+--------------------------------------------------------------------
+# 4. Reconstruct full spectrum and its uncertainty
+--------------------------------------------------------------------
+
+4.1  Reconstructed spectrum:
+        for i in 1 … N_λ:
+            s_rec[i] = μ[i] + Σ_{k=1}^K  m_post[k] * P[i][k]
+
+4.2  Posterior variance per wavelength:
+        for i in 1 … N_λ:
+            var_s[i] = Σ_{k,l=1}^K  Σ_post[k][l] * P[i][k] * P[i][l]
+
+--------------------------------------------------------------------
+# 5. Return results
+--------------------------------------------------------------------
+
+Return (s_rec , sqrt(var_s))

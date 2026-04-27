@@ -1,0 +1,74 @@
+Inputs:
+    S_train[1…N]        // Near‑IR spectra from training set (flux vs λ)
+    λ[1…L]              // Wavelength grid common to all spectra
+    F[1…K]              // Set of photometric filter response curves R_k(λ)
+    C_phot[1…K]         // Observed photometric fluxes
+    σ_phot[1…K]         // Measurement uncertainties for each flux
+    n_pc                // Desired number of principal components (e.g., 4–10)
+
+Outputs:
+    μ_spec[1…L]         // Mean reconstructed spectrum
+    Σ_spec[1…L,1…L]     // Covariance matrix of reconstructed spectrum
+    θ[1…n_pc]           // Posterior samples of PC coefficients
+
+--------------------------------------------------------------------
+Step 0 – Pre‑processing of Training Spectra
+--------------------------------------------------------------------
+0.1   Interpolate all S_train onto common λ grid.
+0.2   Compute mean spectrum μ_S = (1/N) Σ_i S_train[i].
+0.3   Center training spectra: X[i] = S_train[i] – μ_S  for i=1…N.
+0.4   Perform Singular Value Decomposition (SVD):
+          X = U Σ V^T
+      → Principal component basis vectors PC[j] = V[:,j]  for j=1…n_pc
+      → Singular values σ_j = Σ[j,j]  (square‑root of eigenvalues).
+0.5   Store first n_pc PCs and associated eigenvalues.
+
+--------------------------------------------------------------------
+Step 1 – Forward Photometric Model
+--------------------------------------------------------------------
+1.1   For each filter k, pre‑compute linear mapping from PC coefficients
+      to expected flux:
+          a_k[j] = ∫ PC[j](λ) · R_k(λ) dλ   for j=1…n_pc
+          b_k    = ∫ μ_S(λ)   · R_k(λ) dλ
+      // These integrals can be evaluated numerically over λ grid.
+
+1.2   Define photometric prediction function:
+          f_k(θ) = b_k + Σ_{j=1}^{n_pc} a_k[j] * θ[j]
+      // θ is vector of PC coefficients.
+
+--------------------------------------------------------------------
+Step 2 – Bayesian Inference of PC Coefficients
+--------------------------------------------------------------------
+2.1   Specify prior for θ:
+          θ ~ Normal(0, diag(σ_j^2))   // PCs independent, variance = λ_j
+      where σ_j^2 = eigenvalue_j from SVD.
+
+2.2   Likelihood for observed photometry:
+          p(C_phot | θ) = Π_{k=1}^{K}
+                          Normal( C_phot[k] | f_k(θ), σ_phot[k]^2 )
+
+2.3   Posterior:
+          p(θ | C_phot, σ_phot) ∝ p(C_phot | θ) × p(θ)
+
+2.4   Sample posterior using e.g., affine‑invariant ensemble sampler
+      or Hamiltonian Monte Carlo until convergence.
+      Store M samples {θ^(m)}_{m=1}^{M}.
+
+--------------------------------------------------------------------
+Step 3 – Reconstruct Full Spectrum and Uncertainty
+--------------------------------------------------------------------
+3.1   For each posterior sample m:
+          s^(m)(λ) = μ_S(λ) + Σ_{j=1}^{n_pc} θ^(m)[j] * PC[j](λ)
+
+3.2   Compute point estimate:
+          μ_spec(λ) = (1/M) Σ_{m=1}^{M} s^(m)(λ)
+
+3.3   Compute covariance:
+          Σ_spec(λ_i, λ_j) = (1/(M-1)) Σ_{m=1}^{M}
+                                [s^(m)(λ_i)-μ_spec(λ_i)] *
+                                [s^(m)(λ_j)-μ_spec(λ_j)]
+
+--------------------------------------------------------------------
+Step 4 – Output
+--------------------------------------------------------------------
+Return μ_spec[1…L], Σ_spec[1…L,1…L], and the set of posterior samples θ.

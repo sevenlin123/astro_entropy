@@ -1,0 +1,82 @@
+Input:
+    - Reference spectra S_ref = {s_1, …, s_N}   // high‑resolution reflectance vectors
+    - Filter transmission curves T_f   // for each filter f ∈ {1,…,F}
+    - New photometry m_new = {m_f}      // measured reflectance or magnitude per filter
+    - Desired latent dimension K_pca     // e.g. 5 for taxonomy, 8–10 for full reconstruction
+    - Number of posterior samples N_sample  // e.g. 1000
+
+Output:
+    - Reconstructed high‑resolution spectrum Ŝ
+    - Credible interval [lower, upper] per wavelength bin
+    - Taxonomy probability vector P_tax (H2O, CO2, Organics, Methanol)
+
+--------------------------------------------------------------------
+Step 1 – Build Prior (Latent Manifold)
+--------------------------------------------------------------------
+1.1 Compute mean spectrum μ_S = mean(S_ref)
+1.2 Center spectra: S_centered = {s_i - μ_S}
+1.3 Perform Principal Component Analysis on S_centered:
+        – Eigenvectors E = {e_1,…,e_Kpca}
+        – Eigenvalues λ_k
+1.4 Project reference spectra onto PCs to get latent vectors:
+        L_ref = {l_i} where l_i = Eᵀ · (s_i - μ_S)
+1.5 Estimate density of L_ref with Kernel Density Estimation (KDE):
+        – Bandwidth h ≈ 0.5  (tuned empirically)
+        – KDE model p_L(l)
+1.6 Sample M synthetic latent vectors {l_j} from p_L(l)   // M ≫ N
+1.7 For each l_j, reconstruct synthetic spectrum:
+        s_syn_j = μ_S + E · l_j
+
+--------------------------------------------------------------------
+Step 2 – Generate Synthetic Photometry (Likelihood Model)
+--------------------------------------------------------------------
+For each synthetic spectrum s_syn_j:
+    2.1 For each filter f:
+          – Convolve s_syn_j with T_f to obtain noiseless photometry p_f_j
+    2.2 Add Gaussian noise with σ_rel = 20%:
+          – m_f_j = p_f_j * (1 + Normal(0, 0.2))
+    2.3 Store pair (m_j, l_j) in training set D_regress
+
+--------------------------------------------------------------------
+Step 3 – Train Encoder (Regressor)
+--------------------------------------------------------------------
+3.1 Input: D_regress = {(m_j, l_j)}
+3.2 Train an AutoML regression model R_enc:
+        – Features: vector m_j (length F)
+        – Targets: latent vector l_j (length Kpca)
+        – Use default AutoML pipeline (e.g. Gradient‑Boosted Decision Trees)
+        – Output: deterministic function ŷ_l = R_enc(m)
+
+--------------------------------------------------------------------
+Step 4 – Train Taxonomy Classifier
+--------------------------------------------------------------------
+4.1 Label each reference spectrum s_i with taxonomic class C_i
+4.2 Use latent vectors L_ref and labels {C_i} to train AutoML classifier:
+        – Features: l_i
+        – Target: C_i
+        – Output: probability vector P_cls(l)
+
+--------------------------------------------------------------------
+Step 5 – Forward Inference (Posterior Sampling)
+--------------------------------------------------------------------
+5.1 Given new photometry m_new:
+        – Predict latent mean ŷ_l = R_enc(m_new)
+5.2 Sample N_sample latent vectors from a Gaussian centered at ŷ_l:
+        – For k = 1…N_sample:
+              l_k ~ Normal(ŷ_l, Σ_enc)   // Σ_enc estimated from training residuals
+5.3 For each sampled l_k:
+        – Decode to spectrum: s_k = μ_S + E · l_k
+5.4 Aggregate decoded spectra:
+        – Mean spectrum Ŝ = mean({s_k})
+        – Credible interval per wavelength bin:
+              lower = percentile({s_k}, 2.5)
+              upper = percentile({s_k}, 97.5)
+
+--------------------------------------------------------------------
+Step 6 – Taxonomy Prediction
+--------------------------------------------------------------------
+6.1 Compute taxonomy probability by averaging classifier outputs:
+        P_tax = mean_{k}( P_cls(l_k) )
+
+--------------------------------------------------------------------
+Return Ŝ, [lower, upper], P_tax

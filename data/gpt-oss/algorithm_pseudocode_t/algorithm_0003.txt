@@ -1,0 +1,76 @@
+# LOAD data
+Read spectral templates {R_k(λ)}   // k = 1…K taxonomy classes
+Read filter curves {T_f(λ)}        // f = 1…F filters
+Read solar spectrum S(λ)
+
+# COMPUTE synthetic magnitudes and fluxes for every class–filter pair
+FOR each class k IN 1…K:
+    FOR each filter f IN 1…F:
+        I_kf   ← ∫ S(λ) · R_k(λ) · T_f(λ) dλ          # reflected sunlight
+        I_ref_f← ∫ S(λ) · T_f(λ)       dλ             # reference (solar) flux
+        m_kf   ← –2.5 · log10( I_kf / I_ref_f )      # synthetic magnitude
+        F_kf   ← 10^( –0.4 · m_kf )                  # synthetic flux
+    END FOR
+END FOR
+
+# STORE matrices
+M ← matrix of m_kf           # size F × K
+F ← matrix of F_kf           # size F × K
+
+INPUT: Observed magnitudes {m_f^obs} and errors {σ_f}
+CONSTANT: Dirichlet prior α = (α_1,…,α_K)  // e.g. α_k = 1.0
+
+# 1. Convert observations to fluxes and error estimates
+FOR each filter f:
+    y_f  ← 10^( –0.4 · m_f^obs )                     # observed flux
+    ε_f  ← 0.921 · σ_f · y_f                        # flux uncertainty
+END FOR
+
+Y ← vector (y_1,…,y_F)ᵀ
+E²← diag(ε_1²,…,ε_F²)                               # noise covariance
+
+# 2. Bayesian linear model: Y ≈ F · w + noise
+#    w is a K‑dimensional weight vector on the simplex (∑ w_k = 1, w_k ≥ 0)
+
+# 3. MCMC sampling of posterior p(w | Y)
+Initialize w₀ ← Dirichlet(α)                       # random point on simplex
+Store samples S ← []
+
+FOR t = 1 TO N_SAMPLES:
+    # Propose a new weight vector by a symmetric Dirichlet perturbation
+    w′ ← Dirichlet(α)                               # proposal on simplex
+
+    # Predicted fluxes
+    Y′ ← F · w′
+
+    # Log‑likelihood
+    LL′ ← –0.5 · (Y – Y′)ᵀ · E⁻¹ · (Y – Y′)
+
+    # Log‑prior (Dirichlet)
+    LP′ ← Σ_k (α_k – 1) · log(w′_k)
+
+    # Acceptance ratio (Metropolis–Hastings)
+    r ← exp( LL′ + LP′ – (LL_prev + LP_prev) )
+
+    IF Uniform(0,1) < min(1, r):
+        w_current ← w′
+        LL_prev    ← LL′
+        LP_prev    ← LP′
+    END IF
+
+    Append w_current to S
+END FOR
+
+# 4. Post‑processing
+w_mean ← mean(S)                # posterior mean weight vector
+w_ci   ← quantiles(S, [0.16, 0.84])   # 68% credible interval per class
+
+# 5. Reconstruct spectral reflectance
+FOR each wavelength λ:
+    R_rec(λ) ← Σ_k w_mean_k · R_k(λ)
+END FOR
+
+OUTPUT:
+    w_mean        # class probability estimates
+    w_ci          # uncertainty bounds
+    R_rec(λ)      # reconstructed spectrum

@@ -1,0 +1,50 @@
+Input:
+    - Photometry catalog C = {O_k}
+        • Each object O_k has measurements {(i, m_{k,i}, σ_{k,i})}
+          where i indexes filters.
+    - Spectral template library T = {S_j(λ)}  (j = 1…N_T)
+    - Filter transmission curves F = {T_i(λ)} (i = 1…N_F)
+
+Output:
+    - For every object O_k:
+        • Posterior class probabilities P_k(j)  (j = 1…N_T)
+        • Best‑fit class label ℓ_k = argmax_j P_k(j)
+        • Outlier flag δ_k (boolean)
+
+Procedure:
+
+1. **Pre‑compute Synthetic Magnitudes**
+   For each template S_j and filter T_i:
+        a. Integrate the product of the spectrum and the filter response:
+           M_{i,j} = -2.5 log10 [ ∫_λ S_j(λ) T_i(λ) dλ /
+                                ∫_λ T_i(λ) dλ ] + ZP_i
+        (ZP_i = zero‑point of filter i, assumed known)
+   Store the matrix M of size (N_F × N_T).
+
+2. **Loop over all objects O_k ∈ C**
+   2.1 Initialize arrays:
+        χ²_k(j) = 0   for all j
+        L_k(j)   = 0   for all j
+
+   2.2 For each template j:
+         Compute chi‑square:
+             χ²_k(j) = Σ_{i} [(m_{k,i} – M_{i,j})² / σ_{k,i}²]
+         Compute likelihood (assuming Gaussian errors):
+             L_k(j) = exp( –0.5 * χ²_k(j) )
+
+   2.3 Normalise to obtain posterior probabilities:
+         Z_k = Σ_{j} L_k(j)
+         For each j:
+             P_k(j) = L_k(j) / Z_k
+
+   2.4 Determine best‑fit class:
+         ℓ_k = argmax_j P_k(j)
+
+   2.5 Outlier detection (simple rule):
+         If max_j P_k(j) < T_p   OR   min_j χ²_k(j) > T_c
+              δ_k = TRUE
+         Else
+              δ_k = FALSE
+         (T_p and T_c are pre‑set thresholds, e.g., 0.2 and 10.)
+
+3. Return for all objects the tuples (ℓ_k, P_k, δ_k).

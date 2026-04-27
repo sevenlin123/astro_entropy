@@ -1,0 +1,97 @@
+INPUT
+    SPECTRA[1…N]          # High‑resolution reflectance vectors (M wavelengths)
+    FILTER_CURVES[1…F]    # Instrument throughput vs. wavelength
+    PHOTOMETRY_NEW        # Sparse photometry vector (length P ≤ F)
+
+OUTPUT
+    SPEC_RECONSTRUCTED     # Full‑resolution reconstructed spectrum
+    TAXONOMY_PROBS         # Probability vector over taxonomic classes
+
+--------------------------------------------------------------------
+STEP 1 – BUILD PRIOR (PCA + KDE)
+--------------------------------------------------------------------
+
+1.1  Compute mean spectrum μ_s = mean(SPECTRA, axis=1)
+1.2  Center spectra: X_centered[i] = SPECTRA[i] - μ_s   for i = 1…N
+1.3  Perform Singular Value Decomposition (SVD):
+      U, Σ, Vt = svd(X_centered, full_matrices=False)
+1.4  Select K principal components (K ≈ 5–8 based on variance criterion)
+      PC_basis = Vt[:K].T           # M × K matrix of eigenvectors
+1.5  Project seed spectra onto latent space:
+      Z_seed[i] = PC_basisᵀ · (SPECTRA[i] - μ_s)   for i = 1…N
+1.6  Estimate density of {Z_seed} via Kernel Density Estimation (KDE):
+      KDE_model = KDE(Z_seed, bandwidth=h)   # h ≈ 0.5
+1.7  Sample synthetic latent vectors:
+      Z_synth = KDE_model.sample(L)          # L ≫ N, e.g., L = 5000
+1.8  Reconstruct synthetic spectra:
+      S_synth[i] = μ_s + PC_basis · Z_synth[i]   for i = 1…L
+
+--------------------------------------------------------------------
+STEP 2 – GENERATE NOISY PHOTOMETRY FOR TRAINING
+--------------------------------------------------------------------
+
+2.1  For each spectrum S in {S_seed} ∪ {S_synth}:
+        a.  For each filter f in 1…F:
+                R_f = integrate( S * FILTER_CURVES[f] ) / integrate( SOLAR_SPECTRUM * FILTER_CURVES[f] )
+                # R_f = theoretical reflectance in filter f
+        b.  Add Gaussian noise to each R_f:
+                σ_f = 0.20 * R_f                 # 20 % relative uncertainty
+                R_f_noisy = R_f + Normal(0, σ_f)
+        c.  Store photometry vector m = [R_1_noisy … R_F_noisy]
+            and its latent target z = corresponding latent coefficient
+        d.  If the number of desired photometric points P < F:
+                randomly select P filters from the above list
+                keep their noisy values and discard the rest
+
+2.2  Compile training set:
+        TRAIN_X = {photometry vectors m}   # shape: (#samples, P)
+        TRAIN_Y = {latent vectors z}       # shape: (#samples, K)
+
+--------------------------------------------------------------------
+STEP 3 – TRAIN AUTO‑ML ENCODER (Photometry → Latent)
+--------------------------------------------------------------------
+
+3.1  Initialize AutoML framework (e.g., AutoGluon Tabular).
+3.2  Configure AutoML to search over:
+        - Gradient‑Boosted Decision Trees (GBDT)
+        - Neural Network (NN)
+        - Random Forest (RF)
+        - Etc.
+3.3  Fit AutoML model on TRAIN_X → TRAIN_Y:
+        ENCODER = AutoML.fit(TRAIN_X, TRAIN_Y)
+3.4  Validate ENCODER on a hold‑out portion of the training data
+        to check mean‑squared error (optional; skip if omitted).
+
+--------------------------------------------------------------------
+STEP 4 – TRAIN AUTO‑ML CLASSIFIER (Latent → Taxonomy)
+--------------------------------------------------------------------
+
+4.1  Obtain class labels for each seed spectrum (H₂O, CO₂, Organic, Methanol).
+4.2  For each seed spectrum, compute latent vector z_i (from STEP 1.5).
+4.3  Create classifier training set:
+        CLS_TRAIN_X = {z_i}
+        CLS_TRAIN_Y = {class label of spectrum i}
+4.4  Fit AutoML classifier:
+        CLASSIFIER = AutoML.fit(CLS_TRAIN_X, CLS_TRAIN_Y)
+
+--------------------------------------------------------------------
+STEP 5 – INFERENCE ON NEW OBSERVATION
+--------------------------------------------------------------------
+
+5.1  Prepare new photometry vector m_new:
+        - If P < F, use only the measured filters.
+        - Normalize or scale as was done during training (e.g., mean‑subtraction
+          per filter if applied).
+
+5.2  Predict latent coefficients:
+        z_hat = ENCODER.predict(m_new)            # shape: (K,)
+
+5.3  Reconstruct full spectrum:
+        S_hat = μ_s + PC_basis · z_hat            # shape: (M,)
+
+5.4  Classify taxonomy:
+        probs = CLASSIFIER.predict_proba(z_hat)   # vector of class probabilities
+
+5.5  Output:
+        SPEC_RECONSTRUCTED = S_hat
+        TAXONOMY_PROBS      = probs

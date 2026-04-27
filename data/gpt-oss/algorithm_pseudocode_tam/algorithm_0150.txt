@@ -1,0 +1,78 @@
+Input:
+    S_ref   – Reference set of high‑resolution TNO spectra  
+    F       – Set of filter throughput curves (e.g., JWST/NIRCam)  
+    σ_rel   – Relative photometric uncertainty (default 0.20)  
+    K_dim   – Number of principal components to retain  
+    h_kde   – KDE bandwidth for latent density  
+    N_syn   – Number of synthetic latent samples to generate  
+
+Output:
+    Reconstructed spectrum S_rec for any new sparse photometry  
+    Posterior distribution over taxonomy labels (optional)
+
+--------------------------------------------------------------------
+1.  Latent‑space construction (Prior)
+--------------------------------------------------------------------
+1.1  Perform PCA on S_ref  
+      [μ_S, V_pc, λ] = PCA(S_ref, num_components = K_dim)
+
+1.2  Project each reference spectrum onto PCs  
+      For each s in S_ref:  
+          z_real = V_pcᵀ · (s - μ_S)        // latent coefficient vector  
+
+1.3  Estimate density in latent space via KDE  
+      kde_model = KDE(samples = {z_real}, bandwidth = h_kde)
+
+1.4  Generate synthetic latent vectors  
+      For i = 1 … N_syn:  
+          z_syn[i] = Sample(kde_model)     // draw from estimated density  
+
+--------------------------------------------------------------------
+2.  Synthetic training data generation (Likelihood)
+--------------------------------------------------------------------
+2.1  For each synthetic latent vector z_syn[i]:  
+          s_syn[i] = V_pc · z_syn[i] + μ_S           // inverse PCA → spectrum  
+
+2.2  Forward‑model photometry for each synthetic spectrum  
+      For each i:  
+          m_clean[i] = Convolve(s_syn[i], F)        // compute fluxes in all filters  
+
+2.3  Inject realistic noise  
+      For each i, j (filter index):  
+          ε_ij ~ Normal(0, σ_rel * m_clean[i][j])   // Gaussian noise  
+          m_noisy[i][j] = m_clean[i][j] + ε_ij  
+
+--------------------------------------------------------------------
+3.  Encoder (regressor) training
+--------------------------------------------------------------------
+3.1  Assemble training set  
+      X_train = { m_noisy[i] }          // photometry (input)  
+      Y_train = { z_syn[i] }            // latent coeffs (target)  
+
+3.2  Train a multivariate regressor (e.g., Gradient‑Boosted Trees)  
+      regressor = TrainRegressor(X_train, Y_train)  
+
+--------------------------------------------------------------------
+4.  Classifier training (optional)
+--------------------------------------------------------------------
+4.1  Label each synthetic latent vector with taxonomy class  
+      (use known labels of nearest reference spectra or cluster assignment)  
+
+4.2  Train a classifier on latent coordinates  
+      classifier = TrainClassifier({z_syn[i]}, {class[i]})  
+
+--------------------------------------------------------------------
+5.  Forward inference for new observations
+--------------------------------------------------------------------
+Input: m_new – measured sparse photometry for a target TNO  
+
+5.1  Predict latent coefficients (posterior mean)  
+      z_pred = regressor.Predict(m_new)  
+
+5.2  (Optional) Obtain class probabilities  
+      p_class = classifier.PredictProba(z_pred)  
+
+5.3  Reconstruct full spectrum  
+      s_rec = V_pc · z_pred + μ_S  
+
+Return: s_rec, (p_class if requested)

@@ -1,0 +1,98 @@
+Inputs:
+    - SpectralData   : {S_i(λ)}   i = 1 … N  (high‑resolution spectra)
+    - FilterCurves   : {T_f(λ)}   f = 1 … F  (throughputs of chosen filters)
+    - PhotometryObs  : m_obs      (vector of observed reflectances in the F filters)
+
+Parameters:
+    - K          : number of principal components (default 8)
+    - h_kde      : KDE bandwidth (default 0.5)
+    - N_synth    : number of synthetic latent samples per real spectrum (default 100)
+    - σ_noise    : relative photometric noise level (default 0.20)
+
+Output:
+    - SpectrumReconst  : reconstructed high‑resolution spectrum
+    - SpecUncertainty   : 68% credible interval at each λ
+    - TaxonomyProb      : probabilities for each taxonomic class
+
+--------------------------------------------------------------------
+1. PREPARATION
+--------------------------------------------------------------------
+1.1 Compute PCA on the training spectra
+        PCs, mean_spec, eigenvalues = PCA(SpectralData, n_components=K)
+
+1.2 Project each training spectrum into latent space
+        Latents_real[i] = PCs^T · (SpectralData[i] – mean_spec)
+
+1.3 Build a continuous prior over latent space
+        Prior_KDE = KDE(Latents_real, bandwidth=h_kde)
+
+1.4 Generate synthetic latent samples
+        For each real latent vector L_real in Latents_real:
+                Draw N_synth samples {L_syn} from Prior_KDE
+                Store L_syn and label of L_real (for taxonomy)
+
+1.5 Construct full synthetic spectral library
+        For each synthetic latent L_syn:
+                Spectrum_syn = mean_spec + PCs · L_syn
+                Store Spectrum_syn along with its label
+
+--------------------------------------------------------------------
+2. FORWARD MODELING (Implicit Likelihood)
+--------------------------------------------------------------------
+2.1 Convolve synthetic spectra with filter curves
+        For each Spectrum_syn:
+                For each filter f:
+                        m_syn[f] = ∫ Spectrum_syn(λ) * T_f(λ) dλ   /   ∫ Solar(λ)*T_f(λ)dλ
+                Add Gaussian noise:
+                        m_syn_noisy[f] = m_syn[f] * (1 + N(0, σ_noise))
+                Store (m_syn_noisy , L_syn)
+
+2.2 Assemble training set for encoder
+        X_encoder = {m_syn_noisy}
+        Y_encoder = {L_syn}
+
+--------------------------------------------------------------------
+3. TRAIN ENCODER (Photometry → Latent)
+--------------------------------------------------------------------
+3.1 Use AutoML to fit a regression model
+        Encoder = AutoML_Train(X_encoder, Y_encoder)
+        // AutoML selects ensemble of GBDTs, Neural Nets, etc.
+
+--------------------------------------------------------------------
+4. TRAIN CLASSIFIER (Latent → Taxonomy)
+--------------------------------------------------------------------
+4.1 Assemble training set for classifier
+        X_classifier = Latents_real   (or L_syn if desired)
+        Y_classifier = taxonomy_labels
+
+4.2 Fit probabilistic classifier
+        Classifier = AutoML_Train(X_classifier, Y_classifier)
+        // Outputs posterior class probabilities.
+
+--------------------------------------------------------------------
+5. INFERENCE ON NEW OBSERVATION
+--------------------------------------------------------------------
+5.1 Predict latent distribution from observed photometry
+        L_mean, L_cov  = Encoder.predict_with_uncertainty(m_obs)
+        // Returns point estimate and covariance of latent vector.
+
+5.2 Generate posterior samples of latent variables
+        For s = 1 … N_samples:
+                L_s[s] = SampleFromGaussianCopula(mean=L_mean, cov=L_cov)
+        // Optionally include copula to preserve latent correlations.
+
+5.3 Reconstruct spectra from latent samples
+        For each s:
+                Spec_s[s] = mean_spec + PCs · L_s[s]
+
+5.4 Aggregate reconstructions
+        SpectrumReconst = Median(Spec_s over s)
+        SpecUncertainty  = Quantile(Spec_s, 16%) and Quantile(Spec_s, 84%)
+
+5.5 Predict taxonomy
+        TaxonomyProb = Classifier.predict_proba(L_mean)
+
+--------------------------------------------------------------------
+6. OUTPUT
+--------------------------------------------------------------------
+Return SpectrumReconst, SpecUncertainty, TaxonomyProb

@@ -1,0 +1,92 @@
+Input: Set of high‑resolution reflectance spectra {S_i}  (i = 1 … N, N≈50)
+       Each spectrum sampled at M wavelength points λ_1 … λ_M
+
+1.1. Normalize each spectrum (e.g., divide by reflectance at a reference wavelength).
+1.2. Store normalized spectra as rows in matrix X (size N × M).
+
+2.1. Perform Principal Component Analysis (PCA) on X:
+        - Compute mean spectrum μ_X.
+        - Center data: X_centered = X – μ_X.
+        - Compute covariance matrix C = (X_centered)^T * X_centered / (N-1).
+        - Obtain eigenvalues λ_k and eigenvectors v_k (k = 1 … K).
+          Choose K such that cumulative explained variance ≥ 95 %  (typically 4–5).
+
+2.2. Project reference spectra onto PCA basis:
+        Z_real = X_centered * V_K   # V_K contains first K eigenvectors
+        (Z_real is N × K matrix of latent coefficients)
+
+2.3. Kernel Density Estimation (KDE) in latent space:
+        - Define Gaussian kernel k(z) = exp(-||z||²/(2h²)).
+        - Set bandwidth h ≈ 0.5 (tuned empirically).
+        - Estimate density p(z) ∝ Σ_{i=1}^{N} k((z−Z_real_i)/h).
+
+2.4. Sample synthetic latent vectors {z_j} from p(z):
+        - Draw J >> N samples (e.g., J = 5000) using importance sampling or
+          direct kernel mixture sampling.
+
+3.1. For each synthetic latent vector z_j:
+        - Reconstruct spectrum: s_j = μ_X + V_K * z_j      # inverse PCA
+        - Convolve s_j with instrument filter responses {T_b} (b = 1 … B):
+              m_j_b = ∫ s_j(λ) * T_b(λ) dλ   (numerical integration)
+        - Collect synthetic photometry vector m_j = [m_j_1 … m_j_B].
+
+3.2. Inject Gaussian noise to simulate measurement uncertainty:
+        For each band b:
+            σ_b = 0.20 * m_j_b          # 20 % relative uncertainty
+            m_j_b ← m_j_b + Normal(0, σ_b).
+
+3.3. Assemble training dataset for the encoder:
+        Inputs   = {m_j}           # J × B matrix
+        Targets  = {z_j}           # J × K matrix
+
+4.1. Use an AutoML framework (e.g., AutoGluon) to train a regression model R:
+        R:  ℝ^B → ℝ^K
+    - Input: noisy photometry vector m (length B)
+    - Output: predicted latent coefficient vector ẑ
+
+4.2. Train R on the dataset (Inputs, Targets) obtained in Step 3.
+4.3. Save the trained encoder R for inference.
+
+5.1. For a new observed photometry vector m* (length B):
+        - Predict mean latent vector: z̄ = R(m*).
+
+5.2. Estimate marginal posterior distributions for each component k:
+        - Assume Gaussian: z_k ~ Normal(μ_k = z̄_k, σ_k = σ̂_k),
+          where σ̂_k derived from R’s validation error or
+          from residuals of training set (optional).
+
+5.3. Construct correlation matrix Σ from the covariance of latent
+        vectors in the training set (or from KDE).
+
+5.4. Build Gaussian copula:
+        - Transform each marginal to uniform U_k = Φ((z_k − μ_k)/σ_k)
+          where Φ is standard normal CDF.
+        - Apply multivariate normal with correlation Σ to obtain joint U.
+        - Map back to z-space: z_sample_k = Φ⁻¹(U_k) * σ_k + μ_k.
+
+5.5. Generate N_samples posterior draws {z^(s)} (s = 1 … N_samples).
+
+5.6. For each draw, reconstruct spectrum:
+        s^(s) = μ_X + V_K * z^(s).
+
+6.1. Compute point‑estimate spectrum:
+        ŝ = μ_X + V_K * z̄   (mean latent vector).
+
+6.2. Compute confidence bands:
+        - For each wavelength λ_i, collect {s^(s)_i}.
+        - Determine desired percentile bounds (e.g., 2.5 % and 97.5 %) to form
+          95 % credible interval per λ_i.
+
+6.3. Return:
+        - Point‑estimate spectrum ŝ(λ)
+        - Credible interval envelope
+        - (Optional) Posterior latent samples {z^(s)} for further analysis.
+
+7.1. Train a separate AutoML classifier C on latent vectors {Z_real}
+        with known taxonomic labels.
+
+7.2. For a new observation:
+        - Use encoder R to obtain z̄.
+        - Predict class probabilities: p_class = C(z̄).
+
+7.3. Return class probabilities along with reconstructed spectrum.

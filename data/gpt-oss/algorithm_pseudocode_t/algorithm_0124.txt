@@ -1,0 +1,48 @@
+Input:
+    - Photometric catalog: { (filter_i, magnitude_i, error_i) } for i = 1 … N_filters
+    - Solar reference spectrum S(λ)
+    - Library of K template spectra { T_k(λ) } for k = 1 … K
+    - Filter transmission curves { R_i(λ) } for i = 1 … N_filters
+
+Output:
+    - Posterior probability distribution over taxonomic classes: { P_k }
+    - Best‑fit reconstructed reflectance spectrum: R_best(λ)
+    - Scaling factor (geometric albedo proxy): a_best
+
+Algorithm:
+
+1. Pre‑processing  
+   1.1 Convert apparent magnitudes to fluxes  
+       For each measurement i:
+           F_i = 10^(-0.4 * magnitude_i)  
+           δF_i = ln(10)/2.5 * F_i * error_i          // propagate magnitude error
+   1.2 Remove measurements with non‑positive flux or undefined errors  
+   1.3 Store remaining indices I_valid
+
+2. Template forward modeling  
+   For each class k = 1 … K:
+       2.1 For each valid filter i ∈ I_valid:
+             E_k,i = ∫ T_k(λ) * R_i(λ) dλ            // expected relative flux in filter i
+       2.2 Assemble expectation vector E_k = [E_k,i]_i∈I_valid
+
+3. Linear fit for scaling factor per class  
+   For each class k = 1 … K:
+       3.1 Define weighted least‑squares objective  
+            χ²_k(a) = Σ_{i∈I_valid} [(F_i - a * E_k,i)^2] / (δF_i^2)
+       3.2 Solve for optimal a_k minimizing χ²_k(a):
+            a_k = (Σ_i (F_i * E_k,i / δF_i^2)) / (Σ_i (E_k,i^2 / δF_i^2))
+       3.3 Compute minimum χ²_k_min = χ²_k(a_k)
+       3.4 Compute likelihood L_k = exp( -0.5 * χ²_k_min )
+
+4. Normalization to obtain posterior probabilities  
+   4.1 Compute total evidence Z = Σ_k L_k
+   4.2 For each class k:  
+        P_k = L_k / Z
+
+5. Select best class and reconstruct spectrum  
+   5.1 Identify index k_best = argmax_k P_k
+   5.2 Set a_best = a_{k_best}
+   5.3 Reconstructed spectrum: R_best(λ) = a_best * T_{k_best}(λ)
+
+6. Return results  
+   Output {P_k}, R_best(λ), a_best

@@ -1,0 +1,76 @@
+Input:
+    S_train[1..N][1..L]      # N training spectra sampled at L wavelengths
+    F[1..M]                  # M broadband filter transmission curves
+    w_obs[1..M]              # Observed photometric fluxes for a target TNO
+    sigma_w[1..M]            # Measurement uncertainties (standard deviations)
+
+Parameters:
+    K                       # Number of principal components to retain (e.g., 8–10)
+    
+Output:
+    s_recon[1..L]           # Reconstructed spectrum
+    cred_int[1..L]          # Credible interval bounds (e.g., 95%) per wavelength
+    prob_outlier            # Posterior predictive probability of being an outlier
+
+1.1 Compute mean spectrum μ_s[1..L]:
+        μ_s[l] = (1/N) * Σ_{i=1..N} S_train[i][l]
+
+1.2 Center spectra:
+        S_centered[i][l] = S_train[i][l] - μ_s[l]   ∀ i,l
+
+1.3 Perform singular value decomposition (SVD):
+        U, Σ, V^T = SVD(S_centered)   # U: left singular vectors, Σ: singular values,
+                                     # V^T: right singular vectors (PCs)
+
+1.4 Select first K PCs:
+        PC[1..K][1..L] = rows of V^T corresponding to largest K singular values
+
+1.5 Compute training coefficient covariance:
+        C_train = (1/(N-1)) * (U[:,1:K] * Σ[1:K,1:K]^2 * U[:,1:K]^T)
+        # Equivalent to sample covariance of projected coefficients
+
+2.1 Compute filter response vector f_m[1..L]  # transmission curve sampled at L wavelengths
+
+2.2 Compute filter basis matrix A[m][k] for k = 1…K:
+        A[m][k] = Σ_{l=1..L} f_m[l] * PC[k][l]
+   (This is the linear mapping from PC coefficients to expected photometric flux)
+
+A_mat[M][K] = matrix whose row m is A[m][1..K]
+
+Likelihood:
+    p(w | c) ∝ exp( -0.5 * (w - A_mat * c)^T * Σ_w^{-1} * (w - A_mat * c) )
+    where Σ_w = diag(σ_w^2)
+
+Prior:
+    p(c) ∝ exp( -0.5 * c^T * C_train^{-1} * c )
+
+3.1 Compute posterior precision matrix:
+        Λ_post = A_mat^T * Σ_w^{-1} * A_mat + C_train^{-1}
+
+3.2 Compute posterior mean:
+        μ_post = Λ_post^{-1} * (A_mat^T * Σ_w^{-1} * w_obs)
+
+3.3 Compute posterior covariance:
+        Σ_post = Λ_post^{-1}
+
+4.1 Reconstructed spectrum:
+        s_recon[l] = μ_s[l] + Σ_{k=1..K} PC[k][l] * μ_post[k]
+
+4.2 Spectral uncertainty (posterior variance at each wavelength):
+        For each l:
+            var_l = Σ_{k1=1..K} Σ_{k2=1..K} 
+                     PC[k1][l] * PC[k2][l] * Σ_post[k1,k2]
+        Credible interval (95%) bounds:
+            cred_int[l].lower = s_recon[l] - 1.96 * sqrt(var_l)
+            cred_int[l].upper = s_recon[l] + 1.96 * sqrt(var_l)
+
+5.1 Predictive distribution of photometry:
+        w_pred_mean = A_mat * μ_post
+        w_pred_cov = A_mat * Σ_post * A_mat^T + Σ_w
+
+5.2 Evaluate likelihood of observed photometry under predictive model:
+        prob_outlier = multivariate_normal_pdf(w_obs, w_pred_mean, w_pred_cov)
+
+5.3 Flag as outlier if prob_outlier < threshold (e.g., 0.01)
+
+Return s_recon, cred_int, prob_outlier

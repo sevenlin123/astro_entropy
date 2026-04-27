@@ -1,0 +1,104 @@
+Input:
+    - Photometric measurements for a single TNO:
+        * magnitudes m[1…Nbands]
+        * magnitude uncertainties σmag[1…Nbands]
+    - Zero‑point fluxes for each band: zp[1…Nbands]   // to convert mag → flux
+    - Transmission curves for each filter: T[band](λ)
+    - Basis spectra (e.g., from PCA or a library of templates):
+        * B[k](λ)   for k = 1 … K
+    - Prior on coefficients a = [a₁ … a_K]  (e.g., zero‑mean Gaussian with covariance Σ₀)
+
+Output:
+    - Posterior samples of coefficients a
+    - Mean coefficient vector â
+    - Reconstructed spectrum Srec(λ) = Σ_k â_k · B_k(λ)
+    - Uncertainty on reconstructed spectrum (from posterior variance)
+
+------------------------------------------------------------------
+1. Pre‑processing
+------------------------------------------------------------------
+1.1 Convert magnitudes to observed fluxes:
+      F_obs[band] = 10^( –0.4 * ( m[band] – zp[band] ) )
+1.2 Propagate uncertainties to flux units:
+      σF[band] = (ln 10 / 2.5) * F_obs[band] * σmag[band]
+
+------------------------------------------------------------------
+2. Synthetic photometry of basis spectra
+------------------------------------------------------------------
+For each basis spectrum k:
+    For each filter band i:
+        • Compute the convolution integral:
+              S[i,k] = ∫ B_k(λ) · T_i(λ) dλ  /  ∫ T_i(λ) dλ
+        • Store S[i,k]   (dimensionless “filter response” of basis k in band i)
+
+------------------------------------------------------------------
+3. Forward model: predicted flux from coefficients
+------------------------------------------------------------------
+Define function PredictFlux(a[1…K]):
+    For each band i:
+        F_pred[i] = Σ_k a_k · S[i,k]
+    Return F_pred[1…Nbands]
+
+------------------------------------------------------------------
+4. Likelihood function (Gaussian measurement noise)
+------------------------------------------------------------------
+Define function LogLikelihood(a):
+    F_pred = PredictFlux(a)
+    ll = 0
+    For each band i:
+        r = F_obs[i] – F_pred[i]
+        ll += –0.5 * ( r² / σF[i]² + log(2π σF[i]²) )
+    Return ll
+
+------------------------------------------------------------------
+5. Prior density (Gaussian)
+------------------------------------------------------------------
+Define function LogPrior(a):
+    diff = a – μ₀          // μ₀ often zero vector
+    lp = –0.5 * diffᵀ · Σ₀⁻¹ · diff
+    Return lp
+
+------------------------------------------------------------------
+6. Posterior density
+------------------------------------------------------------------
+Define function LogPosterior(a):
+    Return LogLikelihood(a) + LogPrior(a)
+
+------------------------------------------------------------------
+7. Posterior sampling
+------------------------------------------------------------------
+Choose a sampler appropriate for the dimensionality K:
+    • If K is small (≤ 10) and priors/likelihood are Gaussian, use analytic solution
+        – solve linear system (Sᵀ W S + Σ₀⁻¹) a = Sᵀ W F_obs,
+          where W = diag(1/σF²)
+        – posterior mean â = solution
+        – posterior covariance Σ_post = (Sᵀ W S + Σ₀⁻¹)⁻¹
+    • Otherwise, run Markov‑Chain Monte Carlo:
+        – Initialize a = μ₀
+        – For iter = 1 … Niter:
+              Propose a' = a + ε   (ε ~ Normal(0, C_proposal))
+              α = min(1, exp(LogPosterior(a') – LogPosterior(a)))
+              With probability α: a ← a'
+              Store a in chain
+        – After burn‑in and thinning, compute sample statistics
+
+------------------------------------------------------------------
+8. Spectrum reconstruction
+------------------------------------------------------------------
+Compute mean coefficient vector â from samples (or analytic solution)
+Reconstructed spectrum:
+    For each λ in wavelength grid:
+        Srec(λ) = Σ_k â_k · B_k(λ)
+
+Uncertainty on Srec:
+    For each λ:
+        Var_Srec(λ) = Σ_k Σ_j Cov_post(k,j) · B_k(λ) · B_j(λ)
+        Std_Srec(λ) = sqrt(Var_Srec(λ))
+
+------------------------------------------------------------------
+9. Return results
+------------------------------------------------------------------
+Return:
+    – Coefficient posterior samples (if MCMC)
+    – Posterior mean â and covariance Σ_post
+    – Reconstructed spectrum Srec(λ) and its standard deviation Std_Srec(λ)

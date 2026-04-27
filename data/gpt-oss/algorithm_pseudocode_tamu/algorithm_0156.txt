@@ -1,0 +1,92 @@
+INPUT
+    S_ref[1..N_spec]        # Reference high‑resolution spectra
+    λ_grid[1..N_λ]          # Common wavelength grid
+    Filt_eff[1..N_filt]     # Filter transmission curves
+    K_pc                    # Number of principal components (default 8)
+    h_kde                    # KDE bandwidth (default 0.5)
+    N_synth                   # Number of synthetic latent samples (e.g. 10,000)
+    σ_noise_rel = 0.20       # Relative noise level for synthetic photometry
+    M_post = 1000              # Number of posterior samples for inference
+OUTPUT
+    {Ŝ_j[1..N_λ]}  j=1..M_post   # Posterior sample spectra
+    TaxonomyProbabilities         # Probabilities for each taxonomic class
+
+--------------------------------------------------------------------
+1. PREPROCESS REFERENCE SPECTRA
+--------------------------------------------------------------------
+   1.1  Resample every S_ref[i] onto λ_grid.
+   1.2  Normalize each spectrum to unit mean reflectance
+        (R_i(λ) ← R_i(λ) / ⟨R_i⟩ ).
+   1.3  Stack into data matrix M_spec[N_spec × N_λ].
+   1.4  Subtract column means → M_centered.
+--------------------------------------------------------------------
+2. PRINCIPAL COMPONENT ANALYSIS (PCA)
+--------------------------------------------------------------------
+   2.1  Compute covariance matrix C = (M_centeredᵀ · M_centered) / (N_spec−1).
+   2.2  Eigen‑decompose C → eigenvectors V[1..N_λ × K_pc]
+        and eigenvalues λ_eig[1..K_pc].
+   2.3  Project reference spectra onto PCs:
+        C_real = M_centered · V   # size N_spec × K_pc
+--------------------------------------------------------------------
+3. BUILD PRIOR ON LATENT SPACE
+--------------------------------------------------------------------
+   3.1  Fit multivariate KDE to C_real with bandwidth h_kde
+        → pdf_prior(c).
+   3.2  Draw N_synth latent vectors:
+        C_synth[k] ~ pdf_prior,  k = 1..N_synth.
+--------------------------------------------------------------------
+4. SYNTHETIC PHOTOMETRY GENERATION (FORWARD MODELING)
+--------------------------------------------------------------------
+   For each k = 1..N_synth:
+      4.1  Reconstruct spectrum:
+            R_k(λ) = μ_mean + Σ_{i=1}^{K_pc} C_synth[k,i] * V[:,i]
+      4.2  For each filter f = 1..N_filt:
+            m_true[k,f] = ∫ R_k(λ) * Filt_eff[f](λ) dλ
+            (numerical integration over λ_grid)
+      4.3  Perturb photometry:
+            m_noisy[k,f] = m_true[k,f] * (1 + ε)
+            where ε ~ Normal(0, σ_noise_rel * m_true[k,f])
+      4.4  Store training pair (m_noisy[k,:], C_synth[k,:]).
+--------------------------------------------------------------------
+5. TRAIN ENCODER (PHOTOMETRY → LATENT COEFFICIENTS)
+--------------------------------------------------------------------
+   5.1  Use AutoML framework (e.g., XGBoost) to train regression
+        model Enc such that
+             Enc(m_noisy) ≈ C_synth
+        Optionally predict mean μ_enc and covariance Σ_enc
+        (via quantile regression or ensemble variance).
+--------------------------------------------------------------------
+6. TRAIN CLASSIFIER (LATENT → TAXONOMY LABEL)
+--------------------------------------------------------------------
+   6.1  Assign known taxonomy labels L[i] to each reference spectrum i.
+   6.2  Train AutoML classifier Clf on (C_real[i,:], L[i]).
+--------------------------------------------------------------------
+7. INFERENCE ON NEW OBSERVATIONS
+--------------------------------------------------------------------
+   Given new photometry m_obs[1..N_filt]:
+
+   7.1  Encoder Prediction:
+        μ_hat , Σ_hat = Enc.predict_distribution(m_obs)
+        (μ_hat is mean latent vector,
+         Σ_hat is estimated covariance)
+
+   7.2  POSTERIOR SAMPLING (Gaussian Copula):
+        For j = 1..M_post:
+            a. Sample u_j ~ Uniform(0,1)^{K_pc}
+            b. Transform via Gaussian copula:
+               z_j = Φ⁻¹(u_j)          # Φ⁻¹ is inverse standard normal CDF
+               l_j = μ_hat + L * z_j   # L is Cholesky factor of Σ_hat
+            c. Decode spectrum:
+               Ŝ_j = μ_mean + Σ_{i=1}^{K_pc} l_j[i] * V[:,i]
+
+   7.3  TAXONOMY PROBABILITIES:
+        For each sampled latent vector l_j:
+            p_j[class] = Clf.predict_proba(l_j)
+        Aggregate:
+            TaxonomyProbabilities[class] = mean_j(p_j[class])
+
+   7.4  OUTPUT:
+        Return {Ŝ_j} as posterior spectrum ensemble
+        and TaxonomyProbabilities.
+--------------------------------------------------------------------
+END

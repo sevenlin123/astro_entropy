@@ -1,0 +1,93 @@
+PROCEDURE ProbabilisticSpectralReconstruction(
+          OBSERVATIONS,            // [(filter, mag, err), ...]
+          FILTER_RESPONSES,        // {filter : (λ, R(λ)), ...}
+          BASIS_SPECTRA,           // [S_j(λ)], j = 1..J
+          PRIOR_MEAN,              // μ  (vector of length J, default = 0)
+          PRIOR_COV,               // Σ  (J×J matrix, default = λI)
+          BURN_IN, THIN, N_SAMPLES, // MCMC controls
+          TAXONOMIC_TEMPLATES      // [{name, S_k(λ)}], optional
+     )
+    --------------------------------------------------------------------
+    /* 1. Pre‑processing & Grid Alignment */
+    1.1 Determine common wavelength grid Λ from all FILTER_RESPONSES.
+    1.2 Interpolate each BASIS_SPECTRA[j] onto Λ → B_j[λ].
+    1.3 For each FILTER f in FILTER_RESPONSES:
+           R_f[λ] = interpolated throughput on Λ.
+           ZP_f   = photometric zero‑point (given or assumed).
+
+    /* 2. Design Matrix Construction */
+    2.1 For each filter f:
+           denom_f = ∫ R_f[λ] dλ
+           For each basis j:
+                numer_fj = ∫ B_j[λ] * R_f[λ] dλ
+                A[f][j] = numer_fj / denom_f         // linear response coefficient
+    2.2 Let M = number of filters, J = number of bases.
+    
+    /* 3. Forward Model (Predicted Magnitude) */
+    3.1 Define function PredMag(c, f):
+           flux_f = Σ_{j=1}^{J} A[f][j] * c[j]          // linear combination
+           pred_m = -2.5 * log10(flux_f) + ZP_f
+           RETURN pred_m
+    
+    /* 4. Log–Posterior */
+    4.1 Define function LogPosterior(c):
+           // Likelihood
+           lnL = 0
+           For each observation (f, m_obs, σ):
+                m_pred = PredMag(c, f)
+                lnL += -0.5 * ((m_obs - m_pred)/σ)^2
+           // Prior
+           Δc = c - PRIOR_MEAN
+           lnPrior = -0.5 * Δcᵀ * inverse(PRIOR_COV) * Δc
+           RETURN lnL + lnPrior
+
+    /* 5. MCMC Sampling (Metropolis–Hastings) */
+    5.1 Initialize c_curr = PRIOR_MEAN
+    5.2 lnP_curr = LogPosterior(c_curr)
+    5.3 Samples = []
+    5.4 For step = 1 to (BURN_IN + N_SAMPLES*THIN):
+          Propose c_prop = c_curr + Normal(0, step_size)   // vector of length J
+          lnP_prop = LogPosterior(c_prop)
+          α = min(1, exp(lnP_prop - lnP_curr))
+          u = Uniform(0,1)
+          IF u < α:
+                c_curr = c_prop
+                lnP_curr = lnP_prop
+          ENDIF
+          IF step > BURN_IN AND (step - BURN_IN) mod THIN == 0:
+                Append c_curr to Samples
+          ENDIF
+       END FOR
+
+    /* 6. Post‑Processing */
+    6.1 Compute coefficient statistics:
+           C_mean   = mean(Samples, axis=0)      // vector length J
+           C_std    = std(Samples, axis=0)
+    6.2 Reconstruct mean spectrum:
+           S_mean[λ] = Σ_{j=1}^{J} C_mean[j] * B_j[λ]
+    6.3 If TAXONOMIC_TEMPLATES provided:
+           For each template t:
+                // Project each sampled spectrum onto template space
+                // e.g., compute Euclidean distance between sample spectrum and template
+                d_t = []
+                FOR each sample s in Samples:
+                      S_s[λ] = Σ_j s[j] * B_j[λ]
+                      d_t.append( distance(S_s, t.S_template) )
+                END FOR
+                P_t = 1 / mean(d_t)   // relative likelihood
+           Normalize {P_t} to sum to 1 → TaxonomyProbabilities
+    6.4 Compute spectrum uncertainty:
+           For each λ:
+                S_samples[λ] = [ Σ_j s[j]*B_j[λ] for s in Samples ]
+                S_std[λ] = std(S_samples[λ])
+
+    /* 7. Output */
+    RETURN {
+             "posterior_coefficients" : Samples,
+             "coefficient_mean"      : C_mean,
+             "coefficient_std"       : C_std,
+             "reconstructed_spectrum": S_mean,
+             "spectrum_uncertainty"  : S_std,
+             "taxonomy_probabilities": TaxonomyProbabilities   // if computed
+           }
+END PROCEDURE

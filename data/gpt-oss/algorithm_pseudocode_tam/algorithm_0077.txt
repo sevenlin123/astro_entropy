@@ -1,0 +1,87 @@
+Input:
+    - SeedSpectra = {S_i | i = 1 … N}          // Reflectance spectra (high‑res)
+    - Filters = {F_j | j = 1 … M}             // Instrument filter throughputs
+    - NoiseStd = 0.20                         // 20 % relative noise
+
+Parameters:
+    - K_pc   = number of principal components (e.g., 5–10)
+    - KDE_bw = kernel bandwidth (e.g., 0.5)
+    - N_aug  = number of synthetic samples (e.g., 5000)
+
+Output:
+    - PCA_Evecs, PCA_mean                     // Principal component basis
+    - LatentPriorSampler()                    // Function to draw latent vectors
+    - TrainedRegressor                        // Photometry → latent coefficients
+    - TrainedClassifier                      // Latent coefficients → taxonomy
+
+1.1.1 Perform PCA on SeedSpectra:
+        [U, Σ, V] = SVD(SeedSpectra)           // U: eigenvectors (principal components)
+        PCA_Evecs = U[:, 1:K_pc]
+        PCA_mean  = mean(SeedSpectra, axis=0)
+
+1.1.2 Project seed spectra onto PCs:
+        LatentReal = (SeedSpectra - PCA_mean) * PCA_Evecs
+        // LatentReal shape: (N, K_pc)
+
+1.1.3 Fit KDE to LatentReal with bandwidth KDE_bw
+        LatentPriorSampler() = sample_from_KDE(LatentReal, KDE_bw)
+
+1.1.4 Generate synthetic latent vectors:
+        LatentAug = [LatentPriorSampler() for k = 1 … N_aug]
+
+1.2.1 Reconstruct augmented spectra:
+        SpectraAug = LatentAug * PCA_Evecs.T + PCA_mean
+        // SpectraAug shape: (N_aug, L)   (L = number of wavelength bins)
+
+1.2.2 Compute noiseless photometry for each augmented spectrum:
+        For each spectrum s in SpectraAug:
+            For each filter f in Filters:
+                m_f = integrate(s * throughput(f)) / integrate(throughput(f))
+        // m_f = reflectance in filter f
+
+1.2.3 Add Gaussian noise:
+        For each m_f:
+            m_f_noisy = m_f * (1 + Normal(0, NoiseStd))
+
+1.3.1 Prepare training data:
+        X_train = Matrix of noisy photometry (N_aug × M)
+        Y_train = LatentAug                    // Ground‑truth latent coefficients
+
+1.3.2 Train an AutoML ensemble (e.g., AutoGluon):
+        TrainedRegressor = AutoML_Train(X_train, Y_train)
+
+1.3.3 Evaluate regression performance (optional):
+        Use cross‑validation on synthetic data to confirm mean‑square error < threshold
+
+1.4.1 Label seed spectra with known taxonomy (H₂O, CO₂, Org, Meth).
+1.4.2 Use LatentReal (seed projections) and labels to train classifier:
+        TrainedClassifier = AutoML_Train(LatentReal, Labels)
+
+Input:
+    - PhotometryObs = {m_f_obs | f = 1 … M}  // Observed reflectances (or magnitudes)
+Output:
+    - SpectrumRecon   // High‑resolution reconstructed spectrum
+    - TaxonomyProb    // Probability distribution over taxonomic classes
+
+Procedure:
+
+2.1 Predict latent coefficients:
+        LatentPred = TrainedRegressor.predict(PhotometryObs)
+
+2.2 Reconstruct spectrum:
+        SpectrumRecon = LatentPred * PCA_Evecs.T + PCA_mean
+
+2.3 Classify taxonomy:
+        TaxonomyProb = TrainedClassifier.predict_proba(LatentPred)
+
+Return SpectrumRecon, TaxonomyProb
+
+3.1 Compute spectral diagnostics:
+        - Slope = linear_fit(SpectrumRecon over 0.8–2.5 μm)
+        - Absorption depths = max_min in specified bands
+
+3.2 Generate posterior samples (if desired):
+        For i = 1 … N_samples:
+            LatentSample = Sample from Gaussian centered at LatentPred with covariance from regressor
+            SpectrumSample[i] = LatentSample * PCA_Evecs.T + PCA_mean
+        Use {SpectrumSample} to estimate credible intervals per wavelength

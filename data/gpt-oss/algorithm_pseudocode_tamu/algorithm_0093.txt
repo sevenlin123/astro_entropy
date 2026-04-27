@@ -1,0 +1,125 @@
+INPUT:
+    – Reference high‑resolution spectra {S_i} (i = 1 … N_ref), each sampled
+      at M_wavelength points.
+    – Associated taxonomic labels L_i ∈ {Water, CO₂, Organic, Methanol}.
+    – Filter transmission curves {T_k(λ)} for k = 1 … N_filter.
+    – New sparse photometry vector m_obs = [m_1 … m_Nfilter] with
+      1σ uncertainties σ = [σ_1 … σ_Nfilter].
+
+OUTPUT:
+    – Posterior predictive distribution of full spectrum S_post(λ).
+    – Credible interval (e.g., 95 %) per wavelength.
+    – Taxonomic probability vector p_tax.
+    – Reconstructed mean spectrum Ŝ(λ).
+
+--------------------------------------------------------------------
+STEP 1 – Construct Latent Manifold (Prior)
+--------------------------------------------------------------------
+
+1.1  Pre‑process all reference spectra:
+        * Divide each spectrum by the solar spectrum to obtain
+          reflectance R_i(λ).
+        * Interpolate to a common wavelength grid λ_j, j = 1…M_wav.
+
+1.2  Perform Principal Component Analysis (PCA) on {R_i}:
+        * Compute mean spectrum μ_R and covariance Σ_R.
+        * Extract K principal components {e_k(λ)} (k = 1…K) that
+          retain > 95 % of variance (typically K = 8–10).
+        * Project each spectrum onto components:
+              z_i = [z_i1 … z_iK] = [e_1 … e_K]^T · (R_i – μ_R).
+
+1.3  Estimate continuous density in latent space:
+        * Use a Gaussian Kernel Density Estimate (KDE) with bandwidth
+          h ≈ 0.5 on the set {z_i}.
+        * Generate N_syn synthetic latent vectors {z_syn} by sampling
+          the KDE.
+
+--------------------------------------------------------------------
+STEP 2 – Forward Model (Implicit Likelihood)
+--------------------------------------------------------------------
+
+2.1  For each synthetic latent vector z_syn:
+        * Reconstruct spectrum:
+              R_syn(λ) = μ_R + Σ_{k=1}^{K} z_syn_k · e_k(λ).
+        * Convolve R_syn with each filter curve T_k:
+              m_syn_k = ∫ R_syn(λ) · T_k(λ) dλ / ∫ T_k(λ) dλ.
+        * Add Gaussian noise reflecting photometric S/N:
+              m_syn_k ← m_syn_k + N(0, σ_noise_k),
+            with σ_noise_k = 0.20 × m_syn_k (20 % relative error).
+
+2.2  Store pairs (m_syn, z_syn) as the training dataset for the
+      photometry→latent regressor.
+
+--------------------------------------------------------------------
+STEP 3 – Train Inference Models
+--------------------------------------------------------------------
+
+3.1  Photometry‑to‑Latent Regressor:
+        * Use an AutoML ensemble (e.g., XGBoost, RandomForest,
+          Multi‑layer Perceptron) to learn mapping:
+              ẑ = f_reg(m)   (point estimate).
+        * During training, also record residuals r = z_syn – ẑ
+          to estimate predictive covariance Σ_res.
+
+3.2  Latent‑to‑Taxonomy Classifier:
+        * Train a separate AutoML classifier g_cls(z) that maps
+          latent vector → class probabilities p(L | z).
+        * Train on {z_i, L_i} from the reference spectra (not the
+          synthetic set).
+
+--------------------------------------------------------------------
+STEP 4 – Inference on New Observation
+--------------------------------------------------------------------
+
+4.1  Predict latent mean and covariance for m_obs:
+        * z_mean = f_reg(m_obs).
+        * Assume predictive covariance Σ_pred = Σ_res
+          (or use model‑specific uncertainty if available).
+
+4.2  Draw N_sample samples from the joint posterior of latent
+      coefficients using a Gaussian Copula:
+        * For k = 1 … N_sample:
+              u_k ~ Uniform(0,1)^K           // independent
+              y_k = Φ^{-1}(u_k)             // inverse normal CDF
+              z_k = z_mean + L · y_k
+          where L is Cholesky factor of Σ_pred
+          and Φ^{-1} is applied element‑wise.
+
+4.3  Decode each sampled latent vector to a full spectrum:
+        * For each z_k:
+              R_k(λ) = μ_R + Σ_{j=1}^{K} z_k_j · e_j(λ).
+
+4.4  Aggregate samples to form posterior predictive distribution:
+        * Mean spectrum:
+              Ŝ(λ) = (1/N_sample) Σ_k R_k(λ).
+        * Credible interval at each λ (e.g., 2.5th & 97.5th percentiles).
+
+4.5  Taxonomic classification:
+        * Compute class probabilities by averaging over samples:
+              p_tax = (1/N_sample) Σ_k g_cls(z_k).
+
+--------------------------------------------------------------------
+STEP 5 – Output
+--------------------------------------------------------------------
+
+Return:
+    – Mean reconstructed spectrum Ŝ(λ).
+    – Credible interval curves for Ŝ(λ).
+    – Taxonomic probability vector p_tax.
+    – Optional: diagnostic plots or statistics (not required here).
+
+--------------------------------------------------------------------
+Notes
+--------------------------------------------------------------------
+• K is chosen empirically (≈8–10) to balance reconstruction fidelity
+  and numerical stability.
+• Bandwidth h ≈ 0.5 gives a smooth yet realistic manifold.
+• Synthetic data are used only during training; the final inference
+  is evaluated on the actual observation m_obs.
+• The Gaussian Copula preserves any non‑trivial dependence among
+  latent components implied by the KDE.
+• All operations are vectorised for efficiency; N_syn and
+  N_sample are user‑tunable (e.g., 5 000 synthetic samples,
+  1 000 posterior draws).
+
+END

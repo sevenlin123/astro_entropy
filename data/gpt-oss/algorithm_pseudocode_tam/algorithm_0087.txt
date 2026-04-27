@@ -1,0 +1,106 @@
+INPUT:
+    SpecData      – 51 high‑resolution TNO spectra (wavelength λ_i, reflectance R_i)
+    FilterCurves   – Effective throughput of desired photometric filters
+    PhotometryObs  – Sparse photometry vector m_obs for a new object
+    K              – Number of principal components to retain (default 8)
+    h_bandwidth    – KDE bandwidth (default 0.5)
+    n_aug          – Number of synthetic latent samples to generate (default 5000)
+
+OUTPUT:
+    S_rec          – Reconstructed full‑resolution spectrum (λ, R)
+    P_tax          – Probability vector over taxonomy classes (H₂O, CO₂, ORGANIC, METHANOL)
+
+--------------------------------------------------------------------
+STEP 0.  Pre‑compute Solar Spectrum (optional if using reflectance)
+--------------------------------------------------------------------
+    SolarSpec = load_solar_spectrum()          # (λ, F_⊙)
+
+--------------------------------------------------------------------
+STEP 1.  Build Latent Manifold (Prior)
+--------------------------------------------------------------------
+    # 1.1  Standardise spectra
+    mean_spec = mean(SpecData)
+    std_spec  = std(SpecData)
+    Spec_std  = (SpecData - mean_spec) / std_spec
+
+    # 1.2  PCA on standardised spectra
+    PCs, Scores = PCA(Spec_std, n_components=K)     # PCs: matrix (K × Nλ)
+    # 1.3  KDE over PCA scores
+    kde_model = KDE(Scores, bandwidth=h_bandwidth)
+
+    # 1.4  Sample synthetic latent vectors
+    LatSamples = kde_model.sample(n_aug)            # shape (n_aug × K)
+
+    # 1.5  Generate synthetic spectra from latent samples
+    SpecSynthetic = inverse_PCA(LatSamples, PCs, mean_spec, std_spec)
+    # SpecSynthetic has shape (n_aug × Nλ)
+
+--------------------------------------------------------------------
+STEP 2.  Forward‑model Synthetic Photometry (Likelihood)
+--------------------------------------------------------------------
+    for each synthetic spectrum S_j in SpecSynthetic:
+        # Convolve with filter curves to get expected photometry
+        m_j = []
+        for each filter f in FilterCurves:
+            R_f   = integrate_over_filter(S_j, f)   # ∫ R(λ) * T_f(λ) dλ
+            m_j.append(R_f)
+        # Add Gaussian noise (20% relative)
+        σ_j = 0.2 * array(m_j)
+        m_noisy = m_j + Normal(0, σ_j)
+        store (m_noisy, LatSamples[j])            # pair of photometry and true latent
+
+    TrainingSet = {(photometry, latent_vector)}
+
+--------------------------------------------------------------------
+STEP 3.  Train Encoder (Photometry → Latent)
+--------------------------------------------------------------------
+    # Use AutoML regressor (e.g., Gradient‑Boosted Trees)
+    regressor = AutoMLRegressor()
+    regressor.fit(
+        X = [photometry for each pair],
+        y = [latent_vector for each pair]
+    )
+
+--------------------------------------------------------------------
+STEP 4.  Train Classifier (Latent → Taxonomy)
+--------------------------------------------------------------------
+    # Obtain taxonomy labels for the 51 real spectra (from catalog)
+    Labels = [class_of(SpecData[i]) for i in 1..51]
+    # Map each label to its mean latent vector (using original Scores)
+    LatLabels = [Scores[i] for i in 1..51]
+
+    classifier = AutoMLClassifier()
+    classifier.fit(
+        X = LatLabels,
+        y = Labels
+    )
+
+--------------------------------------------------------------------
+STEP 5.  Inference on New Observation
+--------------------------------------------------------------------
+    # 5.1  Predict latent vector(s) for observed photometry
+    latent_pred = regressor.predict(PhotometryObs)      # shape (K,)
+
+    # 5.2  Optional: sample uncertainty by regressor's prediction intervals
+    #       or bootstrap predictions (omitted here for brevity)
+
+    # 5.3  Reconstruct full spectrum via inverse PCA
+    S_rec = inverse_PCA(latent_pred, PCs, mean_spec, std_spec)
+
+    # 5.4  Classify taxonomy from latent vector
+    P_tax = classifier.predict_proba(latent_pred)
+
+--------------------------------------------------------------------
+RETURN S_rec, P_tax
+--------------------------------------------------------------------
+
+PCA(data, n_components):
+    # Center data, compute covariance, eigen‑decomposition
+    # Return first n_components eigenvectors and scores.
+
+inverse_PCA(latent, PCs, mean_spec, std_spec):
+    # Rebuild spectrum: S = latent·PCs + mean_spec
+    # Rescale by std_spec if spectra were standardised.
+
+integrate_over_filter(spectrum, filter):
+    # Numerical integration: sum R(λ)*T_f(λ) over λ grid.

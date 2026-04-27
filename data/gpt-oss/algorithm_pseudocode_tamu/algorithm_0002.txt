@@ -1,0 +1,73 @@
+pseudocode
+INPUT:
+    S_ref[1..N]      # Reference near‑IR spectra (λ_i , R_i)
+    F_j[1..M]        # Effective throughput curves of M photometric filters
+    L                # Number of principal components to retain (e.g., 8)
+    h                # KDE bandwidth (e.g., 0.5)
+    σ_phot           # Relative photometric noise level (e.g., 20%)
+
+OUTPUT:
+    For any new photometric vector m_new[1..M]:
+        – posterior samples {S_k} of reconstructed spectra
+        – class probability vector P_class[4] (H2O, CO2, Org, Meth)
+
+--------------------------------------------------------------------
+PREPARATION (once)
+--------------------------------------------------------------------
+
+1.  // --- PCA on reference spectra ---------------------------------
+2.  For each spectrum s in S_ref:
+3.      Normalize s to reflectance (divide by solar spectrum)
+4.  Compute mean spectrum μ_R[λ]
+5.  Center all spectra: s' = s - μ_R
+6.  Perform Singular Value Decomposition on {s'} → U, Σ, V^T
+7.  Take first L columns of V^T → principal components C[1..L]   // shape (L × λ)
+8.  Project reference spectra onto PCs: 
+        α_ref[n][k] = (s'_n · C[k])  for n = 1..N, k = 1..L
+
+9.  // --- KDE augmentation ------------------------------------------
+10. Fit a Gaussian KDE to points {α_ref[n]} in ℝ^L with bandwidth h
+11. Draw M_aug synthetic latent vectors {α_syn[m]}  (e.g., 10 000 samples)
+
+12.  // --- Generate synthetic spectra and photometry ------------------
+13. For each α in {α_ref} ∪ {α_syn}:
+14.     Reconstruct spectrum: R_syn = μ_R + Σ_k α_k * C[k]
+15.     For each filter j:
+16.         m_syn[j] = ∫ R_syn(λ) * F_j(λ) dλ          // forward model
+17.     Add Gaussian noise: m_noisy[j] = m_syn[j] * (1 + N(0,σ_phot))
+18.     Store pair (m_noisy , α)
+
+19.  // --- Train regressor (encoder) ----------------------------------
+20. Split stored pairs into training / validation sets
+21. Use an AutoML ensemble (e.g., Gradient‑Boosted Trees + NN)
+22. Train model E: m → α_pred   (predict L‑dimensional vector)
+23. Save E and its prediction variance estimate V_E (if available)
+
+24.  // --- Train classifier -------------------------------------------
+25. Use {α_ref} with known taxonomic labels to train classifier C:
+26.    Input: α
+27.    Output: categorical distribution over 4 classes
+28. Save C
+
+--------------------------------------------------------------------
+INFERENCE (for each new photometric measurement m_new)
+--------------------------------------------------------------------
+
+29. // Predict latent coefficient distribution
+30. α_mean, α_cov = E.predict_distribution(m_new)
+31. // If E only gives a point estimate:
+32.    α_mean = E.predict(m_new)
+33.    α_cov  = diag(σ²_k)  // use residual variance per PC
+
+34. // Optional: sample from posterior using Gaussian copula
+35. For i = 1 to N_samples:
+36.     u ~ Uniform(0,1)^L
+37.     z = Φ⁻¹(u)                       // Φ⁻¹ is inverse normal CDF
+38.     α_sample = μ_α + L_chol * z       // μ_α = α_mean, L_chol = Cholesky(α_cov)
+39.     S_sample = μ_R + Σ_k α_sample_k * C[k]
+40.     Store S_sample
+
+41. // Compute class probabilities
+42. P_class = C.predict_prob(α_mean)
+
+43. Return {S_sample[1..N_samples]}, P_class

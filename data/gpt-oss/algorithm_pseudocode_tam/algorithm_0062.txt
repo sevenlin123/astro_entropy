@@ -1,0 +1,97 @@
+pseudocode
+Input:
+    - SPECTRA_SET = {s_i(λ)}      // high‑resolution reflectance spectra (i=1…N)
+    - FILTER_SET   = {f_j(λ)}      // instrument throughput curves (j=1…M)
+    - PHOTOMETRY   = {m_k}          // measured band fluxes for a new object
+    - BAND_NOISE   = σ_rel           // assumed relative photometric error (default 0.20)
+
+Output:
+    - S_RECON      = reconstructed spectrum ŝ(λ)
+    - TAX_PROB     = probabilities for each taxonomic class
+    - LATENT_DENSITY  = posterior density over latent space (optional)
+
+--------------------------------------------------------------------
+1.  PREPROCESSING
+    ------------------------------------------------------------------
+    1.1   Normalize each spectrum s_i(λ) to unity at a reference λ₀
+          (e.g. divide by flux at 1.3 µm).
+    1.2   Resample all spectra onto a common wavelength grid λ_grid.
+
+--------------------------------------------------------------------
+2.  PRINCIPAL COMPONENT ANALYSIS (PCA)
+    ------------------------------------------------------------------
+    2.1   Assemble data matrix X (size N × L) where L = len(λ_grid).
+    2.2   Subtract mean spectrum μ(λ) from each row of X.
+    2.3   Compute covariance C = (Xᵀ X) / (N‑1).
+    2.4   Perform eigen‑decomposition of C → eigenvectors V_k(λ), eigenvalues
+          λ_k.
+    2.5   Select first K PCs such that cumulative variance ≈ 99 %  
+          (typical K = 8–10). Store basis B = [V₁ … V_K].
+    2.6   Project each normalized spectrum onto PCs:
+            α_i = Bᵀ (s_i – μ)          // α_i is a K‑dimensional coefficient vector.
+
+--------------------------------------------------------------------
+3.  LATENT SPACE AUGMENTATION (KDE)
+    ------------------------------------------------------------------
+    3.1   Fit a multivariate Kernel Density Estimate (KDE) to the set {α_i}.
+          Choose bandwidth h ≈ 0.5.
+    3.2   Sample a large synthetic set {α̃_j} from the KDE (e.g. 10 000 points).
+
+--------------------------------------------------------------------
+4.  SYNTHETIC PHOTOMETRY GENERATION
+    ------------------------------------------------------------------
+    4.1   For each synthetic coefficient vector α̃_j:
+          4.1.1  Reconstruct spectrum:
+                 s̃_j(λ) = μ(λ) + B · α̃_j
+          4.1.2  Convolve s̃_j(λ) with each filter f_j(λ) to obtain ideal band flux:
+                 m̃_jk = ∫ s̃_j(λ) f_k(λ) dλ / ∫ f_k(λ) dλ
+          4.1.3  Add Gaussian noise:
+                 m̃_jk ← m̃_jk * (1 + 𝒩(0, BAND_NOISE))
+    4.2   Compile training set:
+          TRAIN_X = {m̃_jk}   // M‑dimensional photometric vectors
+          TRAIN_Y = {α̃_j}   // K‑dimensional latent targets
+
+--------------------------------------------------------------------
+5.  TRAIN PHOTOMETRY‑TO‑LATENT REGRESSOR
+    ------------------------------------------------------------------
+    5.1   Use an automated ensemble (e.g. AutoGluon) to train a model R:
+          R : ℝ^M → ℝ^K
+          Train on (TRAIN_X, TRAIN_Y).
+    5.2   Validate R internally (cross‑validation) to check bias/variance.
+
+--------------------------------------------------------------------
+6.  TRAIN LATENT‑SPACE CLASSIFIER
+    ------------------------------------------------------------------
+    6.1   Label each real spectrum s_i with its taxonomic class C_i.
+    6.2   Train a probabilistic classifier Q on the set {(α_i, C_i)}:
+          Q : ℝ^K → P(C | α)
+    6.3   Optionally, include synthetic α̃_j with class weights 0
+          (they contribute only to regularization).
+
+--------------------------------------------------------------------
+7.  INFERENCE FOR A NEW OBJECT
+    ------------------------------------------------------------------
+    7.1   Preprocess the measured photometry PHOTOMETRY:
+          - normalize or scale as done during training.
+    7.2   Predict latent coefficients:
+          α̂ = R(PHOTOMETRY)
+    7.3   Optional posterior sampling:
+          Generate N_samples draws from the predictive distribution
+          of R (e.g. using bootstrapped models) → {α̂^(n)}.
+    7.4   Decode to spectrum(s):
+          For each α̂^(n):  ŝ^(n)(λ) = μ(λ) + B · α̂^(n)
+          If N_samples = 1, set S_RECON = ŝ^(1)(λ).
+          Else, compute mean and confidence intervals over {ŝ^(n)(λ)}.
+    7.5   Classify:
+          TAX_PROB = Q(α̂)   // probability vector over classes
+    7.6   Return:
+          S_RECON, TAX_PROB (and optionally posterior density).
+
+--------------------------------------------------------------------
+8.  OPTIONAL: OUTLIER DETECTION
+    --------------------------------------------------------------------
+    8.1   Evaluate density p(α̂) under the KDE fitted in Step 3.
+    8.2   If p(α̂) < threshold (e.g. 5 % percentile), flag as potential outlier.
+
+--------------------------------------------------------------------
+END

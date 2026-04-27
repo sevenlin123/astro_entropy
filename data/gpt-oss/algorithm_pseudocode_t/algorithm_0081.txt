@@ -1,0 +1,81 @@
+INPUT
+    - Observed photometry: { (m_i, σ_i, λ_i) }  for i = 1 … N_filters
+      where m_i = observed magnitude, σ_i = uncertainty, λ_i = effective wavelength
+    - Filter transmission functions: { T_i(λ) } for each filter
+    - Library of prototype spectra: { S_k(λ) } for k = 1 … K_classes
+      (each S_k is a discrete vector sampled at common wavelength grid)
+    - Spectral basis construction parameters (e.g., number of principal components)
+    - Prior hyper‑parameters for coefficient vector c = (c_1 … c_K)
+    - MCMC settings: num_iterations, burn_in, thinning
+
+OUTPUT
+    - Posterior samples of coefficient vector c
+    - Reconstructed spectrum Ŝ(λ) = Σ_k c_k * S_k(λ)
+    - Class probability estimates P(class = k | data)
+
+PROCEDURE
+
+1. **Preprocess Data**
+   1.1 Convert observed magnitudes to relative fluxes:
+        f_i_obs = 10^(-0.4 * (m_i - m_ref))   // m_ref arbitrary zero point
+   1.2 Convert uncertainties to flux errors:
+        σ_f_i = (ln 10 / 2.5) * f_i_obs * σ_i
+   1.3 Assemble observation vector **F_obs** = [f_1_obs … f_N]^T
+        Assemble error vector **σ_F** = [σ_f_1 … σ_f_N]^T
+
+2. **Build Spectral Basis**
+   2.1 Sample each prototype spectrum S_k at the same wavelength grid λ_grid.
+   2.2 Optionally perform dimensionality reduction (e.g., PCA) on the set {S_k}
+        to obtain orthonormal basis vectors {B_j} (j = 1 … J).
+   2.3 Store basis matrix **B** where B[:, j] = B_j(λ_grid).
+
+3. **Forward Model: Flux Prediction**
+   3.1 For a given coefficient vector **c**, construct spectral estimate:
+         Ŝ(λ) = Σ_{k=1}^{K} c_k * S_k(λ)
+   3.2 Compute predicted flux in filter i by convolving Ŝ with filter transmission:
+         f_i_pred(c) = ∫ Ŝ(λ) * T_i(λ) dλ / ∫ T_i(λ) dλ
+   3.3 Assemble prediction vector **F_pred(c)** = [f_1_pred … f_N]^T
+
+4. **Define Likelihood**
+   4.1 Assume Gaussian measurement errors:
+         L(c) = Π_{i=1}^{N}  (1/(√(2π) σ_f_i))
+                * exp[ -(f_i_obs - f_i_pred(c))^2 / (2 σ_f_i^2) ]
+   4.2 Working with log‑likelihood:
+         lnL(c) = -0.5 * Σ_{i=1}^{N} [ ((f_i_obs - f_i_pred(c))/σ_f_i)^2 + ln(2π σ_f_i^2) ]
+
+5. **Specify Priors**
+   5.1 Choose prior for coefficients (e.g., multivariate normal):
+         p(c) = N( μ_prior , Σ_prior )
+   5.2 Compute log‑prior:
+         lnp(c) = -0.5 * [(c - μ_prior)^T Σ_prior^{-1} (c - μ_prior) + ln|2π Σ_prior|]
+
+6. **Posterior Sampling (MCMC)**
+   6.1 Initialize chain at c^(0) = μ_prior.
+   6.2 For t = 1 to num_iterations:
+         6.2.1 Propose new coefficients c* = c^(t-1) + η, where η ~ N(0, proposal_cov)
+         6.2.2 Compute lnL* = lnL(c*), lnp* = lnp(c*)
+         6.2.3 Compute acceptance probability:
+                 α = min(1, exp[(lnL* + lnp*) - (lnL^{t-1} + lnp^{t-1})])
+         6.2.4 Draw u ~ Uniform(0,1)
+         6.2.5 If u < α:
+                  accept: c^(t) = c*, lnL^{t} = lnL*, lnp^{t} = lnp*
+              else:
+                  reject: c^(t) = c^(t-1), lnL^{t} = lnL^{t-1}, lnp^{t} = lnp^{t-1}
+   6.3 Discard first burn_in samples; keep every thinning‑th sample.
+
+7. **Post‑Processing**
+   7.1 Compute posterior mean of coefficients:
+         ȼ = (1/M) Σ_{samples} c_s
+   7.2 Construct mean reconstructed spectrum:
+         Ŝ_mean(λ) = Σ_k ȼ_k * S_k(λ)
+   7.3 Estimate class probabilities:
+         For each class k:
+             P(k | data) = fraction of posterior samples where c_k is largest
+         (or use softmax on log‑posterior contributions if desired)
+
+8. **Output Results**
+   8.1 Return posterior samples {c_s}
+   8.2 Return Ŝ_mean(λ) and its credible intervals (derived from samples)
+   8.3 Return class probabilities P(k | data)
+
+END PROCEDURE

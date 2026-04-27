@@ -1,0 +1,88 @@
+Input
+  Spectral Library L = {S_1 … S_N}
+      S_j : 1‑D array of fluxes at wavelengths λ_1 … λ_M
+  Photometry for target T:
+      y = [y_1 … y_F]      // measured fluxes in F filters
+      σ = [σ_1 … σ_F]      // measurement uncertainties
+  Filters F_i (i = 1…F)
+  Desired number of principal components K   // e.g. 8–10
+
+Output
+  Reconstructed spectrum Ŝ(λ)
+  Credible‑interval bounds at each λ
+  Posterior coefficient vector ĉ
+  Posterior covariance matrix C_p
+
+------------------------------------------------------------------
+Step 1 – Prepare Spectral Library
+------------------------------------------------------------------
+1.1 For every spectrum S_j in L
+       • Normalize to unit area or remove continuum (as needed).
+       • Subtract mean spectrum μ_S = (1/N)∑_j S_j  // mean over library
+1.2 Form data matrix X (N × M):
+       X_j = S_j – μ_S
+
+------------------------------------------------------------------
+Step 2 – Principal‑Component Analysis (PCA)
+------------------------------------------------------------------
+2.1 Compute covariance matrix Σ_X = (1/(N−1)) Xᵀ X
+2.2 Eigen‑decompose Σ_X → eigenvalues λ_k, eigenvectors v_k
+2.3 Sort v_k by decreasing λ_k
+2.4 Select first K eigenvectors V_K = [v_1 … v_K]
+2.5 Project library onto PCs:
+       For each j:
+           c_j = V_Kᵀ (S_j – μ_S)    // K‑dimensional coefficient vector
+2.6 Estimate prior coefficient covariance:
+       Σ_c = (1/(N−1)) ∑_j (c_j – 0)(c_j – 0)ᵀ
+       (zero mean is assumed after centering)
+
+------------------------------------------------------------------
+Step 3 – Build Filter Projection Matrix
+------------------------------------------------------------------
+3.1 For each PC k (1…K)
+       For each filter i (1…F)
+           m_k[i] = ∫_λ PC_k(λ) · R_i(λ) dλ
+           // R_i(λ) = transmission curve of filter i
+3.2 Assemble matrix M (F × K) with elements m_k[i]
+3.3 Compute mean photometric vector μ_f:
+       For each filter i:
+           μ_f[i] = ∫_λ μ_S(λ) · R_i(λ) dλ
+
+------------------------------------------------------------------
+Step 4 – Bayesian Inference of Coefficients
+------------------------------------------------------------------
+4.1 Define weight matrix W = diag( 1 / σ_1² , … , 1 / σ_F² )
+4.2 Compute posterior precision:
+       Λ = Mᵀ W M + Σ_c⁻¹
+4.3 Compute posterior mean:
+       ĉ = Λ⁻¹ Mᵀ W ( y − μ_f )
+4.4 Compute posterior covariance:
+       C_p = Λ⁻¹
+
+------------------------------------------------------------------
+Step 5 – Reconstruct Full Spectrum
+------------------------------------------------------------------
+5.1 Initialize Ŝ(λ) = μ_S(λ)
+5.2 For each PC k (1…K)
+       Ŝ(λ) ← Ŝ(λ) + ĉ_k · PC_k(λ)
+5.3 Propagate uncertainties:
+       For each wavelength λ_m:
+           Var(Ŝ[λ_m]) = ∑_{k,l=1}^{K} PC_k[λ_m] PC_l[λ_m] C_p[k,l]
+       Credible bounds = Ŝ[λ_m] ± 1.96 √Var(Ŝ[λ_m])
+
+------------------------------------------------------------------
+Step 6 – Optional Outlier Scoring
+------------------------------------------------------------------
+6.1 Predict photometry from ĉ:
+       ŷ_pred = μ_f + M ĉ
+6.2 Compute Mahalanobis distance:
+       d² = (y − ŷ_pred)ᵀ W (y − ŷ_pred)
+6.3 Flag object if d² exceeds chosen threshold (rare type indicator)
+
+------------------------------------------------------------------
+Return
+------------------------------------------------------------------
+• Ŝ(λ)  // reconstructed spectrum
+• Credible‑intervals per λ
+• ĉ, C_p   // posterior coefficients & covariance
+• Outlier score d²   // optional

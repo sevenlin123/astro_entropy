@@ -1,0 +1,91 @@
+Input:
+    - Spectral training set  S  = { s_i(w) }  i=1…N_spec   (flux vs λ)
+    - Filter response set  F  = { f_j(λ) }  j=1…N_filt   (dimensionless transmission)
+    - Target object photometry  P  = { p_j }  j=1…N_filt      (observed fluxes)
+    - Photometric uncertainties  σ_P = { σ_j }  j=1…N_filt
+    - Desired number of principal components  K   (≈ 4–10)
+
+Output:
+    - Reconstructed spectrum  Ŝ(λ)
+    - Uncertainty band  ΔŜ(λ)
+
+--------------------------------------------------------------------
+1. TRAINING PHASE  (performed once)
+
+   1.1 Compute mean spectrum μ(λ)  ←  (1/N_spec) Σ_i s_i(λ)
+
+   1.2 Center training spectra:
+          S_centered[i,λ] ← s_i(λ) – μ(λ)
+
+   1.3 Compute covariance matrix C:
+          C[λ_a, λ_b] ← (1/(N_spec-1)) Σ_i S_centered[i,λ_a] * S_centered[i,λ_b]
+
+   1.4 Eigen‑decompose C:
+          C = U Λ Uᵀ
+          where U contains eigenvectors (principal components)
+                Λ diagonal eigenvalues
+
+   1.5 Select first K PCs:
+          PCs[λ,k] ← U[:,k]   for k=1…K
+          σ_PC[k]  ← sqrt(Λ[k,k])   (standard deviation along PC k)
+
+   1.6 Build filter‑projection matrix H  (size N_filt × K):
+          For each filter j:
+              For each PC k:
+                  H[j,k]  ←  ∫_λ f_j(λ) * PCs[λ,k]  dλ
+          (numerical integration using the same wavelength grid as S)
+
+--------------------------------------------------------------------
+2. INFERRING LATENT COEFFICIENTS  (for a single object)
+
+   2.1 Define prior on latent vector z = [z₁ … z_K]ᵀ:
+          z ~ Normal(0 , I_K)            # zero mean, unit variance
+          (or scale by σ_PC if desired)
+
+   2.2 Build design matrix for observation:
+          X = H                      # N_filt × K
+          y = P                      # N_filt × 1
+          R = diag(σ_P²)             # N_filt × N_filt
+
+   2.3 Compute posterior analytically (Gaussian case):
+
+          # Prior precision: Λ₀ = I_K
+          # Likelihood precision: Λ_L = Xᵀ R⁻¹ X
+          # Posterior precision: Λ_p = Λ₀ + Λ_L
+          # Posterior mean: μ_p = Λ_p⁻¹ (Xᵀ R⁻¹ y)
+
+          Λ_p   = I_K + Xᵀ @ inverse(R) @ X
+          μ_p   = inverse(Λ_p) @ (Xᵀ @ inverse(R) @ y)
+
+   2.4 Posterior covariance:
+          Σ_p   = inverse(Λ_p)
+
+   2.5 Sample posterior (optional for Monte‑Carlo error propagation):
+          Draw L samples {z^(ℓ)} ~ N(μ_p , Σ_p)     (ℓ=1…L)
+
+--------------------------------------------------------------------
+3. RECONSTRUCTION OF FULL SPECTRUM
+
+   3.1 Base (mean) spectrum:
+          Ŝ_base(λ) ← μ(λ)
+
+   3.2 Expected contribution from PCs:
+          Ŝ_PC(λ) ← Σ_{k=1}^{K} μ_p[k] * PCs[λ,k]
+
+   3.3 Reconstructed spectrum:
+          Ŝ(λ) ← Ŝ_base(λ) + Ŝ_PC(λ)
+
+   3.4 Uncertainty propagation:
+          If using analytical propagation:
+              For each λ:
+                  var(Ŝ(λ)) = Σ_{k=1}^{K} Σ_{m=1}^{K}
+                                 PCs[λ,k] * Σ_p[k,m] * PCs[λ,m]
+          Else (Monte‑Carlo):
+              For each sample ℓ:
+                  Ŝ^(ℓ)(λ) = μ(λ) + Σ_k z^(ℓ)[k] * PCs[λ,k]
+              Estimate mean and 95% CI from {Ŝ^(ℓ)(λ)}.
+
+--------------------------------------------------------------------
+4. OUTPUT
+
+   Return Ŝ(λ) and its uncertainty band (e.g., 95% credible interval).

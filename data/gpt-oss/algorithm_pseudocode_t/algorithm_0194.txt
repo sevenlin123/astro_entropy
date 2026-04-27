@@ -1,0 +1,37 @@
+text
+Input:
+    - F[1..N]          : measured broadband fluxes (or magnitudes) for one TNO
+    - σF[1..N]         : measurement uncertainties
+    - R[f][λ]          : filter transmission curve for filter f (discretized over λ)
+    - B[j][λ]          : spectral basis functions j=1..M (discretized over λ)
+    - λ_grid           : common wavelength grid for integration
+    - prior_var[j]     : prior variance for coefficient j
+    - n_samples        : number of posterior draws (optional, can be 0 for point estimate)
+
+Output:
+    - μc[1..M]         : posterior mean of coefficients
+    - Σc[1..M,1..M]    : posterior covariance of coefficients
+    - Spectrum[λ]      : mean reflected spectrum at each λ
+    - Spectrum_unc[λ] : 1‑σ uncertainty of the spectrum (optional)
+
+for f = 1 to N:
+    for j = 1 to M:
+        A[f,j] = ∫ B[j][λ] * R[f][λ] dλ   // numerical integration over λ_grid
+
+W = diag( 1 / σF[f]^2 )   // N × N diagonal weight matrix
+
+Λ = diag( 1 / prior_var[j] )   // M × M prior precision matrix
+
+Σc = inverse( Aᵀ · W · A  +  Λ )                // M × M posterior covariance
+μc = Σc · ( Aᵀ · W · F )                         // M × 1 posterior mean
+
+for s = 1 to n_samples:
+    c[s] = draw_multivariate_normal( μc, Σc )
+
+Spectrum[λ] = Σ_{j=1}^{M} μc[j] * B[j][λ]
+
+for s = 1 to n_samples:
+    Spectrum_s[λ] = Σ_{j=1}^{M} c[s][j] * B[j][λ]
+Spectrum_unc[λ] = stddev( {Spectrum_s[λ]} )   // 1‑σ envelope
+
+return μc, Σc, Spectrum, (optionally) Spectrum_unc

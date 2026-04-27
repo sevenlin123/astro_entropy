@@ -1,0 +1,77 @@
+Input:
+    - S_real = {s_i(λ)}_{i=1..N}   // N observed TNO spectra (high‑res reflectance vs wavelength)
+    - M_real = {m_i}                // corresponding full photometry in all filters (optional for training)
+    - FilterCurves = {F_j(λ)}       // throughput curves for each available filter j
+    - PhotometryNew = {p_k}         // sparse photometry (≤ 6 bands) for the target object
+    - K_latent = desired number of PCA components (default 5–10)
+    - Bandwidth_h = KDE bandwidth (≈0.5)
+    - NoiseLevel σ_noise = 0.20     // 20 % relative Gaussian noise for synthetic photometry
+    - NumSynthetic = number of synthetic latent samples (e.g., 5000)
+
+Output:
+    - SpectrumReconstructed(λ)      // continuous high‑resolution reflectance spectrum
+    - CredibleIntervals(λ)          // 68 % / 95 % intervals per wavelength
+    - TaxonomyProbabilities         // posterior probabilities for each taxonomic class
+
+Procedure:
+
+1. **PCA Basis Construction**
+   1.1 Arrange S_real as an N×M matrix S_mat (M = number of spectral bins).
+   1.2 Center S_mat by subtracting column means.
+   1.3 Compute covariance matrix C = (S_matᵀ · S_mat)/(N-1).
+   1.4 Eigen‑decompose C → eigenvectors E[1..M], eigenvalues λ[1..M].
+   1.5 Select first K_latent eigenvectors → PCA_basis = E[1..K_latent].
+   1.6 Project each real spectrum onto the basis to obtain latent coefficients:
+        L_real[i] = PCA_basisᵀ · (s_i - μ_S),  where μ_S is the mean spectrum.
+
+2. **Latent Space Augmentation via KDE**
+   2.1 Fit a multivariate Gaussian kernel density estimator to L_real with bandwidth h = Bandwidth_h.
+   2.2 Sample NumSynthetic latent vectors {l_star} from the KDE to obtain synthetic latent set L_syn.
+   2.3 For each l_star:
+        2.3.1 Reconstruct synthetic spectrum s_star = μ_S + PCA_basis · l_star.
+        2.3.2 Compute synthetic photometry m_star by convolving s_star with each FilterCurve:
+              m_star[j] = ∫ s_star(λ) * F_j(λ) dλ / ∫ F_j(λ) dλ   (reflectance form).
+        2.3.3 Perturb m_star with Gaussian noise:
+              m_star_noisy[j] = m_star[j] * (1 + N(0,σ_noise)).
+        2.3.4 Store pair (m_star_noisy, l_star) in training set.
+
+3. **Encoder Training (AutoML Regressor)**
+   3.1 Define training dataset D = {(m_noisy, l_star)} from step 2.3.
+   3.2 Use an AutoML framework (e.g., AutoGluon) to train an ensemble regressor R that maps
+        input photometry vector m to output latent coefficient vector l.
+        R learns p(l | m) implicitly; output may be mean and variance estimates.
+   3.3 Validate convergence and prevent overfitting (e.g., via early stopping, cross‑validation inside AutoML).
+
+4. **Taxonomy Classifier Training (Optional)**
+   4.1 Assign each real spectrum a class label C_i (e.g., H₂O, CO₂, Organic, Methanol).
+   4.2 Train a separate AutoML classifier Q that takes latent coefficients l as input
+        and outputs posterior class probabilities q(C | l).
+   4.3 Store classifier Q for later use.
+
+5. **Inference on New Photometry**
+   5.1 Feed PhotometryNew into the trained regressor R to obtain posterior over latent space:
+        (μ_l, Σ_l) = R.predict(PhotometryNew)   // mean and covariance of l
+   5.2 **Posterior Sampling (Gaussian Copula)**
+        5.2.1 Sample N_samples latent vectors {l_sample} from multivariate normal N(μ_l, Σ_l).
+        5.2.2 Optionally apply a Gaussian Copula transformation to preserve any non‑linear
+             dependencies inferred during training (e.g., by resampling ranks).
+   5.3 **Spectrum Decoding**
+        For each sampled l_sample:
+            s_sample = μ_S + PCA_basis · l_sample
+            Store s_sample as one realization of the posterior spectrum.
+   5.4 **Credible Interval Construction**
+        At each wavelength λ_k:
+            Collect {s_sample[λ_k]} over all samples.
+            Compute median, 16th percentile, 84th percentile → 68 % CI.
+            Compute 2.5th and 97.5th percentiles → 95 % CI.
+   5.5 **Classifier Prediction**
+        5.5.1 Compute class probabilities by averaging Q's output over all l_sample:
+              P_class = (1/N_samples) Σ q(C | l_sample)
+        5.5.2 Return P_class as taxonomy probabilities.
+
+6. **Outputs**
+   6.1 SpectrumReconstructed(λ) = median of sampled spectra.
+   6.2 CredibleIntervals(λ) = {CI_68, CI_95}.
+   6.3 TaxonomyProbabilities = P_class.
+
+End Procedure

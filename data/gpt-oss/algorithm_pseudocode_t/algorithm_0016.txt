@@ -1,0 +1,119 @@
+INPUT:
+    - Photometric catalog {O_i,j} for N_TNOs where i = 1…N_TNOs,
+      j = 1…N_filters (magnitudes).
+    - Filter transmission curves {R_j(λ)}.
+    - Solar spectrum S_sol(λ).
+    - Spectral library {L_k(λ)} for k = 1…K.
+    - Taxonomy templates {T_c(λ)} for c = 1…C.
+    - Measurement uncertainties {σ_i,j}.
+    - Prior parameters for spectral coefficients (μ_prior, Σ_prior).
+
+OUTPUT:
+    - Posterior mean spectra {Ȓ_i(λ)}.
+    - Spectrum uncertainties {ΔR_i(λ)}.
+    - Class probabilities {P_i,c}.
+    - Outlier flags {flag_i}.
+
+--------------------------------------------------------------------
+STEP 0: PRE‑PROCESSING
+--------------------------------------------------------------------
+FOR each TNO i:
+    FOR each filter j:
+        - Convert magnitude O_i,j to relative flux:
+              f_obs_i,j = 10^(–0.4 * O_i,j)
+        - Normalize to solar spectrum:
+              f_norm_i,j = f_obs_i,j / ∫[ R_j(λ) * S_sol(λ) ] dλ
+    END FOR
+END FOR
+
+--------------------------------------------------------------------
+STEP 1: BUILD BASIS FROM LIBRARY
+--------------------------------------------------------------------
+1.1 Resample all library spectra onto common λ grid.
+1.2 Subtract mean spectrum μ_lib(λ) from each L_k(λ).
+1.3 Construct data matrix D of shape (K × N_λ).
+1.4 Perform Singular Value Decomposition:
+        D = U · Σ · Vᵀ
+1.5 Select first M left singular vectors B_m(λ) = V_m, m=1…M
+     (M chosen to capture ≥ 95% variance).
+1.6 Set basis matrix B(λ) = [B_1(λ) … B_M(λ)].
+
+--------------------------------------------------------------------
+STEP 2: BAYESIAN INFERENCE PER OBJECT
+--------------------------------------------------------------------
+FOR each TNO i:
+    ----------------------------------------------------------------
+    2.1 DEFINE FORWARD MODEL
+    ----------------------------------------------------------------
+    FOR each filter j:
+        DEFINE function synthetic_flux_i,j(c):
+            RETURN ∫[ R_j(λ) * ( μ_lib(λ) + Σ_{m=1}^{M} c_m * B_m(λ) ) ] dλ
+    END FOR
+
+    ----------------------------------------------------------------
+    2.2 LIKELIHOOD
+    ----------------------------------------------------------------
+    Define likelihood:
+        L(c) = Π_j Normal( f_norm_i,j | synthetic_flux_i,j(c), σ_i,j )
+
+    ----------------------------------------------------------------
+    2.3 PRIOR
+    ----------------------------------------------------------------
+    Prior on coefficient vector c = (c_1,…,c_M)ᵀ:
+        p(c) = Normal( μ_prior , Σ_prior )
+
+    ----------------------------------------------------------------
+    2.4 POSTERIOR
+    ----------------------------------------------------------------
+    Posterior ∝ L(c) * p(c)
+
+    ----------------------------------------------------------------
+    2.5 SAMPLE FROM POSTERIOR
+    ----------------------------------------------------------------
+    Use Hamiltonian Monte Carlo (HMC) or No-U-Turn Sampler:
+        Run S iterations, discard burn‑in, thin as needed.
+        Store samples {c_i^(s)} for s = 1…S.
+
+    ----------------------------------------------------------------
+    2.6 ESTIMATE SPECTRUM
+    ----------------------------------------------------------------
+    Compute posterior mean coefficients:
+        c̄_i = (1/S) Σ_s c_i^(s)
+    Reconstruct mean spectrum:
+        Ŷ_i(λ) = μ_lib(λ) + Σ_{m=1}^{M} c̄_{i,m} * B_m(λ)
+    Compute posterior variance per λ:
+        ΔŶ_i²(λ) = (1/S) Σ_s [ μ_lib(λ) + Σ_m c_i,m^(s) * B_m(λ) ]²
+                  – Ŷ_i(λ)²
+    Store Ŷ_i(λ) and ΔŶ_i(λ).
+
+END FOR
+
+--------------------------------------------------------------------
+STEP 3: TAXONOMIC CLASSIFICATION
+--------------------------------------------------------------------
+FOR each TNO i:
+    FOR each class c:
+        - Compute weighted distance:
+            d_i,c² = ∑_λ [ ( Ŷ_i(λ) – T_c(λ) )² / ΔŶ_i(λ) ]
+        - Convert to probability:
+            P_i,c ∝ exp( –0.5 * d_i,c² )
+    END FOR
+    Normalize P_i,c so Σ_c P_i,c = 1.
+END FOR
+
+--------------------------------------------------------------------
+STEP 4: OUTLIER DETECTION
+--------------------------------------------------------------------
+FOR each TNO i:
+    - Compute predictive likelihood:
+          L_pred_i = Π_j Normal( f_norm_i,j | synthetic_flux_i,j( c̄_i ), σ_i,j )
+    - Compute chi‑square statistic:
+          χ²_i = Σ_j [ ( f_norm_i,j – synthetic_flux_i,j( c̄_i ) )² / σ_i,j² ]
+    - If χ²_i > χ²_threshold THEN flag_i = TRUE ELSE flag_i = FALSE.
+END FOR
+
+--------------------------------------------------------------------
+RETURN:
+    - {Ŷ_i(λ), ΔŶ_i(λ)} for all i.
+    - Class probability matrix {P_i,c}.
+    - Outlier flags {flag_i}.

@@ -1,0 +1,121 @@
+Algorithm SpectralReconstruction
+Input:
+    Obs = { (filter_i, mag_i, sigma_i) } for i=1..N
+    Templates = { T_k(lambda) } for k=1..K   // basis spectra
+    FilterResponses = { R_i(lambda) }
+    SolarSpectrum = S_sun(lambda)
+Output:
+    PosteriorSamples = { (a_j, k) }   // mixture weights and taxonomy label
+    ReconstructedSpectrum(lambda) = sum_j a_j T_k(lambda)
+    TaxonomyProbabilities = P(k | Obs)
+
+Procedure:
+1. Precompute for each template k and filter i:
+       F_ik = ∫ T_k(λ) R_i(λ) dλ   // integrated reflectance
+       S_i = ∫ S_sun(λ) R_i(λ) dλ // solar reference
+       PredictedMagnitudeMatrix[i][k] = -2.5 * log10(F_ik / S_i)
+
+2. Define state vector x = (a_1,...,a_K, k)
+   Constraints: a_j ≥ 0, Σ a_j = 1
+
+3. Define prior:
+       For weights a: Dirichlet(alpha)  // e.g., alpha=1 uniform
+       For taxonomy k: categorical(P_prior_k)
+
+4. Define likelihood L(x):
+       For each observation (i):
+           μ_i = Σ_j a_j * PredictedMagnitudeMatrix[i][j]
+           L_i = exp( -(mag_i - μ_i)^2 / (2 σ_i^2) )
+       Return product over i
+
+5. Posterior proportional to Prior * Likelihood
+
+6. Run MCMC sampler:
+       Initialize a^(0), k^(0)
+       For t = 1 to N_iter:
+           Propose new weights a* by Dirichlet proposal
+           Propose new taxonomy k* by categorical proposal
+           Compute acceptance ratio r = [Posterior(a*,k*) / Posterior(a^(t-1),k^(t-1))]
+           Accept with prob min(1,r); otherwise keep previous state
+           Store current state in PosteriorSamples
+
+7. After discarding burn-in and thinning:
+       Compute mean spectrum:
+           Spectrum_mean(λ) = Σ_j (mean a_j) * T_j(λ)
+       Compute taxonomy posterior:
+           P(k | Obs) = count of samples with k / total samples
+
+Return PosteriorSamples, Spectrum_mean, TaxonomyProbabilities
+
+text
+Algorithm ProbabilisticSpectralReconstruction
+
+Inputs
+------
+Obs      : list of observations  
+           Obs = { (f_i, m_i, σ_i) }  for i = 1 … N_filters
+Templates: list of K basis spectra  
+           Templates = { T_k(λ) }  for k = 1 … K
+Filters  : list of filter transmission curves  
+           Filters  = { R_f(λ) }  for f = 1 … N_filters
+Solar    : solar spectral flux S_sun(λ)
+
+Outputs
+-------
+PosteriorSamples : collection of sampled states { (a, k) }
+ReconstructedSpectrum(λ) : weighted sum Σ_k a_k · T_k(λ)
+TaxonomyProbabilities   : { P(k | Obs) }
+
+--------------------------------------------------------------------
+
+1. Pre‑compute Filter Integrals
+   For every filter f and template k:
+        F_fk = ∫_λ  T_k(λ) · R_f(λ)  dλ          // reflectance contribution
+        S_f  = ∫_λ  S_sun(λ) · R_f(λ)  dλ          // solar reference
+        μ_fk = –2.5·log10( F_fk / S_f )            // predicted magnitude for template k in filter f
+
+2. Define State Variables
+   a  = (a_1, …, a_K)      // non‑negative mixture weights, Σ a_k = 1
+   k  = taxonomic class index (integer 1…K)
+   State = (a, k)
+
+3. Set Priors
+   - Weight prior: Dirichlet(α)  with α = (1,…,1)  (uniform over simplex)
+   - Class prior: categorical(π)  where π_k = prior probability of class k
+
+4. Likelihood Function
+   For a given State (a, k):
+        For each observation (f_i, m_i, σ_i):
+              μ_i = Σ_{j=1}^{K} a_j · μ_jf_i      // predicted magnitude
+              L_i = exp( – (m_i – μ_i)^2 / (2·σ_i^2) )
+        Likelihood L(State) = Π_i L_i
+
+5. Posterior
+   Posterior(State) ∝ Prior(a) · Prior(k) · L(State)
+
+6. MCMC Sampling (Metropolis–Hastings)
+   Initialize:
+        a^(0) ← Dirichlet(α)          // random simplex point
+        k^(0) ← draw from categorical(π)
+   For t = 1 … N_iterations:
+        a'  ← propose new weights from Dirichlet(α)
+        k'  ← propose new class from categorical(π)
+        Compute
+             Posterior'  = Prior(a') · Prior(k') · L((a',k'))
+             Posterior_t  = Prior(a^(t−1)) · Prior(k^(t−1)) · L((a^(t−1),k^(t−1)))
+        Acceptance ratio r = Posterior' / Posterior_t
+        Accept with probability min(1, r):
+             If accepted: (a^(t), k^(t)) ← (a', k')
+             Else         : (a^(t), k^(t)) ← (a^(t−1), k^(t−1))
+        Store (a^(t), k^(t)) in PosteriorSamples
+
+7. Post‑processing
+   Discard initial burn‑in samples; optionally thin by keeping every nth sample.
+   Compute mean spectrum:
+        ⟨a⟩_k = mean of weight a_k across retained samples
+        ReconstructedSpectrum(λ) = Σ_{k=1}^{K} ⟨a⟩_k · T_k(λ)
+   Compute taxonomy posterior:
+        Count occurrences of each class k in retained samples
+        TaxonomyProbabilities[k] = count_k / total_retained_samples
+
+Return PosteriorSamples, ReconstructedSpectrum(λ), TaxonomyProbabilities

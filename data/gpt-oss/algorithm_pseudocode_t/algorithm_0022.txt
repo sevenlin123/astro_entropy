@@ -1,0 +1,97 @@
+INPUT
+    N_obs          # number of photometric measurements
+    F[1..N_obs]    # measured fluxes
+    σ[1..N_obs]    # measurement uncertainties
+    Filter[1..N_obs]   # filter transmission curves (discrete wavelength grids)
+    B[1..K][1..M]   # basis functions B_k(λ_m),  M wavelength points
+    μ_a[1..K]       # prior mean of coefficients
+    Σ_a[1..K,1..K]  # prior covariance of coefficients
+    Σ_prop[1..K,1..K] # proposal covariance for MCMC
+    η               # step‑size for gradient ascent
+    N_opt           # number of optimization iterations
+    N_samp          # number of MCMC samples
+
+OUTPUT
+    a_samples[1..N_samp][1..K]   # posterior samples of coefficients
+    R_mean[1..M]                 # posterior mean reflectance spectrum
+    R_err[1..M]                  # 68 % credible interval width
+
+for i = 1 .. N_obs
+    T[i][1..M] ← discretized transmission of Filter[i]
+end for
+
+# Compute reflectance spectrum for a coefficient vector a
+function Reflectance(a[1..K])
+    for m = 1 .. M
+        R[m] ← Σ_{k=1}^{K} a[k] * B[k][m]
+    end for
+    return R
+end function
+
+# Compute model flux in filter i for a coefficient vector a
+function ModelFlux(i, a)
+    R ← Reflectance(a)
+    num ← Σ_{m=1}^{M} T[i][m] * R[m]
+    denom ← Σ_{m=1}^{M} T[i][m]
+    return num / denom
+end function
+
+# Log‑likelihood for coefficient vector a
+function LogLikelihood(a)
+    ll ← 0
+    for i = 1 .. N_obs
+        m ← ModelFlux(i, a)
+        ll ← ll - 0.5 * ((F[i] - m)/σ[i])^2
+    end for
+    return ll
+end function
+
+# Log‑prior for coefficient vector a
+function LogPrior(a)
+    diff ← a - μ_a
+    return -0.5 * diffᵀ * Σ_a⁻¹ * diff
+end function
+
+# Log‑posterior
+function LogPosterior(a)
+    return LogLikelihood(a) + LogPrior(a)
+end function
+
+a ← μ_a                            # initial guess
+for iter = 1 .. N_opt
+    grad ← ∇_a LogPosterior(a)      # analytical or numerical gradient
+    a ← a + η * grad
+    if ||grad|| < tolerance
+        break
+    end if
+end for
+a_MAP ← a                          # maximum a posteriori estimate
+
+a_current ← a_MAP
+p_current  ← LogPosterior(a_current)
+
+for s = 1 .. N_samp
+    # Propose new coefficients
+    a_proposal ← a_current + Normal(0, Σ_prop)
+
+    # Evaluate posterior
+    p_proposal ← LogPosterior(a_proposal)
+
+    # Acceptance probability
+    α ← min(1, exp(p_proposal - p_current))
+
+    if Uniform(0,1) < α
+        a_current ← a_proposal
+        p_current  ← p_proposal
+    end if
+
+    a_samples[s] ← a_current
+end for
+
+for m = 1 .. M
+    R_vals ← [ Reflectance(a_samples[s])[m]  for s = 1 .. N_samp ]
+    R_mean[m] ← mean(R_vals)
+    R_err[m]  ← percentile(R_vals, 84) - percentile(R_vals, 16)  # 68 % CI
+end for
+
+return a_samples, R_mean, R_err

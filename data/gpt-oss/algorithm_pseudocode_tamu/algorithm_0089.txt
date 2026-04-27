@@ -1,0 +1,116 @@
+Inputs
+-------
+S_raw[1…N]        : High‑resolution reflectance spectra (vectors of length L_spec)
+F[1…M]            : Instrument filter throughput curves (vectors of length L_spec)
+K                 : Number of principal components to retain
+h_KDE             : Bandwidth for kernel density estimation
+Nsynth            : Number of synthetic latent samples to generate
+σ_noise           : Relative photometric noise level (e.g., 0.20 for 20 %)
+class_labels[1…N] : Taxonomic label for each training spectrum (optional)
+
+Outputs
+-------
+For a new photometric measurement m_obs[1…M]:
+    1. Ensemble of reconstructed spectra {S_recon[t]} (t = 1…Npost)
+    2. Empirical credible intervals for each wavelength bin
+    3. Posterior class probability vector p_class
+
+pseudo
+// 1.1 Pre‑processing
+for i = 1 … N
+    S_norm[i] ← normalise(S_raw[i])          // e.g., divide by mean or solar spectrum
+end for
+
+// 1.2 Principal Component Analysis (PCA)
+[μ_S , V, Λ] ← PCA(S_norm, components = K)   // μ_S ∈ ℝ^{L_spec}, V ∈ ℝ^{L_spec×K}
+for i = 1 … N
+    L[i] ← Vᵀ · (S_norm[i] – μ_S)           // latent vector (K‑dimensional)
+end for
+
+// 1.3 Kernel Density Estimation (KDE) in latent space
+KDE_model ← fitGaussianKDE(L, bandwidth = h_KDE)
+
+// 1.4 Synthetic latent sample generation
+for s = 1 … Nsynth
+    l_s  ← sample(KDE_model)                // l_s ∈ ℝ^K
+    L_samp[s] ← l_s
+    S_samp[s] ← μ_S + V · l_s              // inverse PCA → synthetic spectrum
+end for
+
+// 1.5 Forward modelling of photometry
+for s = 1 … Nsynth
+    // Convolve synthetic spectrum with each filter curve
+    for j = 1 … M
+        m_true[j] ← integral(S_samp[s] · F[j]) / integral(F[j])
+    end for
+    // Inject Gaussian noise
+    for j = 1 … M
+        m_noisy[j] ← m_true[j] + Normal(0, σ_noise * m_true[j])
+    end for
+    Photometry[s] ← m_noisy                    // vector of length M
+    Latent_target[s] ← L_samp[s]              // vector of length K
+end for
+
+// 1.6 Train AutoML regressor (Encoder)
+//    Predict latent vector from noisy photometry
+R ← AutoMLRegressor()
+R.train(input = Photometry[1…Nsynth], target = Latent_target[1…Nsynth])
+
+// 1.7 Train AutoML classifier (Taxonomy) – optional
+if class_labels provided then
+    C ← AutoMLClassifier()
+    C.train(input = Latent_target[1…Nsynth], target = class_labels[1…N])
+end if
+
+pseudo
+Input: Observed photometry m_obs[1…M] with uncertainty σ_obs[1…M]
+
+// 2.1 Predict latent posterior distribution
+//    The regressor outputs either (a) point estimates + covariance,
+//    or (b) an ensemble of predictions. Here we assume it returns
+//    mean μ_L and covariance Σ_L (K×K).
+[μ_L , Σ_L] ← R.predict_distribution(m_obs)
+
+// 2.2 Build Gaussian Copula for latent posterior
+corr_matrix ← Σ_L / sqrt(diag(Σ_L) * diag(Σ_L)ᵀ)     // correlation matrix
+// Draw Npost samples from multivariate normal with corr_matrix
+samples_l ← drawMultivariateNormal(mean = μ_L,
+                                   covariance = Σ_L,
+                                   size = Npost)
+
+// 2.3 Decode each latent sample to full spectrum
+for t = 1 … Npost
+    S_recon[t] ← μ_S + V · samples_l[t]
+end for
+
+// 2.4 Compute empirical credible intervals
+for λ = 1 … L_spec
+    values ← [S_recon[t][λ] for t = 1 … Npost]
+    lower[λ] ← percentile(values, 2.5)
+    median[λ] ← percentile(values, 50)
+    upper[λ] ← percentile(values, 97.5)
+end for
+
+// 2.5 Taxonomic probability (if classifier trained)
+if C exists then
+    probs ← zeros(num_classes)
+    for t = 1 … Npost
+        p_t ← C.predict_proba(samples_l[t])      // vector over classes
+        probs ← probs + p_t
+    end for
+    p_class ← probs / Npost
+else
+    p_class ← None
+end if
+
+Output:
+    • Mean reconstructed spectrum: μ_S + V · μ_L
+    • Credible interval envelope: (lower, upper)
+    • Posterior class probabilities: p_class
+
+pseudo
+// 3.1 Spectral diagnostics
+for each diagnostic (e.g., spectral slope, band depth)
+    compute diagnostic from every S_recon[t]
+    derive mean and credible interval of diagnostic
+end for

@@ -1,0 +1,112 @@
+Input:
+    - Reference high‑resolution near‑IR spectra of N_TNO objects
+      (wavelength grid λ_i, reflectance R_i)
+    - Instrument/filter throughput curves {T_k(λ)} for k = 1 … K_filt
+    - Photometric measurements of a new target: magnitudes m_j
+      (or reflectances r_j) with associated uncertainties σ_j
+
+Parameters:
+    - Number of principal components K_pc (default 5–10)
+    - KDE bandwidth h (default 0.5)
+    - Noise level for forward‑model simulations η (default 0.20)
+    - Number of synthetic latent draws M_synth (e.g., 5000)
+
+Output:
+    - Mean reconstructed spectrum Ŝ(λ)
+    - Credible interval envelope [S_low(λ), S_high(λ)]
+    - Taxonomic class probabilities P(class | m_j)
+
+--------------------------------------------------------------------
+1. PRE‑PROCESSING OF TRAINING SPECTRA
+   ----------------------------------------------------------------
+   1.1   Align all spectra to a common wavelength grid λ_grid.
+   1.2   Normalise each spectrum (e.g., divide by median reflectance).
+   1.3   Stack spectra into matrix X (size N_TNO × L_wvl).
+
+2. PRINCIPAL COMPONENT ANALYSIS (Latent Manifold Construction)
+   ----------------------------------------------------------------
+   2.1   Perform PCA on X → obtain mean vector μ_X,
+          orthonormal eigenvectors E (L_wvl × K_pc),
+          and eigenvalues Λ.
+   2.2   Project each spectrum onto PCs:
+          z_n = Eᵀ · (x_n – μ_X)   for n = 1 … N_TNO
+          Store latent coefficient matrix Z (N_TNO × K_pc).
+
+3. PRIOR ESTIMATION IN LATENT SPACE
+   ----------------------------------------------------------------
+   3.1   Estimate probability density p(z) via multivariate KDE:
+          p(z) ≈ Σ_{n=1}^{N_TNO} 𝒩(z | z_n, h² I_Kpc)
+   3.2   Sample M_synth latent vectors {z*}_m ~ p(z):
+          Use random‑seeded draws from KDE (e.g., via bootstrap
+          or Gaussian mixture approximation).
+
+4. SYNTHETIC SPECTRA FROM SAMPLE LATENT VECTORS
+   ----------------------------------------------------------------
+   4.1   For each sampled latent vector z*:
+          • Reconstruct spectrum:
+                s* = μ_X + E · z*
+          • Store s*.
+
+5. FORWARD MODELING TO PHOTOMETRY
+   ----------------------------------------------------------------
+   5.1   For each synthetic spectrum s*:
+          • Convolve with each filter throughput:
+                f*_k = ∫ s*(λ) · T_k(λ) dλ  /  ∫ T_k(λ) dλ
+          • Convert to magnitudes or reflectances:
+                r*_k = f*_k   (or m*_k = −2.5 log₁₀(f*_k) + const)
+          • Add Gaussian noise:
+                r_noisy_k = r*_k + 𝒩(0, (η·r*_k)²)
+          • Record (photometry vector r_noisy, latent vector z*).
+
+6. TRAINING THE ENCODER (Photometry → Latent)
+   ----------------------------------------------------------------
+   6.1   Assemble training set:
+          Inputs: noisy photometry vectors {r_noisy}
+          Targets: corresponding latent vectors {z*}
+   6.2   Select AutoML regression framework (e.g., Gradient‑Boosted
+          Decision Trees, Neural Networks, ensembles).
+   6.3   Fit regressor to predict posterior over latent coefficients
+          given photometry (e.g., output mean and variance per PC).
+   6.4   Validate regression performance on held‑out synthetic pairs
+          (optional internal check).
+
+7. TRAINING THE CLASSIFIER (Latent → Taxonomy)
+   ----------------------------------------------------------------
+   7.1   Label each real spectrum with taxonomic class (Water, CO₂,
+          Organics‑Methanol, Organics‑Non‑Methanol).
+   7.2   Train a probabilistic classifier on Z (latent coefficients)
+          using the same AutoML toolbox.
+   7.3   Output class probability vector for any latent input.
+
+8. INFERENCE ON NEW TARGET
+   ----------------------------------------------------------------
+   8.1   Pre‑process measured photometry:
+          • Apply same normalisation (if needed).
+          • Form input vector r_meas.
+   8.2   Pass r_meas to trained encoder:
+          • Obtain posterior samples {ẑ}_i (e.g., draw 1000 samples
+            from mean ± sqrt(var) for each PC or use copula sampling).
+   8.3   For each latent sample ẑ_i:
+          • Reconstruct spectrum ŝ_i = μ_X + E · ẑ_i
+          • Store ŝ_i.
+   8.4   Compute point‑estimate spectrum:
+          Ŝ(λ) = mean_{i} ŝ_i(λ)
+   8.5   Compute credible intervals:
+          For each wavelength λ:
+              S_low(λ)  = percentile_{α/2}( {ŝ_i(λ)} )
+              S_high(λ) = percentile_{1−α/2}( {ŝ_i(λ)} )
+          (α typically = 0.05 for 95 % CI)
+   8.6   Pass the mean latent vector z̄ = mean({ẑ}_i) to the
+          classifier → obtain class probabilities P(class | m_j).
+
+9. OUTPUT AND INTERPRETATION
+   ----------------------------------------------------------------
+   9.1   Return:
+          • Reconstructed spectrum Ŝ(λ)
+          • Credible interval envelope [S_low, S_high]
+          • Taxonomic probabilities
+   9.2   (Optional) Flag outliers if posterior predictive checks
+          indicate poor fit to observed photometry.
+
+--------------------------------------------------------------------
+END ALGORITHM

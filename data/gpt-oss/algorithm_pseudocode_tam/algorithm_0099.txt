@@ -1,0 +1,114 @@
+Input:
+    - SeedSpectra  : { S_i }  i = 1 … N   (high‑resolution reflectance spectra)
+    - FilterCurves : { T_f(λ) } f = 1 … F   (instrument throughput curves)
+    - BandNames    : { B_f } 
+    - PhotometryObs: { m_obs } (vector of observed photometric reflectances)
+
+Output:
+    - SpectrumRecons: reconstructed high‑resolution spectrum
+    - TaxonProb      : probability distribution over taxonomic classes
+
+function TrainPipeline(SeedSpectra, FilterCurves, BandNames):
+
+    # 1.1 Principal Component Analysis (PCA) on seed spectra
+    [PC_eigenvecs, PC_means, PC_std] ← PCA(SeedSpectra, n_components = K)
+    # PC_means and PC_std are used for normalisation during training
+
+    # 1.2 Project seed spectra onto PCA space
+    LatentCoeffs ← (SeedSpectra - PC_means) / PC_std   # matrix shape (N, K)
+    # Each row is a coefficient vector a_i
+
+    # 1.3 Build continuous prior in latent space by KDE
+    KDE_model ← FitKDE(LatentCoeffs, bandwidth = h)   # non‑parametric density
+
+    # 1.4 Generate synthetic latent samples
+    N_syn ← M               # e.g. M = 10 000
+    LatentSamples ← Sample(KDE_model, N_syn)          # shape (M, K)
+
+    # 1.5 Decode synthetic samples back to spectra
+    SyntheticSpectra ← Decode(PC_eigenvecs, PC_means, PC_std, LatentSamples)
+    # Decode(x) = PC_means + PC_std * x * PC_eigenvecs^T
+
+    # 1.6 Forward‑model synthetic spectra to obtain photometry
+    SyntheticPhotometry ← ∅
+    for each s in SyntheticSpectra:
+        p ← ConvolveWithFilters(s, FilterCurves)     # reflectance per band
+        # inject Gaussian noise (σ = 20% of reflectance)
+        p_noisy ← p + Normal(0, 0.2 * p)
+        SyntheticPhotometry.append(p_noisy)
+    # SyntheticPhotometry is shape (M, F)
+
+    # 1.7 Train AutoML regressor (encoder) from photometry → latent coeffs
+    Regressor ← AutoMLTrain(
+                   X = SyntheticPhotometry,
+                   y = LatentSamples,
+                   task = “regression”,
+                   ensemble = True)
+
+    # 1.8 Train AutoML classifier (taxon) on latent space
+    LatentLabels ← AssignTaxonomicLabels(SeedSpectra)   # known classes
+    Classifier ← AutoMLTrain(
+                    X = LatentCoeffs,
+                    y = LatentLabels,
+                    task = “classification”,
+                    ensemble = True)
+
+    return {
+        PCA_params: {PC_eigenvecs, PC_means, PC_std},
+        Regressor: Regressor,
+        Classifier: Classifier
+    }
+
+function InferSpectrum(PhotometryObs, ModelComponents):
+
+    # 2.1 Pre‑process observed photometry
+    p_norm ← (PhotometryObs - μ_phot) / σ_phot   # optional, if regressor was trained on normalised data
+
+    # 2.2 Predict latent coefficients (posterior predictive)
+    # Regressor may return mean and uncertainty or a distribution via ensembles
+    LatentPredict ← ModelComponents.Regressor.predict(p_norm)
+    # LatentPredict can be a single vector or a set of draws
+
+    # 2.3 Optional: sample multiple draws to propagate uncertainty
+    SampledLatents ← DrawFromPredictiveDistribution(LatentPredict, n_draws = D)
+
+    # 2.4 Decode each sampled latent vector to spectrum
+    ReconSpectra ← ∅
+    for each a in SampledLatents:
+        s ← Decode(
+                ModelComponents.PCA_params.PC_eigenvecs,
+                ModelComponents.PCA_params.PC_means,
+                ModelComponents.PCA_params.PC_std,
+                a )
+        ReconSpectra.append(s)
+    # ReconSpectra is a collection of spectra (shape (D, L))
+
+    # 2.5 Aggregate spectra to obtain mean spectrum and credible intervals
+    SpectrumRecons.mean ← Mean(ReconSpectra, axis=0)
+    SpectrumRecons.lower95 ← Quantile(ReconSpectra, 0.025, axis=0)
+    SpectrumRecons.upper95 ← Quantile(ReconSpectra, 0.975, axis=0)
+
+    # 2.6 Classify taxonomic type using latent predictions
+    TaxonProbs ← ModelComponents.Classifier.predict_proba(LatentPredict)
+    # If LatentPredict is a distribution, average probs over draws
+
+    return SpectrumRecons, TaxonProbs
+
+function PCA(data, n_components):
+    # Center data, compute covariance, eigendecompose
+    # Return eigenvectors, means, stds
+
+function Decode(eigenvecs, means, stds, coeffs):
+    return means + stds * coeffs @ eigenvecs.T
+
+function ConvolveWithFilters(spectrum, FilterCurves):
+    for each filter f:
+        R_f ← ∫ spectrum(λ) * FilterCurves[f](λ) dλ  / ∫ FilterCurves[f](λ) dλ
+    return vector {R_f}
+
+function AutoMLTrain(X, y, task, ensemble):
+    # Internally builds/ensembles models (GBDT, NN, etc.)
+    # Returns fitted model object
+
+function AssignTaxonomicLabels(seed_spectra):
+    # Map each seed spectrum to its known class label

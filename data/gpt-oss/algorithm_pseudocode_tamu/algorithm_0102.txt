@@ -1,0 +1,103 @@
+INPUT:
+    - Reference spectra S_ref = {s_i(λ)}   // i = 1..N_ref (≈ 50)
+    - JWST NIRCam filter transmission curves {T_f(λ)}   // f = 1..F
+    - New object photometry m_new = {m_j}   // j = 1..J (J ≈ 2–6)
+
+PARAMETERS:
+    - K = number of principal components to retain  (e.g., 5–10)
+    - h_KDE = KDE bandwidth (≈ 0.5)
+    - σ_noise = relative photometric noise (≈ 20%)
+    - N_aug = number of synthetic latent samples to generate (≈ 5000)
+    - N_copula = number of posterior samples for reconstruction (≈ 1000)
+
+------------------------------------------------------------------
+Step 1: Build Prior (Latent Space)
+
+1.1 Concatenate all reference spectra onto matrix M_ref (N_ref × L)  
+      where L = number of wavelength bins.
+
+1.2 Standardize M_ref (zero mean, unit variance per wavelength bin).
+
+1.3 Perform PCA on M_ref → eigenvectors E (K × L) and scores C_ref (N_ref × K).
+
+1.4 Estimate probability density over latent coefficients:
+        • Use Gaussian KDE on C_ref with bandwidth h_KDE
+        • Obtain function p_latent(c)
+
+1.5 Generate synthetic latent vectors:
+        FOR n = 1 TO N_aug:
+            c_syn[n] ← sample from p_latent(c)
+        END
+
+1.6 Decode synthetic latent vectors to spectra:
+        FOR n = 1 TO N_aug:
+            s_syn[n] ← Eᵀ · c_syn[n]   // inverse PCA
+        END
+
+------------------------------------------------------------------
+Step 2: Forward Model Photometry
+
+2.1 FOR each synthetic spectrum s_syn[n]:
+        FOR each filter f:
+            m_f[n] ← ∫ s_syn[n](λ) · T_f(λ) dλ / ∫ T_f(λ) dλ
+        END
+        // m_f[n] is noiseless reflectance in filter f
+
+2.2 Inject Gaussian noise:
+        FOR each m_f[n]:
+            m_f_noisy[n] ← m_f[n] * (1 + ε),  ε ~ N(0, σ_noise²)
+        END
+
+2.3 Assemble training dataset:
+        X_train = {m_f_noisy[n]}   // (N_aug × F) matrix
+        Y_train = {c_syn[n]}       // (N_aug × K) matrix
+
+------------------------------------------------------------------
+Step 3: Train Encoder (Regressor)
+
+3.1 Use AutoML (e.g., AutoGluon) to train a regression model R:
+        Input: X_train
+        Target: Y_train
+        Output: Predict latent coefficients ŷ = R(m)
+
+------------------------------------------------------------------
+Step 4: Train Classifier (Optional)
+
+4.1 Encode reference spectra to latent space: C_ref (already computed).
+
+4.2 Train AutoML classifier C_cls on:
+        Input: C_ref
+        Labels: taxonomic class (H2O, CO2, Organic, Methanol)
+
+------------------------------------------------------------------
+Step 5: Inference on New Photometry
+
+5.1 Predict latent coefficients:
+        ŷ_new = R(m_new)              // point estimate
+        // Obtain predictive distribution if AutoML provides
+        // (e.g., by sampling from ensemble of models)
+
+5.2 Posterior Sampling via Gaussian Copula:
+        a. Compute marginal posteriors for each dimension k of ŷ_new.
+        b. Estimate correlation matrix Σ from training residuals or
+           from ensemble predictions.
+        c. Sample N_copula points z ~ N(0, Σ).
+        d. Transform z to uniform u via Φ(z) (Φ = standard normal CDF).
+        e. Apply inverse marginal CDFs to obtain latent samples c_post[n].
+
+5.3 Decode posterior samples to spectra:
+        FOR n = 1 TO N_copula:
+            s_post[n] ← Eᵀ · c_post[n]
+        END
+
+5.4 Construct reconstructed spectrum:
+        - Mean spectrum: s_mean = mean(s_post)
+        - Credible interval: compute percentiles (e.g., 2.5%, 97.5%) across s_post
+        - Optional: compute spectral slopes, absorption depths from s_mean
+
+5.5 Taxonomic classification (optional):
+        class_probs = C_cls.predict_proba(ŷ_new)
+
+OUTPUT:
+    - Reconstructed spectrum s_mean(λ) with confidence bands
+    - Taxonomic probability distribution class_probs

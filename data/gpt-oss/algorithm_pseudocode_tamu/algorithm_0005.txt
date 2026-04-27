@@ -1,0 +1,49 @@
+Input: 
+    - Reference spectra set R = {S₁,…,S_N}   // N ≈ 50 high‑resolution TNO spectra
+    - Filter set F = {F₁,…,F_M}              // JWST NIRCam or user‑specified filters
+    - Number of PCA components K             // e.g., K = 8–10
+    - KDE bandwidth h (≈0.5)
+    - Noise level σ_noise (≈20 %)             // relative reflectance uncertainty
+
+Output: 
+    - PCA basis U (size [λ × K])
+    - PCA mean μ_S (size [λ])
+    - Trained regressor Model_enc        // photometry → PCA coefficients
+    - Trained classifier Model_cls       // PCA coefficients → taxonomy
+
+for each S in R:
+    S_centered ← S – mean(S)          // remove per‑spectrum mean
+
+for each S in R:
+    α ← Uᵀ (S – μ_S)                  // K‑dimensional coefficient vector
+    store α in list A
+
+for each αⁿ:
+    S_syn ← μ_S + U αⁿ                // inverse PCA
+
+for each filter Fj:
+    m_fj = ∫ S_syn * T_fj dλ / ∫ T_fj dλ      // reflectance in Fj
+
+for each m_fj:
+    m_fj_noisy = m_fj * (1 + Normal(0, σ_noise))
+
+Model_enc = AutoML.fit(X = m_noisy, y = αⁿ, task='regression')
+
+Model_cls = AutoML.fit(X = α, y = taxonomy_labels, task='classification')
+
+Input: New photometry vector m_new = {m₁,…,m_M} with uncertainties σ_m
+Output:
+    - Posterior samples of latent coefficients {α^(s)}
+    - Reconstructed spectra {S^(s)}
+    - Taxonomy probability vector P_tax
+
+α_mean, α_cov = Model_enc.predict_with_uncertainty(m_new)
+
+for s in 1..N_samples:
+    z ← Sample multivariate normal(0, Σ)
+    u ← Φ(z)                        // Φ: standard normal CDF
+    α_sample(s) ← Inverse_CDF_KDE(u) // map uniform to KDE‑based marginal
+
+S_sample(s) = μ_S + U * α_sample(s)
+
+P_tax = Model_cls.predict_proba(α_mean)

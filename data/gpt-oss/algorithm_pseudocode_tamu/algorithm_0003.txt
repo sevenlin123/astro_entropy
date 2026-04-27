@@ -1,0 +1,78 @@
+INPUT: Reference spectral dataset {S_i} (i = 1 … N_ref)
+OUTPUT: PCA basis V_k (k = 1 … K), mean spectrum μ_S
+        Kernel Density Estimate (KDE) model p(z) over latent vectors z
+        (z_k = projection of S_i onto V_k)
+
+1.1   Center spectra:  S'_i ← S_i – μ_S      // μ_S = mean of {S_i}
+1.2   Perform PCA on {S'_i} → eigenvectors V_1…V_K, eigenvalues λ_1…λ_K
+1.3   For each spectrum S_i, compute latent vector  
+          z_i = [ (S_i – μ_S) · V_1 , … , (S_i – μ_S) · V_K ]
+1.4   Fit Gaussian‑kernel KDE to {z_i} → density function p(z)
+
+INPUT: KDE model p(z), PCA basis V_k, mean μ_S
+OUTPUT: Synthetic latent vectors {z_j} (j = 1 … N_syn),
+        corresponding synthetic spectra {S_syn_j},
+        synthetic noisy photometry {m_syn_j}
+
+2.1   Draw N_syn latent samples from p(z):  z_j ~ p(z)
+2.2   For each z_j:
+       2.2.1  Reconstruct high‑resolution spectrum  
+              S_syn_j = μ_S + Σ_{k=1..K} z_j[k] * V_k
+       2.2.2  Forward‑model photometry:
+              For each filter f in instrument set:
+                  m_syn_j[f] = ∫ S_syn_j(λ) * T_f(λ) dλ
+              // T_f(λ) = throughput of filter f
+       2.2.3  Add Gaussian noise to each band:
+              m_syn_j[f] ← m_syn_j[f] * (1 + ε_f),
+              ε_f ~ Normal(0, σ_rel)   // σ_rel ≈ 0.20
+
+INPUT: Synthetic training pairs {(m_syn_j, z_j)}
+OUTPUT: Trained regressor R:  m → ẑ  (mean latent vector)
+        (optionally, regression of each latent dimension separately)
+
+3.1   Split synthetic set into training/validation (optional)
+3.2   Use AutoML (e.g., AutoGluon) to search over models:
+        - Gradient‑Boosted Trees
+        - Neural Networks
+        - Ensembles
+        to minimize MSE between predicted ẑ and true z
+3.3   Store best‑performing model R
+
+INPUT: Latent vectors {z_i} with known taxonomic labels L_i
+OUTPUT: Classifier C:  ẑ → P(L | ẑ)
+
+4.1   Train AutoML classifier on {z_i, L_i}
+4.2   Store C
+
+INPUT: Measured photometry m_obs (vector of length F)
+OUTPUT: Posterior samples of latent vector {z^*_s},
+        Reconstructed spectra {S^*_s},
+        Taxonomic probabilities P(L | m_obs)
+
+5.1   Predict mean latent vector:
+        ẑ = R(m_obs)
+
+5.2   Estimate uncertainty of each latent dimension:
+        σ_zk = √Var_k   // obtained from regressor (e.g., ensemble std dev)
+        Assemble diagonal covariance Σ_z = diag(σ_z1², … , σ_zK²)
+
+5.3   Build Gaussian Copula:
+        - Obtain marginal posterior samples for each z_k via
+          z_k ~ Normal(ẑ_k, σ_zk)
+        - Compute correlation matrix ρ from training latent set
+        - Sample joint latent vectors {z^*_s} using the copula
+          (ensures physical correlations preserved)
+
+5.4   For each sampled latent vector z^*_s:
+        5.4.1  Reconstruct spectrum:
+               S^*_s = μ_S + Σ_{k=1..K} z^*_s[k] * V_k
+        5.4.2  Store S^*_s
+
+5.5   Taxonomic prediction:
+        P(L | m_obs) = C(ẑ)   // or average C over {z^*_s}
+
+6.1   Compute summary statistics of reconstructed spectra:
+        - Mean spectrum = average of {S^*_s}
+        - Credible intervals per wavelength = percentile bounds
+6.2   Derive spectral diagnostics (slope, absorption depth)
+        using the mean spectrum

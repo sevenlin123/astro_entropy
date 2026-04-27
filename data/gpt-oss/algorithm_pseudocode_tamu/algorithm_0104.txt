@@ -1,0 +1,120 @@
+INPUT:
+    m_obs          : vector of measured reflectances in N_filter photometric bands
+    σ_m_obs        : corresponding 1‑σ uncertainties (optional)
+    R_filter[j](λ) : effective throughput curve of filter j (j = 1…N_filter)
+    S_ref          : set of H_ref spectral samples (high‑resolution)  [M λ‑bins]
+    L              : list of taxonomic labels for S_ref (used only for training)
+
+OUTPUT:
+    S_mean(λ)      : posterior‑mean reconstructed spectrum
+    CredInt(λ)     : empirical 68 % credible interval at each λ
+    P_taxonomy     : probability distribution over taxonomic classes
+    (Optional)     : ensemble {S_k(λ)} of N_samples reconstructions
+
+--------------------------------------------------------------------
+STEP 0 – GLOBAL CONSTANTS
+--------------------------------------------------------------------
+    K          := number of retained principal components (≈ 5–10)
+    h_KDE      := KDE bandwidth (≈ 0.5)
+    N_synth    := number of synthetic latent samples (≈ 10⁵)
+    N_post     := number of posterior samples for inference (≈ 10³)
+    σ_noise    := 0.20   # relative reflectance noise for forward modeling
+
+--------------------------------------------------------------------
+STEP 1 – BUILD PRIOR IN LATENT SPACE
+--------------------------------------------------------------------
+
+1.1  Center spectra:
+        μ_S  ← mean(S_ref)            # vector length M
+        S_centered ← S_ref – μ_S
+
+1.2  Principal Component Analysis:
+        V, Λ ← eigen-decompose(cov(S_centered))   # V: M×K orthonormal matrix
+        # Keep first K columns of V, eigenvalues in Λ
+
+1.3  Project training spectra onto latent axes:
+        C_real ← Vᵀ · (S_ref – μ_S)          # K×N_ref matrix
+
+1.4  Estimate continuous density by KDE:
+        KDE_model ← fit_KDE(C_real, bandwidth = h_KDE)  # Gaussian kernel
+        C_synth ← KDE_model.sample(N_synth)            # K×N_synth matrix
+
+1.5  Generate synthetic spectra from latent samples:
+        S_synth ← μ_S + V · C_synth                     # M×N_synth matrix
+
+--------------------------------------------------------------------
+STEP 2 – SIMULATE PHOTOMETRY (IMPLICIT LIKELIHOOD)
+--------------------------------------------------------------------
+
+2.1  Convolve each synthetic spectrum with filter responses:
+        For each synthetic spectrum s in S_synth:
+            For each filter j:
+                m_j = ∫ s(λ) * R_filter[j](λ) dλ / ∫ R_filter[j](λ) dλ
+            Store m_synth ← (m_1 … m_N_filter)
+
+2.2  Inject Gaussian noise:
+        For each element m_j in m_synth:
+            σ_j ← σ_noise * m_j
+            m_noisy_j ← draw_normal(mean=m_j, std=σ_j)
+
+2.3  Assemble training set:
+        X_train ← {m_noisy_synth}          # N_synth × N_filter
+        Y_train ← {C_synth}                # N_synth × K
+
+--------------------------------------------------------------------
+STEP 3 – TRAIN ENCODER AND CLASSIFIER
+--------------------------------------------------------------------
+
+3.1  Encoder (photometry → latent coefficients):
+        encoder ← AutoMLRegressor()       # e.g. ensemble of GBDT & NN
+        encoder.train(X_train, Y_train)   # minimizes MSE or quantile loss
+
+3.2  Latent‑space taxonomic classifier:
+        # Labels are attached to each synthetic sample via nearest real
+        # spectrum in latent space (or via label propagation)
+        y_class ← assign_labels_from_real(C_synth, L)
+        classifier ← AutoMLClassifier()
+        classifier.train(Y_train, y_class)
+
+--------------------------------------------------------------------
+STEP 4 – INFERENCE FOR NEW OBJECT
+--------------------------------------------------------------------
+
+4.1  (Optional) Account for measurement uncertainty:
+        If σ_m_obs provided:
+            Draw N_draws noisy photometry sets:
+                m_draw[n] ← draw_normal(mean=m_obs, std=σ_m_obs)
+        Else:
+            m_draw ← [m_obs]
+
+4.2  Predict latent mean and uncertainty:
+        For each m in m_draw:
+            μ_c   ← encoder.predict_mean(m)      # vector length K
+            Σ_c   ← encoder.predict_covariance(m)  # K×K (if available)
+            # If covariance not provided, assume diagonal with var from
+            # regressor variance or use bootstrapping.
+
+4.3  Posterior sampling via Gaussian copula:
+        Define marginal distributions for each component i:
+            dist_i ~ Normal(μ_c[i], sqrt(Σ_c[i,i]))
+        Construct correlation matrix ρ from Σ_c (normalized)
+        For k = 1 … N_post:
+            u_k ← sample_multivariate_normal(mean=0, cov=ρ)   # K‑dim
+            z_k ← Φ⁻¹(u_k)                                     # inverse CDF
+            c_k ← μ_c + diag(√Σ_c) * z_k                       # K‑dim latent sample
+            store c_k
+
+4.4  Reconstruct spectra from latent samples:
+        For each c_k:
+            S_k ← μ_S + V · c_k
+        Aggregate:
+            S_mean ← mean_k(S_k)
+            CredInt_lower ← percentile_k(S_k, 16)
+            CredInt_upper ← percentile_k(S_k, 84)
+
+4.5  Taxonomy probabilities:
+        P_taxonomy ← classifier.predict_proba(μ_c)
+
+--------------------------------------------------------------------
+RETURN:
+    S_mean(λ), CredInt(λ), P_taxonomy, (optionally) {S_k(λ)}

@@ -1,0 +1,114 @@
+text
+# ----------------------------------------------------------
+# INPUTS
+# ----------------------------------------------------------
+# 1. Photometric catalog
+#    For each object i = 1 … Nobj
+#       m_obs[i][k]      : observed magnitude in band k
+#       sigma[i][k]      : measurement error in band k
+#    K = number of distinct filters
+#
+# 2. Filter response curves
+#    R[k][λ]          : normalized throughput for filter k (discretised in λ)
+#
+# 3. Spectral basis
+#    φ[j][λ]          : j = 1 … J basis functions (e.g. 4 polynomial terms)
+#
+# 4. Hyper‑prior settings
+#    τ²               : variance for population mean μ
+#    ν, Ψ             : degrees‑of‑freedom and scale matrix for inverse‑Wishart on Σ
+#
+# 5. MCMC control
+#    Nburn, Nsave, Nstep   : burn‑in, saving frequency, total iterations
+
+# ----------------------------------------------------------
+# OUTPUTS
+# ----------------------------------------------------------
+# Posterior samples of:
+#   • Coefficients a_i[j] for each object i (reflectance spectrum)
+#   • Population mean μ[j]
+#   • Population covariance Σ[j][j′]
+
+# ----------------------------------------------------------
+# PRECOMPUTATIONS
+# ----------------------------------------------------------
+FOR each filter k = 1 … K:
+    FOR each basis j = 1 … J:
+        # Pre‑integrate basis × filter → synthetic flux matrix
+        F[k][j] = ∫ φ[j][λ] * R[k][λ] dλ         # numeric integration
+    END
+END
+
+# Normalise each filter to obtain effective zero‑point offsets if needed
+# (not shown – assume already accounted for in R[k])
+
+# ----------------------------------------------------------
+# INITIALISATION
+# ----------------------------------------------------------
+Set μ  ← vector of zeros (length J)
+Set Σ  ← identity matrix of size J×J
+FOR each object i:
+    Initialise a_i ← small random vector (e.g. Gaussian(0, 0.1))
+END
+
+# ----------------------------------------------------------
+# MAIN MCMC LOOP
+# ----------------------------------------------------------
+FOR t = 1 TO Nstep:
+    
+    # --- Sample individual spectra (coefficients) ----------
+    FOR each object i = 1 … Nobj:
+        
+        # Construct design matrix for object i
+        #   X_i[k,j] = F[k][j]   (same for all objects)
+        # Compute linear predictor for magnitudes:
+        #   m_pred[i][k] = -2.5 * log10( X_i * a_i )  [simplified form]
+        
+        # Use Metropolis‑Hastings (or HMC) to draw a new a_i* from
+        #   p(a_i | μ, Σ, data_i) ∝ exp{ -½ (a_i-μ)^T Σ⁻¹ (a_i-μ) }
+        #                           * ∏_k N( m_obs[i][k] | m_pred[i][k], σ[i][k]^2 )
+        # Proposal: Gaussian centered at current a_i with small covariance
+        proposal_a ← a_i + Normal(0, ε² I)   # ε tuned for acceptance ~30%
+        
+        # Compute likelihoods
+        L_current ← ∏_k NormalPDF( m_obs[i][k]; m_pred(i,a_i), σ[i][k] )
+        L_proposed← ∏_k NormalPDF( m_obs[i][k]; m_pred(i,proposal_a), σ[i][k] )
+        
+        # Compute prior densities (Gaussian)
+        P_current ← GaussianPDF( a_i; μ, Σ )
+        P_proposed← GaussianPDF( proposal_a; μ, Σ )
+        
+        # Acceptance ratio
+        α ← min(1, (L_proposed * P_proposed) / (L_current * P_current) )
+        IF Uniform(0,1) < α:
+            a_i ← proposal_a
+        END
+    END
+    
+    # --- Update population hyper‑parameters analytically --------------------
+    
+    # Update μ given all a_i and current Σ
+    #   μ | {a_i}, Σ  ~ N( μ̂ , (n/Σ + 1/τ² I)⁻¹ )
+    n ← Nobj
+    Σ_inv ← inv(Σ)
+    μ_mean ← Σ_inv * Σ * ( Σ_inv * sum_over_i(a_i) ) / (n + τ² * Σ_inv)
+    # (exact algebra omitted – standard conjugate update)
+    μ ← μ_mean
+    
+    # Update Σ given all a_i and μ
+    #   Σ | {a_i}, μ  ~ InvWishart( ν + n,  Ψ + S )
+    # where S = Σ_i (a_i - μ)(a_i - μ)^T
+    S ← zeros(J,J)
+    FOR each i:
+        diff ← a_i - μ
+        S ← S + diff * diffᵀ
+    END
+    Σ_shape ← ν + n
+    Σ_scale ← Ψ + S
+    Σ ← InverseWishartSample( Σ_shape, Σ_scale )
+    
+    # --- Record samples after burn‑in ---------------------------------------
+    IF t > Nburn AND (t - Nburn) mod Nsave == 0:
+        STORE current a_i, μ, Σ into output chains
+    END
+END

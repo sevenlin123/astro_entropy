@@ -1,0 +1,86 @@
+Input:
+    - Reference spectra set R = {S_i, i=1..N_ref}  // high‑resolution reflectance vectors
+    - Filter transmission curves F_j(λ), j = 1..N_filter
+    - New sparse photometry vector m_new = {m_k, k=1..N_phot}
+    - Desired number of latent dimensions K_latent (e.g. 5–10)
+
+Output:
+    - Posterior samples of latent coefficients {z_t, t=1..T}
+    - Reconstructed spectrum samples {Ŝ_t, t=1..T}
+    - Taxonomy probability vector p_tax
+
+--------------------------------------------------------------------
+1.  TRAINING PHASE
+--------------------------------------------------------------------
+
+1.1  Principal Component Analysis (PCA)
+    • Compute mean spectrum μ_S = (1/N_ref) Σ_i S_i
+    • Center spectra: S'_i = S_i – μ_S
+    • Form data matrix X = [S'_1, S'_2, …, S'_N_ref]
+    • Perform eigendecomposition of covariance(X):
+          C = X Xᵀ / (N_ref-1) → eigenvectors V = [v_1,…,v_N_spec]
+          eigenvalues λ = [λ_1,…,λ_N_spec]
+    • Select top K_latent eigenvectors: V_K = [v_1,…,v_K_latent]
+    • Project spectra into latent space:
+          z_i = V_Kᵀ · S'_i   // z_i ∈ ℝ^{K_latent}
+
+1.2  Latent Density Augmentation (KDE)
+    • Fit multivariate kernel density estimator to {z_i}
+          KDE(z) ← kernel(z; bandwidth h)
+    • Sample M_aug synthetic latent vectors:
+          z̃_j ~ KDE(z) ,  j = 1..M_aug
+    • For each z̃_j:
+          a. Reconstruct synthetic spectrum:
+                S̃_j = μ_S + V_K · z̃_j
+          b. Convolve with each filter F_j to obtain synthetic photometry:
+                m_syn_jk = ∫ S̃_j(λ) · F_k(λ) dλ / ∫ F_k(λ) dλ
+          c. Add Gaussian noise:
+                m_noisy_jk = m_syn_jk + N(0, σ_rel·m_syn_jk)   // σ_rel ≈ 0.2
+    • Collect training pairs:
+          X_train = {m_noisy_j} , Y_train = {z̃_j}
+
+1.3  Encoder Training (AutoML Regressor)
+    • Feed (X_train, Y_train) to AutoML framework (e.g., AutoGluon)
+    • AutoML selects best ensemble of regression models (e.g., GBDT, NN)
+    • Output trained encoder E: ℝ^{N_phot} → ℝ^{K_latent}
+
+1.4  Classifier Training (Optional)
+    • Label each reference spectrum z_i with taxonomy class C_i
+    • Train a classifier on {z_i, C_i} using the same AutoML engine
+    • Output classifier C: ℝ^{K_latent} → Probabilities over classes
+
+--------------------------------------------------------------------
+2.  INFERENCE PHASE
+--------------------------------------------------------------------
+
+2.1  Obtain Latent Posterior Samples
+    • Input photometry: m_new
+    • Pass through encoder:
+          ẑ_mean = E(m_new)      // point estimate
+    • Estimate encoder predictive variance (if available) or
+      bootstrap: repeat 2.1 with perturbed photometry
+          For t = 1..T:
+              Sample perturbation δ_t ~ N(0, σ_rel·m_new)
+              m_t = m_new + δ_t
+              z_t = E(m_t)
+          Store {z_t}
+
+2.2  Decode to Spectrum
+    • For each latent sample z_t:
+          Ŝ_t = μ_S + V_K · z_t
+
+2.3  Taxonomy Probabilities
+    • If classifier C exists:
+          p_tax = C(ẑ_mean)     // or average over {z_t}
+    • Else:
+          p_tax = uniform over classes
+
+--------------------------------------------------------------------
+3.  OUTPUT
+--------------------------------------------------------------------
+
+Return:
+    - Set of reconstructed spectra {Ŝ_t} (posterior distribution)
+    - Posterior mean spectrum: S̄ = (1/T) Σ_t Ŝ_t
+    - Posterior standard deviation per wavelength: σ_S(λ) = sqrt( (1/(T-1)) Σ_t (Ŝ_t(λ)-S̄(λ))^2 )
+    - Taxonomy probability vector p_tax

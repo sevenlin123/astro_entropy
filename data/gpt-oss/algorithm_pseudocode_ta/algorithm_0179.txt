@@ -1,0 +1,138 @@
+pseudocode
+# ------------------------------------------------------------------
+# 1. Training Phase – Build Principal‑Component Latent Space
+# ------------------------------------------------------------------
+
+INPUT: 
+    S = {s_1, s_2, …, s_N}   # N observed near‑IR spectra
+        each s_i = [λ_j, f_ij]  (flux at discrete wavelengths λ_j, j=1…M)
+
+STEP 1: Preprocess spectra
+    • Interpolate all spectra onto a common wavelength grid {λ_j}
+    • Normalize each spectrum (e.g., divide by mean flux or magnitude)
+    • Store matrix F ∈ ℝ^(N×M) where row i contains spectrum s_i
+
+STEP 2: Compute mean spectrum μ_s = (1/N) Σ_i F[i,:]
+    • Center data:  C = F - μ_s (broadcasted over rows)
+
+STEP 3: Compute covariance matrix Σ = (1/(N−1)) * Cᵀ * C
+
+STEP 4: Eigen‑decompose Σ
+    • Solve Σ v_k = λ_k v_k  for k=1…M
+    • Sort eigenvalues λ_k descending; keep first K_pc components  
+      (K_pc chosen per application, e.g., 5 for taxonomy, 8–10 for full reconstruction)
+
+STEP 5: Construct projection matrix W ∈ ℝ^(M×K_pc)
+    • Columns are eigenvectors v_1…v_Kpc
+    • Store also the inverse mapping: W⁺ = Wᵀ (if orthonormal)
+
+OUTPUT: 
+    • μ_s, W (principal components), K_pc
+    • Basis spectra B_k = μ_s + W[:,k]   (for later inspection)
+
+pseudocode
+# ------------------------------------------------------------------
+# 2. Forward Photometric Model – From Latent Coefficients to Observables
+# ------------------------------------------------------------------
+
+INPUT:
+    • Filters set 𝔽 = {f_1, f_2, …, f_F}
+    • For each filter f_p: transmission curve T_p(λ)
+    • Latent coefficient vector a ∈ ℝ^K_pc  (unknown)
+    • Reconstruction of spectrum: 
+          f̂(λ | a) = μ_s(λ) + Σ_{k=1}^{K_pc} a_k * W[λ,k]
+
+FOR each filter f_p:
+    1. Compute synthetic flux:
+           F̃_p(a) = ∫ f̂(λ | a) * T_p(λ) dλ / ∫ T_p(λ) dλ
+       (or discrete sum over wavelength grid)
+
+OUTPUT:  F̃(a) = [F̃_1(a), …, F̃_F(a)]   # Predicted photometry for coefficient vector a
+
+pseudocode
+# ------------------------------------------------------------------
+# 3. Bayesian Inference – Posterior over Latent Coefficients
+# ------------------------------------------------------------------
+
+INPUT:
+    • Observed photometry y = [y_1, …, y_F]   (fluxes or magnitudes)
+    • Measurement uncertainties σ = [σ_1, …, σ_F]
+    • Prior on a:  a ~ Normal(0, Λ_prior) where Λ_prior = diag(σ_a^2)
+         (σ_a derived from distribution of latent coeffs in training set)
+
+LIKELIHOOD:
+    L(a) = Π_{p=1}^F  Normal(y_p | F̃_p(a), σ_p^2)
+
+POSTERIOR:
+    p(a | y) ∝ L(a) * Normal(a | 0, Λ_prior)
+
+INFERENCE METHOD:
+    • Analytical solution exists if forward model linear in a and errors Gaussian.
+      Then posterior mean and covariance can be obtained from linear regression formulas.
+    • Otherwise, sample from posterior using e.g., Hamiltonian Monte Carlo (HMC):
+        - Initialize a₀ = 0
+        - For t = 1 … N_iter:
+              propose a' via HMC step
+              accept/reject with Metropolis criterion
+        - Collect posterior samples {a^(t)}
+
+OUTPUT:
+    • Posterior samples {a^(t)}  (t=1..N_samples)
+    • Posterior mean  ā = (1/N_samples) Σ_t a^(t)
+    • Posterior covariance Σ_a = (1/(N_samples−1)) Σ_t (a^(t)−ā)(a^(t)−ā)ᵀ
+
+pseudocode
+# ------------------------------------------------------------------
+# 4. Spectrum Reconstruction – Forward Transform to Flux Domain
+# ------------------------------------------------------------------
+
+FOR each posterior sample a^(t):
+    1. Reconstruct spectrum:
+           f̂^(t)(λ) = μ_s(λ) + Σ_{k=1}^{K_pc} a_k^(t) * W[λ,k]
+    2. Store f̂^(t)(λ)
+
+COMPUTE:
+    • Point estimate:  f̄(λ) = (1/N_samples) Σ_t f̂^(t)(λ)
+    • Credible interval width at each λ:
+           CI_low(λ) = quantile_{α/2} { f̂^(t)(λ) }
+           CI_high(λ) = quantile_{1−α/2} { f̂^(t)(λ) }
+        (e.g., α=0.05 for 95 % interval)
+
+OUTPUT:
+    • Reconstructed spectrum f̄(λ)  (mean or MAP)
+    • Uncertainty envelope [CI_low, CI_high]
+
+pseudocode
+# ------------------------------------------------------------------
+# 5. Optional: Outlier / Rare‑Type Identification
+# ------------------------------------------------------------------
+
+INPUT:
+    • Posterior predictive distribution of photometry: p(y_pred | a)
+    • Observed photometry y_obs
+
+STEP:
+    • Compute likelihood ratio λ = L(y_obs | ā) / max_{a} L(y_obs | a)
+    • If λ < threshold (e.g., 0.01), flag as candidate outlier
+    • Optionally, adjust prior to allow low‑probability regions:
+          • Define extended prior density that places mass on rare latent vectors
+          • Re‑run inference for flagged objects
+
+OUTPUT:
+    • Flag indicating outlier status
+    • If flagged, provide specialized reconstructed spectrum
+
+pseudocode
+# ------------------------------------------------------------------
+# 6. Complete Pipeline Workflow
+# ------------------------------------------------------------------
+
+1. Train PCA model on high‑resolution spectra → obtain μ_s, W, K_pc.
+2. For each new TNO with sparse photometry:
+     a. Build forward photometric model F̃(a).
+     b. Specify Gaussian prior on a (from training set statistics).
+     c. Run Bayesian inference to obtain posterior samples of a.
+     d. Reconstruct spectrum from posterior samples → mean spectrum & credible band.
+     e. (Optional) Check for outlier status and refine if necessary.
+3. Store reconstructed spectra and uncertainties for downstream taxonomy,
+   survey‑optimization, or cataloging tasks.

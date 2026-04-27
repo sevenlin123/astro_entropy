@@ -1,0 +1,113 @@
+INPUT:
+    - Seed spectra S_seed[1..N]   # flux or reflectance vectors sampled on a common wavelength grid λ[1..L]
+    - Filter throughputs T_f[1..F][1..L]  # transmission curves for each photometric band
+    - Optional: observed photometry m_obs[1..F]  (with known uncertainties σ_m[1..F])
+    - Hyper‑parameters:
+        K            # number of principal components to retain
+        h_kde        # bandwidth for kernel density estimation
+        N_synth      # number of synthetic latent samples to generate
+        N_post       # number of posterior draws during inference
+
+OUTPUT:
+    - Ensemble of reconstructed spectra {S_recon[n]}_{n=1..N_post}
+    - Mean spectrum Ȳ_S[1..L]  and 95% credible intervals CI_95[1..L]
+    - Taxonomy probability vector P_tax[1..C]  (optional)
+
+--------------------------------------------------------------------
+STEP 0: PREPROCESS SEED SPECTRA
+--------------------------------------------------------------------
+FOR each i in 1..N:
+    S_seed[i] ← interpolate_to_common_grid(S_seed[i], λ)
+    S_seed[i] ← normalize_to_reflectance(S_seed[i])   # divide by solar spectrum if needed
+END FOR
+
+--------------------------------------------------------------------
+STEP 1: PRINCIPAL COMPONENT ANALYSIS (PCA)
+--------------------------------------------------------------------
+μ_S   ← mean_vector_over_i(S_seed[i])                # mean spectrum (length L)
+S_centered[i] ← S_seed[i] – μ_S                      # centered spectra
+
+[PC, Λ] ← eigendecompose(covariance_matrix(S_centered))   # PC: L×L matrix, Λ: eigenvalues
+PC_K   ← first K columns of PC                            # L×K matrix of leading PCs
+
+FOR each i in 1..N:
+    z_real[i] ← PC_Kᵀ · S_centered[i]                    # K‑dimensional latent coefficients
+END FOR
+
+--------------------------------------------------------------------
+STEP 2: KERNEL DENSITY ESTIMATION (KDE) IN LATENT SPACE
+--------------------------------------------------------------------
+# Fit a Gaussian kernel density to the set {z_real[i]}
+kde_model ← fit_gaussian_kde({z_real[i]}, bandwidth = h_kde)
+
+--------------------------------------------------------------------
+STEP 3: SYNTHETIC SPECTRA AND PHOTOMETRY GENERATION
+--------------------------------------------------------------------
+# Draw N_synth synthetic latent vectors from the KDE
+FOR n in 1..N_synth:
+    z_syn[n] ← sample_from(kde_model)                    # K‑dimensional vector
+
+    # Reconstruct synthetic spectrum on the full grid
+    S_syn[n] ← μ_S + PC_K · z_syn[n]                     # length L
+
+    # Forward‑model photometry through each filter
+    FOR f in 1..F:
+        numerator   ← Σ_λ (S_syn[n][λ] * T_f[f][λ])
+        denominator ← Σ_λ (T_f[f][λ])                       # (solar spectrum omitted for reflectance)
+        m_syn[n][f] ← numerator / denominator
+    END FOR
+
+    # Inject Gaussian noise at 20% relative level
+    FOR f in 1..F:
+        noise_sd   ← 0.20 * m_syn[n][f]
+        m_syn[n][f] ← m_syn[n][f] + Normal(0, noise_sd)
+    END FOR
+END FOR
+
+--------------------------------------------------------------------
+STEP 4: ENCODER TRAINING (PHOTOMETRY → LATENT COEFFICIENTS)
+--------------------------------------------------------------------
+# Assemble training dataset:
+#   Inputs:  {m_syn[n]}   (size N_synth × F)
+#   Targets: {z_syn[n]}   (size N_synth × K)
+
+encoder_model ← AutoML_regressor()          # e.g., ensemble of GBDTs + NN
+encoder_model.train(inputs = m_syn, targets = z_syn)
+
+--------------------------------------------------------------------
+STEP 5: CLASSIFIER TRAINING (LATENT COEFFICIENTS → TAXONOMY LABELS)
+--------------------------------------------------------------------
+# Label each real seed spectrum with its taxonomic class y[i] ∈ {1..C}
+classifier_model ← AutoML_classifier()
+classifier_model.train(inputs = z_real, targets = y)
+
+--------------------------------------------------------------------
+STEP 6: INFERRING FROM NEW OBSERVED PHOTOMETRY
+--------------------------------------------------------------------
+IF m_obs provided:
+    # Predict posterior distribution of latent coefficients
+    # 1. Point estimate
+    z_pred_mean ← encoder_model.predict(m_obs)           # K‑vector
+
+    # 2. Posterior sampling (e.g., via surrogate GP or bootstrap of ensemble)
+    FOR k in 1..N_post:
+        z_draw[k] ← sample_from_encoder_posterior(encoder_model, m_obs)  # K‑vector
+    END FOR
+
+    # Reconstruct spectra for each posterior draw
+    FOR k in 1..N_post:
+        S_draw[k] ← μ_S + PC_K · z_draw[k]               # length L
+    END FOR
+
+    # Compute statistics over the ensemble
+    Ȳ_S      ← mean_over_k(S_draw)                     # length L
+    CI_95    ← percentile_over_k(S_draw, 2.5%, 97.5%)   # per wavelength
+
+    # Taxonomy probabilities from classifier
+    P_tax    ← classifier_model.predict_prob(z_pred_mean)  # C‑vector
+
+    RETURN S_draw, Ȳ_S, CI_95, P_tax
+ELSE:
+    # No inference required; only training completed
+    RETURN null
+END IF

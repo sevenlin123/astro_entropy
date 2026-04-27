@@ -1,0 +1,92 @@
+INPUT
+    S      :  N_spec × N_wave matrix of training spectra (fluxes or reflectances)
+    filt   :  list of M filter transmission functions F_j(λ)  (j = 1…M)
+    y_obs  :  observed photometry vector {m_j}  (j = 1…M)
+    σ_obs  :  corresponding photometric uncertainties {σ_j}
+    K      :  number of principal components to retain (e.g. 8–10)
+
+OUTPUT
+    z_samples  :  posterior samples of latent coefficients (K‑dimensional)
+    S_rec      :  reconstructed spectra for each sample
+    L          :  log‑likelihood of MAP estimate (for outlier test)
+
+--------------------------------------------------------------------
+STEP 0 – Pre‑processing
+--------------------------------------------------------------------
+1.  Center training spectra:
+        μ_S ← mean(S, axis=0)                       # N_wave vector
+        S_c ← S – μ_S
+2.  Compute covariance matrix C = (S_cᵀ · S_c) / (N_spec – 1)
+3.  Eigen‑decompose C → eigenvalues λ_k and orthonormal eigenvectors U_k
+4.  Select first K eigenvectors:
+        PC_K ← U[:,0:K]                             # N_wave × K matrix
+5.  Construct basis spectra:
+        B0 ← μ_S                                   # mean spectrum
+        Bk[ℓ] ← PC_K[ℓ,:]   for ℓ = 1…N_wave       # K vectors
+
+--------------------------------------------------------------------
+STEP 1 – Forward model: filter responses in latent space
+--------------------------------------------------------------------
+6.  For each filter j:
+        r_j ← ∫ B0(λ) · F_j(λ) dλ                 # mean flux in filter j
+        for k = 1…K:
+            R[j,k] ← ∫ PC_k(λ) · F_j(λ) dλ         # PC contribution
+   Result: R  is an M × K matrix,  r_0 is an M‑vector
+
+   The photometric prediction for latent vector z is:
+        m_pred(z) = r_0 + R · z                      (M‑vector)
+
+--------------------------------------------------------------------
+STEP 2 – Bayesian inference for latent coefficients
+--------------------------------------------------------------------
+7.  Define likelihood:
+        L(z) = Π_{j=1..M}  N( m_obs[j] | m_pred(z)[j], σ_obs[j] )
+        lnL(z) = Σ_j  [ -(m_obs[j]-m_pred(z)[j])²/(2σ_obs[j]²)
+                         - ln(σ_obs[j]√(2π)) ]
+
+8.  Define prior:
+        p(z) = N(0, I_K)          # standard normal on each component
+        lnPrior(z) = -½‖z‖² – ½K ln(2π)
+
+9.  Posterior log‑density:
+        lnPosterior(z) = lnL(z) + lnPrior(z)
+
+--------------------------------------------------------------------
+STEP 3 – Obtain posterior samples (or MAP)
+--------------------------------------------------------------------
+10.  Choose inference method:
+        a) MAP (maximum a posteriori):
+                minimize –lnPosterior(z)  (non‑linear least squares)
+                obtain z_MAP
+        b) MCMC (e.g., Metropolis‑Hastings or Hamiltonian MC):
+                run chain to generate {z_s} , s = 1…S_samples
+
+   (For brevity assume MAP is used; replace with MCMC if desired.)
+
+--------------------------------------------------------------------
+STEP 4 – Reconstruct spectra and uncertainties
+--------------------------------------------------------------------
+11.  For each sample z_s (or MAP value):
+        S_rec[s] = B0 + Σ_{k=1..K}  z_s[k] · PC_k          # N_wave vector
+
+12.  Estimate uncertainties:
+        If MCMC: use variance across {S_rec[s]} at each λ
+        If MAP: propagate covariance of z_MAP via linear error propagation:
+                Cov_z = (Rᵀ·Diag(σ_obs⁻²)·R + I_K)⁻¹
+                Cov_S = PC_K · Cov_z · PC_Kᵀ
+
+--------------------------------------------------------------------
+STEP 5 – Outlier detection (optional)
+--------------------------------------------------------------------
+13.  Compute log‑likelihood at MAP:
+        L_outlier = lnL(z_MAP)
+14.  Flag object as outlier if L_outlier < τ_threshold
+        (τ_threshold set empirically from training data or prior knowledge)
+
+--------------------------------------------------------------------
+RETURN
+--------------------------------------------------------------------
+- Posterior samples {z_s}
+- Reconstructed spectra {S_rec[s]}
+- Uncertainty estimates (variance or covariance)
+- Log‑likelihood L_outlier (for outlier flagging)

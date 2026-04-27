@@ -1,0 +1,65 @@
+INPUT:  
+    S_real   –  N × M array of observed reflectance spectra (N ≈ 51, M = # wavelength bins)  
+    λ        –  array of M wavelength values  
+    F        –  list of filter transmission curves (JWST NIRCam or other)  
+    α        –  desired number of principal components (e.g., 8)  
+    h_kde    –  KDE bandwidth (≈ 0.5)  
+    σ_rel    –  relative photometric noise (e.g., 0.20)  
+    n_aug    –  number of synthetic latent samples (e.g., 5 000)  
+    n_draw   –  number of posterior draws for reconstruction (e.g., 1 000)  
+OUTPUT:  trained encoder R, trained classifier C, PCA model P
+
+PCA_fit(S_real, α) → (V, μ)          // V: α×M eigenvectors, μ: M‑dim mean spectrum
+C_real ← (S_real – μ) × Vᵀ           // N × α matrix of latent coefficients
+
+KDE_fit(C_real, h_kde) → KDE_model
+C_aug ← KDE_sample(KDE_model, n_aug)   // n_aug × α synthetic latent vectors
+S_aug ← C_aug × V + μ                 // decode to full spectra
+
+FOR each spectrum s in S_aug:
+      m_clean  ← convolve(s, F)        // vector of theoretical filter reflectances
+      m_noisy  ← m_clean × (1 + ε)     // ε ~ Normal(0, σ_rel) element‑wise
+      STORE (m_noisy , corresponding C_aug)
+END FOR
+
+R ← AutoML_Regressor(TrainingInputs, TrainingTargets)      // maps photometry → latent
+C ← AutoML_Classifier(TrainingTargets, Labels_from_S_real)  // maps latent → taxonomy
+
+FUNCTION RECONSTRUCT(m_obs):
+    // m_obs : observed photometry (n_filters vector)
+
+    // 2.1 Predict latent coefficient distribution
+    μ_lat , Σ_lat ← R.predict_distribution(m_obs)   // mean and covariance of latent
+                                                      // (obtained via ensemble variance or
+                                                      // predictive posterior)
+
+    // 2.2 Sample latent vectors via Gaussian copula
+    marginals ← [Normal(μ, Σ_lat.diagonal()) for each component]
+    corr_mat   ← Σ_lat / sqrt(diag(Σ_lat) * diag(Σ_lat)ᵀ)   // correlation matrix
+    latent_draws ← GaussianCopulaSample(marginals, corr_mat, n_draw)
+
+    // 2.3 Decode to spectra
+    spectra_draws ← latent_draws × V + μ   // each row → full M‑bin spectrum
+
+    // 2.4 Compute reconstruction statistics
+    Spectrum_mean      ← mean(spectra_draws, axis=0)
+    Spectrum_CI_low    ← percentile(spectra_draws, 2.5, axis=0)
+    Spectrum_CI_high   ← percentile(spectra_draws, 97.5, axis=0)
+
+    // 2.5 Taxonomy probabilities
+    class_probs ← C.predict_probabilities(μ_lat)
+
+    RETURN {
+        mean_spectrum : Spectrum_mean,
+        lower_ci      : Spectrum_CI_low,
+        upper_ci      : Spectrum_CI_high,
+        class_probs   : class_probs
+    }
+END FUNCTION
+
+m_observed ← load_photometry(target_id)          // e.g., 4 JWST NIRCam bands
+result     ← RECONSTRUCT(m_observed)
+
+plot(result.mean_spectrum, λ)
+shade(result.lower_ci, result.upper_ci, λ)
+print(result.class_probs)

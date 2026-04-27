@@ -1,0 +1,45 @@
+INPUT
+    F_obs[b]          : observed fluxes in photometric bands b = 1…B
+    σ_obs[b]          : measurement uncertainties
+    T_b(λ)            : transmission curves of each band
+    λ_grid[ℓ]         : discretised wavelength grid
+    Templates[k][ℓ]   : spectral templates for k = 1…K
+    M                 : number of basis components (≤ K)
+    N_samp            : number of posterior samples to draw
+
+OUTPUT
+    R_mean[ℓ]         : mean reconstructed reflectance spectrum
+    R_std[ℓ]          : standard‑deviation spectrum
+    χ²                : goodness‑of‑fit statistic
+    Class_probs[k]    : posterior probability that object belongs to class k
+    Sampled_params[i] : vector of sampled coefficients a_i
+
+L(a) = Π_{b=1}^{B} Normal( F_obs[b] ; mean=f_b(a), std=σ_obs[b] )
+
+p(a) = Normal( μ_prior , Σ_prior )
+
+Initialize a_0 (e.g., zeros)
+for i = 1 … N_samp
+    propose a* using leapfrog dynamics
+    accept/reject with Metropolis criterion on:
+        log p(a*) + log L(a*)   vs   log p(a_{i-1}) + log L(a_{i-1})
+    if accepted: a_i = a*
+    else        : a_i = a_{i-1}
+end
+
+for ℓ = 1 … length(λ_grid)
+    R_samples[ℓ][i] = Σ_{m=1}^{M} Sampled_params[i][m] * B_m[ℓ]
+    R_mean[ℓ]       = mean_i( R_samples[ℓ][i] )
+    R_std[ℓ]        = std_i( R_samples[ℓ][i] )
+end
+
+for b = 1 … B
+    f_b_mean = ( Σ_ℓ R_mean[ℓ] * T_b(ℓ) ) / ( Σ_ℓ T_b(ℓ) )
+    Δ_b     = F_obs[b] - f_b_mean
+    χ²_b    = (Δ_b / σ_obs[b])^2
+end
+χ² = Σ_b χ²_b
+
+for k = 1 … K
+    Class_probs[k] = (1/N_samp) * Σ_i π_k * N( PC_i ; μ_k , Σ_k )
+end

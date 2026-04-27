@@ -1,0 +1,85 @@
+INPUT:
+    - Reference spectra S_ref = {s_1 … s_N}  (high‑resolution reflectance vectors)
+    - Filter transmission curves T_f   (for all desired photometric filters)
+    - New photometric measurement m_new  (vector of measured reflectances or magnitudes)
+    - Desired number of PCA components K  (e.g., K = 8)
+    - KDE bandwidth h  (e.g., h = 0.5)
+    - Noise level σ_noise  (e.g., 20 % relative reflectance)
+
+OUTPUT:
+    - Posterior samples of full‑resolution spectra {S_k}
+    - Posterior classification probabilities P(class | m_new)
+
+--------------------------------------------------------------------
+STEP 1 – Build Latent Prior
+--------------------------------------------------------------------
+1.1  Perform PCA on S_ref:
+        PCs, mean_vec, eigenvalues = PCA(S_ref, num_components=K)
+1.2  Project reference spectra onto PCA basis:
+        coeff_ref = PCs.T @ (S_ref - mean_vec)
+1.3  Estimate density in latent space with KDE:
+        kde_model = KDE(coeff_ref, bandwidth=h)
+1.4  Sample M synthetic latent vectors from KDE:
+        coeff_syn = kde_model.sample(M)          // e.g., M = 5000
+1.5  Decode synthetic latents to spectra:
+        S_syn = PCs @ coeff_syn + mean_vec
+        // S_syn contains M synthetic spectra
+
+--------------------------------------------------------------------
+STEP 2 – Generate Synthetic Photometry (Implicit Likelihood)
+--------------------------------------------------------------------
+2.1  For each synthetic spectrum s in S_syn:
+        a.  Convolve s with each filter T_f:
+                m_f = integral(s * T_f) / integral(T_f)
+        b.  Add Gaussian noise:
+                m_f_noisy = m_f + Normal(0, σ_noise * m_f)
+    Store pairs (m_f_noisy , coeff_syn)
+
+--------------------------------------------------------------------
+STEP 3 – Train Encoder (Photometry → Latent Coefficients)
+--------------------------------------------------------------------
+3.1  Assemble training dataset D_enc = { (m_f_noisy , coeff_syn) }
+3.2  Use AutoML (e.g., AutoGluon) to fit regressor R_enc:
+        R_enc = AutoML.fit(D_enc, target='coeff_syn')
+    // R_enc predicts mean latent coefficient vector from noisy photometry
+
+--------------------------------------------------------------------
+STEP 4 – Train Classifier (Latent → Taxonomic Labels)
+--------------------------------------------------------------------
+4.1  Label each reference spectrum s_i with its known class label L_i
+4.2  Assemble training dataset D_cls = { (coeff_ref_i , L_i) }
+4.3  Fit classifier C_cls (AutoML) on D_cls:
+        C_cls = AutoML.fit(D_cls, target='L_i')
+
+--------------------------------------------------------------------
+STEP 5 – Inference on New Observation
+--------------------------------------------------------------------
+5.1  Input photometry m_new  (same format as synthetic photometry)
+5.2  Predict mean latent coefficients:
+        coeff_hat = R_enc.predict(m_new)
+5.3  Estimate uncertainty in coefficients:
+        // Option 1: Use model‑provided prediction variance
+        // Option 2: Resample by feeding m_new into R_enc multiple times
+        // Option 3: Construct Gaussian Copula from posterior samples
+5.4  Sample N_latent posterior draws:
+        coeff_samples = SampleFromCopula(coeff_hat, cov_matrix, N_latent)
+        // cov_matrix can be derived from R_enc residuals or a fixed value
+5.5  Decode each sample to full spectrum:
+        S_samples = [ PCs @ c + mean_vec  for c in coeff_samples ]
+5.6  Classify each latent sample:
+        class_probs = [ C_cls.predict_proba(c)  for c in coeff_samples ]
+        Aggregate to get posterior class distribution P(class | m_new)
+
+--------------------------------------------------------------------
+STEP 6 – Output
+--------------------------------------------------------------------
+6.1  Return list of posterior spectra S_samples
+6.2  Return summary statistics (median spectrum, credible intervals per wavelength)
+6.3  Return posterior class probabilities
+
+--------------------------------------------------------------------
+OPTIONAL POST‑PROCESSING
+--------------------------------------------------------------------
+- Compute spectral diagnostics (slope, absorption depth) from each S_sample
+- Plot confidence intervals by aggregating over samples
+- Store results in a structured catalog

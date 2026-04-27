@@ -1,0 +1,71 @@
+Input
+    S       : Training spectra matrix (Ns × Nw)  – spectra sampled at common wavelength grid
+    R_f(λ)  : Response curves for each photometric filter f (Ffilters)
+    p_obs   : Observed magnitudes for a target object (length Ffilters)
+    σ_p     : Measurement uncertainties for p_obs
+    k       : Number of principal components to retain
+    M      : Number of Monte‑Carlo samples for Bayesian inference
+
+Output
+    x_rec(λ)      : Reconstructed full spectrum (mean estimate)
+    C_spec(λ,λ')  : Covariance matrix describing spectral uncertainty
+    flag_outlier  : Boolean indicating whether the target is an outlier
+
+------------------------------------------------------------------
+1.  Pre‑process the training spectra
+    1.1  Interpolate every spectrum to a common wavelength grid λ[1…Nw]
+    1.2  Normalise each spectrum (e.g., divide by integrated flux)
+    1.3  Store resulting matrix S_norm (Ns × Nw)
+
+2.  Principal‑Component Analysis (PCA)
+    2.1  Compute mean spectrum μ(λ) = (1/Ns) Σ_i S_norm[i,:]
+    2.2  Centre spectra:  X_c = S_norm – μ
+    2.3  Compute covariance matrix C = (X_cᵀ X_c) / (Ns – 1)
+    2.4  Eigen‑decompose C → eigenvalues λ_eig[1…Nw], eigenvectors V[1…Nw]
+    2.5  Select first k eigenvectors → V_k (Nw × k)
+    2.6  Project all centred spectra onto PCs: A = X_cᵀ V_k   (Ns × k)
+    2.7  Compute coefficient statistics from training set:
+           ā_train = mean(A, axis=0)   (length k)
+           Σ_a_train = covariance(A)
+
+3.  Forward photometry model
+    3.1  Define function m_f(a):
+           a  – vector of PC coefficients (length k)
+           x(λ) = μ(λ) + V_k a                     // reconstructed spectrum
+           For each filter f:
+                F_f(a) = ∫ R_f(λ) x(λ) dλ / ∫ R_f(λ) dλ
+                m_f(a) = –2.5 log10(F_f(a)) + ZP_f
+    3.2  Store m_f(a) for use in likelihood evaluation
+
+4.  Bayesian inference of PC coefficients
+    4.1  Prior on a:   a ~ N(ā_train , Σ_a_train)   // Gaussian prior from training data
+    4.2  Likelihood:   L(a) = Π_f  N( p_obs[f] | m_f(a) , σ_p[f]^2 )
+    4.3  Posterior:    p(a | p_obs) ∝ L(a) × prior(a)
+
+    4.4  Initialise Markov chain:
+           a₀ = ā_train
+    4.5  For iter = 1 … M:
+           Propose a' = a_(iter-1) + η          // η drawn from a symmetric proposal
+           Compute m_f(a'), evaluate L(a')
+           Compute acceptance probability α = min(1, L(a') / L(a_(iter-1)))
+           With probability α accept a_(iter) = a'
+           else reject and set a_(iter) = a_(iter-1)
+
+    4.6  After burn‑in, collect {a^(s)}_{s=1}^{M′}
+    4.7  Estimate posterior mean â = (1/M′) Σ_s a^(s)
+    4.8  Estimate posterior covariance Σ_a = cov({a^(s)})
+
+5.  Spectrum reconstruction
+    5.1  Reconstruct mean spectrum:
+           x_rec(λ) = μ(λ) + V_k â
+    5.2  Propagate coefficient uncertainty to spectrum:
+           C_spec(λ,λ') = V_k Σ_a V_kᵀ
+
+6.  Outlier detection (optional)
+    6.1  Compute predictive likelihood of observed photometry under posterior:
+           P_pred = (1/M′) Σ_s Π_f  N( p_obs[f] | m_f(a^(s)), σ_p[f]^2 )
+    6.2  If P_pred < threshold (e.g., 0.01) then flag_outlier = True
+           else flag_outlier = False
+
+Return
+    x_rec(λ), C_spec, flag_outlier

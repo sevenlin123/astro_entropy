@@ -1,0 +1,76 @@
+INPUT  
+    – Seed spectra {S_i(λ)} for i = 1…N_seed, each sampled on M_wavelength grid  
+    – Solar spectrum S_sun(λ) (same wavelength grid)  
+    – Filter transmission curves {T_k(λ)} for k = 1…K_filters  
+    – Desired number of principal components K_pc (e.g., 5–10)  
+    – Kernel‑density bandwidth h (≈0.5)  
+    – Photometric noise level σ_noise (fractional, e.g., 0.20)
+
+1.1  Convert each seed spectrum to reflectance  
+      R_i(λ) ← S_i(λ) / S_sun(λ)
+
+1.2  Perform PCA on the reflectance matrix  
+      [U, Σ, V] ← SVD(R_i centered)  
+      U[:,1:K_pc] → principal basis U_pc  
+      μ_R ← mean(R_i)  
+
+1.3  Project each reflectance onto the PCA basis  
+      C_real[i, :] ← U_pcᵀ · (R_i – μ_R)      // latent coefficients (N_seed × K_pc)
+
+2.1  Estimate density in latent space using KDE  
+      KDE ← fit_KDE(C_real, bandwidth = h)
+
+2.2  Draw synthetic latent vectors  
+      C_synth ← sample_KDE(KDE, N_aug)       // e.g., N_aug ≈ 5 000
+
+2.3  Reconstruct synthetic reflectances  
+      R_synth[j, λ] ← μ_R[λ] + U_pc[λ,:] · C_synth[j,:]^T
+
+2.4  Generate synthetic spectra (multiplying by solar spectrum)  
+      S_synth[j, λ] ← R_synth[j, λ] · S_sun[λ]
+
+3.1  For each synthetic spectrum j  
+      For each filter k  
+          Flux_true[j,k] ← ∫ T_k(λ) · S_synth[j, λ] dλ  
+          Flux_solar[k] ← ∫ T_k(λ) · S_sun[λ] dλ  
+          Reflectance_true[j,k] ← Flux_true[j,k] / Flux_solar[k]  
+
+3.2  Inject Gaussian noise (relative)  
+      Reflectance_noisy[j,k] ← Reflectance_true[j,k] · (1 + Normal(0, σ_noise))
+
+4.1  Assemble training dataset  
+      X_train ← concatenation of all Reflectance_noisy vectors (samples × K_filters)  
+      Y_train ← concatenation of corresponding latent vectors  
+                (C_real for real spectra, C_synth for synthetic spectra)
+
+4.2  Train photometry→latent regressor  
+      Regressor ← AutoML_Train(X_train, Y_train)  
+          // e.g., ensemble of Gradient‑Boosted Decision Trees
+
+4.3  (Optional) Train taxonomy classifier in latent space  
+      Labels ← known taxonomic labels for seed spectra  
+      Classifier ← AutoML_Train(C_real, Labels)
+
+INPUT: New photometric observation m_obs = [m_1 … m_K] (reflectances or magnitudes)
+
+5.1  Predict latent coefficients  
+      c_pred ← Regressor.predict(m_obs)          // vector of length K_pc  
+
+5.2  Optional: Obtain predictive uncertainty  
+      c_samples ← Regressor.sample_predictions(m_obs, n_samples)  
+      c_mean ← mean(c_samples); c_std ← std(c_samples)
+
+5.3  Decode to full spectrum  
+      R_pred(λ) ← μ_R[λ] + U_pc[λ,:] · c_pred^T  
+      S_pred(λ) ← R_pred(λ) · S_sun[λ]        // optional flux form
+
+5.4  Taxonomy prediction (if classifier trained)  
+      tax_prob ← Classifier.predict_proba(c_pred)
+
+OUTPUT  
+    – Reconstructed high‑resolution spectrum S_pred(λ)  
+    – Latent coefficient vector c_pred (with uncertainty if available)  
+    – Taxonomic probability vector tax_prob
+
+6.1  Compute diagnostic metrics (spectral slope, absorption band depth) from S_pred(λ)
+6.2  Evaluate credible intervals using c_samples → ensemble of spectra

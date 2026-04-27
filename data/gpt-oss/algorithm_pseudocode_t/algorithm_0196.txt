@@ -1,0 +1,50 @@
+INPUT:
+    O = {o_1, …, o_N}            // list of TNOs with sparse photometry
+    T = {t_1, …, t_M}            // library of spectral templates (flux vs wavelength)
+    λ_grid = {λ_1, …, λ_K}       // wavelength grid shared by all templates
+    priors = {π_1, …, π_M}       // prior weight for each template (default = uniform)
+
+PREPROCESSING:
+    For each observation o_i:
+        1. Convert each measured magnitude m_{i,j} in filter j to flux f_{i,j} using
+           standard zero‑point relations.
+        2. Apply any necessary corrections (e.g., phase angle, extinction) to obtain
+           corrected flux vector F_i = [f_{i,1}, …, f_{i,L}] and measurement errors
+           σ_i = [σ_{i,1}, …, σ_{i,L}].
+
+SCORING OF TEMPLATE MATCHES:
+    For each object o_i:
+        For each template t_k:
+            a. Interpolate template t_k onto the filter effective wavelengths to
+               produce model flux vector M_{k,i} = [m_{k,1}, …, m_{k,L}].
+            b. Find optimal linear scaling factor α_{k,i} that minimises
+               χ²_{k,i} = Σ_j [(F_{i,j} – α_{k,i} * M_{k,i,j}) / σ_{i,j}]².
+               (α_{k,i} = Σ_j (F_{i,j} * M_{k,i,j}/σ_{i,j}²) / Σ_j (M_{k,i,j}²/σ_{i,j}²))
+            c. Compute likelihood:
+                   L_{k,i} = exp( –0.5 * χ²_{k,i} ).
+            d. Compute unnormalised posterior weight:
+                   w_{k,i} = π_k * L_{k,i}.
+
+POSTERIOR NORMALISATION:
+    For each object o_i:
+        Normalise weights:
+            P_{k,i} = w_{k,i} / Σ_{ℓ=1}^{M} w_{ℓ,i}
+        // P_{k,i} is the posterior probability that o_i matches template t_k
+
+SPECTRUM RECONSTRUCTION:
+    For each object o_i:
+        1. Initialise reconstructed flux vector R_i = 0 (length K).
+        2. For each template t_k:
+                R_i += P_{k,i} * t_k.flux_on_λ_grid   // weighted sum across templates
+        3. Optionally compute uncertainty:
+                Var_i(λ) = Σ_k P_{k,i} * [t_k.flux_on_λ_grid – R_i]²
+        4. Store:
+                • Posterior probabilities P_{k,i} for taxonomy classification
+                • Reconstructed spectrum R_i(λ)
+                • Uncertainty Var_i(λ)
+
+OUTPUT:
+    For every TNO o_i:
+        - Posterior probability vector P_i over templates
+        - Reconstructed spectral energy distribution R_i(λ)
+        - Optional variance estimate Var_i(λ)

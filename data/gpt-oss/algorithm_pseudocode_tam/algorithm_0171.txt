@@ -1,0 +1,43 @@
+text
+1.1  Compute mean spectrum μ_s ← (1/N) Σ_i s_i
+1.2  Center spectra: S_c[i] ← s_i – μ_s          for i = 1…N
+1.3  Perform PCA on {S_c[i]} → eigenvectors V ∈ ℝ^{L×K},
+     eigenvalues λ[1…K], explained variance %.
+1.4  Retain first K PCs that capture ≥ 90 % variance.
+
+text
+2.1  Project training spectra onto PCs:
+        C[i] ← Vᵀ · S_c[i]                     # C ∈ ℝ^{N×K}
+2.2  Fit multivariate KDE on {C[i]} with bandwidth h.
+2.3  Sample A latent vectors {c_a} from the KDE.      # c_a ∈ ℝ^K
+
+text
+3.1  For each c_a:
+        3.1.1  Reconstruct synthetic spectrum:
+                s_a ← μ_s + V · c_a               # length L
+        3.1.2  For each filter f_j:
+                p_a[j] ← ∫ s_a(λ) · f_j(λ) dλ
+        3.1.3  Add Gaussian noise:
+                p_a[j] ← p_a[j] + N(0, σ_noise·p_a[j])
+
+text
+4.1  Instantiate AutoML regressor (e.g., AutoGluon with GBDT ensemble).
+4.2  Train model R on (X, Y):
+        minimize mean squared error between R(p_a) and c_a
+4.3  Validate on withheld synthetic subset (optional).
+
+text
+5.1  Assign discrete taxonomic labels to each real spectrum s_i
+       (Water, CO₂, Organic, Methanol).
+5.2  Train AutoML classifier C on pairs (c_i, label_i).
+5.3  Output classifier probabilities P(label | c_pred).
+
+text
+6.1  Standardise m if necessary (apply same scaling used in training).
+6.2  Predict latent coefficients:
+        ĉ  ← R(m)            # vector in ℝ^K
+6.3  Optional: sample multiple predictions from regressor's uncertainty estimate
+6.4  Reconstruct full spectrum:
+        ŝ  ← μ_s + V · ĉ     # length L
+6.5  Optional: taxonomy probabilities
+        p_tax = C(ĉ)

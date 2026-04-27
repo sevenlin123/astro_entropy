@@ -1,0 +1,93 @@
+INPUT
+    S_train   – matrix of n_train spectra (wavelength axis length L)
+    F_filters – list of N filter transmission curves T_i(λ), i = 1…N
+    Phot[i]   – measured flux in filter i for a target object
+    Err[i]    – measurement uncertainty in filter i
+
+PARAMETERS
+    K         – number of principal components to retain (e.g., 8–10)
+
+OUTPUT
+    Spectrum_mean[1…L]   – mean reconstructed spectrum
+    Spectrum_CI_low[1…L] – lower bound of 95% credible interval
+    Spectrum_CI_high[1…L] – upper bound of 95% credible interval
+    Posterior_samples    – optional set of sampled coefficient vectors
+
+--------------------------------------------------------------------
+STEP 0: TRAINING – PCA on Spectral Library
+--------------------------------------------------------------------
+    1. Compute mean spectrum μ = mean(S_train, axis=0)
+    2. Center data: X = S_train – μ
+    3. Compute covariance matrix C = (Xᵀ X) / (n_train – 1)
+    4. Eigen‑decompose C → eigenvalues λ_k, eigenvectors v_k
+    5. Sort eigenvectors by descending λ_k
+    6. Retain first K eigenvectors → PCs[1…K]  (each is a length‑L vector)
+    7. Store μ, PCs, λ_k for later use
+
+--------------------------------------------------------------------
+STEP 1: BUILD FILTER RESPONSE MATRICES
+--------------------------------------------------------------------
+    For each filter i:
+        a. Interpolate T_i(λ) onto wavelength grid λ_1 … λ_L
+        b. Normalize so that ∫ T_i(λ) dλ = 1
+        c. Store T_i[1…L]
+
+--------------------------------------------------------------------
+STEP 2: DEFINE PHOTOMETRIC MODEL FOR GIVEN COEFFICIENT VECTOR a
+--------------------------------------------------------------------
+    Function FluxModel(a):
+        # Reconstruct spectrum at coefficient vector a
+        s[1…L] = μ[1…L] + Σ_{k=1..K} a_k * PCs[k][1…L]
+        # Convolve with each filter
+        For i = 1 … N:
+            m_i(a) = Σ_{j=1..L} s[j] * T_i[j] * Δλ
+        Return m[1…N]   # vector of predicted fluxes
+
+--------------------------------------------------------------------
+STEP 3: DEFINE LIKELIHOOD AND PRIOR
+--------------------------------------------------------------------
+    Likelihood(a) = Π_{i=1..N} NormalPDF( Phot[i] ; mean=m_i(a), std=Err[i] )
+    Prior(a)      = Π_{k=1..K} NormalPDF( a_k ; mean=0, std=σ_prior_k )
+                   # σ_prior_k can be chosen as sqrt(λ_k) or set to 1
+
+--------------------------------------------------------------------
+STEP 4: BAYESIAN INFERENCE – SAMPLE FROM POSTERIOR
+--------------------------------------------------------------------
+    Use a simple Laplace approximation:
+        1. Find MAP estimate a_MAP by maximizing log Posterior = log(Likelihood)+log(Prior)
+           (use Newton–Raphson or gradient descent)
+        2. Compute Hessian H at a_MAP
+        3. Posterior ≈ Normal(mean=a_MAP, cov=H⁻¹)
+
+    OPTIONAL: Draw M independent samples {a^(m)} from this Normal
+              to propagate uncertainties fully
+
+--------------------------------------------------------------------
+STEP 5: RECONSTRUCT SPECTRUM AND COMPUTE UNCERTAINTIES
+--------------------------------------------------------------------
+    If sampling:
+        For each sample m:
+            s^(m)[1…L] = μ[1…L] + Σ_{k=1..K} a^(m)_k * PCs[k][1…L]
+        For each wavelength j:
+            Spectrum_mean[j] = mean_{m}( s^(m)[j] )
+            Spectrum_CI_low[j], Spectrum_CI_high[j] =
+                percentiles_{m}( s^(m)[j], [2.5%, 97.5%] )
+    Else (Laplace only):
+        Compute s_MAP[j] = μ[j] + Σ_k a_MAP_k * PCs[k][j]
+        Propagate linear uncertainty:
+            Var[s[j]] = Σ_{k,l} PCs[k][j] * (H⁻¹)_{kl} * PCs[l][j]
+        Set:
+            Spectrum_mean[j] = s_MAP[j]
+            Spectrum_CI_low[j]  = s_MAP[j] – 1.96 * sqrt(Var[s[j]])
+            Spectrum_CI_high[j] = s_MAP[j] + 1.96 * sqrt(Var[s[j]])
+
+--------------------------------------------------------------------
+STEP 6: OUTLIER DETERMINATION (OPTIONAL)
+--------------------------------------------------------------------
+    Compute marginal likelihood (model evidence) Z ≈ (2π)^{K/2} |H⁻¹|^{1/2} L(a_MAP) P(a_MAP)
+    Compare Z against threshold or against other objects to flag low‑probability spectra.
+
+--------------------------------------------------------------------
+RETURN
+    Spectrum_mean, Spectrum_CI_low, Spectrum_CI_high
+    (and Posterior_samples if generated)

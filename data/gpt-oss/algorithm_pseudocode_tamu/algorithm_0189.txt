@@ -1,0 +1,98 @@
+pseudocode
+INPUT:
+    S_true[1..N]      // high‑resolution reference spectra (wavelength grid λ)
+    F_filters[1..M]   // filter response functions
+    Phot_obs[1..K]    // measured photometry for target object
+    K_bandwidth       // KDE bandwidth (default 0.5)
+    N_latent          // number of retained PCA components (default 8)
+    N_aug             // number of synthetic latent samples (default 5000)
+
+OUTPUT:
+    Spectrum_recon[λ]        // reconstructed high‑res spectrum
+    Cov_spectrum[λ]          // covariance / 1σ interval per wavelength
+    Taxonomy_probabilities   // [P_H2O, P_CO2, P_Organics, P_Methanol]
+
+--------------------------------------------------------------------
+STEP 1 – TRAINING PHASE
+--------------------------------------------------------------------
+
+1.1 Compute mean spectrum μ_S = mean(S_true)
+
+1.2 Center spectra:  S_centered[i] = S_true[i] – μ_S   for i = 1..N
+
+1.3 Perform PCA on S_centered:
+        U, Σ, Vt = eigendecompose( cov(S_centered) )
+        PCs = first N_latent columns of U              // eigenvectors
+        Eigenvalues = first N_latent entries of Σ
+
+1.4 Project reference spectra to latent space:
+        C_ref[i] = PCsᵀ · S_centered[i]   // i = 1..N
+
+1.5 Estimate density of latent coefficients using KDE:
+        KDE = GaussianKernelDensity( C_ref , bandwidth=K_bandwidth )
+
+1.6 Sample synthetic latent vectors:
+        C_synth[j] = KDE.sample()   for j = 1..N_aug
+
+1.7 Decode synthetic latents to spectra:
+        S_synth[j] = μ_S + PCs · C_synth[j]
+
+1.8 Forward‑model synthetic photometry:
+        For each filter m = 1..M:
+            Phot_synth[j][m] = integrate( S_synth[j] * F_filters[m] ) / integrate( S_solar * F_filters[m] )
+
+1.9 Add observational noise to synthetic photometry:
+        For each j, m:
+            Phot_noisy[j][m] = Phot_synth[j][m] * (1 + Normal(0, 0.20))
+
+1.10 Assemble training dataset:
+        X_train = Phot_noisy         // shape (N_aug, M)
+        Y_train = C_synth            // shape (N_aug, N_latent)
+
+1.11 Train encoder (AutoML regressor):
+        Encoder = AutoML_Train( X_train → Y_train )
+        // internal ensemble of GBDT / NN etc.
+
+1.12 Train taxonomy classifier in latent space:
+        Labels_ref = taxonomy_labels_of( S_true )
+        Classifier = AutoML_Train( C_ref → Labels_ref )
+
+--------------------------------------------------------------------
+STEP 2 – INFERENCE PHASE (new target)
+--------------------------------------------------------------------
+
+2.1 Compute mean photometry vector:
+        Phot_meas = Phot_obs   // length M
+
+2.2 Predict posterior distribution of latent coefficients:
+        Latent_mean, Latent_cov = Encoder.predict_distribution( Phot_meas )
+        // Encoder returns mean vector μ_C and covariance Σ_C (possibly via Gaussian Copula)
+
+2.3 Sample L latent draws (e.g., L = 1000):
+        For l = 1..L:
+            Sample C_l ∼ MultivariateNormal( μ_C, Σ_C )   // respecting copula structure
+            Store C_samples[l] = C_l
+
+2.4 Decode each latent draw to spectrum:
+        For l = 1..L:
+            S_l = μ_S + PCs · C_samples[l]
+            Store S_samples[l] = S_l
+
+2.5 Aggregate samples to compute spectrum statistics:
+        For each wavelength λ_k:
+            Mean_flux[λ_k] = mean( S_samples[:, k] )
+            Std_flux[λ_k]  = std( S_samples[:, k] )
+            Cov_spectrum[λ_k] = Std_flux[λ_k]
+
+2.6 Taxonomy probability estimation:
+        For each l = 1..L:
+            Prob_l = Classifier.predict_proba( C_samples[l] )
+            Accumulate Prob_l
+        Taxonomy_probabilities = mean( Prob_l over l )
+
+--------------------------------------------------------------------
+RETURN
+--------------------------------------------------------------------
+    Spectrum_recon = Mean_flux
+    Cov_spectrum
+    Taxonomy_probabilities

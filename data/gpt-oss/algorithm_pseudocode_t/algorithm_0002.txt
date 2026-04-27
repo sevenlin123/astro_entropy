@@ -1,0 +1,77 @@
+Input:
+    - Photometric catalog P = { (λ_j, m_j, σ_mj) } for j = 1 … N
+        (λ_j: effective wavelength of filter j,
+         m_j: observed magnitude,
+         σ_mj: measurement uncertainty)
+    - Spectral library S = { s_k(λ) } for k = 1 … K
+        (s_k: normalized reflectance spectrum of class k)
+    - Prior parameters:
+        * Class prior π_k   (e.g., uniform)
+        * Basis weight prior ρ(w | k)  (e.g., Gaussian with zero mean, variance τ²)
+    - Hyper‑parameters:
+        * τ² – variance of basis weights
+        * σ_sys – systematic photometric error (if any)
+
+Output:
+    - Posterior distribution over class k
+    - Posterior samples of basis weights w = {w_ℓ} for the chosen class
+    - Reconstructed spectrum R(λ) and its credible interval
+
+Procedure:
+
+1. **Pre‑processing**
+   1.1 Convert magnitudes to fluxes:
+        F_j = 10^(-0.4 * m_j)   // relative flux
+        σ_Fj = ln(10)/2.5 * F_j * σ_mj
+   1.2 For each filter j, compute the filter transmission curve T_j(λ).
+
+2. **Define Model**
+   2.1 Choose a reference class k* (initial guess, e.g., highest π_k).
+   2.2 Express the unknown spectrum as a linear combination of basis spectra:
+        S_model(λ) = Σ_{ℓ=1}^{L} w_ℓ * B_ℓ(λ)
+        where B_ℓ(λ) are orthonormal basis vectors derived from the library
+        (e.g., first L principal components of S or a subset of S_k*).
+   2.3 Predict flux in filter j:
+        F_pred_j(w, k*) = ∫ S_model(λ) * T_j(λ) dλ / ∫ T_j(λ) dλ
+   2.4 Define likelihood for a single object:
+        p(F | w, k*, σ) = Π_{j=1}^{N} Normal(F_j | F_pred_j, sqrt(σ_Fj² + σ_sys²))
+
+3. **Bayesian Inference**
+   3.1 Set prior over weights:
+        p(w | k*) = Normal(w | 0, τ² I)
+   3.2 Compute posterior for fixed class k*:
+        p(w | F, k*) ∝ p(F | w, k*) * p(w | k*)
+   3.3 Use Markov Chain Monte Carlo (MCMC) to sample from p(w | F, k*):
+        Initialize w⁰ (e.g., zeros).
+        For t = 1 … T:
+            Propose w' = w^{t-1} + ε, ε ~ Normal(0, Σ_prop)
+            Accept with probability:
+                α = min(1, p(F | w', k*) / p(F | w^{t-1}, k*))
+            If accepted: w^t = w'; else w^t = w^{t-1}
+   3.4 After burn‑in, collect M samples {w^(m)}.
+
+4. **Class Posterior**
+   4.1 For each class k:
+        Compute marginal likelihood:
+            p(F | k) ≈ (1/M) Σ_{m=1}^{M} p(F | w^(m), k)
+        Compute posterior class probability:
+            p(k | F) ∝ π_k * p(F | k)
+   4.2 Normalize over all classes to obtain {p(k | F)}.
+
+5. **Spectrum Reconstruction**
+   5.1 Select most probable class k̂ = argmax_k p(k | F).
+   5.2 Reconstruct spectrum using posterior samples of weights for k̂:
+        For each λ:
+            R(λ) = (1/M) Σ_{m=1}^{M} S_model(λ; w^(m))
+            Credible interval at λ:
+                lower = percentile_{α/2}(S_model(λ; w^(m)))
+                upper = percentile_{1-α/2}(S_model(λ; w^(m)))
+
+6. **Optional Outlier Detection**
+   6.1 Compute overall likelihood p(F) = Σ_k π_k * p(F | k).
+   6.2 If p(F) < threshold (e.g., 1e-6), flag object as outlier.
+
+Return:
+    - Posterior class probabilities {p(k | F)}
+    - Reconstructed spectrum R(λ) with credible intervals
+    - Weight samples {w^(m)} for further diagnostics

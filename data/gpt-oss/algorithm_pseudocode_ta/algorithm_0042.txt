@@ -1,0 +1,98 @@
+Input
+    • Training spectra {S_i(λ)} , i = 1 … N_s (flux vs. wavelength)
+    • Filter transmission curves {R_f(λ)} , f = 1 … N_f
+    • Observed photometry for an object: 
+          m_obs[f],   σ_obs[f]        (magnitudes & errors)
+    • Desired number of principal components K  (≈ 8–10)
+
+Output
+    • Posterior samples of latent coefficients {z_s}   (s = 1 … N_samples)
+    • Reconstructed spectra {S_s(λ)}                 (posterior predictive)
+    • Credible‑interval band for S(λ) (e.g. 95 %)
+
+--------------------------------------------------------------------
+1. TRAINING PHASE (once)
+--------------------------------------------------------------------
+1.1  Pre‑process training spectra
+     – Resample all spectra onto a common wavelength grid λ_1 … λ_M.
+     – Optionally normalize each spectrum (e.g., unit area).
+
+1.2  Compute mean spectrum
+     μ(λ) = (1/N_s) Σ_i S_i(λ).
+
+1.3  Center spectra
+     ΔS_i(λ) = S_i(λ) − μ(λ).
+
+1.4  Perform PCA
+     • Compute covariance matrix C = (1/(N_s−1)) Σ_i ΔS_i ΔS_iᵀ.
+     • Eigen‑decompose:  C v_k = λ_k v_k , k = 1 … M.
+     • Order eigenvectors by decreasing eigenvalue.
+     • Select first K eigenvectors → principal components:
+           PC_k(λ) = v_k(λ) ,  k = 1 … K.
+     • Store the coefficient matrix Z_train(i,k) = ΔS_i · PC_k.
+
+1.5  Build prior on latent vector z
+     – Mean of training coefficients: μ_z = 0 (by centering).
+     – Covariance of training coefficients:
+           Σ_z = diag(λ_1,…,λ_K)   (or full covariance if desired).
+
+--------------------------------------------------------------------
+2. FORWARD MODEL FOR PHOTOMETRY
+--------------------------------------------------------------------
+For any latent vector z ∈ ℝ^K:
+    2.1  Reconstruct spectrum:
+           S(z,λ) = μ(λ) + Σ_{k=1}^{K} z_k · PC_k(λ)
+
+    2.2  Compute flux in filter f:
+           F_f(z) = ∫ S(z,λ) · R_f(λ) dλ   (numerical integration)
+
+    2.3  Convert flux to AB magnitude:
+           m_f(z) = −2.5 log10( F_f(z) / F_ref )    (F_ref = 3631 Jy)
+
+--------------------------------------------------------------------
+3. BAYESIAN INFERENCE (for a single object)
+--------------------------------------------------------------------
+3.1  Likelihood
+     For each filter f:
+         L_f(z) = Normal( m_obs[f] | m_f(z) , σ_obs[f] )
+     Total likelihood:  L(z) = Π_f L_f(z)
+
+3.2  Prior
+     p(z) = Normal( z | 0 , Σ_z )
+
+3.3  Posterior
+     p(z | m_obs) ∝ L(z) · p(z)
+
+3.4  Sample posterior
+     • Choose sampler (e.g., Hamiltonian Monte Carlo, Slice Sampling).
+     • Run until convergence to obtain N_samples draws {z_s}.
+
+--------------------------------------------------------------------
+4. POSTERIOR PREDICTION AND UNCERTAINTY
+--------------------------------------------------------------------
+4.1  For each posterior draw s:
+       Compute spectrum:
+           S_s(λ) = μ(λ) + Σ_{k=1}^{K} z_s[k] · PC_k(λ)
+
+4.2  Assemble ensemble of spectra {S_s(λ)}.
+
+4.3  Credible intervals:
+       For each wavelength λ_j:
+           – Collect values {S_s(λ_j)} over s=1…N_samples.
+           – Compute desired percentiles (e.g., 2.5th & 97.5th for 95 % CI).
+
+--------------------------------------------------------------------
+5. OPTIONAL OUTLIER CHECK
+--------------------------------------------------------------------
+5.1  Compute predictive photometry for each draw:
+       m_pred_s[f] = m_f(z_s)
+5.2  Compare predictive distribution to observed m_obs:
+       If |m_obs[f] − median(m_pred_s[f])| > nσ × σ_obs[f]
+          flag object as potential outlier.
+
+--------------------------------------------------------------------
+Return
+    • Posterior samples {z_s}
+    • Mean reconstructed spectrum μ_S(λ) = average of {S_s(λ)}
+    • Credible‑interval envelope for S(λ)
+    • (Optional) Outlier flag

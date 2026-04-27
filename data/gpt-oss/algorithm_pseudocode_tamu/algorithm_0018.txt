@@ -1,0 +1,79 @@
+Inputs
+-------
+- Training spectra S_true[n_samples][n_wavelengths]
+- Corresponding filter transmission curves T_f[j][λ]  (j = 1…N_filters)
+- Desired number of PCA components K   (e.g. 8–10)
+- KDE bandwidth h (e.g. 0.5)
+- Photometric noise level σ_noise (relative, e.g. 0.20)
+
+Outputs
+-------
+- For any new photometry m_new[1…N_filters]:
+    * Posterior samples {S_post[i]} of full spectra
+    * Taxonomic probability vector p_type
+    * Credible intervals on spectral features
+
+Algorithm
+---------
+
+1. **Pre‑processing of reference spectra**
+   1.1. Convert each spectrum to reflectance (divide by solar spectrum).
+   1.2. Resample all spectra onto a common wavelength grid λ_k (k = 1…n_λ).
+
+2. **PCA latent space definition**
+   2.1. Stack reflectance vectors into matrix R (n_samples × n_λ).
+   2.2. Subtract mean μ_R from R.
+   2.3. Compute SVD: R = U Σ Vᵀ.
+   2.4. Keep first K columns of Vᵀ → eigenbasis E (K × n_λ).
+   2.5. Project all spectra onto latent space:
+        Z_real = (R – μ_R) · Eᵀ   // K‑dimensional coefficients.
+
+3. **Kernel Density Estimation (KDE) on latent manifold**
+   3.1. Estimate multivariate Gaussian kernel density f(Z) using bandwidth h.
+   3.2. Sample M synthetic latent vectors {Z_syn[m]} from f(Z).
+       (M large enough, e.g. 10 000).
+
+4. **Generate synthetic spectra and photometry**
+   For each Z_syn[m]:
+     4.1. Reconstruct spectrum:
+            R_syn[m] = μ_R + Z_syn[m] · E
+     4.2. Compute noiseless photometry:
+            m_syn_noiseless[m,j] = ∫ R_syn[m](λ) · T_f[j](λ) dλ
+                                / ∫ T_f[j](λ) dλ          // reflectance
+     4.3. Add Gaussian noise:
+            m_syn[m,j] = m_syn_noiseless[m,j] + N(0, σ_noise·m_syn_noiseless[m,j])
+     4.4. Store pair (m_syn[m], Z_syn[m]) as training example.
+
+5. **Train encoder (photometry → latent)**
+   5.1. Assemble training dataset D_enc = {(m_syn[m], Z_syn[m])}.
+   5.2. Use an AutoML regressor (e.g. XGBoost, random forest ensemble).
+   5.3. Train to minimise squared error between predicted Ẑ and true Z_syn.
+
+6. **Train classifier (latent → taxonomy)**
+   6.1. Assign each real spectrum a taxonomic label L (e.g. H₂O, CO₂, Organic, Methanol).
+   6.2. Build training pairs {(Z_real[n], L[n])}.
+   6.3. Train an AutoML classifier on these pairs (e.g. gradient‑boosted tree, logistic regression).
+   6.4. Obtain class probability vector p_type( Ẑ ).
+
+7. **Inference for new observation**
+   Input: Photometry m_new[1…N_filters].
+
+   7.1. Predict latent coefficient distribution:
+        - Use encoder to produce mean μ̂_Z and covariance Σ̂_Z (e.g. via bootstrap or heteroscedastic regression).
+   7.2. Construct Gaussian copula:
+        - Sample S latent vectors {Z_sample[s]} from multivariate normal N(μ̂_Z, Σ̂_Z).
+        - Transform to uniform marginals, then apply inverse copula to enforce dependencies if needed.
+   7.3. Decode each sampled latent vector to spectrum:
+        - S_sample[s] = μ_R + Z_sample[s] · E
+   7.4. Compile posterior set {S_sample[s]}.
+   7.5. Compute statistics:
+        - Median spectrum, 68 % credible interval per wavelength.
+        - Derive spectral features (slopes, band depths) and their intervals.
+   7.6. Classify:
+        - For each Z_sample[s], evaluate classifier → class probabilities.
+        - Average over samples to get final p_type(m_new).
+
+8. **Output**
+   - Return {S_sample[s]}, credible intervals, p_type, and optional diagnostics.
+
+End Algorithm

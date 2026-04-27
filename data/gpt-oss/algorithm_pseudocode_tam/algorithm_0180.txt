@@ -1,0 +1,118 @@
+FUNCTION TRAIN_RECONSTRUCTOR(
+        spectra_list,          # list of observed TNO spectra (λ, Rλ)
+        filter_response_list,  # list of (λ, transmission) for desired filters
+        n_comp = 8,            # number of principal components to keep
+        kde_bw   = 0.5,        # KDE bandwidth
+        n_aug    = 5000,       # number of synthetic latent samples
+        noise_rel = 0.20,      # relative photometric noise (σ/mean)
+        regressor_cfg,         # AutoML configuration dict
+        classifier_cfg):       # AutoML configuration dict
+
+    1. // ---------- 1. Build PCA prior ----------
+    2. mean_spec   ← mean(spectra_list)              # element‑wise average
+    3. eigvec, eigval ← PCA(spectra_list, n_comp)    # whitened PCs
+    4. coeffs ← project(spectra_list, mean_spec, eigvec)
+       # coeffs shape: (N_spectra, n_comp)
+
+    5. // ---------- 2. Augment manifold ----------
+    6. kde ← FIT_KDE(coeffs, bandwidth=kde_bw)        # non‑parametric density
+    7. latent_samples ← SAMPLE_KDE(kde, size=n_aug)   # shape: (n_aug, n_comp)
+
+    8. // ---------- 3. Generate synthetic spectra ----------
+    9. synthetic_spectra ← []
+   10. FOR each lc IN latent_samples:
+   11.     spec ← INVERSE_PCA(lc, mean_spec, eigvec)
+   12.     synthetic_spectra.append(spec)
+   13. END FOR
+
+    14. // ---------- 4. Forward‑model photometry ----------
+    15. synthetic_photometry ← []
+    16. FOR each spec IN synthetic_spectra:
+    17.     mags ← CONVOLVE_WITH_FILTERS(spec, filter_response_list)
+    18.     noisy_mags ← ADD_GAUSSIAN_NOISE(mags, rel=noise_rel)
+    19.     synthetic_photometry.append(noisy_mags)
+    20. END FOR
+
+    21. // ---------- 5. Prepare training tables ----------
+    22. X_train ← synthetic_photometry          # shape: (n_aug, n_filters)
+    23. Y_train ← latent_samples                # shape: (n_aug, n_comp)
+
+    24. // ---------- 6. Train AutoML encoder ----------
+    25. encoder ← AUTOML_REGRESSOR(X_train, Y_train, cfg=regressor_cfg)
+          # e.g., ensemble of GBRT + NN
+
+    26. // ---------- 7. Train taxonomic classifier ----------
+    27. // use original coeffs and known taxon labels
+    28. X_cls ← coeffs
+    29. y_cls ← taxonomy_labels_of(spectra_list)
+    30. classifier ← AUTOML_CLASSIFIER(X_cls, y_cls, cfg=classifier_cfg)
+
+    31. RETURN {
+             pca_mean: mean_spec,
+             pca_eigvec: eigvec,
+             encoder: encoder,
+             classifier: classifier
+           }
+
+END FUNCTION
+
+FUNCTION RECONSTRUCT_SPECTRUM(
+        photometry,           # measured fluxes/magnitudes in the chosen filters
+        reconstructor_dict):
+    
+    1. // ---------- 1. Predict latent coefficients ----------
+    2. lc_pred ← reconstructor_dict.encoder.predict(photometry)
+       # Optionally obtain predictive variance if regressor supports it
+
+    3. // ---------- 2. Decode to full spectrum ----------
+    4. spec_recon ← INVERSE_PCA(lc_pred,
+                               reconstructor_dict.pca_mean,
+                               reconstructor_dict.pca_eigvec)
+
+    5. // ---------- 3. Taxonomic posterior ----------
+    6. tax_prob ← reconstructor_dict.classifier.predict_proba(lc_pred)
+
+    7. RETURN { spectrum: spec_recon,
+               taxonomy: tax_prob }
+
+END FUNCTION
+
+FUNCTION PCA(data, k):
+    # data: array (N, M wavelengths)
+    # returns eigenvectors (M×k) and eigenvalues
+    ...
+
+FUNCTION project(data, mean, eigvec):
+    # subtract mean, multiply by transpose of eigvec
+    ...
+
+FUNCTION INVERSE_PCA(latent, mean, eigvec):
+    # reconstruct high‑resolution spectrum
+    return mean + latent × eigvecᵀ
+...
+
+FUNCTION CONVOLVE_WITH_FILTERS(spectrum, filter_responses):
+    # integrate spectrum × transmission over λ
+    # return vector of filter fluxes / reflectances
+...
+
+FUNCTION ADD_GAUSSIAN_NOISE(values, rel):
+    # add N(0, rel*value) to each element
+...
+
+FUNCTION FIT_KDE(points, bandwidth):
+    # build kernel density estimator
+...
+
+FUNCTION SAMPLE_KDE(kde, size):
+    # sample 'size' points from the KDE
+...
+
+FUNCTION AUTOML_REGRESSOR(X, Y, cfg):
+    # AutoML library (e.g., AutoGluon) trains ensemble
+    # Returns a model with predict(X) → Y
+...
+
+FUNCTION AUTOML_CLASSIFIER(X, Y, cfg):
+    # AutoML library trains ensemble for classification
+...

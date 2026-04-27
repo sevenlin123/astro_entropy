@@ -1,0 +1,49 @@
+Inputs
+-------
+S_train   : matrix of N_spec training spectra (rows) × N_wave wavelengths (columns)
+F_target  : vector of observed photometric fluxes for the target (length N_fil)
+σ_target  : vector of 1σ uncertainties for the target photometry (length N_fil)
+R_j(λ)    : filter transmission curves for each band j (discrete samples over λ)
+
+Parameters
+----------
+K          : number of principal components to keep (e.g. 4–10)
+σ_a_prior  : prior standard deviation for each PCA coefficient (obtained from training data)
+
+Outputs
+-------
+s_rec(λ)   : reconstructed full‑spectrum (vector length N_wave)
+σ_rec(λ)   : 1σ uncertainty for the reconstructed spectrum (vector length N_wave)
+
+1.1   μ(λ)      ← mean spectrum over all training spectra
+1.2   X         ← S_train – μ            # center the data
+1.3   C         ← (Xᵀ X) / (N_spec – 1)   # covariance matrix
+1.4   eig_vals, eig_vecs ← eigen_decomposition(C)
+1.5   Sort eig_vecs by descending eig_vals
+1.6   PCs(k, λ) ← k‑th eigenvector (row)  # k = 1…K, λ = 1…N_wave
+1.7   For each training spectrum i:
+        a_i(k) ← dot_product(PCs(k,·), X[i,·])   # PCA coefficients
+1.8   σ_a_prior(k) ← standard_deviation( {a_i(k)} )
+
+2.1   For each filter j:
+        μ_f(j) ← integral_over_λ[ μ(λ) * R_j(λ) ]   # mean flux of the mean spectrum
+        For each component k:
+            p_kj ← integral_over_λ[ PCs(k,λ) * R_j(λ) ]
+        Store p_kj in matrix P(k,j)   # size K × N_fil
+
+3.1   W ← diag( 1 / σ_target(j)^2 )           # weight matrix
+3.2   Σ_a⁻¹ ← diag( 1 / σ_a_prior(k)^2 )      # prior precision matrix
+3.3   Posterior precision:
+        Π ← Pᵀ W P + Σ_a⁻¹
+3.4   Posterior covariance:
+        C_a ← inverse(Π)
+3.5   Posterior mean of coefficients:
+        â ← C_a * ( Pᵀ W ( F_target – μ_f ) )
+
+4.1   s_rec(λ) ← μ(λ) + Σ_{k=1}^{K} â(k) * PCs(k,λ)
+
+4.2   For each wavelength λ:
+        var(λ) ← Σ_{k,l=1}^{K} PCs(k,λ) * PCs(l,λ) * C_a(k,l)
+        σ_rec(λ) ← sqrt( var(λ) )
+
+Output s_rec(λ) and σ_rec(λ)

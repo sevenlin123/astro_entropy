@@ -1,0 +1,55 @@
+1.1 μ(λ) ← mean over all training spectra   # shape: N_wave
+1.2 D ← S_train − μ                          # centered spectra, shape: N_spectra × N_wave
+1.3 C ← (Dᵀ · D) / (N_spectra − 1)          # covariance matrix, shape: N_wave × N_wave
+1.4 [λ_vals, E] ← eigendecompose(C)          # eigenvalues, eigenvectors
+1.5 sort E, λ_vals in descending λ order
+1.6 E_K ← first K columns of E               # K‑dimensional basis, shape: N_wave × K
+1.7 Var_prior ← diag(λ_vals[1:K])            # prior variances for PC coefficients
+
+2.1 μ_j ← ∫ μ(λ) * T_j(λ) dλ                 # mean flux contribution
+2.2 A_jk ← ∫ E_K[:,k] * T_j(λ) dλ           # projection of k‑th PC onto filter j
+
+2.3 μ_vec[j] ← μ_j
+2.4 A_mat[j,k] ← A_jk        # shape: N_filters × K
+
+3.1 Define M ← number of measured filters for object i
+3.2 Build vectors/matrices:
+       b ← [ phot[i][j] − μ_vec[j] ]          # shape: M
+       W ← diag( 1 / err[i][j]^2 )           # weight matrix, shape: M × M
+       A ← rows of A_mat corresponding to measured filters  # shape: M × K
+
+3.3 Prior precision matrix:
+       Λ_prior ← inverse(Var_prior)          # shape: K × K
+
+3.4 Posterior precision:
+       Λ_post ← Aᵀ · W · A + Λ_prior         # shape: K × K
+
+3.5 Posterior mean of coefficients:
+       μ_c ← inverse(Λ_post) · Aᵀ · W · b    # shape: K
+
+3.6 Posterior covariance of coefficients:
+       Σ_c ← inverse(Λ_post)                # shape: K × K
+
+4.1 Reconstruct mean spectrum:
+       spec_mean ← μ + E_K · μ_c            # shape: N_wave
+
+4.2 Build spectrum covariance:
+       # Each PC contributes outer product weighted by its posterior variance
+       spec_cov ← sum over k,l of Σ_c[k,l] * (E_K[:,k] ⊗ E_K[:,l])
+       # Shape: N_wave × N_wave
+
+4.3 Compute 95 % credible intervals:
+       std_spec ← sqrt(diagonal(spec_cov))
+       spec_CI_lower ← spec_mean − 1.96 * std_spec
+       spec_CI_upper ← spec_mean + 1.96 * std_spec
+
+5.1 Save spec_mean, spec_cov, spec_CI_lower, spec_CI_upper for object i
+
+Preprocess training spectra → compute μ, E_K, Var_prior
+Precompute filter projections → μ_vec, A_mat
+FOR each object i:
+    Build measurement vectors (b, W, A)
+    Compute posterior (μ_c, Σ_c)
+    Reconstruct spectrum (mean, covariance, CI)
+    Output results
+END

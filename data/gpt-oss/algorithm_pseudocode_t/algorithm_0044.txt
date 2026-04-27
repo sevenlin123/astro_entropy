@@ -1,0 +1,76 @@
+Input:
+    - Photometric catalog P = { (band_i, mag_i, err_i) } for a target object
+    - Wavelength grid λ = [λ1 … λN]
+    - Library of end‑member spectra S = { s_k(λ) | k = 1 … K }
+    - Spectral response functions R_j(λ) for each photometric band j
+    - Prior hyperparameters: 
+          * β_prior  (shape/scale for scaling coefficients)
+          * w_prior   (multinomial Dirichlet parameters for component weights)
+
+Output:
+    - Posterior samples of component weights w = (w1 … wK)
+    - Posterior samples of overall scale β
+    - Reconstructed reflectance spectrum R̂(λ) = β Σ_k w_k s_k(λ)
+    - Derived taxonomic class (mode of w)
+    - Uncertainty metrics (posterior credible intervals)
+
+Algorithm:
+
+1. **Pre‑processing**
+   1.1 Convert catalog magnitudes to flux densities:
+        F_i = 10^(-0.4 * (mag_i - ZP_i))            // ZP_i = zero‑point for band i
+        σ_Fi = 0.4 * ln(10) * F_i * err_i           // propagate magnitude error
+   1.2 For each band i, compute synthetic flux of each end‑member:
+        f_ik = ∫ s_k(λ) * R_i(λ) dλ / ∫ R_i(λ) dλ
+   1.3 Stack synthetic fluxes into matrix A of size (M × K):
+        A[i,k] = f_ik
+
+2. **Define Model**
+   2.1 Assume measured flux vector F = β * A * w + ε
+        where w is a probability vector (w_k ≥ 0, Σ w_k = 1),
+              β > 0 scales overall reflectance,
+              ε ~ N(0, diag(σ_F^2))
+   2.2 Prior on β: β ~ Gamma(shape=α_β, rate=θ_β)   // non‑negative
+   2.3 Prior on w: w ~ Dirichlet(α_w)                // multinomial over components
+
+3. **Likelihood Function**
+   For given parameters (β, w), compute modeled flux:
+        F_model = β * (A * w)
+   Compute log‑likelihood:
+        LL = -½ Σ_i [ (F_i - F_model[i])^2 / σ_Fi^2  +  ln(2π σ_Fi^2) ]
+
+4. **Posterior Sampling (MCMC)**
+   Initialize β^(0), w^(0) (e.g., β=1, w uniform).
+   For iteration t = 1 … T:
+        4.1 Propose new β':
+                β' = β^(t-1) + Normal(0, σ_β_prop)
+                Reject if β' ≤ 0
+        4.2 Propose new w':
+                Sample w' from Dirichlet(α_w * γ) where γ controls proposal variance
+        4.3 Compute log‑posterior:
+                LP_current = LL(β^(t-1), w^(t-1)) + log prior(β^(t-1)) + log prior(w^(t-1))
+                LP_proposed = LL(β', w') + log prior(β') + log prior(w')
+        4.4 Acceptance probability:
+                a = min(1, exp(LP_proposed - LP_current))
+        4.5 With probability a accept:
+                β^(t) = β', w^(t) = w'
+             else
+                β^(t) = β^(t-1), w^(t) = w^(t-1)
+   Burn‑in discard first B samples; thin every s samples.
+
+5. **Post‑Processing**
+   5.1 Compute posterior mean and standard deviation for each parameter:
+        μ_β = mean(β_samples), σ_β = std(β_samples)
+        μ_wk = mean(wk_samples), σ_wk = std(wk_samples)
+   5.2 Reconstruct spectrum:
+        R̂(λ) = μ_β * Σ_k μ_wk * s_k(λ)
+   5.3 Derive taxonomic class:
+        Class = argmax_k (μ_wk)            // most probable component
+   5.4 Compute credible intervals for reconstructed spectrum:
+        For each λ_j:
+            R_samples[λ_j] = β_samples * Σ_k w_samples[:,k] * s_k(λ_j)
+            CI_lower, CI_upper = quantile(R_samples[λ_j], [0.025, 0.975])
+
+6. **Return Results**
+   Output posterior samples, reconstructed spectrum with credible intervals,
+   dominant taxonomic class, and parameter uncertainties.

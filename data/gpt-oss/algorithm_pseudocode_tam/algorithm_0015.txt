@@ -1,0 +1,84 @@
+Input:
+    - SpectraSet = {S_i}   // 51 high‑resolution TNO spectra (wavelength × reflectance)
+    - FilterCurves = {F_j} // Effective throughput curves for chosen photometric filters
+    - K_latent            // Number of principal components to retain (e.g., 5–10)
+    - KDE_bandwidth       // Bandwidth for kernel density estimation (e.g., h = 0.5)
+    - NoiseLevel          // Relative Gaussian noise to inject into synthetic photometry (e.g., 20%)
+
+Output for any new photometric observation m_new:
+    - Posterior distribution over spectra p(S | m_new)
+    - Point‑estimate reconstructed spectrum S_rec
+    - Taxonomy probability vector P_tax
+
+--------------------------------------------------------------------
+Step 1: Build Latent Manifold (Prior)
+
+1.1  Perform PCA on SpectraSet:
+        PC_basis, PC_mean, PC_std = PCA(SpectraSet, n_components = K_latent)
+        // PC_basis: K_latent eigenvectors (wavelength × K_latent)
+        // PC_mean: mean spectrum (wavelength)
+        // PC_std: standard deviation per PC (for later scaling)
+
+1.2  Project each spectrum onto PCs:
+        For each S_i in SpectraSet:
+            coeff_i = PC_basis^T * (S_i – PC_mean)
+            Store coeff_i in LatentCoeffs
+
+1.3  Estimate density in latent space via KDE:
+        KDE_model = KDE(LatentCoeffs, bandwidth = KDE_bandwidth)
+
+1.4  Sample synthetic latent vectors:
+        N_aug = 10,000
+        LatentAug = KDE_model.sample(N_aug)
+
+1.5  Reconstruct synthetic spectra:
+        For each c in LatentAug:
+            S_syn = PC_mean + PC_basis * c
+            Store S_syn in SyntheticSpectra
+
+--------------------------------------------------------------------
+Step 2: Generate Synthetic Photometry (Likelihood)
+
+2.1  For each spectrum in SyntheticSpectra:
+        For each filter F_j:
+            m_j = ∫ S_syn(λ) * F_j(λ) dλ / ∫ F_j(λ) dλ   // Reflectance in filter
+        Add Gaussian noise:
+            m_j_noisy = m_j * (1 + Normal(0, NoiseLevel))
+        Store noisy photometry vector m_noisy
+
+2.2  Pair each noisy photometry with its latent coefficient:
+        TrainingPairs = {(m_noisy, c)}
+
+--------------------------------------------------------------------
+Step 3: Train Encoder (Photometry → Latent Coefficients)
+
+3.1  Use AutoML framework (e.g., AutoGluon) to fit a regressor R:
+        R = AutoML_Train(X = {m_noisy}, y = {c})
+        // R maps photometry vector to latent coefficient vector
+
+--------------------------------------------------------------------
+Step 4: Train Classifier (Latent → Taxonomy)
+
+4.1  Label each original spectrum S_i with taxonomy label L_i
+4.2  Train a classifier C on {coeff_i, L_i}:
+        C = AutoML_Train(X = {coeff_i}, y = {L_i})
+
+--------------------------------------------------------------------
+Step 5: Forward Inference for New Observation m_new
+
+5.1  Predict posterior latent distribution:
+        // Optionally use probabilistic regressor or sample via Monte Carlo
+        c_pred = R.predict(m_new)              // point estimate
+        // Or generate multiple predictions with added noise to get distribution
+
+5.2  Reconstruct spectrum:
+        S_rec = PC_mean + PC_basis * c_pred
+
+5.3  Classify taxonomy:
+        P_tax = C.predict_proba(c_pred)        // probabilities for each class
+
+--------------------------------------------------------------------
+Return:
+    - S_rec (reconstructed spectrum)
+    - P_tax (taxonomy probabilities)
+    - (Optional) Posterior samples of S if MC sampling performed

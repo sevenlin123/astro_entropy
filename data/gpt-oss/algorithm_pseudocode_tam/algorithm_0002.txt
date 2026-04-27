@@ -1,0 +1,84 @@
+// ----------------------------------------------------
+// 1. GLOBAL CONSTANTS
+// ----------------------------------------------------
+NUM_PCA_COMPONENTS   = K          // e.g., 10
+KDE_BANDWIDTH        = h          // e.g., 0.5
+NUM_SYNTHETIC_SAMPLES= M          // e.g., 10,000
+PHOTON_NOISE_STD     = 0.20       // 20% relative reflectance noise
+NUM_INFERENCE_SAMPLES= N          // e.g., 100 (for posterior sampling)
+
+// ----------------------------------------------------
+// 2. TRAINING PHASE
+// ----------------------------------------------------
+
+// 2.1 Load seed spectra
+SEED_SPECTRA = load_reflectance_spectra()   // array [S,N] where N = number of wavelengths
+
+// 2.2 PCA on seed spectra
+PCA_MODEL = PCA(n_components=NUM_PCA_COMPONENTS)
+LATENT_COEFFS_SEED = PCA_MODEL.fit_transform(SEED_SPECTRA)    // [S, K]
+
+// 2.3 Fit KDE on latent coefficients
+KDE_MODEL = KernelDensity(kernel='gaussian', bandwidth=KDE_BANDWIDTH)
+KDE_MODEL.fit(LATENT_COEFFS_SEED)
+
+// 2.4 Sample synthetic latent vectors
+SYN_LATENT = KDE_MODEL.sample(NUM_SYNTHETIC_SAMPLES)          // [M, K]
+
+// 2.5 Decode synthetic latents → spectra
+SYN_SPECTRA = PCA_MODEL.inverse_transform(SYN_LATENT)         // [M, N]
+
+// 2.6 Generate synthetic photometry for each synthetic spectrum
+FOR i FROM 1 TO NUM_SYNTHETIC_SAMPLES DO
+    SPEC = SYN_SPECTRA[i]
+    FOR each FILTER f in FILTER_SET DO
+        PHOT_F[f] = convolve_with_filter(SPEC, f)              // reflectance in filter f
+    END FOR
+    // Add Gaussian noise
+    FOR each FILTER f DO
+        NOISE = PHOT_F[f] * PHOTON_NOISE_STD * randn()
+        SYN_PHOT[i][f] = PHOT_F[f] + NOISE
+    END FOR
+END FOR
+
+// 2.7 Assemble training dataset for regressor
+TRAIN_X = SYN_PHOT      // shape [M, num_filters]
+TRAIN_Y = SYN_LATENT    // shape [M, K]
+
+// 2.8 Train photometry→latent regressor (AutoML)
+ENCODER_MODEL = AutoML_TrainRegressor(TRAIN_X, TRAIN_Y)
+
+// 2.9 Train classifier on latent space
+CLASSIFIER_MODEL = AutoML_TrainClassifier(LATENT_COEFFS_SEED, CLASS_LABELS)
+
+// ----------------------------------------------------
+// 3. INFERENCE PHASE
+// ----------------------------------------------------
+
+FUNCTION reconstruct_spectrum(PHOTOMETRY_OBS):
+    // PHOTOMETRY_OBS : vector of observed reflectances in filters
+
+    // 3.1 Predict latent distribution
+    LATENT_MEAN, LATENT_STD = ENCODER_MODEL.predict_distribution(PHOTOMETRY_OBS)
+
+    // 3.2 Sample latent realizations for posterior
+    SAMPLE_LATENTS = []
+    FOR n FROM 1 TO NUM_INFERENCE_SAMPLES DO
+        SAMPLE_LATENTS[n] = LATENT_MEAN + LATENT_STD * randn(K)
+    END FOR
+
+    // 3.3 Decode each latent sample to spectrum
+    SAMPLE_SPECTRA = []
+    FOR s FROM 1 TO NUM_INFERENCE_SAMPLES DO
+        SAMPLE_SPECTRA[s] = PCA_MODEL.inverse_transform(SAMPLE_LATENTS[s])
+    END FOR
+
+    // 3.4 Estimate posterior statistics (mean, std) at each wavelength
+    RECONSTRUCTED_MEAN   = mean(SAMPLE_SPECTRA, axis=1)   // shape [N]
+    RECONSTRUCTED_STD    = std (SAMPLE_SPECTRA, axis=1)
+
+    // 3.5 Classify taxonomy
+    TAXOPROB = CLASSIFIER_MODEL.predict_proba(LATENT_MEAN)
+
+    RETURN RECONSTRUCTED_MEAN, RECONSTRUCTED_STD, TAXOPROB
+END FUNCTION

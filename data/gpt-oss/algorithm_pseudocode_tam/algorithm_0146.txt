@@ -1,0 +1,73 @@
+INPUT:
+    SEED_SPECTRA   // matrix of shape (N_seed, L_wave) – reflectance spectra
+    FILTER_CURVES  // matrix of shape (N_filter, L_wave) – throughput vs λ
+    N_AUG          // number of synthetic latent samples to generate
+    BAND_NOISE     // fractional photometric noise (e.g., 0.20 for 20%)
+    K              // number of principal components to retain (e.g., 8–10)
+
+OUTPUT:
+    RECONSTRUCTED_SPECTRUM   // array of length L_wave
+    TAXONOMY_PROBABILITIES  // vector of class probabilities
+
+--------------------------------------------------------------------
+STEP 1:  PREPROCESS AND PCA
+--------------------------------------------------------------------
+1.1  μ_spec ← mean(SEED_SPECTRA, axis=0)                    // mean spectrum
+1.2  S_centered ← SEED_SPECTRA – μ_spec
+1.3  [V, Λ] ← PCA(S_centered, components=K)                // eigenvectors V (L_wave × K)
+1.4  Z_real ← Vᵀ · S_centeredᵀ                              // latent coordinates (K × N_seed)
+
+--------------------------------------------------------------------
+STEP 2:  BUILD PRIOR VIA KDE
+--------------------------------------------------------------------
+2.1  KDE_prior ← FitKDE(Z_real.T, bandwidth=h)             // non‑parametric density
+2.2  Z_aug  ← Sample(KDE_prior, N_AUG)                      // synthetic latent vectors (N_AUG × K)
+
+--------------------------------------------------------------------
+STEP 3:  GENERATE SYNTHETIC SPECTRA AND PHOTOMETRY
+--------------------------------------------------------------------
+3.1  FOR each z in Z_aug DO
+        S_synth ← μ_spec + V · z                            // inverse PCA → spectrum
+        m_synth ← ConvolveWithFilters(S_synth, FILTER_CURVES)
+        m_noisy ← m_synth + Normal(0, BAND_NOISE·m_synth)   // additive Gaussian noise
+        STORE (m_noisy, z)
+    END FOR
+// Result: training set {(m_noisy_i, z_i)} for i = 1…N_AUG
+
+--------------------------------------------------------------------
+STEP 4:  TRAIN ENCODER (REGRESSOR)
+--------------------------------------------------------------------
+4.1  INPUT_X ← stack of all m_noisy_i          // shape (N_AUG, N_filter)
+4.2  OUTPUT_Y ← stack of all z_i               // shape (N_AUG, K)
+4.3  REGRESSOR ← TrainAutoMLRegressor(INPUT_X, OUTPUT_Y)
+          // e.g., ensemble of gradient‑boosted trees with default hyper‑params
+
+--------------------------------------------------------------------
+STEP 5:  TRAIN CLASSIFIER ON LATENT SPACE
+--------------------------------------------------------------------
+5.1  LABELS ← taxonomy labels for SEED_SPECTRA            // shape (N_seed,)
+5.2  CLASSIFIER ← TrainAutoMLClassifier(Z_real.T, LABELS)
+          // optional: use only real latent vectors; KDE samples may be excluded
+
+--------------------------------------------------------------------
+STEP 6:  INFERENCE ON NEW PHOTOMETRY
+--------------------------------------------------------------------
+FUNCTION ReconstructSpectrum(m_obs):
+    # m_obs: observed photometry vector (length N_filter)
+    
+    # 6.1  Encode photometry to latent coordinates
+    z_hat ← REGRESSOR.predict(m_obs)                // vector of length K
+    
+    # 6.2  Decode latent to high‑resolution spectrum
+    S_rec ← μ_spec + V · z_hat                       // length L_wave
+    
+    # 6.3  Classify in latent space
+    probs ← CLASSIFIER.predict_proba(z_hat)          // vector over taxonomic classes
+    
+    RETURN (S_rec, probs)
+
+--------------------------------------------------------------------
+USAGE EXAMPLE
+--------------------------------------------------------------------
+m_new ← ObtainPhotometryFromObservation()
+(S_recon, tax_probs) ← ReconstructSpectrum(m_new)

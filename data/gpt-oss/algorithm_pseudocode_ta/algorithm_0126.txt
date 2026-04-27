@@ -1,0 +1,81 @@
+text
+INPUT:
+    - Training spectral dataset {S_i(λ)}   i = 1 … N_train
+    - New object photometry:
+        • Band list B = {b_1,…,b_M}
+        • Fluxes f_obs(b)     (magnitude or flux units)
+        • Measurement errors σ(b)
+
+OUTPUT:
+    - Reconstructed spectrum S_rec(λ)
+    - Spectral uncertainty estimate σ_S(λ)
+
+--------------------------------------------------------------------
+Step 0. Pre‑processing of training spectra
+--------------------------------------------------------------------
+1. Choose common wavelength grid λ_grid.
+2. Interpolate every training spectrum onto λ_grid.
+3. Subtract mean spectrum μ(λ):
+       μ(λ) ← (1/N_train) Σ_i S_i(λ)
+   Define centered spectra:
+       s_i(λ) ← S_i(λ) – μ(λ)
+
+--------------------------------------------------------------------
+Step 1. Principal Component Analysis (PCA)
+--------------------------------------------------------------------
+4. Assemble data matrix X (N_train × L) where L = len(λ_grid):
+       X[i,ℓ] = s_i(λ_ℓ)
+5. Compute covariance C = (1/(N_train−1)) Xᵀ X
+6. Eigen‑decompose C:
+       C v_k = λ_k v_k   for k = 1 … K_max
+   Sort eigenvalues descending: λ_1 ≥ λ_2 ≥ …
+7. Select number of retained components K (e.g., K = 8–10):
+       V = [v_1 … v_K]   (L × K matrix)
+   Store eigenvalues Λ = diag(λ_1,…,λ_K)
+
+--------------------------------------------------------------------
+Step 2. Forward photometric model for a latent spectrum
+--------------------------------------------------------------------
+For each band b in B:
+8. Compute band‑integrated mean flux:
+       μ_b = ∫ μ(λ) R_b(λ) dλ                (R_b: filter response)
+9. For each component k:
+       V_kb = ∫ v_k(λ) R_b(λ) dλ
+   Assemble matrix A (M × K) with entries A[b,k] = V_kb
+
+Define vector y:
+10. y[b] = f_obs(b) – μ_b
+
+--------------------------------------------------------------------
+Step 3. Bayesian inference of latent coefficients
+--------------------------------------------------------------------
+11. Prior on coefficients:
+       c ~ N(0 , Λ)          (zero‑mean, diagonal covariance)
+12. Likelihood:
+       y | c  ~ N(A c , Σ_y)     with Σ_y = diag(σ(b)^2)
+13. Posterior (Gaussian analytical solution):
+       S_post = (Aᵀ Σ_y⁻¹ A + Λ⁻¹)⁻¹
+       m_post = S_post Aᵀ Σ_y⁻¹ y
+   Return posterior mean coefficients m_post and covariance S_post.
+
+--------------------------------------------------------------------
+Step 4. Reconstruct full spectrum
+--------------------------------------------------------------------
+14. S_rec(λ_ℓ) = μ(λ_ℓ) + Σ_{k=1}^{K} m_post[k] * v_k(λ_ℓ)
+
+15. Spectral uncertainty:
+   For each wavelength λ_ℓ:
+       σ_S(λ_ℓ)² = Σ_{k,j} S_post[k,j] * v_k(λ_ℓ) * v_j(λ_ℓ)
+
+--------------------------------------------------------------------
+Step 5. (Optional) Outlier / rare‑type detection
+--------------------------------------------------------------------
+16. Compute predictive log‑likelihood of observed photometry:
+       ℓ = −½ [ (y − A m_post)ᵀ Σ_y⁻¹ (y − A m_post)
+                + ln|Σ_y| + ln|S_post| + const ]
+17. Flag object as anomalous if ℓ below chosen threshold
+   (or equivalently, posterior predictive probability < ε).
+
+--------------------------------------------------------------------
+RETURN:
+    S_rec(λ_grid), σ_S(λ_grid), posterior m_post, S_post

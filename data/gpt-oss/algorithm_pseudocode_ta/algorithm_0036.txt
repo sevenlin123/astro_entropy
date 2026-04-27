@@ -1,0 +1,71 @@
+INPUT
+    S            # matrix of N_spec training spectra (N_spec × N_wave)
+    R            # filter response matrix (N_filter × N_wave)
+    f_obs        # vector of observed photometric fluxes (N_filter)
+    σ_f          # vector of photometric uncertainties (N_filter)
+    K            # number of principal‑component dimensions to retain
+
+OUTPUT
+    s_rec        # reconstructed full spectrum (N_wave)
+    CI_low, CI_hi # lower/upper bounds of 95% credible interval per wavelength
+
+--------------------------------------------------------------------
+1.  PREPARE TRAINING BASIS
+--------------------------------------------------------------------
+2.  μ  ← mean(S, axis=0)                     # mean spectrum (1 × N_wave)
+3.  S_c ← S  –  μ                             # centered spectra (N_spec × N_wave)
+
+4.  C  ← (S_cᵀ · S_c) / (N_spec – 1)          # covariance matrix (N_wave × N_wave)
+
+5.  eig_vals, eig_vecs ← eig(C)               # eigen decomposition
+6.  idx_sort ← argsort(eig_vals)[::-1]         # descending order
+7.  V_k ← eig_vecs[:, idx_sort[:K]]           # first K PC eigenvectors (N_wave × K)
+8.  Λ   ← diag(eig_vals[idx_sort[:K]])        # eigenvalues of selected PCs (K × K)
+
+--------------------------------------------------------------------
+2.  PROJECT FILTER RESPONSES ON TO PC SPACE
+--------------------------------------------------------------------
+9.  M     ← R · V_k                           # filter responses for PCs (N_filter × K)
+10. f_mean← R · μ                             # mean spectrum in filter space (N_filter)
+
+--------------------------------------------------------------------
+3.  DEFINE LIKELIHOOD AND PRIOR
+--------------------------------------------------------------------
+11.  Σ_f ← diag(σ_f²)                         # observation error covariance (N_filter × N_filter)
+
+12.  # Likelihood:  p(f | a)  ∝ exp[–½ (f – f_mean – M a)ᵀ Σ_f⁻¹ (f – …)]
+13.  # Prior:        p(a)      ∝ exp[–½ aᵀ Λ⁻¹ a]      (zero‑mean Gaussian)
+
+--------------------------------------------------------------------
+4.  COMPUTE MAP ESTIMATE OF COEFFICIENT VECTOR
+--------------------------------------------------------------------
+14.  A_inv  ← Mᵀ · Σ_f⁻¹ · M + Λ⁻¹             # (K × K)
+15.  A      ← inv(A_inv)                       # (K × K)
+16.  a_map  ← A · Mᵀ · Σ_f⁻¹ · (f_obs – f_mean)   # (K × 1)
+
+--------------------------------------------------------------------
+5.  POSTERIOR COUPLING
+--------------------------------------------------------------------
+17.  Cov_a  ← A                                # posterior covariance of a (K × K)
+
+--------------------------------------------------------------------
+6.  RECONSTRUCT FULL SPECTRUM
+--------------------------------------------------------------------
+18.  s_rec  ← μ + V_k · a_map                 # (N_wave)
+
+--------------------------------------------------------------------
+7.  PROPAGATE UNCERTAINTY (CRITICAL FOR 95% CI)
+--------------------------------------------------------------------
+19.  N_draw ← 1000                            # number of Monte‑Carlo draws
+20.  samples_a ← multivariate_normal(mean=a_map,
+                                    cov=Cov_a,
+                                    size=N_draw)           # (N_draw × K)
+21.  samples_s ← μ + samples_a · V_kᵀ          # (N_draw × N_wave)
+
+22.  CI_low  ← percentile(samples_s, 2.5, axis=0)   # 2.5th percentile per wavelength
+23.  CI_high ← percentile(samples_s, 97.5, axis=0)  # 97.5th percentile per wavelength
+
+--------------------------------------------------------------------
+8.  RETURN
+--------------------------------------------------------------------
+24.  return s_rec, CI_low, CI_high

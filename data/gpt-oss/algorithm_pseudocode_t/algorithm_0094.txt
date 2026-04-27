@@ -1,0 +1,64 @@
+INPUT:
+    - Observations O = { (f_i, m_i, σ_i, t_i) }  // filter index, measured magnitude, photometric error, observation time
+    - Filter transmission curves T_f(λ) for all filters f
+    - Solar reference spectrum S(λ)
+    - Wavelength grid Λ = {λ_1 … λ_N}  // discretization of 0.3–2.5 μm
+
+OUTPUT:
+    - Posterior samples {R_k(λ)}_{k=1}^{K} of the reflectance spectrum R(λ)
+    - Posterior mean spectrum R̄(λ) and 68% credible interval bounds
+
+ALGORITHM:
+
+1. PRE‑PROCESSING
+   1.1. Convert magnitudes to relative fluxes:
+           F_i = 10^(-0.4 * (m_i - m_ref))      // m_ref = reference magnitude (e.g. Vega)
+   1.2. For each filter f, compute normalized response:
+           W_f(λ) = T_f(λ) / ∫ T_f(λ) dλ
+   1.3. Store solar reference flux vector S_f = ∫ S(λ) * W_f(λ) dλ  for all filters
+
+2. MODEL SETUP
+   2.1. Define the forward model for a candidate reflectance R(λ):
+           Predicted flux in filter f:
+                Ō_f(R) = ∫ R(λ) * S(λ) * W_f(λ) dλ
+           (Numerical integration is performed over Λ.)
+   2.2. Place a Gaussian‑Process prior on the log‑reflectance:
+           log R(λ) ~ GP( μ_GP(λ), K_GP(λ, λ') )
+        where μ_GP(λ)=0 and K_GP is a squared‑exponential kernel
+           K_GP(λ, λ') = σ² * exp( - (λ-λ')² / (2ℓ²) )
+        Hyperparameters (σ, ℓ) are fixed or given weak priors.
+
+3. LIKELIHOOD
+   3.1. For each observation i:
+           Predict flux Ō_{f_i}(R) using step 2.1
+           Likelihood term:
+                p(m_i | R) = Normal( Ō_{f_i}(R), σ_i² )
+   3.2. Total likelihood:
+            p(O | R) = Π_i p(m_i | R)
+
+4. POSTERIOR SAMPLING (MCMC)
+   4.1. Initialize R^(0)(λ) = 1.0 (flat spectrum)
+   4.2. For iteration k = 1 … K:
+          4.2.1. Propose new log‑reflectance:
+                    log R* = log R^(k-1) + η,   η ~ Normal(0, Σ_prop)
+                  (Σ_prop chosen to give ≈25% acceptance.)
+          4.2.2. Compute log prior: log p(R*) from GP in step 2.2
+          4.2.3. Compute log likelihood: log p(O | R*) from step 3.2
+          4.2.4. Acceptance probability:
+                    α = min(1, exp( log p(O|R*) + log p(R*) 
+                                   - log p(O|R^(k-1)) - log p(R^(k-1)) ))
+          4.2.5. If u < α (u uniform[0,1]) accept:
+                    R^(k) = R*
+                 else reject:
+                    R^(k) = R^(k-1)
+   4.3. Store R^(k) as sample k
+
+5. POST‑PROCESSING
+   5.1. After burn‑in and thinning, obtain retained samples {R_k}
+   5.2. Compute posterior mean:
+            R̄(λ) = (1/M) Σ_{k=1}^{M} R_k(λ)
+   5.3. Compute 68% credible interval at each λ:
+            lower(λ), upper(λ) = quantiles 16%, 84% of {R_k(λ)}
+
+6. RETURN
+   Return {R_k(λ)}, R̄(λ), [lower(λ), upper(λ)] for all λ∈Λ

@@ -1,0 +1,90 @@
+INPUT:
+    - Observed sparse photometry vector m = {m_1, …, m_F} with measurement errors σ_m
+    - Training set of N_ref spectral reflectance vectors S_ref[n], n=1…N_ref
+    - Instrument throughput curves T_f(λ) for each filter f
+    - Desired number of principal components K  (e.g., K = 8–10)
+    - KDE bandwidth h  (e.g., h = 0.5)
+    - Noise level for forward‑model simulation η  (e.g., 20 %)
+
+OUTPUT:
+    - Posterior samples of latent coefficients {z^{(s)}} , s=1…S
+    - Reconstructed spectra {Ŝ^{(s)}(λ)} , s=1…S
+    - Taxonomic probability vector p_tax
+
+--------------------------------------------------------------------
+STEP 1 – Build Latent Space (Prior)
+
+1.1   Center all reference spectra:
+          S_center[n] = S_ref[n] – μ_S        // μ_S = mean(S_ref)
+1.2   Perform PCA on {S_center[n]}:
+          [U, Σ, V] = SVD( S_center )         // U: eigenvectors (principal components)
+          PCs = first K columns of U           // PCs(λ, k)
+1.3   Project reference spectra onto PCs:
+          z_ref[n] = (S_center[n])ᵀ · PCs     // latent coefficient vector for each ref spectrum
+1.4   Estimate density in latent space with KDE:
+          For each dimension k:
+              pdf_k(z_k) = (1/(N_ref * h)) * Σ_{n} exp( -(z_k - z_ref[n,k])² / (2h²) )
+          // Joint PDF = Π_k pdf_k(z_k)  (independent Gaussian kernels)
+
+--------------------------------------------------------------------
+STEP 2 – Generate Synthetic Training Set (Augmentation)
+
+2.1   Sample M synthetic latent vectors from KDE:
+          {z_syn[j]}, j=1…M  (e.g., M = 5000)
+2.2   Reconstruct synthetic spectra:
+          S_syn[j] = PCs · z_syn[j] + μ_S
+          // Ensure physical bounds (e.g., reflectance ∈ [0,1]) if needed
+2.3   Forward‑model photometry for each synthetic spectrum:
+          For each filter f:
+              m_syn[f] = ∫ S_syn[j](λ) · T_f(λ) dλ
+          // Optionally normalize to reflectance units
+2.4   Add Gaussian photometric noise:
+          m_syn_noisy[f] ~ Normal( m_syn[f], η·m_syn[f] )
+          // Repeat noise realization if multiple samples per synthetic spectrum desired
+
+--------------------------------------------------------------------
+STEP 3 – Train Encoder (Photo → Latent)
+
+3.1   Prepare training pairs:
+          X = { m_syn_noisy }   // shape (M, F)
+          Y = { z_syn }         // shape (M, K)
+3.2   Use AutoML framework to fit regression model:
+          reg_model = AutoML_Regressor.fit(X, Y)
+          // Underlying ensemble of Gradient‑Boosted Trees, Random Forests, etc.
+
+--------------------------------------------------------------------
+STEP 4 – Train Taxonomy Classifier (Latent → Class)
+
+4.1   Assign taxonomy labels L[n] to each reference spectrum (e.g., H₂O, CO₂, Org, Meth)
+4.2   Train classifier on latent coordinates of reference spectra:
+          clf = AutoML_Classifier.fit( z_ref, L )
+--------------------------------------------------------------------
+STEP 5 – Inference for New Observation
+
+5.1   Input photometry m_obs with errors σ_m
+5.2   Predict latent mean and covariance:
+          z_mean, Σ_z = reg_model.predict_with_uncertainty( m_obs )
+          // Regression model returns posterior over latent coefficients
+5.3   Sample S latent draws using Gaussian Copula:
+          For s = 1…S:
+              Draw u_k ∼ Uniform(0,1) for k=1…K
+              Transform to normal marginals: y_k = Φ⁻¹(u_k)  // Φ⁻¹ = inverse CDF of standard normal
+              Apply Cholesky of Σ_z: v = L_chol · y  // L_chol: lower triangular from Σ_z
+              z_sample[s] = z_mean + v
+5.4   Decode spectra:
+          For each s:
+              Ŝ[s] = PCs · z_sample[s] + μ_S
+5.5   Taxonomy probabilities:
+          p_tax = clf.predict_proba( z_mean )      // Classifier applied to mean latent vector
+
+--------------------------------------------------------------------
+STEP 6 – Output Results
+
+Return:
+    - Latent posterior samples {z_sample[s]}
+    - Reconstructed spectra {Ŝ[s](λ)}
+    - Taxonomic probability vector p_tax
+    - Optional: credible intervals per wavelength from {Ŝ[s]}
+
+--------------------------------------------------------------------
+END

@@ -1,0 +1,67 @@
+PROCEDURE RECONSTRUCT_SPECTRUM(S, {T_m}, y_obs, σ_obs, K):
+
+  # ------------------------------------------------------------------
+  # 1. Pre‑processing of training spectra
+  # ------------------------------------------------------------------
+  1.1  μ ← mean(S, axis=0)                      # mean spectrum (size N_wave)
+  1.2  S_centered ← S – μ                       # zero‑mean spectra
+
+  # ------------------------------------------------------------------
+  # 2. Principal Component Analysis (PCA)
+  # ------------------------------------------------------------------
+  2.1  C ← (S_centered.T @ S_centered) / (N_spec-1)   # covariance matrix
+  2.2  [λ, V] ← eig(C)                                 # eigenvalues, eigenvectors
+  2.3  idx ← argsort(λ, descending=True)
+  2.4  V_K ← V[:, idx[:K]]                            # first K eigenvectors (size N_wave × K)
+  2.5  A ← S_centered @ V_K                           # projections of training spectra into PC space (size N_spec × K)
+
+  # ------------------------------------------------------------------
+  # 3. Prior distribution on PC coefficients
+  # ------------------------------------------------------------------
+  3.1  a_prior_mean ← mean(A, axis=0)                 # mean of PC coefficients (size K)
+  3.2  Σ_prior ← cov(A, rowvar=False)                # covariance of PC coefficients (size K × K)
+
+  # ------------------------------------------------------------------
+  # 4. Pre‑compute band vectors for rapid forward modelling
+  #    Band vector b_mk = ∫ T_m(λ) · V_k(λ) dλ
+  #    Constant term b_m0 = ∫ T_m(λ) · μ(λ) dλ
+  # ------------------------------------------------------------------
+  4.1  For each band m = 1 … M:
+         b_m0[m] ← sum( T_m * μ ) * Δλ
+         For k = 1 … K:
+             b_mk[m, k] ← sum( T_m * V_K[:, k] ) * Δλ
+  4.2  B ← b_mk   # matrix size M × K
+  4.3  b0 ← b_m0  # vector size M
+
+  # ------------------------------------------------------------------
+  # 5. Bayesian inference for PC coefficients given photometry
+  #    Likelihood: y = b0 + B·a + ε ,  ε ∼ N(0, diag(σ_obs²))
+  #    Prior:     a ∼ N(a_prior_mean, Σ_prior)
+  # ------------------------------------------------------------------
+  5.1  W ← diag( 1 / (σ_obs ** 2) )                     # weight matrix (size M × M)
+
+  5.2  Σ_post_inv ← inv( Σ_prior ) + B.T @ W @ B
+  5.3  Σ_post ← inv( Σ_post_inv )                      # posterior covariance (size K × K)
+
+  5.4  rhs ← inv( Σ_prior ) @ a_prior_mean + B.T @ W @ (y_obs - b0)
+  5.5  a_post ← Σ_post @ rhs                          # posterior mean of PC coefficients (size K)
+
+  # ------------------------------------------------------------------
+  # 6. Spectrum reconstruction
+  # ------------------------------------------------------------------
+  6.1  s_rec ← μ + V_K @ a_post                        # reconstructed spectrum (size N_wave)
+
+  # ------------------------------------------------------------------
+  # 7. Propagate coefficient uncertainty to spectral uncertainty
+  #    var_rec(λ_i) = Σ_{k,l} V_K[i,k] Σ_post[k,l] V_K[i,l]
+  # ------------------------------------------------------------------
+  7.1  var_rec ← zeros(N_wave)
+  7.2  For i = 1 … N_wave:
+          v_i ← V_K[i, :]                             # K‑vector at wavelength λ_i
+          var_rec[i] ← v_i.T @ Σ_post @ v_i
+
+  # ------------------------------------------------------------------
+  # 8. Return result
+  # ------------------------------------------------------------------
+  RETURN s_rec, sqrt(var_rec)
+END PROCEDURE

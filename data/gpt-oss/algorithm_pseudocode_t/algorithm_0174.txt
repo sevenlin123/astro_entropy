@@ -1,0 +1,78 @@
+PROBABILISTIC_SPECTRAL_RECONSTRUCTION(
+        P[1..N]          // observed magnitudes in N filters
+        E[1..N]          // photometric uncertainties
+        FILTERS[1..N]    // filter transmission curves
+        TEMPLATES[1..K]  // K spectral template functions
+        PRIOR_C_ALPHA    // Dirichlet prior hyper‑parameter
+        PRIOR_S_MU, PRIOR_S_SIGMA   // Log‑normal prior for scale
+        ITERATIONS, BURNIN )  // MCMC settings
+
+BEGIN
+  /* ---------- Step 1 – Data preprocessing ---------- */
+  FOR i = 1 TO N DO
+      F_obs[i]   ← MAG_TO_FLUX(P[i])          // convert mag → flux density
+      SIG_F[i]   ← F_obs[i] * (ln10/2.5) * E[i]   // propagate error
+  END FOR
+
+  /* ---------- Step 2 – Compute filter–template response matrix ---------- */
+  FOR i = 1 TO N DO
+      FOR k = 1 TO K DO
+          NUM ← INTEGRATE( TEMPLATES[k](λ) * FILTERS[i](λ) , λ )
+          DEN ← INTEGRATE( FILTERS[i](λ) , λ )
+          R[i][k] ← NUM / DEN                  // response of template k in filter i
+      END FOR
+  END FOR
+
+  /* ---------- Step 3 – Define forward model ---------- */
+  // F_model[i] = SCALE * Σ_k  C[k] * R[i][k]
+  //   C[ ] : mixture coefficients (∑ C = 1, C ≥ 0)
+  //   SCALE : overall flux scaling (positive)
+
+  /* ---------- Step 4 – Initialize MCMC chain ---------- */
+  SAMPLE C_current ∼ Dirichlet(PRIOR_C_ALPHA)            // initial coefficients
+  SAMPLE SCALE_current ∼ LogNormal(PRIOR_S_MU, PRIOR_S_SIGMA) // initial scale
+
+  /* ---------- Step 5 – MCMC sampling loop ---------- */
+  FOR n = 1 TO ITERATIONS DO
+
+      /* ---- 5a: Sample SCALE given current C ---- */
+      // Conditional likelihood is Gaussian in SCALE
+      NUM ← 0 ; DEN ← 0
+      FOR i = 1 TO N DO
+          RES ← F_obs[i] - SCALE_current * Σ_k C_current[k] * R[i][k]
+          NUM ← NUM + RES * (Σ_k C_current[k] * R[i][k]) / (SIG_F[i]^2)
+          DEN ← DEN + (Σ_k C_current[k] * R[i][k])^2 / (SIG_F[i]^2)
+      END FOR
+      MU_scale ← (NUM + PRIOR_S_MU / PRIOR_S_SIGMA^2) /
+                 (DEN + 1 / PRIOR_S_SIGMA^2)
+      VAR_scale ← 1 / (DEN + 1 / PRIOR_S_SIGMA^2)
+      SCALE_new ← DRAW_FROM_LOGNORMAL(MU_scale, VAR_scale)
+
+      /* ---- 5b: Sample C given current SCALE ---- */
+      // Conditional likelihood is Gaussian in C (linear) but constrained
+      // to simplex; use constrained Gaussian sampler or hit‑and‑run.
+      // Compute mean and covariance of multivariate normal:
+      A_row ← Σ over i of (R[i][k] * R[i][l]) / SIG_F[i]^2   // matrix K×K
+      b_col ← Σ over i of (F_obs[i] / SCALE_new) * R[i][k] / SIG_F[i]^2
+      // Solve linear system A * μ_c = b to get unconstrained mean
+      μ_c ← SOLVE(A_row, b_col)
+      Σ_c ← INVERSE(A_row)      // covariance
+      // Draw sample from Gaussian and project onto simplex:
+      C_sample ← DRAW_CONSTRAINED_GAUSSIAN(μ_c, Σ_c, SIMPLEX_CONSTRAINT)
+      C_new ← C_sample
+
+      /* ---- 5c: Store samples after burn‑in ---- */
+      IF n > BURNIN THEN
+          STORE (SCALE_new, C_new)
+      END IF
+
+      /* ---- 5d: Update current state ---- */
+      SCALE_current ← SCALE_new
+      C_current     ← C_new
+  END FOR
+
+  /* ---------- Step 6 – Post‑processing ---------- */
+  COMPUTE_DESCRIPTIVE_STATS( STORED_SCALE, STORED_C )   // means, modes, credible intervals
+
+  RETURN STORED_SCALE, STORED_C
+END

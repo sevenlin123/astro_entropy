@@ -1,0 +1,61 @@
+Input:
+    X          : Nspec × Nλ matrix of training near‑IR spectra
+    k          : number of principal components to retain (≈4–10)
+    W[j]       : filter response vector (length Nλ) for each of M filters
+    y_obs[j]   : observed broadband fluxes (M×1 vector)
+    C_y        : M × M photometric error covariance matrix
+Output:
+    μ_z        : posterior mean of latent coefficient vector (k×1)
+    Σ_z        : posterior covariance of latent coefficients (k×k)
+    s_mean     : mean reconstructed spectrum (Nλ×1)
+    σ_s        : element‑wise standard deviation of reconstructed spectrum (Nλ×1)
+
+--------------------------------------------------------------------
+1.  Train PCA on the spectral library
+--------------------------------------------------------------------
+1.1  μ_x ← mean(X, axis=0)                     # mean spectrum (1×Nλ)
+1.2  Xc ← X  –  μ_x                           # centered spectra
+1.3  S   ← (Xcᵀ · Xc) / (Nspec – 1)            # covariance matrix (Nλ×Nλ)
+1.4  [E, Λ] ← eig(S)                          # eigen‑decomposition
+1.5  sort eigenvectors by decreasing eigenvalue
+1.6  V_k ← first k columns of E                # principal directions (Nλ×k)
+1.7  P   ← V_k * diag(√Λ_k)                    # scaled PCs (Nλ×k)
+
+--------------------------------------------------------------------
+2.  Build the forward model from latent space to photometry
+--------------------------------------------------------------------
+2.1  For each filter j = 1…M
+        a_j ← W[j] ⋅ μ_x                      # scalar bias term
+        B_j ← W[j] ⋅ P                        # 1 × k row vector
+   EndFor
+2.2  b  ← vector of all a_j  (M×1)
+2.3  B  ← matrix of all B_j (M × k)
+
+--------------------------------------------------------------------
+3.  Bayesian inference in the latent space
+--------------------------------------------------------------------
+3.1  Prior:  p(z)  =  N(0, I_k)
+3.2  Likelihood:  p(y|z) = N( b + B z ,  C_y )
+3.3  Posterior (analytic, Gaussian linear model):
+        Σ_z  ← ( I_k + Bᵀ · C_y⁻¹ · B )⁻¹
+        μ_z  ← Σ_z · Bᵀ · C_y⁻¹ · y_obs
+
+--------------------------------------------------------------------
+4.  Reconstruct the full spectrum and its uncertainty
+--------------------------------------------------------------------
+4.1  s_mean ← μ_x  +  P · μ_z                  # mean reconstructed spectrum (Nλ×1)
+4.2  # Propagate latent‑space posterior variance through PCs
+        Cov_s  ← P · Σ_z · Pᵀ                  # Nλ×Nλ covariance matrix
+4.3  σ_s  ← sqrt(diag(Cov_s))                 # element‑wise std dev
+
+--------------------------------------------------------------------
+5.  Optional: draw samples from the posterior to visualize spectrum spread
+--------------------------------------------------------------------
+5.1  For n = 1 … Nsample
+        z_n  ← multivariate_normal( μ_z , Σ_z )
+        s_n  ← μ_x + P · z_n
+   EndFor
+
+--------------------------------------------------------------------
+Return:
+    μ_z , Σ_z , s_mean , σ_s   (and optionally the sampled spectra {s_n})

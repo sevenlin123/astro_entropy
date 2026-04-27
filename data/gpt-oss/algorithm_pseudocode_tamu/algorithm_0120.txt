@@ -1,0 +1,59 @@
+pseudo
+   μ_S ← mean(S_ref)                     // vector of length L (λ points)
+   S_centered ← S_ref − μ_S              // N × L matrix
+   [U, Σ, V^T] ← SVD(S_centered)         // U: PCs (L×K), Σ: singular values
+   K ← choose_number_of_components()     // e.g. 8–10 for reconstruction
+   PCs ← U[:,1:K]                         // K principal eigenvectors
+   coeff_ref ← (S_centered · PCs)          // N × K matrix of PCA coefficients
+
+pseudo
+   KDE ← fit_gaussian_kde(coeff_ref, bandwidth=h)   // h≈0.5
+
+pseudo
+   M ← number_of_synthetic_samples   // e.g. 10 000
+   coeff_synth ← KDE.sample(M)        // M × K matrix
+   spectra_synth ← μ_S + coeff_synth · PCs^T   // M × L matrix
+
+pseudo
+   for each spectrum s in spectra_synth:
+       m_f ← ∫ s(λ)·T_f(λ) dλ / ∫ T_f(λ) dλ     // reflected flux in filter f
+   end
+
+pseudo
+   σ_rel ← 0.20                               // 20 % relative uncertainty
+   M_noisy ← M_synth + Normal(0, σ_rel·M_synth)
+
+pseudo
+   regressor ← AutoML_regressor.fit(
+                   X = M_noisy,          // F‑dimensional photometry
+                   y = coeff_synth )     // K‑dimensional latent vector
+
+pseudo
+   classifier ← AutoML_classifier.fit(
+                    X = coeff_ref,
+                    y = taxonomic_labels )
+
+pseudo
+   coeff_mean, coeff_cov ← regressor.predict_with_uncertainty(m_obs)
+
+pseudo
+   n_samples ← 500
+   latent_samples ← sample_from_gaussian_copula(
+                       mean=coeff_mean,
+                       covariance=coeff_cov,
+                       n=n_samples )
+
+pseudo
+   spectra_recon ← μ_S + latent_samples · PCs^T   // n_samples × L
+
+pseudo
+   for λ_j in λ:
+       values_j ← spectra_recon[:, j]
+       lower_j, upper_j ← percentile(values_j, [2.5, 97.5])
+       interval[λ_j] ← (lower_j, upper_j)
+   end
+
+pseudo
+   probs ← classifier.predict_proba(latent_samples)   // n_samples × N_classes
+   prob_mean ← mean(probs, axis=0)
+   prob_std  ← std(probs, axis=0)

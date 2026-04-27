@@ -1,0 +1,112 @@
+Inputs
+-------
+S_raw[1…N_spec]          – N_spec high‑resolution near‑IR spectra (flux vs λ)
+F_filters[1…N_filt]      – Filter transmission curves (λ → T(λ))
+Phot[1…M]                – Measured photometry of target object
+Err[1…M]                 – Measurement uncertainties (σ_i)
+
+Parameters
+----------
+K            – Number of principal components to retain
+α            – Prior covariance scale (scalar or vector)
+
+Outputs
+-------
+Spect_pred[λ]        – Reconstructed spectrum (mean ± σ)
+Cov_spect[λ,λ']      – Posterior covariance matrix of spectrum
+
+--------------------------------------------------------------------
+Step 0: Pre‑processing
+--------------------------------------------------------------------
+For each spectrum s in S_raw:
+    1. Interpolate to common wavelength grid λ_common
+    2. Normalise (e.g., divide by flux at reference λ₀)
+
+--------------------------------------------------------------------
+Step 1: Principal Component Analysis
+--------------------------------------------------------------------
+1. Compute mean spectrum μ_λ = mean(S_raw[:, λ_common])
+2. Subtract mean:  X = S_raw - μ_λ
+3. Perform singular value decomposition (SVD):
+       X = U Σ Vᵀ
+4. Select first K columns of Vᵀ → PCs[k, λ_common]   (k=1…K)
+5. Store eigenvalues Λ_k = diag(Σ)^2 / (N_spec-1)
+
+--------------------------------------------------------------------
+Step 2: Forward Model – From weights to photometry
+--------------------------------------------------------------------
+Define function FluxFromWeights(w[1…K]):
+    # w are latent coefficients
+    Spectrum = μ_λ + Σ_{k=1}^{K} w_k * PCs[k, λ]
+    For each filter i:
+        f_i = ∫ Spectrum(λ) * T_i(λ) dλ  / ∫ T_i(λ) dλ
+    Return f[1…M]
+
+--------------------------------------------------------------------
+Step 3: Likelihood Function
+--------------------------------------------------------------------
+Given observed Phot[i] with error Err[i]:
+    Likelihood(Phot | w) = 
+        Π_{i=1}^{M}
+        Normal(Phot[i] | FluxFromWeights(w)[i], Err[i]^2)
+
+--------------------------------------------------------------------
+Step 4: Prior on Latent Coefficients
+--------------------------------------------------------------------
+Assume independent Gaussian priors:
+    p(w_k) = Normal(0, α^2 * Λ_k)
+    (Λ_k is variance of k‑th PC in training set)
+
+--------------------------------------------------------------------
+Step 5: Posterior Inference
+--------------------------------------------------------------------
+Goal: sample or compute posterior p(w | Phot)
+Methods:
+    a) If likelihood is Gaussian and linear → analytic solution:
+           Posterior ~ Normal(w_mean, Cov_w)
+           where
+               Cov_w  = (α^{-2} * diag(Λ)^{-1} + Jᵀ W J)^{-1}
+               w_mean = Cov_w * Jᵀ W Phot
+           J = Jacobian of FluxFromWeights wrt w  (size M×K)
+           W = diag(Err^{-2})
+    b) Else use Markov Chain Monte Carlo (Metropolis–Hastings, HMC):
+           initialise w₀ = 0
+           iterate:
+              propose w' = w_current + η * N(0,I_K)
+              accept with prob min(1, Likelihood(Phot|w')/Likelihood(Phot|w_current))
+
+Choose option a if linear; else use b.
+
+--------------------------------------------------------------------
+Step 6: Posterior Predictive Spectrum
+--------------------------------------------------------------------
+For analytic posterior:
+    1. Compute mean spectrum:
+           Spect_mean(λ) = μ_λ + Σ_{k=1}^{K} w_mean_k * PCs[k, λ]
+    2. Compute spectrum covariance:
+           Cov_spect(λ, λ') =
+               Σ_{k} Λ_k * PCs[k, λ] * PCs[k, λ']   (prior part)
+             +  Σ_{k,l} PCs[k, λ] * Cov_w(k,l) * PCs[l, λ']   (posterior part)
+Return Spect_mean and Cov_spect.
+
+If using MCMC:
+    1. For each stored sample w^(s):
+           Spect^(s)(λ) = μ_λ + Σ_k w^(s)_k * PCs[k, λ]
+    2. Estimate mean and covariance across samples.
+
+--------------------------------------------------------------------
+Step 7: Output
+--------------------------------------------------------------------
+Return Spect_pred[λ] = Spect_mean(λ)   (optionally plus ±1σ from sqrt(diag(Cov_spect)))
+Store uncertainty estimates per wavelength.
+
+--------------------------------------------------------------------
+Optional Extension: Outlier / Rare‑type Detection
+--------------------------------------------------------------------
+1. Compute posterior probability density p(w | Phot) over latent space.
+2. Identify low‑probability regions (e.g., probability < threshold τ).
+3. Flag those photometric solutions as candidate rare spectra.
+
+--------------------------------------------------------------------
+End of Algorithm
+--------------------------------------------------------------------

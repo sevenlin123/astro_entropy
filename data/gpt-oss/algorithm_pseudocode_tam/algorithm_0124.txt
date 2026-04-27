@@ -1,0 +1,88 @@
+INPUT:
+    SPECTRA_DATA   // list of N high‑resolution spectra (wavelength grid λ_i, reflectance R_i)
+    FILTER_CURVES  // list of M instrument filter transmission curves T_m(λ)
+    PHOTOMETRY_OBJ // new object photometry vector p = [p_1 … p_M]
+    N_LATENT       // desired number of principal components (e.g., K = 8–10)
+
+OUTPUT:
+    RECONSTRUCTED_SPECTRUM   // high‑res reflectance vector Ŕ(λ)
+    TAXONOMY_PROBABILITIES   // P(class | photometry)
+
+--------------------------------------------------------------------
+1. PREPARE THE PRIOR (PCA + KDE)
+--------------------------------------------------------------------
+
+1.1  # Center the spectra
+     FOR each spectrum S in SPECTRA_DATA:
+         mean_spectrum = mean(S)
+         S_centered = S – mean_spectrum
+
+1.2  # Compute PCA on centered spectra
+     PCA_MODEL = PCA.fit(S_centered, n_components = N_LATENT)
+     Eigenvectors  = PCA_MODEL.components_          # shape (N_LATENT, n_wavelengths)
+     Eigenvalues   = PCA_MODEL.explained_variance_
+     PROJECTED_COEFFS = PCA_MODEL.transform(S_centered)   # shape (N, N_LATENT)
+
+1.3  # Estimate continuous density in latent space with KDE
+     KDE_MODEL = KDE(kernel='gaussian', bandwidth = h)   # choose h ≈ 0.5
+     KDE_MODEL.fit(PROJECTED_COEFFS)
+
+--------------------------------------------------------------------
+2. GENERATE AUGMENTED TRAINING SET
+--------------------------------------------------------------------
+
+2.1  # Sample synthetic latent vectors
+     NUM_SYNTH = 5000
+     SYNTH_COEFFS = KDE_MODEL.sample(NUM_SYNTH)          # shape (NUM_SYNTH, N_LATENT)
+
+2.2  # Reconstruct synthetic spectra from latent vectors
+     SYNTH_SPECTRA = PCA_MODEL.inverse_transform(SYNTH_COEFFS)  # shape (NUM_SYNTH, n_wavelengths)
+
+2.3  # Forward‑model synthetic photometry
+     FOR i in 1 … NUM_SYNTH:
+         FOR each filter m in 1 … M:
+             # Convolve spectrum with filter throughput
+             flux_m = ∫ SYNTH_SPECTRA[i](λ) * FILTER_CURVES[m](λ) dλ
+             p_syn[i,m] = flux_m
+         END FOR
+     END FOR
+
+2.4  # Add Gaussian photometric noise (σ = 20 % of flux)
+     p_syn_noisy = p_syn + Normal(0, 0.2 * p_syn)
+
+--------------------------------------------------------------------
+3. TRAIN THE ENCODER (PHOTOMETRY → LATENT COEFFICIENTS)
+--------------------------------------------------------------------
+
+3.1  # Define feature matrix X = p_syn_noisy   (shape NUM_SYNTH × M)
+     # Target matrix Y = SYNTH_COEFFS           (shape NUM_SYNTH × N_LATENT)
+
+3.2  ENCODER_MODEL = AutoMLRegressor()      # e.g., ensemble of GBDT + NN
+     ENCODER_MODEL.train(X, Y)
+
+--------------------------------------------------------------------
+4. TRAIN THE CLASSIFIER (LATENT COEFFICIENTS → TAXONOMIC LABELS)
+--------------------------------------------------------------------
+
+4.1  # Labels for original spectra (e.g., H₂O, CO₂, Organic, Methanol)
+     CLASS_LABELS = [label_1 … label_N]
+
+4.2  # Use original PROJECTED_COEFFS as training inputs
+     CLASSIFIER_MODEL = AutoMLClassifier()
+     CLASSIFIER_MODEL.train(PROJECTED_COEFFS, CLASS_LABELS)
+
+--------------------------------------------------------------------
+5. INFERENCE ON NEW OBJECT
+--------------------------------------------------------------------
+
+5.1  # Encode photometry to latent coefficient distribution
+     latent_pred_mean, latent_pred_cov = ENCODER_MODEL.predict_with_uncertainty(PHOTOMETRY_OBJ)
+     # If model provides only point estimate, use that as mean.
+
+5.2  # Decode to reconstruct spectrum
+     RECONSTRUCTED_SPECTRUM = PCA_MODEL.inverse_transform(latent_pred_mean)
+
+5.3  # Classify taxonomy
+     TAXONOMY_PROBABILITIES = CLASSIFIER_MODEL.predict_proba(latent_pred_mean)
+
+RETURN RECONSTRUCTED_SPECTRUM, TAXONOMY_PROBABILITIES

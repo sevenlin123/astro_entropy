@@ -1,0 +1,60 @@
+Input:
+    - Photometry catalog P = { (obj_i, f_k, σ_fk) } for i = 1..N_objs,
+      where f_k is the measured apparent magnitude in filter k (k = 1..K),
+      σ_fk its measurement error.
+    - Filter response functions R_k(λ) for each filter k.
+    - Wavelength grid λ = { λ_1, …, λ_L } covering all filters.
+    - Spectral basis functions B_m(λ) (m = 1..M) (e.g., polynomial, reflectance templates).
+
+Output:
+    - Posterior samples of spectral coefficients θ_i for each object i.
+    - Reconstructed reflectance spectrum S_i(λ) = Σ_m θ_im B_m(λ).
+    - Estimated uncertainties on S_i(λ).
+
+Procedure:
+
+1. **Pre‑processing**
+   1.1 For each filter k, normalize R_k(λ) so that ∫ R_k(λ) dλ = 1.
+   1.2 Define synthetic photometry operator:
+        F_k(θ) = -2.5 log10[ ∫ S(λ;θ) * R_k(λ) dλ ] + C_k,
+        where C_k is the zero‑point offset for filter k.
+   1.3 Choose prior distribution p(θ).  
+        (Example: Gaussian prior with mean μ_prior and covariance Σ_prior.)
+
+2. **Forward Model Construction**
+   2.1 For each object i, create parameter vector θ_i = (θ_i1,…,θ_iM).
+   2.2 Construct model magnitudes m_ik(θ_i) = F_k(θ_i) for all filters k with data.
+
+3. **Likelihood Evaluation**
+   3.1 Define Gaussian likelihood for object i:
+        L_i(θ_i) = Π_k N(f_ik | m_ik(θ_i), σ_fik^2),
+        where N(x|μ,σ²) is normal PDF.
+   3.2 Compute log‑likelihood:
+        ln L_i(θ_i) = –0.5 Σ_k [ (f_ik – m_ik(θ_i))^2 / σ_fik^2 + ln(2π σ_fik^2) ].
+
+4. **Posterior Sampling (per object)**
+   For each object i:
+     4.1 Initialize θ_i^(0) (e.g., draw from prior or use least‑squares fit).
+     4.2 Run Markov Chain Monte Carlo (MCMC) sampler (e.g., Metropolis–Hastings or Hamiltonian MC):
+         For iteration t = 1 … T:
+             a. Propose new state θ_i* = θ_i^(t−1) + η, 
+                where η ~ Normal(0, Σ_prop).
+             b. Compute ln L_i(θ_i*) and prior log p(θ_i*).
+             c. Accept with probability α = min{1, exp[ln L_i(θ_i*) + ln p(θ_i*) – ln L_i(θ_i^(t−1)) – ln p(θ_i^(t−1))] }.
+             d. If accepted, set θ_i^(t) = θ_i*; else θ_i^(t) = θ_i^(t−1).
+     4.3 After burn‑in, collect samples {θ_i^(t)} as posterior draws.
+
+5. **Spectrum Reconstruction**
+   For each retained posterior sample θ_i^(t):
+     5.1 Compute reflectance spectrum S_i^(t)(λ) = Σ_m θ_im^(t) B_m(λ).
+   5.2 Estimate posterior mean spectrum:
+        ⟨S_i(λ)⟩ = (1/N_samp) Σ_t S_i^(t)(λ).
+   5.3 Estimate spectral uncertainty:
+        σ_Si(λ) = sqrt[ (1/(N_samp−1)) Σ_t (S_i^(t)(λ) − ⟨S_i(λ)⟩)^2 ].
+
+6. **Output Generation**
+   6.1 Store posterior samples {θ_i^(t)} for each object.
+   6.2 Store mean spectrum ⟨S_i(λ)⟩ and uncertainty σ_Si(λ).
+   6.3 Return results.
+
+End Algorithm

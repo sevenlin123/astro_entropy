@@ -1,0 +1,86 @@
+INPUT:
+    SPECTRAL_LIBRARY = { s_i(λ) }   // training spectra, all resampled to same λ grid
+    FILTER_CURVES    = { T_k(λ) }     // instrument filter transmissions
+    PHOTOMETRY       = { (F_k, σ_k) } // measured fluxes & uncertainties for target
+
+PARAMETERS:
+    N_PC             // number of principal components to retain (e.g., 8–10)
+
+OUTPUT:
+    RECONSTRUCTED_SPECTRUM   // mean spectrum μ̂(λ)
+    UNCERTAINTY_PROFILE      // 95 % credible interval per λ
+    POSTERIOR_SAMPLES        // optional set of PC coefficient draws
+
+-----------------------------------------------------------------------
+STEP 1 – PREPROCESS LIBRARY
+-----------------------------------------------------------------------
+1.1 NORMALIZE each spectrum s_i(λ) to unit area or median reflectance.
+1.2 CALCULATE mean spectrum μ(λ) = average over i of s_i(λ).
+1.3 SUBTRACT mean: s'_i(λ) = s_i(λ) – μ(λ).
+
+-----------------------------------------------------------------------
+STEP 2 – PRINCIPAL COMPONENT ANALYSIS
+-----------------------------------------------------------------------
+2.1 COMPUTE covariance matrix C = (1/(N_lib-1)) * Σ_i s'_i(λ) s'_i(λ)^T.
+2.2 PERFORM eigendecomposition: C = E Λ E^T.
+2.3 SELECT first N_PC eigenvectors:  E_pc = [e_1 … e_{N_PC}].
+2.4 DEFINE component variances:  var_j = Λ_jj  (for j=1..N_PC).
+
+-----------------------------------------------------------------------
+STEP 3 – FORWARD MODEL OF PHOTOMETRY
+-----------------------------------------------------------------------
+3.1 DEFINE function RECONSTRUCT(a):
+        // a = (a_1,…,a_{N_PC})  – PC coefficients
+        RETURN μ(λ) + Σ_{j=1}^{N_PC} a_j * e_j(λ)
+
+3.2 DEFINE function EXPECTED_FLUX(a):
+        For each filter k:
+            f_k(a) = ∫ RECONSTRUCT(a)(λ) * T_k(λ) dλ 
+                     / ∫ T_k(λ) dλ
+        RETURN vector f(a) = {f_k(a)}
+
+-----------------------------------------------------------------------
+STEP 4 – BAYESIAN INFERENCE
+-----------------------------------------------------------------------
+4.1 DEFINE PRIOR(a):
+        // Gaussian prior centered at 0 with variance var_j
+        p(a) ∝ exp( –0.5 Σ_{j=1}^{N_PC} (a_j^2 / var_j) )
+
+4.2 DEFINE LIKELIHOOD(a):
+        // Assume independent Gaussian errors on fluxes
+        L(a) ∝ exp( –0.5 Σ_{k} [ (F_k – f_k(a))^2 / σ_k^2 ] )
+
+4.3 DEFINE POSTERIOR(a):
+        P(a | data) ∝ L(a) * p(a)
+
+-----------------------------------------------------------------------
+STEP 5 – SAMPLE FROM POSTERIOR
+-----------------------------------------------------------------------
+5.1 INITIALIZE sampler (e.g., HMC, NUTS, or Metropolis‑Hastings):
+        Start at a = 0 (or random draw from prior).
+5.2 ITERATE until convergence:
+        propose a′
+        compute acceptance ratio α = min(1, P(a′|data)/P(a|data))
+        accept or reject accordingly
+5.3 STORE accepted samples {a^{(s)}} for s = 1…S.
+
+-----------------------------------------------------------------------
+STEP 6 – RECONSTRUCT SPECTRA AND ESTIMATE UNCERTAINTIES
+-----------------------------------------------------------------------
+6.1 FOR each sample a^{(s)}:
+        compute spectrum R^{(s)}(λ) = RECONSTRUCT(a^{(s)})
+6.2 COMPUTE mean spectrum:
+        μ̂(λ) = (1/S) Σ_s R^{(s)}(λ)
+6.3 COMPUTE 95 % credible interval per λ:
+        For each λ:
+            collect values {R^{(s)}(λ)}
+            sort and pick 2.5th and 97.5th percentiles → interval [L(λ), U(λ)]
+
+-----------------------------------------------------------------------
+STEP 7 – OUTPUT RESULTS
+-----------------------------------------------------------------------
+Return:
+    μ̂(λ)               // expected reconstructed spectrum
+    [L(λ), U(λ)]        // uncertainty envelope
+    {a^{(s)}}           // optional posterior samples
+    {R^{(s)}(λ)}        // optional sample spectra

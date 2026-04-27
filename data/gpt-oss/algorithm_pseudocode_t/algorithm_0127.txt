@@ -1,0 +1,56 @@
+Input:
+    - Photometric measurements for a target:  
+      P = { (filter_j, flux_j, error_j) | j = 1 … N_f }
+    - Spectral basis library:  
+      S = { s_k(λ) | k = 1 … K }   (each s_k is a high‑resolution template spectrum)
+    - Filter response curves:  
+      R = { R_j(λ) | j = 1 … N_f }
+
+Output:
+    - Posterior distribution over spectral coefficients c = (c_1 … c_K)
+    - Reconstructed spectrum F(λ) = Σ_k c_k s_k(λ)
+
+Procedure:
+
+1. Pre‑processing
+   1.1. Normalize each basis spectrum s_k(λ) to unit norm.
+   1.2. For every filter j, compute the “modeled flux” contribution of each basis spectrum:
+        A_{j,k} = (∫ s_k(λ) R_j(λ) dλ) / (∫ R_j(λ) dλ)
+        (A is an N_f × K matrix).
+
+2. Build the measurement vector y and noise covariance Σ
+   2.1. y_j ← observed flux_j
+   2.2. Σ_jj ← error_j²
+   2.3. Σ ← diag(error_1²,…,error_Nf²)
+
+3. Define prior over coefficients
+   3.1. Choose a zero‑mean Gaussian prior:  
+        p(c) ~ N(0, Λ)  
+        where Λ is a K×K diagonal matrix of prior variances (e.g., Λ_k = τ²).
+
+4. Likelihood
+   4.1. The forward model predicts fluxes:  
+        ŷ = A · c
+   4.2. Likelihood:  
+        p(y | c) ∝ exp[ –½ (y – ŷ)ᵀ Σ⁻¹ (y – ŷ) ]
+
+5. Posterior computation (analytic Gaussian case)
+   5.1. Compute the posterior precision matrix:  
+        Q_post = Aᵀ Σ⁻¹ A + Λ⁻¹
+   5.2. Compute the posterior mean:  
+        μ_post = Q_post⁻¹ (Aᵀ Σ⁻¹ y)
+   5.3. Compute the posterior covariance:  
+        Σ_post = Q_post⁻¹
+
+6. (Optional) Sampling
+   6.1. Draw M samples {c^(m)} from N(μ_post, Σ_post)
+   6.2. For each sample, construct a spectrum:  
+        F^(m)(λ) = Σ_k c_k^(m) s_k(λ)
+
+7. Result aggregation
+   7.1. Compute the posterior mean spectrum:  
+        F_mean(λ) = Σ_k μ_post_k s_k(λ)
+   7.2. Compute uncertainty bounds: e.g., 16th/84th percentiles from the sampled spectra.
+
+Return:
+    - μ_post, Σ_post, F_mean(λ), and optional sample spectra.

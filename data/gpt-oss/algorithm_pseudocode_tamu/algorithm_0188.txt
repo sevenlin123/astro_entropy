@@ -1,0 +1,91 @@
+text
+Input:
+    S_ref[1..N]          # Reference high‑resolution spectra (flux vs λ)
+    F_eff[1..M]          # Instrument filter throughput curves
+    K_lat                # Desired number of PCA components (e.g., 5–10)
+    h_kde                 # KDE bandwidth (≈0.5)
+    N_syn                # Number of synthetic latent samples per real spectrum (e.g., 200)
+
+Steps:
+1.1 Standardise spectra
+      For each S_ref[i]:
+          Normalise by dividing by the mean reflectance in a chosen band
+          Store normalised spectra in S_std[i]
+
+1.2 Compute PCA on {S_std}
+      Use Singular Value Decomposition to obtain:
+          U (orthogonal eigenvectors, shape: λ_bins × K_lat)
+          V (principal component scores, shape: N × K_lat)
+      Retain first K_lat components → PCA_basis = U[:,1:K_lat]
+      Keep scores matrix V
+
+1.3 Build latent density with Kernel Density Estimation
+      Fit Gaussian KDE to V with bandwidth h_kde → KDE_model
+      Generate synthetic latent samples:
+          For i = 1 to N_syn:
+              Draw v_syn[i] ~ KDE_model
+          Store V_syn[i] = v_syn[i]
+
+1.4 Forward‑model synthetic photometry for all real + synthetic spectra
+      For each spectrum S in {S_std} ∪ {V_syn transformed back to full spectrum}:
+          Convert latent vector v to full spectrum:
+              S_full = PCA_basis * v + S_mean   # S_mean is mean of S_std
+          For each filter m = 1..M:
+              Compute modelled flux:
+                  f_m = ∫ S_full(λ) * F_eff[m](λ) dλ / ∫ F_eff[m](λ) dλ
+              Add Gaussian noise:
+                  σ_f = 0.20 * f_m      # 20 % relative uncertainty
+                  f_m_noisy = f_m + N(0, σ_f)
+          Store photometry vector p = [f_1_noisy … f_M_noisy]
+
+1.5 Assemble training data:
+      X_train = {p}            # Photometry (inputs)
+      Y_train = {V} + {V_syn}  # Latent vectors (targets)
+
+text
+2.1 Encoder (Photometry → Latent)  
+      Use AutoML framework (e.g., AutoGluon):
+          Train ensemble regressors on (X_train, Y_train)
+          Output: Trained model E(p) → μ_pred(p), Σ_pred(p)  # Predictive mean & covariance
+
+2.2 Classifier (Latent → Taxonomy)  
+      For each real spectrum, associate taxonomic label L ∈ {H₂O, CO₂, Organics, Methanol}
+      Train AutoML classifier on (V, L) → Probabilities P(L | v)
+
+text
+Input:
+    p_new[1..M]   # Observed photometry of new target
+
+3.1 Encode photometry to latent distribution
+      μ, Σ = E(p_new)                     # Predictive mean vector, covariance matrix
+
+3.2 Sample latent vectors via Gaussian Copula
+      Define correlation matrix R from Σ (normalize to unit variances)
+      For s = 1 to N_sample (e.g., 1000):
+          Draw z ~ N(0, R)                 # Multivariate normal
+          Transform to uniform: u = Φ(z)   # Φ = standard normal CDF
+          Map to latent space using inverse KDE cumulative:
+              v_s = KDE_inverse_cdf(u)
+          Store sample v_s
+
+3.3 Decode samples to full spectra
+      For each v_s:
+          S_s = PCA_basis * v_s + S_mean
+          Store S_s
+
+3.4 Construct posterior summaries
+      Compute median spectrum S_med = median(S_s over s)
+      Compute credible intervals (e.g., 16th/84th percentiles) at each wavelength
+      Return (S_med, CI_lower, CI_upper)
+
+3.5 Taxonomy prediction
+      For each v_s:
+          p_type_s = Classifier(v_s)       # Posterior probabilities per class
+      Aggregate over samples:
+          P_type = mean(p_type_s over s)   # Class probabilities for the target
+      Return P_type
+
+text
+- Reconstructed spectrum (median + credible interval)
+- Taxonomic probability distribution
+- Optional diagnostics: posterior predictive checks, residual plots

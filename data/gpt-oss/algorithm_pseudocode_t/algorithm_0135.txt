@@ -1,0 +1,14 @@
+Algorithm ProbabilisticSpectralReconstruction(...)
+Input ...
+Output ...
+
+Procedure
+    ... pre-processing ...
+    ...
+
+FOR each object i DO
+    1. Compute Λ_i, Σ_i, μ_i using equations 13–15.
+    2. Reconstruct mean spectrum Ŝ_i = B * μ_i.
+    3. Estimate class probabilities P_i using steps 16–17.
+    4. Evaluate χ²_i for outlier check.
+END FOR

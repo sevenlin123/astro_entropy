@@ -1,0 +1,40 @@
+Inputs
+------
+- Training spectra {S_k(λ)}  k = 1 … N_train
+- Observed photometry for an object: 
+    { (band j, magnitude m_j, error σ_j) }  j = 1 … N_obs
+- Filter transmission curves {T_j(λ)} for all bands
+
+Parameters
+----------
+- Number of principal components to retain: L  (default 8–10)
+- Number of posterior samples: K   (default 1000)
+
+Outputs
+-------
+- Posterior‑mean spectrum  S̄(λ)
+- Spectral covariance matrix  Σ_S(λ, λ′)
+- K posterior samples {S^(k)(λ)}
+
+f_j(l) = ∫ T_j(λ) * U(λ, l) dλ        // numeric integration
+
+F_j    ← 10^(–0.4 * m_j)            // observed flux
+    σ_Fj   ← ln(10)/2.5 * F_j * σ_j     // flux error
+
+F̂_j(a) = f_jᵀ · a
+
+a ~ N(0 , Λ)          // Λ = diag(λ_1,…,λ_L)
+
+Σ_a = ( Λ⁻¹ + Σ_j ( f_j f_jᵀ / σ_Fj² ) )⁻¹          // L×L matrix
+m_a = Σ_a · ( Σ_j ( f_j · F_j / σ_Fj² ) )           // L-vector
+
+a^(k) ~ N( m_a , Σ_a )
+
+S^(k)(λ_m) = μ(λ_m) + U(m, :) · a^(k)
+
+S̄(λ_m) = μ(λ_m) + U(m, :) · m_a
+
+Σ_S = U · Σ_a · Uᵀ          // M×M matrix
+
+ℓ_j = –0.5 * [ (F_j – f_jᵀ m_a)² / (σ_Fj² + f_jᵀ Σ_a f_j) 
+               + log(2π (σ_Fj² + f_jᵀ Σ_a f_j)) ]

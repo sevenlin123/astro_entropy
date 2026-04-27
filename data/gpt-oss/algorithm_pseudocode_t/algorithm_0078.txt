@@ -1,0 +1,104 @@
+For each object i in 1..N:
+   Initialize w_i (e.g., uniform)
+   For iteration t in 1..T:
+       # E-step: compute expected likelihood
+       compute mu = B^T * w_i
+       compute residual = y_i - mu
+       # M-step: update w_i via gradient step with prior
+       w_i_new = w_i + η * (B * residual / sigma^2 - λ * grad_prior(w_i))
+       enforce positivity and sum-to-one
+   Save posterior samples w_i
+
+INPUT:
+    Y          – matrix of observed photometric fluxes (N_objects × N_bands)
+    σ          – matrix of observational uncertainties (N_objects × N_bands)
+    R(band)    – instrumental response functions for each band
+    S_k(λ)     – library of K spectral templates (wavelength–grid × K)
+    K          – number of taxonomic classes (optional)
+    N_iter     – number of MCMC iterations
+    burn_in    – number of initial samples to discard
+    thinning    – keep every 'thinning'–th sample after burn‑in
+
+OUTPUT:
+    W_samples[i][k]  – posterior samples of mixing weights for object i
+    TAX[i]           – most probable taxonomic class for object i
+    OUTLIER[i]       – flag indicating outlier status
+
+--------------------------------------------------------------------
+1. Pre‑processing
+--------------------------------------------------------------------
+1.1 Convert magnitudes to reflectance (or flux) if needed.
+1.2 For each band b:
+        Compute synthetic photometry of each template:
+            S_kb = ∫ S_k(λ) * R(b)(λ) dλ   (vector of length K)
+1.3 Assemble design matrix A of size (N_bands × K):
+        A[b,k] = S_kb
+
+--------------------------------------------------------------------
+2. Bayesian Model Definition
+--------------------------------------------------------------------
+For each object i:
+    Observation model:
+        Y[i,*]  ~ Normal( A * w_i , diag(σ[i,*]^2) )
+    Weight prior:
+        w_i ~ Dirichlet(α)           // α = (α₁,…,α_K) positive hyper‑parameter
+    Optional taxonomic prior (hierarchical):
+        z_i ~ Categorical(π)         // π = (π₁,…,π_K)
+        w_i | z_i = k  ~ Dirichlet(α_k)
+
+--------------------------------------------------------------------
+3. Posterior Sampling (Gibbs + Metropolis‑Hastings)
+--------------------------------------------------------------------
+For each object i:
+    Initialize w_i^(0)  ←  uniform over simplex
+    If hierarchical: initialize z_i^(0) ← argmax(π)
+    For t = 1 … N_iter:
+        3.1 Sample w_i^(t) from its conditional distribution:
+                p(w_i | Y[i,*], σ[i,*], A, α)  ∝
+                     𝒩(Y[i,*] | A w_i , diag(σ[i,*]^2)) *
+                     Dir(w_i | α)
+            // Use Metropolis‑Hastings with a Dirichlet proposal
+        3.2 (If hierarchical) sample z_i^(t) from:
+                p(z_i | w_i^(t), π, {α_k}) ∝
+                    π_{z_i} * Dir(w_i^(t) | α_{z_i})
+        Store w_i^(t) (and z_i^(t) if used)
+    Discard first burn_in samples
+    Thin remaining samples by factor 'thinning'
+    Set W_samples[i] = retained w_i samples
+
+--------------------------------------------------------------------
+4. Taxonomy Assignment (if hierarchical)
+--------------------------------------------------------------------
+For each object i:
+    For each class k:
+        Compute posterior class probability:
+            P_k = proportion of retained z_i samples equal to k
+    TAX[i] = argmax_k(P_k)
+
+--------------------------------------------------------------------
+5. Outlier Detection
+--------------------------------------------------------------------
+For each object i:
+    For each retained sample w_i^(s):
+        Compute model prediction:
+            μ_s = A * w_i^(s)
+        Compute chi‑square statistic:
+            χ²_s = Σ_b [ (Y[i,b] - μ_s[b])² / σ[i,b]² ]
+    Compute average chi‑square:
+        χ²_avg = mean_s(χ²_s)
+    If χ²_avg > χ²_threshold  (e.g., 95% quantile of χ² distribution with N_bands-1 DOF):
+        OUTLIER[i] = True
+    Else
+        OUTLIER[i] = False
+
+--------------------------------------------------------------------
+6. Result Aggregation
+--------------------------------------------------------------------
+For each object i:
+    Report:
+        Posterior mean weights  w̄_i = mean_s(W_samples[i])
+        Posterior standard deviations  σ_w_i = std_s(W_samples[i])
+        Taxonomy label TAX[i]
+        Outlier flag OUTLIER[i]
+
+END

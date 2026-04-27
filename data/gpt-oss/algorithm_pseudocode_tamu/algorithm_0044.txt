@@ -1,0 +1,94 @@
+--------------------------------------------------------------------
+1.  INPUT
+--------------------------------------------------------------------
+   * Spectral dataset S_real = {s_i(λ)}   i = 1 … N    (N ≈ 50)
+   * Filter set F = {f_j(λ)}   j = 1 … M
+   * Desired latent dimension K (e.g. 8–10)
+   * KDE bandwidth h (e.g. 0.5)
+   * Number of synthetic latent samples L (e.g. 5 000)
+   * Noise level σ_noise (relative, e.g. 0.20)
+--------------------------------------------------------------------
+2.  PREPARE PRIOR
+--------------------------------------------------------------------
+   2.1  Perform PCA on S_real
+         • Center spectra:  s̄(λ) = mean(s_i(λ))
+         • Compute covariance matrix C
+         • Obtain eigenpairs (e_k(λ), λ_k) for k = 1 … K
+         • Project each real spectrum onto PCs:
+                a_i = [⟨s_i – s̄ , e_1⟩ , … , ⟨s_i – s̄ , e_K⟩]
+         • Store matrix A_real = {a_i}   (size N × K)
+
+   2.2  Estimate density in latent space with KDE
+         • Define Gaussian kernel K_h(u) = exp(–|u|²/(2h²)) / (h√(2π))
+         • For each a_i, place kernel K_h centered at a_i
+         • Resulting density p_lat(a) = (1/N) Σ_i K_h(a – a_i)
+
+   2.3  Sample synthetic latent vectors
+         • Draw L samples {a_syn_j} from p_lat
+         • For each a_syn_j:
+               – Generate synthetic spectrum:
+                     s_syn_j(λ) = s̄(λ) + Σ_{k=1}^{K} a_syn_j[k] * e_k(λ)
+
+   2.4  Forward‑model synthetic photometry
+         • For each synthetic spectrum s_syn_j:
+               – For each filter f_j:
+                   m_j = ∫ s_syn_j(λ) * f_j(λ) dλ / ∫ f_j(λ) dλ
+               – Collect vector m_syn_j = (m_1,…,m_M)
+         • Inject Gaussian noise:
+               m_syn_j_noisy = m_syn_j * (1 + Normal(0, σ_noise))
+
+   2.5  Build training tables
+         • Training set for encoder:
+               Inputs  :  {m_syn_j_noisy}
+               Targets :  {a_syn_j}
+         • Training set for classifier:
+               Inputs  :  {a_syn_j}
+               Labels  :  taxonomic class of corresponding s_syn_j
+--------------------------------------------------------------------
+3.  TRAIN MODELS
+--------------------------------------------------------------------
+   3.1  Encoder (Photometry → Latent)
+         • Use AutoML (e.g., AutoGluon) to fit an ensemble of
+           regression trees on the encoder training set.
+         • Output model E:  â = E(m_observed)
+
+   3.2  Classifier (Latent → Taxonomy)
+         • Use AutoML to fit a multi‑class classifier on the
+           classifier training set.
+         • Output model C:  p_class = C(â)
+--------------------------------------------------------------------
+4.  INFERENCE FOR A NEW OBJECT
+--------------------------------------------------------------------
+   4.1  Receive observed photometry m_obs = (m_1,…,m_M)
+   4.2  Encode to latent coefficients:
+         a_mean = E(m_obs)          # point estimate
+         # Optionally obtain prediction interval / distribution
+         # from the ensemble (e.g., percentiles of leaf predictions)
+
+   4.3  Decode to full spectrum:
+         s_rec(λ) = s̄(λ) + Σ_{k=1}^{K} a_mean[k] * e_k(λ)
+
+   4.4  Uncertainty propagation (optional)
+         • Sample N_samples latent vectors from the ensemble’s
+           predictive distribution (Gaussian Copula if desired):
+                a_sample_t  ~  JointDist(â)
+         • For each a_sample_t:
+                s_t(λ) = s̄(λ) + Σ_{k} a_sample_t[k] * e_k(λ)
+         • Compute mean and confidence intervals over {s_t(λ)}
+
+   4.5  Taxonomy probabilities:
+         p_class = C(a_mean)
+
+   4.6  OUTPUT
+         • Reconstructed spectrum s_rec(λ)
+         • Confidence interval envelope (if computed)
+         • Taxonomy probability vector p_class
+--------------------------------------------------------------------
+5.  OPTIONAL: LOOCV VALIDATION (for internal assessment only)
+--------------------------------------------------------------------
+   For each i in 1…N:
+        • Remove spectrum s_i from S_real
+        • Repeat steps 2–4 on the remaining N–1 spectra
+        • Record reconstruction error, coverage, classification accuracy
+--------------------------------------------------------------------
+END

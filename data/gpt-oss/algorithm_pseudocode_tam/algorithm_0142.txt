@@ -1,0 +1,75 @@
+INPUT:
+    - SPECTRA_RAW   : matrix of observed TNO near‑IR spectra (n_spec × n_wave)
+    - FILTER_CURVES : list of effective throughput curves for desired filters
+    - PHOTOMETRY_NEW : array of sparse photometric measurements for a target object
+    - NOISE_LEVEL    : assumed fractional Gaussian noise (e.g. 0.20)
+
+PARAMETERS:
+    - K_PCA          : number of principal components to keep (≈5–10)
+    - H_KDE          : KDE bandwidth (≈0.5)
+    - N_AUGMENT      : number of synthetic latent samples to generate (≈10 000)
+
+-------------------------------------------------------------
+STEP 0 – Pre‑processing
+-------------------------------------------------------------
+1. Normalize each spectrum in SPECTRA_RAW (e.g. divide by mean reflectance).
+2. Optionally log‑transform or continuum‑subtract if required.
+
+-------------------------------------------------------------
+STEP 1 – Build Prior (PCA + KDE)
+-------------------------------------------------------------
+3. Perform PCA on SPECTRA_RAW → obtain:
+       * Mean spectrum μ_s
+       * Eigenvectors V (n_wave × K_PCA)
+       * Scores C_real = (SPECTRA_RAW – μ_s) · V   // (n_spec × K_PCA)
+4. Fit a non‑parametric Kernel Density Estimate (KDE) on C_real
+      * KDE(C_real, bandwidth=H_KDE)  // defines continuous latent distribution
+5. Sample N_AUGMENT latent vectors {c_i} from KDE   // (N_AUGMENT × K_PCA)
+
+-------------------------------------------------------------
+STEP 2 – Generate Augmented Spectra & Photometry
+-------------------------------------------------------------
+For each sampled latent vector c_i:
+6. Reconstruct high‑resolution spectrum:
+        s_i = μ_s + V · c_i^T          // (1 × n_wave)
+7. Compute synthetic photometry m_i for all FILTER_CURVES:
+        For each filter j:
+            m_i[j] = ∫ s_i(λ) · filter_j(λ) dλ   // numerical integration
+8. Add Gaussian noise to m_i:
+        m_i_noisy = m_i + Normal(0, σ = NOISE_LEVEL * m_i)
+9. Store pair (m_i_noisy , c_i).
+
+Result: Training dataset T = {(m_noisy_k , c_k)}  for k=1…N_AUGMENT.
+
+-------------------------------------------------------------
+STEP 3 – Train Encoder (Photometry → Latent Coefficients)
+-------------------------------------------------------------
+10. Split T into training/validation folds (optional).
+11. Feed T into an AutoML regressor (e.g. AutoGluon AutoML)
+        * Input features: m_noisy_k (length = number of filters)
+        * Target labels: c_k  (length = K_PCA)
+12. Allow AutoML to select best ensemble of models (GBDT, NN, etc.)
+13. Validate performance on held‑out fold; iterate if needed.
+
+Result: Trained encoder function E(m) → c_pred.
+
+-------------------------------------------------------------
+STEP 4 – Forward Inference for New Object
+-------------------------------------------------------------
+14. Given PHOTOMETRY_NEW (length = number of filters):
+        * Optional: add realistic noise (if not already measured)
+15. Predict latent coefficients:
+        c_hat = E(PHOTOMETRY_NEW)
+16. Reconstruct spectrum:
+        s_hat = μ_s + V · c_hat^T
+
+Output:
+    * s_hat – high‑resolution reconstructed reflectance spectrum
+    * Optional: sample uncertainty by drawing multiple E predictions or by
+      propagating photometric errors through the encoder (Monte‑Carlo).
+    * Optional: compute taxonomic probabilities by feeding c_hat into a
+      pre‑trained classifier in latent space.
+
+-------------------------------------------------------------
+END OF ALGORITHM
+-------------------------------------------------------------

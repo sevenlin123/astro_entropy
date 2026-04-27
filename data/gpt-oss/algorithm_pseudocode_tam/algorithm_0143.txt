@@ -1,0 +1,95 @@
+plaintext
+Input
+    S_obs      … set of high‑resolution reference spectra  
+    N_filt     … number of photometric filters (e.g., JWST NIRCam set)  
+    filt_thru  … throughput curves for each filter  
+    K          … desired number of principal components (default 5–8)  
+    h_kde      … bandwidth for kernel density estimation (≈0.5)  
+    σ_noise    … relative photometric uncertainty (≈20 %)  
+
+Output
+    Reconstructed spectrum S_rec for each new photometric observation m_new  
+    Posterior samples {S_rec^(i)} of the spectrum  
+    Taxonomic probability vector P_tax for each S_rec^(i)
+
+--------------------------------------------------------------------
+Step 1 – Build Latent Prior
+--------------------------------------------------------------------
+1.1 Perform Principal Component Analysis (PCA) on S_obs  
+        • Center spectra: S_center = S_obs – mean(S_obs)  
+        • Compute covariance matrix C = cov(S_center)  
+        • Eigen‑decompose C → eigenvalues λ_j, eigenvectors v_j  
+        • Select first K eigenvectors → V_K (size [n_wave × K])  
+        • Project spectra onto PCs: Z_real = V_Kᵀ · (S_obs – mean)  
+            (Z_real has shape [n_spec × K])
+
+1.2 Estimate probability density in latent space  
+        • Use Kernel Density Estimation (KDE) on Z_real  
+        • Bandwidth h = h_kde  
+        • From KDE, generate a large set of synthetic latent vectors  
+              Z_syn = {z₁, z₂, …, z_M}   (M ≫ n_spec, e.g., M = 5000)
+
+1.3 Reconstruct synthetic spectra from latent vectors  
+        • For each z ∈ Z_syn:  
+              S_syn = mean + V_K · z  
+        • Store S_syn (shape [M × n_wave])
+
+--------------------------------------------------------------------
+Step 2 – Generate Synthetic Photometry
+--------------------------------------------------------------------
+2.1 For each synthetic spectrum S_syn:  
+        • Convolve with each filter throughput:  
+              m_k = ∫ S_syn(λ) · filt_thru_k(λ) dλ / ∫ filt_thru_k(λ) dλ  
+        • Assemble photometry vector m_syn of length N_filt
+
+2.2 Inject Gaussian noise:  
+        • For each component m_k:  
+              m_k_noisy = m_k * (1 + ε_k), where ε_k ~ N(0, σ_noise²)  
+        • Store noisy photometry m_syn_noisy
+
+Result: Training dataset {(m_syn_noisy, Z_syn)}
+
+--------------------------------------------------------------------
+Step 3 – Train Encoder (Photometry → Latent)
+--------------------------------------------------------------------
+3.1 Choose an AutoML regressor (e.g., ensemble of Gradient‑Boosted Trees).  
+3.2 Train the regressor on the training dataset  
+        • Input: m_syn_noisy  
+        • Target: Z_syn  
+        • Loss: mean‑square error over K latent dimensions  
+        • Output: Predictive model f_enc(m) → μ_z (mean latent vector)  
+
+--------------------------------------------------------------------
+Step 4 – Train Taxonomy Classifier (Latent → Type)
+--------------------------------------------------------------------
+4.1 Label each real spectrum S_obs with its taxonomy class C_obs  
+4.2 Project labeled spectra onto PCs to obtain Z_real  
+4.3 Train a separate AutoML classifier on {Z_real, C_obs}  
+        • Input: Z_real  
+        • Target: class label  
+        • Output: Predictive model f_cls(z) → probability vector P_cls
+
+--------------------------------------------------------------------
+Step 5 – Forward Inference for a New Observation
+--------------------------------------------------------------------
+Given a new photometric observation m_new (length N_filt):
+
+5.1 Encoder step  
+        • Predict latent mean μ_z = f_enc(m_new)  
+        • (Optionally) estimate predictive variance Σ_z from model uncertainty  
+        • Sample a set of latent vectors {z_i} from N(μ_z, Σ_z) or directly
+          use μ_z if variance negligible
+
+5.2 Decoder step – Spectrum reconstruction  
+        • For each sampled z_i:  
+              S_i = mean + V_K · z_i  
+        • Collect reconstructed spectra {S_i} (posterior samples)
+
+5.3 Taxonomy step  
+        • For each z_i:  
+              P_i = f_cls(z_i)  
+        • Aggregate probabilities over samples (e.g., mean over i)
+
+Return
+        • Posterior set of spectra {S_i}  
+        • Corresponding taxonomy probability vectors {P_i}

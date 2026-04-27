@@ -1,0 +1,101 @@
+text
+INPUT: 
+    S_train[1..N]   // N observed spectra, each vector of length L (wavelength bins)
+
+PARAMETERS:
+    K               // desired number of principal components (e.g., 8–10)
+
+PROCEDURE:
+
+1.1  Compute mean spectrum µ_spectrum = (1/N) Σ_i S_train[i]
+
+1.2  Center spectra:
+        X_centered[i] = S_train[i] – µ_spectrum          ∀ i = 1…N
+
+1.3  Perform Singular Value Decomposition (SVD):
+        [U, Σ, Vᵀ] = SVD(X_centered / √(N‑1))
+
+1.4  Select first K right singular vectors (principal components):
+        PC[k] = Vᵀ[k]          ∀ k = 1…K          // each PC has length L
+
+1.5  Store:
+        • µ_spectrum
+        • PC[1…K]
+        • Σ[1…K]            // singular values (optional for priors)
+
+OUTPUT:
+    µ_spectrum, {PC[1…K]}, Σ[1…K]
+
+text
+INPUT:
+    Filters[1..M]   // list of photometric filters
+    PC[1…K]         // principal components
+    λ_grid[1..L]    // wavelength grid used in training
+
+PROCEDURE:
+
+2.1  For each filter m = 1…M:
+        • Integrate filter transmission R_m(λ) over λ_grid
+        • Normalize to unit area (or keep raw integral)
+
+2.2  Compute projected responses:
+        For each component k = 1…K:
+            a_k[m] = Σ_ℓ PC[k][ℓ] * R_m(λ_ℓ) * Δλ_ℓ
+        // a_k[m] gives contribution of component k to filter m
+
+2.3  Assemble matrix A of shape (M × K):
+        A[m,k] = a_k[m]
+
+OUTPUT:
+    Matrix A
+
+text
+INPUT:
+    Photometry vector y[1..M]           // observed fluxes in M filters
+    σ_y[1..M]                          // measurement uncertainties
+    A                                   // matrix from Step 2
+    Prior covariance Λ (K×K)             // e.g., diagonal with variances Σ²
+    µ_spectrum, PC[1…K]
+
+PROCEDURE:
+
+3.1  Construct likelihood:
+        y | c  ~  N( A·c ,  diag(σ_y²) )
+
+3.2  Prior on coefficients:
+        c  ~  N(0 , Λ)
+
+3.3  Compute posterior covariance:
+        Σ_post = ( Aᵀ·diag(1/σ_y²)·A + Λ⁻¹ )⁻¹
+
+3.4  Compute posterior mean:
+        μ_post = Σ_post · ( Aᵀ·diag(1/σ_y²)·y )   // prior mean is zero
+
+3.5  Optional: draw samples {c_samp} from N(μ_post , Σ_post)
+
+3.6  Reconstruct spectrum for each sample:
+        S_recon = µ_spectrum + Σ_k c_samp[k] * PC[k]
+
+3.7  Estimate uncertainty per wavelength:
+        Var_S(λ) = Σ_k Σ_j Σ_post[k,j] * PC[k][λ] * PC[j][λ]
+        // plus observational noise propagated if desired
+
+OUTPUT:
+    • Posterior mean coefficients μ_post
+    • Posterior covariance Σ_post
+    • Reconstructed mean spectrum S_mean = µ_spectrum + Σ_k μ_post[k] * PC[k]
+    • Spectrum uncertainty profile Var_S(λ)
+    • (Optional) Sampled spectra {S_recon}
+
+text
+4.1  Evaluate credible‑interval coverage:
+        For each wavelength λ:
+            Compute percentile bounds from sampled spectra
+            Compare to true spectrum if available (for validation only)
+
+4.2  Identify outliers:
+        If posterior predictive distribution of y deviates strongly
+        from observed y (e.g., low likelihood), flag object as potential
+        rare spectral type.
+
+4.3  Generate diagnostic plots (omitted in implementation).

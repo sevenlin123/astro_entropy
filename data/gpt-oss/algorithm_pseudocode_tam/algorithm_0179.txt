@@ -1,0 +1,85 @@
+pseudocode
+INPUT
+    S_ref[1…N_ref][1…L]          # Reference spectra (N_ref ≈ 50, L wavelength bins)
+    λ_bins[1…L]                  # Wavelength grid of reference spectra
+    Filters[1…F][1…L]            # Throughput curves of F photometric filters
+    Noise_level = 0.20           # Relative reflectance uncertainty (20%)
+
+OUTPUT
+    For any new photometry m_new[1…F]:
+        S_rec[1…L]                # Reconstructed high‑resolution spectrum
+        P_type[1…T]               # Posterior probabilities of T taxonomic classes
+
+--------------------------------------------------------------------
+1.  Define Latent Manifold (Prior)
+--------------------------------------------------------------------
+1.1. Perform PCA on reference spectra
+      [U, Σ, V] = PCA(S_ref)                 # U: eigenvectors (L×K), K ≤ 10
+      S_ref_centered = S_ref – mean(S_ref)
+      α_real[1…N_ref][1…K] = S_ref_centered × U   # Project spectra onto K PCs
+
+1.2. Estimate density in latent space with Kernel Density Estimation (KDE)
+      KDE_model = FitKDE(α_real, bandwidth = h)   # h ≈ 0.5
+
+1.3. Sample synthetic latent vectors
+      N_syn = 5000                                 # e.g. 5000 synthetic points
+      α_syn[1…N_syn][1…K] = SampleFrom(KDE_model)
+
+--------------------------------------------------------------------
+2.  Generate Synthetic Photometry (Training Data)
+--------------------------------------------------------------------
+For i = 1 … N_syn
+    2.1. Reconstruct synthetic spectrum in wavelength domain
+         S_syn[i][1…L] = (α_syn[i] × Uᵀ) + mean(S_ref)   # inverse PCA
+
+    2.2. Forward‑model photometry through each filter
+         For j = 1 … F
+             R_syn[i][j] = ∫ S_syn[i] * Filters[j] dλ
+             R_syn[i][j] /= ∫ SolarFlux * Filters[j] dλ  # reflectance
+
+    2.3. Add Gaussian noise
+         For j = 1 … F
+             σ_noise = Noise_level * R_syn[i][j]
+             m_syn[i][j] = Normal(mean=R_syn[i][j], std=σ_noise)
+
+--------------------------------------------------------------------
+3.  Train Encoder (Photometry → Latent Coefficients)
+--------------------------------------------------------------------
+3.1. Prepare training matrix
+      X_enc = m_syn[1…N_syn]                     # (N_syn × F)
+      Y_enc = α_syn[1…N_syn]                    # (N_syn × K)
+
+3.2. Run AutoML training
+      EncoderModel = AutoML_Regression(X_enc, Y_enc)
+      # AutoML automatically ensembles GradientBoosting, NN, etc.
+      # The output is a function f_enc(m) → α_pred (mean latent vector)
+
+--------------------------------------------------------------------
+4.  Train Classifier (Latent Coefficients → Taxonomy)
+--------------------------------------------------------------------
+4.1. Label the reference spectra with taxonomic classes
+      Labels[1…N_ref] = {class_id}
+
+4.2. Build training set in latent space
+      X_cls = α_real[1…N_ref]                    # (N_ref × K)
+      Y_cls = Labels[1…N_ref]
+
+4.3. Run AutoML training
+      ClassifierModel = AutoML_Classification(X_cls, Y_cls)
+      # Output is function f_cls(α) → probability vector over T classes
+
+--------------------------------------------------------------------
+5.  Inference Pipeline for New Observation
+--------------------------------------------------------------------
+Function ReconstructSpectrum(m_new[1…F]):
+
+    5.1. Encode photometry to latent mean
+        α_mean = EncoderModel.predict(m_new)
+
+    5.2. Compute taxonomy posterior
+        P_type = ClassifierModel.predict_proba(α_mean)
+
+    5.3. Decode to high‑resolution spectrum
+        S_rec = (α_mean × Uᵀ) + mean(S_ref)
+
+    5.4. Return S_rec, P_type

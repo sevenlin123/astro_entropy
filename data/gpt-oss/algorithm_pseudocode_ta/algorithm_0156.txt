@@ -1,0 +1,49 @@
+text
+Inputs:
+    S_spec  – matrix of N_s spectra (wavelength × flux) used for training
+    p       – number of principal components to retain (e.g., 8–10)
+    F_obs   – observed photometry vector for an object (M filters)
+    C_obs   – covariance matrix of photometric uncertainties (M×M)
+    F_model – filter response functions (M × λ)
+
+Outputs:
+    mu_lat  – posterior mean of latent coefficients (p×1)
+    Sigma_lat – posterior covariance of latent coefficients (p×p)
+    Spec_hat – reconstructed full‑spectrum (λ×1)
+    Cov_spec – covariance of reconstructed spectrum (λ×λ)
+
+1.1 Compute mean spectrum μ_spec = mean(S_spec, axis=0)
+1.2 Center data:  X_centered = S_spec – μ_spec
+1.3 Perform Singular Value Decomposition:
+        [U, Σ, Vt] = svd(X_centered, full_matrices=False)
+1.4 Select first p columns of U → U_p  (λ × p)
+1.5 Compute loadings:
+        W = U_p × diag(Σ[:p])          // (λ × p)
+1.6 Store basis vectors W and mean μ_spec
+
+2.1 For each filter m = 1 … M:
+        P_m = integral_over_λ( W(λ, :) * F_model[m, λ] )   // (p × 1)
+        μ_m = integral_over_λ( μ_spec(λ) * F_model[m, λ] ) // scalar
+2.2 Assemble projection matrix P  (M × p) where row m is P_m^T
+2.3 Assemble mean vector μ_F (M×1) where entry m is μ_m
+
+3.1 Assume Gaussian likelihood:
+        F_obs | lat ~ N( P * lat + μ_F , C_obs )
+3.2 Prior on latent coeffs:  lat ~ N(0, I_p)            // isotropic zero‑mean
+3.3 Compute posterior covariance:
+        Sigma_lat = inv( P^T * C_obs⁻¹ * P + I_p )
+3.4 Compute posterior mean:
+        mu_lat = Sigma_lat * ( P^T * C_obs⁻¹ * (F_obs - μ_F) )
+
+4.1 Reconstructed spectrum:
+        Spec_hat = μ_spec + W * mu_lat
+4.2 Covariance of reconstructed spectrum:
+        Cov_spec = W * Sigma_lat * W^T
+
+5.1 For each wavelength λ_i:
+        μ_i = Spec_hat[i]
+        σ_i = sqrt( Cov_spec[i,i] )
+        Lower_i = μ_i - 1.96 * σ_i
+        Upper_i = μ_i + 1.96 * σ_i
+
+Return mu_lat, Sigma_lat, Spec_hat, Cov_spec

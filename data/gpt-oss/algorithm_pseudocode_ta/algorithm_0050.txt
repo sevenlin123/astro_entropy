@@ -1,0 +1,107 @@
+# ------------------------------------------------------------------
+# 1.  TRAIN PRINCIPAL COMPONENT MODEL FROM A SET OF FULL SPECTRA
+# ------------------------------------------------------------------
+function TRAIN_PCA(SPECTRA, K):
+    # INPUT
+    #   SPECTRA   : array shape (N_spec, N_wave)  – full‑resolution spectra
+    #   K         : number of principal components to retain
+    # OUTPUT
+    #   mu        : mean spectrum (length N_wave)
+    #   PC_basis  : matrix (N_wave, K) – first K eigenvectors of covariance
+    #   eig_vals  : array (K) – corresponding eigenvalues
+    #
+    mu      ← mean(SPECTRA, axis=0)                      # compute mean spectrum
+    Xc      ← SPECTRA – mu                               # center spectra
+    U, D, Vt ← svd(Xc, full_matrices=False)             # singular value decomposition
+    PC_basis← Vt.T[:, 0:K]                               # first K right singular vectors
+    eig_vals← D[0:K]                                     # corresponding singular values
+    return mu, PC_basis, eig_vals
+
+# ------------------------------------------------------------------
+# 2.  PRE‑COMPUTE LINEAR RESPONSE OF EACH FILTER TO THE BASIS
+# ------------------------------------------------------------------
+function PRECOMPUTE_FILTER_MATRIX(FILTERS, PC_basis, mu):
+    # INPUT
+    #   FILTERS   : list of filter transmission functions T_j(λ)  (length N_filter)
+    #   PC_basis  : (N_wave, K) matrix from TRAIN_PCA
+    #   mu        : mean spectrum (length N_wave)
+    # OUTPUT
+    #   A         : design matrix (N_filter, K)
+    #   m_mu      : expected magnitudes from mean spectrum (length N_filter)
+    #
+    Nf, K      ← size(A) = (len(FILTERS), PC_basis.shape[1])
+    A           ← zeros(Nf, K)
+    m_mu        ← zeros(Nf)
+    for j in 0 … Nf-1:
+        # Effective band‑pass weight vector for filter j
+        wj ← FILTERS[j]                                 # wj(λ)  (length N_wave)
+        # Predicted magnitude from mean spectrum
+        m_mu[j] ← log10( integrate(wj * mu) )            # or appropriate magnitude system
+        # Project basis onto filter
+        for k in 0 … K-1:
+            A[j,k] ← integrate( wj * PC_basis[:,k] )     # linear response of filter to component k
+    return A, m_mu
+
+# ------------------------------------------------------------------
+# 3.  BAYESIAN INFERENCE OF PRINCIPAL COMPONENT COEFFICIENTS
+# ------------------------------------------------------------------
+function INFER_COMPONENTS(obs_mag, obs_err, A, m_mu, eig_vals):
+    # INPUT
+    #   obs_mag   : observed magnitudes (length N_filter)
+    #   obs_err   : observational uncertainties (length N_filter)
+    #   A         : design matrix from PRECOMPUTE_FILTER_MATRIX
+    #   m_mu      : mean magnitudes from mean spectrum
+    #   eig_vals  : prior variances (length K)
+    # OUTPUT
+    #   c_mean    : posterior mean coefficient vector (length K)
+    #   c_cov     : posterior covariance matrix (K×K)
+    #
+    # Prior: c ~ N(0, diag(eig_vals))
+    Sigma_prior ← diag(eig_vals)                          # prior covariance
+    # Likelihood: obs_mag ~ N( m_mu + A c , diag(obs_err^2) )
+    Sigma_lik  ← diag(obs_err^2)                           # observation covariance
+    # Posterior covariance (analytic for linear Gaussian)
+    Sigma_post  ← inv( inv(Sigma_prior) + A.T @ inv(Sigma_lik) @ A )
+    # Posterior mean
+    residual    ← obs_mag – m_mu
+    c_mean      ← Sigma_post @ ( A.T @ inv(Sigma_lik) @ residual )
+    return c_mean, Sigma_post
+
+# ------------------------------------------------------------------
+# 4.  SAMPLE FROM POSTERIOR AND RECONSTRUCT SPECTRA
+# ------------------------------------------------------------------
+function RECONSTRUCT_SPECTRA(mu, PC_basis, c_mean, c_cov, N_samples):
+    # INPUT
+    #   mu          : mean spectrum (length N_wave)
+    #   PC_basis    : (N_wave, K) principal component basis
+    #   c_mean      : posterior mean coefficients (length K)
+    #   c_cov       : posterior covariance (K×K)
+    #   N_samples   : number of Monte Carlo draws
+    # OUTPUT
+    #   spectra_samples : array (N_samples, N_wave) – sampled reconstructed spectra
+    #   spectrum_mean   : mean reconstructed spectrum (length N_wave)
+    #   spectrum_ci     : credible interval bounds at each wavelength
+    #
+    # Draw coefficient samples from multivariate normal
+    coeff_samples ← mvn_draw(mean=c_mean, cov=c_cov, n=N_samples)
+    spectra_samples ← mu + PC_basis @ coeff_samples.T          # shape (N_wave, N_samples)
+    # Statistics
+    spectrum_mean ← mean(spectra_samples, axis=1)                # per‑wavelength mean
+    lower_ci, upper_ci ← percentile(spectra_samples, [2.5, 97.5], axis=1)
+    return spectra_samples, spectrum_mean, lower_ci, upper_ci
+
+# ------------------------------------------------------------------
+# 5.  MAIN RECONSTRUCTION PIPELINE
+# ------------------------------------------------------------------
+function RECONSTRUCT_TNO_PHOTOMETRY(obs_mag, obs_err, FILTERS, SPECTRA, K, N_samples):
+    # Step 1 – train PCA on full spectra
+    mu, PC_basis, eig_vals ← TRAIN_PCA(SPECTRA, K)
+    # Step 2 – build filter response matrix
+    A, m_mu ← PRECOMPUTE_FILTER_MATRIX(FILTERS, PC_basis, mu)
+    # Step 3 – infer posterior on coefficients
+    c_mean, c_cov ← INFER_COMPONENTS(obs_mag, obs_err, A, m_mu, eig_vals)
+    # Step 4 – sample posterior and reconstruct spectra
+    samples, mean_spec, ci_low, ci_high ← RECONSTRUCT_SPECTRA(mu, PC_basis,
+                                                             c_mean, c_cov, N_samples)
+    # Output the reconstructed spectrum and uncertainties
+    return mean_spec, ci_low, ci_high, samples

@@ -1,0 +1,36 @@
+1.1  μ ← mean over i of S[i]
+1.2  X[i] ← S[i] – μ          // zero‑centered spectra
+1.3  C ← (Xᵀ · X) / (N – 1)    // covariance matrix
+1.4  [eig_vals, eig_vecs] ← eig(C)
+1.5  sort eig_vecs by descending eig_vals
+1.6  choose K such that Σ_{k=1..K} eig_vals[k] / Σ_{all} eig_vals ≥ threshold
+1.7  B ← eig_vecs[:, 1..K]    // K leading PCs
+
+For each filter l = 1 … L:
+    a_l ← Σ_{j=1..M} μ[j] · R_l[j] / Σ_{j=1..M} R_l[j]
+    For k = 1 … K:
+        b_lk ← Σ_{j=1..M} B[j,k] · R_l[j] / Σ_{j=1..M} R_l[j]
+    end
+end
+
+3.1  // Prior: p(c) ~ N(0, I_K)
+
+3.2  // MAP estimation (weighted least‑squares solution):
+       A ← B_lᵀ · W · B_l + I_K
+       rhs ← B_lᵀ · W · (f – a)     // f vector of observed fluxes
+       c_star ← solve(A, rhs)       // posterior mode
+
+3.3  // Posterior covariance:
+       Σ_post ← inverse(A)
+
+4.1  s_rec ← μ + B · c_star            // posterior mode spectrum
+
+4.2  For each wavelength index j = 1 … M:
+          row_B ← B[j, :]                // 1 × K
+          σ_s[j] ← sqrt( row_B · Σ_post · row_Bᵀ )
+       end
+
+5.1  For n = 1 … N_samples:
+          c_sample[n] ← draw from N(c_star, Σ_post)
+          s_sample[n] ← μ + B · c_sample[n]
+       end

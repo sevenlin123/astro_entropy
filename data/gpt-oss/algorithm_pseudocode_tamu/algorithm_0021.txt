@@ -1,0 +1,109 @@
+INPUT
+    S_obs      ← set of observed high‑resolution TNO spectra  
+    F_filters  ← list of NIR filter response curves (e.g., JWST/NIRCam)  
+    m_new      ← sparse photometry of a new object (vector length M)  
+    K          ← desired number of principal components (e.g., 8–10)  
+    B          ← KDE bandwidth (≈0.5)  
+    N_synth    ← number of synthetic latent samples (≈10⁴)  
+    N_post     ← number of posterior samples for reconstruction (≈10³)
+
+OUTPUT
+    S_rec_mean ← mean reconstructed spectrum (length L)  
+    S_rec_ci   ← credible‑interval envelope (length L × 2)  
+    C_prob     ← posterior probability vector over taxonomic classes  
+
+--------------------------------------------------------------------
+STEP 1 – Build the Latent Prior
+--------------------------------------------------------------------
+
+1.1  Compute mean spectrum μ_S from S_obs  
+1.2  Perform PCA on (S_obs – μ_S) retaining K components  
+        → PCA matrix W_K (L × K) and component scores Z_real (N×K)  
+
+1.3  Fit a non‑parametric KDE to Z_real using Gaussian kernel, bandwidth B  
+        → KDE model p_Z  
+
+1.4  Draw N_synth latent vectors {z_i} ~ p_Z  
+        → S_synth_i = μ_S + W_K · z_i   (inverse PCA)  
+
+--------------------------------------------------------------------
+STEP 2 – Simulate Synthetic Photometry
+--------------------------------------------------------------------
+
+For each synthetic spectrum S_synth_i:
+
+    2.1  For each filter f in F_filters  
+             R_i,f = ∫ S_synth_i(λ) * T_f(λ) dλ   / ∫ S_⊙(λ) * T_f(λ) dλ  
+             // Reflectance in filter f  
+
+    2.2  Assemble vector r_i = [R_i,1 … R_i,N]  
+
+    2.3  Perturb r_i with Gaussian noise  
+             σ_rel = 0.20   // 20 % relative uncertainty  
+             r_i_noisy = r_i + Normal(0, σ_rel·r_i)  
+
+Store pairs (r_i_noisy , z_i) as synthetic training set.  
+
+--------------------------------------------------------------------
+STEP 3 – Train Encoder (Photometry → Latent)
+--------------------------------------------------------------------
+
+3.1  X_train = {r_i_noisy}   // M‑dimensional photometry  
+3.2  Y_train = {z_i}         // K‑dimensional latent vectors  
+
+3.3  Use an AutoML regressor (e.g., gradient‑boosted trees ensemble)  
+      to learn mapping f_enc: X → Y.  
+      The trained model f_enc outputs a predictive mean μ_ẑ(m)  
+      and, if available, a predictive covariance Σ_ẑ(m)  
+      (or an ensemble of predictions for later sampling).  
+
+--------------------------------------------------------------------
+STEP 4 – Classifier in Latent Space
+--------------------------------------------------------------------
+
+4.1  Train a second AutoML classifier g_cls on training pairs  
+        (Z_real , class_label).  
+4.2  For any new object, compute posterior class probabilities  
+        C_prob = g_cls( μ_ẑ(m_new) ).  
+
+--------------------------------------------------------------------
+STEP 5 – Posterior Sampling of Latent Coefficients
+--------------------------------------------------------------------
+
+5.1  Obtain predictive mean μ_ẑ and covariance Σ_ẑ for m_new  
+     from f_enc.  
+
+5.2  Construct a Gaussian copula:  
+        • Compute correlation matrix ρ from Σ_ẑ.  
+        • Draw N_post samples u_j ~ Uniform(0,1)^K.  
+        • Transform to normal space:  
+              y_j = Φ⁻¹(u_j)  (Φ is standard normal CDF)  
+        • Apply Cholesky factor L of ρ:  
+              z_j = μ_ẑ + L · y_j  
+
+Result: {z_j} ≈ samples from posterior p(z | m_new).  
+
+--------------------------------------------------------------------
+STEP 6 – Reconstruct Spectra
+--------------------------------------------------------------------
+
+For each posterior latent sample z_j:
+
+    6.1  Reconstruct high‑resolution spectrum  
+            S_j = μ_S + W_K · z_j  
+
+Collect all S_j (j = 1…N_post).  
+
+6.2  Compute pointwise statistics:  
+        S_rec_mean(λ) = mean_j S_j(λ)  
+        S_rec_ci_low(λ) = percentile_j S_j(λ) at 2.5%  
+        S_rec_ci_high(λ)= percentile_j S_j(λ) at 97.5%  
+
+--------------------------------------------------------------------
+RETURN
+--------------------------------------------------------------------
+
+Return S_rec_mean, S_rec_ci (low/high), and C_prob.  
+
+--------------------------------------------------------------------
+END OF ALGORITHM

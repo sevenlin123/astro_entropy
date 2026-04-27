@@ -1,0 +1,55 @@
+INPUT:
+    - Photometry matrix P   (N_obj × M_filters)      // observed fluxes
+    - Filter transmission curves T[1..M_filters]     // wavelength–dependent response
+    - Reference solar spectrum S_ref(wavelength)     // to compute color indices
+    - Basis spectra B[1..K]                          // e.g., principal components
+    - Regularisation parameter λ
+
+OUTPUT:
+    - Reconstructed reflectance spectra R[1..N_obj]    // flux vs wavelength
+    - Basis coefficients C[1..N_obj][1..K]
+    - Uncertainty estimates σ_R[1..N_obj]
+
+ALGORITHM:
+
+1. Pre‑processing
+   1.1 For each filter j:
+          Compute effective wavelength λ_eff[j] by integrating T[j] * S_ref over λ.
+   1.2 Convert raw photometry P to reflectance ratios:
+          For each object i:
+              r_i[j] = P[i][j] / S_ref(λ_eff[j])
+          Store in matrix R_raw (N_obj × M).
+
+2. Build design matrix Φ
+   2.1 For each filter j:
+          Sample basis spectra B at λ_eff[j] to obtain vector b_j[1..K].
+   2.2 Stack vectors b_j as rows to form Φ (M × K).
+   2.3 Optionally append identity rows weighted by λ to enforce smoothness:
+          Φ_reg = [Φ ; sqrt(λ)*I_K] ,
+          P_reg = [R_raw ; zeros(K)].
+
+3. Solve for basis coefficients C
+   3.1 For each object i:
+          Solve least‑squares problem:
+             min_c || Φ_reg * c_i – P_reg_i ||_2^2
+          using e.g. QR decomposition.
+          Store solution c_i in C[i].
+
+4. Reconstruct full spectra
+   4.1 Define fine wavelength grid W = {w_1 … w_L}.
+   4.2 For each object i:
+          Compute spectral shape:
+             r_i(λ) = Σ_{k=1..K} c_i[k] * B_k(λ)   for all λ ∈ W.
+          Scale to absolute reflectance if needed by multiplying by solar flux at λ.
+
+5. Propagate uncertainties
+   5.1 Compute Jacobian J_i = Φ (partial of r_i w.r.t. c_i).
+   5.2 Assume measurement error covariance Σ_P (diagonal from photometric errors).
+   5.3 Estimate coefficient covariance:
+             Σ_Ci = (J_i^T Σ_P^{-1} J_i)^(-1).
+   5.4 Propagate to spectrum:
+             σ_Ri(λ) = sqrt( Σ_{p,q} (∂r_i/∂c_p)(∂r_i/∂c_q) Σ_Ci[p,q] )
+   5.5 Store σ_Ri.
+
+6. Output
+   6.1 Return reconstructed spectra R[i](W), coefficients C[i], uncertainties σ_R[i].

@@ -1,0 +1,98 @@
+INPUT:
+    S          # Training spectra (N_spec × N_λ)
+    T[1…M]     # Filter transmission curves (M filters, each length N_λ)
+    λ_grid     # Wavelength grid corresponding to spectra and filters
+    K          # Number of principal components to keep
+    y          # Photometry of target object (M × 1)
+    σ_y        # Measurement uncertainties of photometry (M × 1)
+
+OUTPUT:
+    ŝ          # Reconstructed full‑spectrum (N_λ × 1)
+    Σ_s         # Spectrum covariance (N_λ × N_λ)
+    ẑ          # Posterior mean of latent coefficients (K × 1)
+    Σ_z         # Posterior covariance of latent coefficients (K × K)
+
+--------------------------------------------------------------------
+STEP 1 – Build the Latent‑Space Model
+--------------------------------------------------------------------
+
+1.1  Compute mean spectrum μ (N_λ × 1):
+        μ ← (1 / N_spec) * Σ_{i=1}^{N_spec} S_i
+
+1.2  Center training spectra:
+        S_c ← S - μ  (broadcast subtraction)
+
+1.3  Perform Singular Value Decomposition (SVD) on centered spectra:
+        U_raw, Σ, Vt ← svd(S_c / √(N_spec - 1))   # U_raw: N_λ × N_λ
+    (Only first K right singular vectors are needed.)
+
+1.4  Select first K principal‑component eigenvectors:
+        U ← U_raw[:, 1:K]                         # N_λ × K
+
+1.5  Store eigenvalues λ_k (diagonal of Σ^2) if desired.
+
+--------------------------------------------------------------------
+STEP 2 – Build the Forward (Photometric) Design Matrix
+--------------------------------------------------------------------
+
+For each filter j = 1 … M:
+    2.1  Compute baseline photometric response from mean spectrum:
+            c_j ← Σ_{ℓ=1}^{N_λ} μ(ℓ) * T_j(ℓ) * Δλ
+        Store baseline vector c (M × 1).
+
+    2.2  Project each principal component onto filter j:
+            For k = 1 … K:
+                A[j, k] ← Σ_{ℓ=1}^{N_λ} U(ℓ, k) * T_j(ℓ) * Δλ
+        Store design matrix A (M × K).
+
+After all filters processed, we have:
+    A   – mapping from latent coefficients z to photometry deviations from mean.
+    c   – expected photometry if all latent coefficients were zero.
+
+--------------------------------------------------------------------
+STEP 3 – Bayesian Inference for a New Target
+--------------------------------------------------------------------
+
+3.1  Assemble measurement noise covariance:
+        C_y ← diag(σ_y^2)          # M × M diagonal matrix
+
+3.2  Define prior on latent coefficients:
+        z ∼ N(0, I_K)              # Independent standard normal
+
+3.3  Compute posterior precision matrix:
+        P ← Aᵀ * C_y⁻¹ * A + I_K   # K × K
+
+3.4  Compute posterior covariance:
+        Σ_z ← P⁻¹                  # K × K
+
+3.5  Compute posterior mean:
+        ẑ ← Σ_z * Aᵀ * C_y⁻¹ * (y - c)   # K × 1
+
+--------------------------------------------------------------------
+STEP 4 – Reconstruct Full Spectrum
+--------------------------------------------------------------------
+
+4.1  Spectral mean plus latent contribution:
+        ŝ ← μ + U * ẑ                 # N_λ × 1
+
+4.2  Propagate covariance through linear model:
+        Σ_s ← U * Σ_z * Uᵀ             # N_λ × N_λ
+
+--------------------------------------------------------------------
+STEP 5 – Optional: Likelihood & Outlier Flagging
+--------------------------------------------------------------------
+
+5.1  Compute marginal likelihood of photometry:
+        Λ ← -(1/2) * [ (y - c)ᵀ * C_y⁻¹ * (y - c)
+                       - (y - c)ᵀ * C_y⁻¹ * A * Σ_z * Aᵀ * C_y⁻¹ * (y - c)
+                       + log|P| + M*log(2π) ]
+
+5.2  If Λ < threshold, flag object as an outlier (rare spectral type).
+
+--------------------------------------------------------------------
+RETURN:
+    ŝ       # Reconstructed spectrum
+    Σ_s      # Uncertainty matrix for the spectrum
+    ẑ       # Posterior latent coefficients
+    Σ_z      # Posterior covariance of latent coefficients
+    Λ        # Log‑marginal likelihood (optional)

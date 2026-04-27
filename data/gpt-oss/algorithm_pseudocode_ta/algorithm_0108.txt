@@ -1,0 +1,70 @@
+Input:
+    S_spec[1..N]          # Near‑IR spectra (wavelength array λ, flux array f)
+    F_filters[1..M]       # Filter transmission curves T_m(λ)
+    phot_obs[1..K]        # Observed photometric fluxes for an object
+    phot_err[1..K]        # Measurement uncertainties
+
+Parameters:
+    n_pc                   # Number of principal components to retain (e.g. 5–10)
+
+Output:
+    spec_rec               # Reconstructed full spectrum (λ, f_rec)
+    spec_cov               # Covariance matrix of reconstructed spectrum
+    pc_coeff_post          # Posterior samples of PC coefficients
+
+--------------------------------------------------------------------
+1.  Pre‑processing
+--------------------------------------------------------------------
+2.  For each spectrum S_spec[i]:
+3.      Interpolate onto a common wavelength grid λ_common
+4.      Normalise flux (e.g. divide by median or integral)
+5.  Compute mean spectrum μ(λ) = average over all i
+6.  Centered spectra: C[i] = S_spec[i] – μ
+
+--------------------------------------------------------------------
+7.  Principal Component Analysis (PCA)
+--------------------------------------------------------------------
+8.  Compute covariance matrix Σ = (1/(N-1)) * C^T * C
+9.  Eigen‑decompose Σ → eigenvectors V[1..N] (PCs) and eigenvalues Λ
+10. Select first n_pc PCs: PC[1..n_pc] = V[:,1:n_pc]
+11. Project centred spectra onto PCs:
+        coeff[i, j] = PC[j]^T * C[i]
+    Store training coefficients matrix A_train[1..N, 1..n_pc]
+
+--------------------------------------------------------------------
+12.  Forward photometry model
+--------------------------------------------------------------------
+13.  For any coefficient vector c[1..n_pc]:
+14.      Reconstruct spectrum f_model(λ) = μ(λ) + Σ_j c[j] * PC[j](λ)
+15.      Compute synthetic photometry:
+            for m in 1..M:
+                P[m](c) = ∫ f_model(λ) * T_m(λ) dλ / ∫ T_m(λ) dλ
+16.  Define likelihood for observed photometry:
+            L(c) = Π_k N( phot_obs[k] | P[k](c), phot_err[k] )
+17.  Define prior on coefficients (e.g. Gaussian with zero mean, variance Λ[1..n_pc])
+18.  Posterior density: p(c | phot_obs) ∝ L(c) * prior(c)
+
+--------------------------------------------------------------------
+19.  Bayesian inference (sampling)
+--------------------------------------------------------------------
+20.  Initialise chain at c0 (e.g. zeros or nearest training coefficients)
+21.  For iter = 1 to N_iter:
+22.      Propose new c' = c + step_size * random_normal_vector
+23.      Compute L(c'), prior(c'), acceptance ratio α = min(1, p(c'|)/p(c|))
+24.      If uniform(0,1) < α: accept c' (c ← c')
+25.  Store accepted c vectors as posterior samples (pc_coeff_post)
+
+--------------------------------------------------------------------
+26.  Spectrum reconstruction
+--------------------------------------------------------------------
+27.  For each posterior sample c_s:
+28.      f_s(λ) = μ(λ) + Σ_j c_s[j] * PC[j](λ)
+29.  Compute pointwise mean spectrum:
+        spec_rec(λ) = mean_over_samples( f_s(λ) )
+30.  Compute covariance:
+        spec_cov(λ, λ') = covariance_over_samples( f_s(λ), f_s(λ') )
+
+--------------------------------------------------------------------
+31.  Return outputs
+--------------------------------------------------------------------
+32.  Output spec_rec, spec_cov, pc_coeff_post

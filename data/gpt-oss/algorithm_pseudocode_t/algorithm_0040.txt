@@ -1,0 +1,119 @@
+Algorithm SpectralReconstruction
+
+Input:
+    - Observed magnitudes: {m_i}   (i = 1 … N_filters)
+    - Magnitude uncertainties: {σ_mi}
+    - Template spectra: {T_k(λ)}  (k = 1 … N_templates)
+    - Filter transmission curves: {R_i(λ)} (i = 1 … N_filters)
+    - Zero‑point fluxes for each filter: {ZP_i}
+
+Output:
+    - Posterior samples of template coefficients: {a_k}
+    - Mean reconstructed spectrum: S̄(λ)
+    - Covariance of coefficients: Σ_a
+    - χ² value for best fit
+    - Residuals for each filter: {r_i}
+
+--------------------------------------------------------------------
+1. **Convert magnitudes to flux densities**
+
+   For each filter i:
+       f_i      ← ZP_i * 10^(–0.4 * m_i)
+       σ_fi     ← 0.4 * ln(10) * ZP_i * 10^(–0.4 * m_i) * σ_mi
+
+--------------------------------------------------------------------
+2. **Define forward model**
+
+   Function PredictFlux(a):
+       # a = vector of template coefficients [a_1 … a_K]
+       For each filter i:
+           # Construct model spectrum as linear combination of templates
+           S(λ) ← Σ_k a_k * T_k(λ)
+
+           # Integrate over filter transmission
+           num ← ∫ S(λ) * R_i(λ) dλ
+           den ← ∫ R_i(λ) dλ
+           f_pred_i ← num / den
+
+       Return {f_pred_i}
+
+--------------------------------------------------------------------
+3. **Likelihood function**
+
+   Function LogLikelihood(a):
+       f_pred ← PredictFlux(a)
+       logL ← –0.5 * Σ_i [ (f_pred_i – f_i)² / σ_fi² + ln(2πσ_fi²) ]
+       Return logL
+
+--------------------------------------------------------------------
+4. **Prior on coefficients**
+
+   # Example: independent Gaussian priors centered at 0 with width σ_a
+   Function LogPrior(a):
+       logp ← –0.5 * Σ_k [ a_k² / σ_a² + ln(2πσ_a²) ]
+       Return logp
+
+--------------------------------------------------------------------
+5. **Posterior probability**
+
+   Function LogPosterior(a):
+       Return LogLikelihood(a) + LogPrior(a)
+
+--------------------------------------------------------------------
+6. **MCMC sampling (Metropolis–Hastings)**
+
+   Initialize:
+       a_current ← zeros(K)          # start at zero coefficients
+       log_post_current ← LogPosterior(a_current)
+       AcceptCount ← 0
+       Samples ← empty list
+
+   For iter = 1 to N_iter:
+       # Propose new coefficients by adding Gaussian noise
+       a_proposed ← a_current + Normal(0, proposal_sigma, size=K)
+       log_post_proposed ← LogPosterior(a_proposed)
+
+       # Acceptance probability
+       α ← min(1, exp(log_post_proposed – log_post_current))
+
+       If Uniform(0,1) < α:
+           a_current ← a_proposed
+           log_post_current ← log_post_proposed
+           AcceptCount ← AcceptCount + 1
+
+       Append a_current to Samples
+
+   AcceptanceRate ← AcceptCount / N_iter
+
+--------------------------------------------------------------------
+7. **Posterior analysis**
+
+   # Discard burn‑in samples
+   PostSamples ← Samples[burn_in : end]
+
+   # Compute mean and covariance of coefficients
+   a_mean ← mean(PostSamples, axis=0)
+   Σ_a    ← cov(PostSamples, rowvar=False)
+
+   # Reconstruct mean spectrum
+   S̄(λ) ← Σ_k a_mean_k * T_k(λ)
+
+--------------------------------------------------------------------
+8. **Goodness‑of‑fit**
+
+   f_pred_best ← PredictFlux(a_mean)
+   χ² ← Σ_i [ (f_pred_best_i – f_i)² / σ_fi² ]
+
+   # Residuals
+   For each filter i:
+       r_i ← f_i – f_pred_best_i
+
+--------------------------------------------------------------------
+9. **Return results**
+
+   Output:
+       - PostSamples
+       - a_mean, Σ_a
+       - S̄(λ)
+       - χ²
+       - Residuals {r_i}

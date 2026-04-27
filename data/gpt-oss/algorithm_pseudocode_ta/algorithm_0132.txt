@@ -1,0 +1,106 @@
+Input:
+    - S = {s_i(λ)}   : training set of N_s full‑resolution spectra (wavelength grid λ)
+    - F = {f_j}       : list of M photometric filters (each defined by transmission T_j(λ))
+    - P = {p_k}       : list of K target objects with sparse photometry
+        For each k:
+            • y_k[j]   : measured flux in filter f_j
+            • σ_k[j]   : measurement uncertainty in filter f_j
+
+Output:
+    - For every k: posterior samples of latent coefficients z_k ∈ ℝ^D
+    - Reconstructed spectra Ŝ_k(λ) = μ(λ) + Σ_{d=1}^D z_k[d]·PC_d(λ)
+    - Credible intervals for Ŝ_k(λ)
+
+--------------------------------------------------------------------
+1.  TRAIN PCA MANIFOLD ON THE SPECTRAL SET
+    -------------------------------------------------------------
+    1.1  Compute mean spectrum:
+            μ(λ) ← (1/N_s) Σ_{i=1}^{N_s} s_i(λ)
+
+    1.2  Center training spectra:
+            s̃_i(λ) ← s_i(λ) – μ(λ)
+
+    1.3  Form data matrix S̃ of size (N_s × N_λ):
+            each row i contains flattened s̃_i(λ)
+
+    1.4  Compute covariance matrix C = (S̃ᵀ S̃) / (N_s – 1)
+
+    1.5  Eigen‑decompose C:
+            C = V Λ Vᵀ
+            where columns of V are eigenvectors (principal components PC_d)
+            and Λ are eigenvalues sorted descending.
+
+    1.6  Select dimensionality D (user choice; e.g., D = 8–10).
+
+    1.7  Truncate to first D components:
+            PC_d(λ) ← column d of V   (d = 1…D)
+            λ_d      ← Λ[d,d]          (variance explained)
+
+    1.8  Store μ(λ), {PC_d(λ)}, D, and variance vector {λ_d}.
+
+--------------------------------------------------------------------
+2.  PRECOMPUTE FILTER RESPONSE MATRICES
+    -------------------------------------------------------------
+    For each filter f_j (j = 1…M):
+        2.1  Interpolate T_j(λ) onto the wavelength grid of μ(λ).
+
+        2.2  For each principal component d:
+                a_jd ← ∫ PC_d(λ) · T_j(λ) dλ      // projection of PC on filter
+           Compute also a_j0 ← ∫ μ(λ) · T_j(λ) dλ   // mean flux in filter
+
+        2.3  Store vector a_j = [a_j0, a_j1 … a_jD].
+
+--------------------------------------------------------------------
+3.  DEFINE PHOTOMETRIC MODEL
+    -------------------------------------------------------------
+    For any latent coefficient vector z ∈ ℝ^D:
+        3.1  Predicted flux in filter j:
+                ŷ_j(z) = a_j0 + Σ_{d=1}^D a_jd · z[d]
+
+--------------------------------------------------------------------
+4.  BAYESIAN INFERENCE FOR EACH OBJECT
+    -------------------------------------------------------------
+    For each object k = 1…K:
+
+        4.1  Likelihood:
+                L_k(z) = Π_{j=1}^M 
+                         N( y_k[j] | ŷ_j(z), σ_k[j]^2 )
+                // Gaussian with measurement error
+
+        4.2  Prior on latent coefficients:
+                z ~ Normal(0, diag(λ_1 … λ_D))
+                // zero mean, variance equal to explained variance
+
+        4.3  Posterior:
+                p_k(z | y_k) ∝ L_k(z) · Prior(z)
+
+        4.4  Sample from posterior:
+                Use e.g., Hamiltonian Monte Carlo or Metropolis‑Hastings:
+                    Initialize z_0 = 0
+                    For t = 1 … N_samples:
+                        Propose z' = z_{t-1} + ε,   ε ~ Normal(0, ε_scale² I)
+                        Compute acceptance ratio α = min(1,
+                            p_k(z'|y_k) / p_k(z_{t-1}|y_k) )
+                        With probability α accept z_t = z', else z_t = z_{t-1}
+                Store all accepted z_t as posterior sample set Z_k.
+
+--------------------------------------------------------------------
+5.  RECONSTRUCT SPECTRA AND PROPAGATE UNCERTAINTIES
+    -------------------------------------------------------------
+    For each posterior sample z in Z_k:
+        5.1  Reconstruct spectrum:
+                Ŝ(λ) = μ(λ) + Σ_{d=1}^D z[d] · PC_d(λ)
+
+    5.2  Collect all Ŝ(λ) from Z_k → build empirical distribution at each λ.
+
+    5.3  For each λ compute:
+                • Posterior mean Ŝ_mean(λ)
+                • Credible interval (e.g., 95%) from empirical percentiles.
+
+--------------------------------------------------------------------
+6.  OUTPUT
+    -------------------------------------------------------------
+    For each object k:
+        • Posterior sample set Z_k
+        • Mean reconstructed spectrum Ŝ_mean_k(λ)
+        • Credible intervals (lower, upper bounds) per λ

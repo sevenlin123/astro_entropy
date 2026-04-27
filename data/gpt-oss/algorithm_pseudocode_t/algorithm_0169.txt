@@ -1,0 +1,98 @@
+PROCEDURE RECONSTRUCT_SPECTRA(ObjectList, FilterList, BasisFunctions, 
+                               ZeroPointFlux, Priors, MCMCParams):
+
+    INPUT:
+        ObjectList      – list of TNOs; each entry contains:
+            magnitudes  : dictionary {filter_name → mag}
+            errors      : dictionary {filter_name → σ_mag}
+        FilterList      – list of filter names in which photometry exists
+        BasisFunctions  – list of spectral basis vectors B_j(λ)  (j = 1…J)
+        ZeroPointFlux   – dictionary {filter_name → f0_f}  (flux at mag 0)
+        Priors          – prior specification for coefficients α_j
+        MCMCParams      – {n_iter, burn_in, step_size, ...}
+
+    OUTPUT:
+        For each TNO:
+            PosteriorSamples – matrix of sampled coefficient vectors α (size: N_samples × J)
+            SpectrumMean(λ)  – posterior mean reflectance spectrum
+            SpectrumCov(λ)   – posterior covariance of reflectance spectrum
+            TaxonomyClass    – assigned taxonomic class (optional)
+
+--------------------------------------------------------------------
+1. Pre‑compute Design Matrix
+--------------------------------------------------------------------
+    For each filter f in FilterList:
+        Compute band‑integrated response R[j][f] for all basis j:
+            R[j][f] = ∫ B_j(λ) * S_f(λ) dλ     // S_f is filter transmission
+
+    // R has dimensions J × |FilterList|
+
+--------------------------------------------------------------------
+2. Convert Observed Magnitudes to Fluxes
+--------------------------------------------------------------------
+    For each TNO k in ObjectList:
+        For each filter f in FilterList:
+            f_obs[k][f]   = ZeroPointFlux[f] * 10^( -0.4 * mag_k[f] )
+            σ_f_obs[k][f] = f_obs[k][f] * ln(10)/2.5 * σ_mag_k[f]
+        Store f_obs[k], σ_f_obs[k]
+
+--------------------------------------------------------------------
+3. Define Likelihood Function
+--------------------------------------------------------------------
+    For a given coefficient vector α (size J):
+        Predicted flux vector for TNO k:
+            f_pred[α]_k[f] = Σ_j α[j] * R[j][f]      // linear combination
+        Residuals:
+            Δ_k[f] = f_obs[k][f] - f_pred[α]_k[f]
+        Log‑likelihood (Gaussian):
+            lnL_k(α) = -½ * Σ_f (Δ_k[f]^2 / σ_f_obs[k][f]^2 + ln(2π σ_f_obs[k][f]^2))
+
+--------------------------------------------------------------------
+4. Prior on Coefficients
+--------------------------------------------------------------------
+    For each α[j]:
+        lnPrior_j(α[j]) = function defined by Priors  // e.g., Normal(0, σ^2)
+
+    lnPrior(α) = Σ_j lnPrior_j(α[j])
+
+--------------------------------------------------------------------
+5. Posterior Sampling (Metropolis–Hastings)
+--------------------------------------------------------------------
+    For each TNO k:
+        Initialize α^(0) (e.g., zeros or prior means)
+        For i = 1 … MCMCParams.n_iter:
+            Propose α* = α^(i-1) + ε,   ε ~ Normal(0, step_size)
+            Compute lnPosterior* = lnL_k(α*) + lnPrior(α*)
+            Compute lnPosterior_cur = lnL_k(α^(i-1)) + lnPrior(α^(i-1))
+            Acceptance ratio:
+                a = exp( lnPosterior* - lnPosterior_cur )
+            Draw u ~ Uniform(0,1)
+            If u < a:
+                α^(i) = α*
+            Else:
+                α^(i) = α^(i-1)
+        Discard first MCMCParams.burn_in samples
+        Store remaining samples in PosteriorSamples_k
+
+--------------------------------------------------------------------
+6. Construct Posterior Spectra
+--------------------------------------------------------------------
+    For each TNO k:
+        For each λ grid point:
+            // Spectrum is linear combination of basis functions
+            SpectrumMean_k(λ) = Σ_j mean_k[α[j]] * B_j(λ)
+            // Covariance derived from sampled α:
+            SpectrumCov_k(λ, λ') = Σ_j Σ_m cov_k[α[j], α[m]] * B_j(λ) * B_m(λ')
+        Return SpectrumMean_k, SpectrumCov_k
+
+--------------------------------------------------------------------
+7. Optional Taxonomic Classification
+--------------------------------------------------------------------
+    Define taxonomy reference spectra {C_l(λ)}  (l = 1…L)
+    For each TNO k:
+        Compute distance to each class l:
+            d_l = √[ Σ_λ (SpectrumMean_k(λ) - C_l(λ))^2 / SpectrumVar_k(λ) ]
+        Assign TaxonomyClass_k = argmin_l d_l
+
+--------------------------------------------------------------------
+END PROCEDURE

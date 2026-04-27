@@ -1,0 +1,89 @@
+Input:
+    S_spec[1..N]      # Near‑IR spectra (wavelength grid λ)
+    filt[1..M]        # Transmission curves of M photometric filters
+    phot_obs          # Observed magnitudes (or fluxes) for target object
+    err_obs           # Measurement uncertainties of phot_obs
+    K                 # Number of principal components to keep
+
+Output:
+    spectrum_recon    # Reconstructed full spectrum
+    cov_recon         # Uncertainty (covariance) of reconstructed spectrum
+    outlier_flag      # Boolean flag indicating potential outlier
+
+--------------------------------------------------------------------
+STEP 1: Build Spectral Basis (Training Phase)
+--------------------------------------------------------------------
+1.1  Normalise all spectra to unit area (or median flux) → S_norm
+1.2  Compute mean spectrum μ_s = mean(S_norm, axis=0)
+1.3  Subtract mean:  X = S_norm - μ_s
+1.4  Perform Singular Value Decomposition (SVD):
+        [U, Σ, Vt] = svd(X, full_matrices=False)
+    PCs = Vt[0:K, :]            # First K principal components (shape K × N)
+    λ_vals = Σ[0:K]             # Singular values
+1.5  Store:
+        μ_s, PCs, λ_vals
+--------------------------------------------------------------------
+STEP 2: Forward Photometric Model
+--------------------------------------------------------------------
+# For any vector of PC coefficients c (length K),
+# the corresponding spectrum is:
+#   s(c) = μ_s + PCsᵀ · c
+# The photometric prediction through filter f is:
+#   p_f(c) = ∫ s(c, λ) · filt_f(λ) dλ
+# (discretised integration over wavelength grid)
+
+Define function PredictPhotometry(c):
+    spectrum = μ_s + transpose(PCs) · c
+    for each filter f in 1..M:
+        p[f] = sum( spectrum * filt[f] ) / sum( filt[f] )
+    return p
+
+--------------------------------------------------------------------
+STEP 3: Bayesian Inference in PC Space
+--------------------------------------------------------------------
+3.1  Likelihood: For observed photometry y,
+      L(y | c) = Π_f  N( y[f] | p_f(c), err_obs[f]^2 )
+
+3.2  Prior over coefficients: 
+      p(c) = N( 0 , diag(λ_vals^2) )     # Zero‑mean Gaussian, variance from PCA
+
+3.3  Posterior:  p(c | y) ∝ L(y | c) · p(c)
+
+3.4  Sample Posterior:
+      # Use simple Metropolis–Hastings or Hamiltonian Monte Carlo
+      Initialise c₀ = 0
+      For t = 1 … N_samples:
+          Propose c' = c_{t-1} + ε,  ε ~ N(0, σ_prop² I_K)
+          Compute α = min(1, p(c'|y)/p(c_{t-1}|y))
+          With probability α accept: c_t = c'
+          Else reject: c_t = c_{t-1}
+
+      Store all accepted c_t
+
+3.5  Estimate Posterior Statistics:
+      c_mean   = mean( {c_t} )
+      c_cov    = covariance( {c_t} )
+
+--------------------------------------------------------------------
+STEP 4: Reconstruct Full Spectrum
+--------------------------------------------------------------------
+4.1  spectrum_recon = μ_s + transpose(PCs) · c_mean
+4.2  For each wavelength λ_i:
+        # propagate coefficient uncertainty to spectral flux
+        cov_recon[λ_i, λ_i] = sum_jk PCs[j,i] * PCs[k,i] * c_cov[j,k]
+
+--------------------------------------------------------------------
+STEP 5: Outlier Detection (Optional)
+--------------------------------------------------------------------
+5.1  Compute Posterior Predictive Residuals:
+        pred_phot = PredictPhotometry(c_mean)
+        resid = (phot_obs - pred_phot) / err_obs
+5.2  If any |resid| > threshold (e.g., 3σ):
+        outlier_flag = True
+   Else:
+        outlier_flag = False
+
+--------------------------------------------------------------------
+Return:
+    spectrum_recon, cov_recon, outlier_flag
+--------------------------------------------------------------------

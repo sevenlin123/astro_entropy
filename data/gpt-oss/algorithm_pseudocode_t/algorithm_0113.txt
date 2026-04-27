@@ -1,0 +1,74 @@
+INPUT:
+    - Photometric measurements P = {(λ_i, F_i, σ_i)}  // i = 1…N
+      where λ_i = effective wavelength of filter i
+            F_i = measured flux density
+            σ_i = measurement uncertainty
+    - Reference filter set R = {λ_rj}  // wavelengths at which the spectrum will be reconstructed
+    - Prior hyper‑parameters θ_prior for the Gaussian Process (GP) model
+    - Optional: spectral library L = {S_k(λ)} for taxonomy comparison
+
+OUTPUT:
+    - Posterior mean spectrum μ(λ) at points λ_rj
+    - Posterior covariance matrix Σ (size M×M, M = |R|)
+    - Set of sampled spectra {s^(t)(λ)}_{t=1..T}
+    - Taxonomic classification scores (optional)
+
+--------------------------------------------------------------------
+STEP 0: PREPARE WAVELENGTH GRID
+    1. Define target reconstruction grid R = {λ_rj} (e.g., 20 equally spaced points from 400 nm to 950 nm).
+    2. Let M = length(R).
+
+--------------------------------------------------------------------
+STEP 1: DEFINE PRIOR MODEL
+    3. Choose a smoothness kernel k(λ, λ'; φ) for the GP (e.g., squared‑exponential):
+           k(λ, λ'; φ) = σ_f^2 * exp( -(λ-λ')^2 / (2ℓ^2) )
+       where φ = {σ_f, ℓ} are hyper‑parameters.
+    4. Initialize hyper‑parameters φ with prior values from θ_prior.
+
+--------------------------------------------------------------------
+STEP 2: BUILD COVARIANCE MATRICES
+    5. Construct observation covariance K_pp:
+           For all i,j: K_pp[i,j] = k(λ_i, λ_j; φ)
+    6. Construct cross‑covariance K_pr:
+           For all i,j: K_pr[i,j] = k(λ_i, λ_rj; φ)
+    7. Construct prediction covariance K_rr:
+           For all i,j: K_rr[i,j] = k(λ_r_i, λ_r_j; φ)
+
+--------------------------------------------------------------------
+STEP 3: INTEGRATE MEASUREMENT NOISE
+    8. Add noise to observation covariance:
+           K_tilde = K_pp + diag(σ_1^2, …, σ_N^2)
+
+--------------------------------------------------------------------
+STEP 4: COMPUTE POSTERIOR PARAMETERS (GP Regression)
+    9. Solve linear system:
+           α = K_tilde^{-1} * F   // F = vector of fluxes F_i
+    10. Compute posterior mean at R:
+            μ = K_pr^T * α          // vector of length M
+    11. Compute posterior covariance at R:
+            Σ = K_rr - K_pr^T * K_tilde^{-1} * K_pr
+        (Use Cholesky decomposition of K_tilde for numerical stability)
+
+--------------------------------------------------------------------
+STEP 5: SAMPLE FROM POSTERIOR
+    12. Draw T independent samples from multivariate normal:
+            s^(t) ~ N( μ , Σ )     // t = 1…T
+    13. Store each sample as a full spectrum over R.
+
+--------------------------------------------------------------------
+STEP 6: OPTIONAL – TAXONOMIC COMPARISON
+    14. For each sampled spectrum s^(t), compute similarity score to each library spectrum S_k:
+            score_k^(t) = exp( -½ * (s^(t) - S_k)^T * W * (s^(t) - S_k) )
+        where W is a weighting matrix (e.g., inverse variance of library points).
+    15. Aggregate scores over T samples to obtain posterior probability for each class:
+            P(class=k | data) ∝ (1/T) * Σ_t score_k^(t)
+    16. Assign taxonomy label with highest posterior probability.
+
+--------------------------------------------------------------------
+RETURN:
+    - Posterior mean spectrum μ(λ)
+    - Posterior covariance Σ
+    - Sampled spectra {s^(t)(λ)}
+    - (Optional) Taxonomic probabilities {P(class=k | data)}
+
+END

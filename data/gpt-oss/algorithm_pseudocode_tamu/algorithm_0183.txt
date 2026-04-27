@@ -1,0 +1,96 @@
+INPUT:
+    S_spec[N_spec][N_wave]         # Reference spectra (reflectance vs wavelength)
+    R_filters[M_filters]          # Filter transmission curves
+    N_components = K              # Desired number of PCA components
+    bandwidth = h                 # KDE bandwidth
+    N_augmented = M               # Number of synthetic latent samples
+    N_posterior = L               # Samples for posterior uncertainty
+    new_photometry[M_filters]    # Observed sparse photometry for target object
+
+OUTPUT:
+    S_recon[N_wave]               # Reconstructed high‑resolution spectrum
+    Cov_recon[N_wave]             # Uncertainty (covariance) of reconstruction
+    TaxonomyProb[Classes]         # Probability distribution over taxonomic classes
+
+----------------------------------------------------
+1. PREPARATION
+----------------------------------------------------
+1.1 Compute mean spectrum μ_spec = mean(S_spec, axis=0)
+
+1.2 Center spectra:
+        S_centered = S_spec - μ_spec
+
+1.3 Perform PCA on centered spectra:
+        U, Σ, Vt = svd(S_centered, full_matrices=False)
+        PC_basis = U[:, :N_components]                # Shape (N_wave, K)
+        PC_scores  = dot(S_centered, PC_basis)         # Shape (N_spec, K)
+
+1.4 Fit a multivariate KDE to PC_scores:
+        kde = KDE(kernel='gaussian', bandwidth=bandwidth)
+        kde.fit(PC_scores)
+
+1.5 Generate synthetic latent samples:
+        latent_synth = kde.sample(N_augmented)         # Shape (M, K)
+
+1.6 Map synthetic latents to synthetic spectra:
+        S_synth_centered = dot(latent_synth, PC_basis.T)   # (M, N_wave)
+        S_synth = S_synth_centered + μ_spec              # (M, N_wave)
+
+1.7 Forward‑model synthetic spectra into photometry:
+        For each spectrum s in S_synth:
+            for each filter f in R_filters:
+                m_f = integrate(s * f / solar_spectrum, λ)   # Reflectance integral
+            photom[f] = m_f
+        Photom_synth = array of shape (M, M_filters)
+
+1.8 Inject Gaussian noise into synthetic photometry:
+        Photom_synth_noisy = Photom_synth + Normal(0, 0.2*Photom_synth)
+
+----------------------------------------------------
+2. TRAINING
+----------------------------------------------------
+2.1 Train encoder (regressor) to map photometry → latent coefficients:
+        X_train = Photom_synth_noisy              # (M, M_filters)
+        Y_train = latent_synth                    # (M, K)
+        encoder = AutoML_Regression()              # e.g., GBDT + NN ensemble
+        encoder.train(X_train, Y_train)
+
+2.2 Train classifier in latent space:
+        X_cls   = PC_scores                        # (N_spec, K)
+        Y_cls   = taxonomy_labels                 # (N_spec,)
+        classifier = AutoML_Classifier()
+        classifier.train(X_cls, Y_cls)
+
+----------------------------------------------------
+3. INFERENCE FOR NEW OBJECT
+----------------------------------------------------
+3.1 Encode new photometry to latent mean:
+        latent_mean = encoder.predict(new_photometry)          # (K,)
+
+3.2 Obtain covariance of encoder prediction:
+        latent_cov  = encoder.predict_variance(new_photometry) # (K,K)
+        # (if encoder provides only mean, approximate via ensemble std dev)
+
+3.3 Sample posterior latent vectors using Gaussian copula:
+        # Build correlation matrix from training latent scores
+        corr_matrix = corrcoef(PC_scores.T)                    # (K,K)
+        # Convert covariance to correlation for copula
+        copula_sampler = GaussianCopula(corr_matrix)
+        latent_samples = copula_sampler.sample(latent_mean,
+                                               latent_cov,
+                                               N_posterior)        # (L, K)
+
+3.4 Decode sampled latents to spectra:
+        S_samples = dot(latent_samples, PC_basis.T) + μ_spec     # (L, N_wave)
+
+3.5 Aggregate samples:
+        S_recon      = mean(S_samples, axis=0)                  # (N_wave,)
+        Cov_recon    = cov(S_samples, rowvar=False)             # (N_wave,N_wave)
+
+3.6 Classify target:
+        taxonomy_probs = classifier.predict_proba(latent_mean)   # (Classes,)
+
+----------------------------------------------------
+4. RETURN RESULTS
+----------------------------------------------------
+Return S_recon, Cov_recon, taxonomy_probs

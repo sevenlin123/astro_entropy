@@ -1,0 +1,88 @@
+INPUT
+    * Reference spectra S_ref[i]   (i = 1…N_ref, each a vector of R wavelengths)
+    * Corresponding taxonomic labels L_ref[i]
+    * Instrument filter transmission curves T_f[j]   (j = 1…N_filt)
+    * New photometry vector m_new (length N_filt)
+
+PARAMETERS
+    * K          – number of principal components to retain (default 8–10)
+    * h_kde      – KDE bandwidth (default 0.5)
+    * N_aug      – number of synthetic latent samples to generate (e.g. 5000)
+    * σ_phot     – relative photometric noise level (default 0.20)
+    * Ensemble size for regression (e.g. 5 models)
+    
+--------------------------------------------------------------------
+STEP 1 : Build Latent Manifold (Prior)
+--------------------------------------------------------------------
+1.1   Mean‑center reference spectra:
+        μ_S = mean_over_i(S_ref[i])            // vector of length R
+        S_centered[i] = S_ref[i] - μ_S
+
+1.2   Perform PCA on {S_centered[i]}:
+        U, Σ, V = SVD(S_centered)             // U: R×K eigenvectors
+        PCs = first K columns of U             // basis functions
+        α_ref[i] = PCsᵀ · S_centered[i]         // latent coefficients (length K)
+
+1.3   Fit non‑parametric KDE on {α_ref[i]}:
+        kde_prior = KDE(α_ref, bandwidth = h_kde)
+
+1.4   Generate synthetic latent vectors:
+        For n = 1 … N_aug:
+            α_syn[n] = sample(kde_prior)
+
+--------------------------------------------------------------------
+STEP 2 : Generate Synthetic Photometry (Likelihood)
+--------------------------------------------------------------------
+2.1   For each synthetic latent vector α_syn[n]:
+        a) Reconstruct high‑resolution spectrum:
+               S_syn[n] = μ_S + PCs · α_syn[n]          // length R
+        b) Convolve with filter curves:
+               m_syn_raw[n][j] = ∫ S_syn[n](λ) * T_f[j](λ) dλ / ∫ T_f[j](λ) dλ
+        c) Add Gaussian noise:
+               m_syn[n][j] = m_syn_raw[n][j] * (1 + Normal(0, σ_phot))
+
+--------------------------------------------------------------------
+STEP 3 : Train Encoder (Regression) and Classifier
+--------------------------------------------------------------------
+3.1   Assemble training set:
+        X_train = { m_syn[n] }                // shape: N_aug × N_filt
+        Y_latent = { α_syn[n] }               // shape: N_aug × K
+        Y_label  = { L_ref[nearest i to α_syn[n]] }   // use nearest training label
+
+3.2   Train regression ensemble to map X → Y_latent:
+        reg_models = []
+        For e = 1 … Ensemble_size:
+            model_e = AutoMLRegressor()        // e.g., GBRT + NN
+            model_e.fit(X_train, Y_latent)
+            reg_models.append(model_e)
+
+3.3   Train classifier on latent space:
+        clf = AutoMLClassifier()
+        clf.fit(Y_latent, Y_label)
+
+--------------------------------------------------------------------
+STEP 4 : Inference on New Observation
+--------------------------------------------------------------------
+4.1   Predict latent coefficient distribution:
+        For each model in reg_models:
+            α_pred_e = model.predict(m_new)      // vector length K
+        α_mean = average_over_e(α_pred_e)
+        α_cov  = covariance_of({α_pred_e})       // optional uncertainty
+
+4.2   Decode to full spectrum:
+        S_rec = μ_S + PCs · α_mean             // length R
+
+4.3   Classify taxonomy:
+        tax_prob = clf.predict_proba(α_mean)   // vector over classes
+
+--------------------------------------------------------------------
+OUTPUT
+--------------------------------------------------------------------
+* Reconstructed spectrum S_rec (wavelength vs reflectance)
+* Latent coefficient mean α_mean and optional covariance
+* Taxonomic posterior tax_prob
+* (Optional) Credible interval for S_rec via sampling α from posterior
+
+--------------------------------------------------------------------
+END OF PIPELINE
+--------------------------------------------------------------------

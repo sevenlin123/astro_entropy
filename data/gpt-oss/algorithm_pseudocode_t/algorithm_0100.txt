@@ -1,0 +1,58 @@
+text
+   μ[λ_j] = (1/K) * Σ_{k=1}^{K} S_k[λ_j]
+   K_cov[λ_a, λ_b] = (1/(K-1)) * Σ_{k=1}^{K} (S_k[λ_a] - μ[λ_a]) * (S_k[λ_b] - μ[λ_b])
+
+text
+   p_prior(r) = multivariate_normal(r | μ, K_cov)
+
+text
+for each filter i = 1 … N_f:
+    # Synthetic flux through filter i
+    F_i(r) = Σ_{j=1}^{N_λ} r[λ_j] * T_i[λ_j] * Δλ_j
+    
+    # Convert to apparent magnitude (using reference flux F_ref_i)
+    m_model[i] = -2.5 * log10( F_i(r) / F_ref_i )
+
+text
+logL(r) = Σ_{i=1}^{N_f} [ -0.5 * ((obs_m[i] - m_model[i]) / σ_m[i])^2
+                           - log(σ_m[i]) - 0.5 * log(2π) ]
+
+text
+logPosterior(r) = logL(r) + log_p_prior(r)
+
+text
+   r_current = μ          # Start at the GP mean
+   logPost_current = logPosterior(r_current)
+
+text
+   proposal_cov = α * I_{N_λ}      # α tuned to achieve ~25% acceptance
+
+text
+   # Draw proposal
+   ε ~ Normal(0, proposal_cov)
+   r_proposal = r_current + ε
+
+   # Evaluate forward model and posterior
+   m_model_prop = ForwardModel(r_proposal)
+   logL_prop = LogLikelihood(r_proposal, m_model_prop)
+   logPosterior_prop = logL_prop + LogPrior(r_proposal)
+
+   # Acceptance probability
+   a = min(1, exp(logPosterior_prop - logPost_current))
+
+   # Accept or reject
+   u ~ Uniform(0,1)
+   if u < a:
+       r_current = r_proposal
+       logPost_current = logPosterior_prop
+   end if
+
+   # Store sample after burn‑in and thinning
+   if t > burn_in and (t - burn_in) mod thin == 0:
+       store r_current as a posterior sample
+   end if
+
+text
+   posterior_mean[λ_j] = mean( { r_sample[λ_j] } )
+   posterior_lower[λ_j] = 16th percentile of { r_sample[λ_j] }
+   posterior_upper[λ_j] = 84th percentile of { r_sample[λ_j] }

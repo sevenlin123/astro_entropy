@@ -1,0 +1,81 @@
+Inputs
+-------
+- Spectral library S_obs  : N_obs × M_wavelength array of reflectance spectra
+- Filter set T            : list of filter response curves {T_f(λ)}
+- Photometry of new target P_new : vector of length L_f (observed reflectances + errors)
+
+Hyper‑parameters
+----------------
+- K_lat               : number of PCA components (e.g., 8–10)
+- h_KDE               : KDE bandwidth (e.g., 0.5)
+- N_aug               : number of synthetic latent samples per real spectrum (e.g., 200)
+- σ_noise_rel         : relative photometric noise level (e.g., 0.20)
+- Copula_corr_matrix  : K_lat × K_lat correlation matrix (from training latent data)
+
+Outputs
+-------
+- Mean reconstructed spectrum Ŝ_mean   : M_wavelength array
+- Credible interval bounds Ŝ_lower, Ŝ_upper : M_wavelength arrays
+- Taxonomic class probabilities          : dictionary {class: prob}
+
+Procedure
+---------
+
+1. **PCA of Reference Spectra**
+   1.1. Center S_obs:  S_centered = S_obs – mean(S_obs, axis=0)
+   1.2. Compute covariance C = cov(S_centered)
+   1.3. Eigen-decompose C → eigenvalues λ_k, eigenvectors U_k (k = 1…K_lat)
+   1.4. Project spectra to latent space:
+        Z_real = S_centered @ U[:, 0:K_lat]      # shape: N_obs × K_lat
+
+2. **Density Estimation & Augmentation**
+   2.1. Fit multivariate Gaussian KDE to Z_real with bandwidth h_KDE.
+   2.2. For each real spectrum i = 1…N_obs:
+         Sample N_aug latent vectors from KDE → {z_i,j}  (j = 1…N_aug)
+   2.3. Build augmented dataset:
+         Z_aug = concatenate( Z_real , {z_i,j} )      # shape: N_aug_total × K_lat
+         S_aug = inverse_PCA(z) for each z in Z_aug  # using U and mean(S_obs)
+   2.4. Store mapping: (Z_aug → S_aug)
+
+3. **Forward Photometry Simulation**
+   3.1. For each augmented spectrum s in S_aug:
+         For each filter f ∈ T:
+           Compute noiseless band reflectance r_f = ∫ s(λ) * T_f(λ) dλ / ∫ T_f(λ) dλ
+         Assemble vector r = [r_f]_f
+   3.2. Add Gaussian noise:
+         For each element r_f:
+           r_f_noisy = r_f + N(0, (σ_noise_rel * r_f)^2)
+   3.3. Collect pairs (photometry_noisy, latent_z) for training
+         Photometry_train = [r_noisy]
+         Latent_train     = Z_aug
+
+4. **Train Encoder (Photometry → Latent)**
+   4.1. Use an AutoML regressor (ensemble of gradient‑boosted trees) to fit:
+         Latent = f_encoder(Photometry)
+   4.2. Train on (Photometry_train, Latent_train)
+   4.3. Validate convergence (e.g., hold‑out fraction) – ignore for core algorithm.
+
+5. **Train Classifier (Latent → Taxonomy)**
+   5.1. Label Z_real with known taxonomic class labels.
+   5.2. Train an AutoML classifier on (Z_real, class_labels).
+
+6. **Inference for a New Target**
+   6.1. Preprocess P_new: normalize by solar spectrum if necessary.
+   6.2. Apply encoder to obtain estimated latent vector:
+         z_hat_mean = f_encoder(P_new)
+   6.3. Estimate posterior of latent coefficients:
+         - Assume each coefficient i has marginal posterior p_i(·) (e.g., Gaussian with mean z_hat_mean[i], std derived from encoder uncertainty).
+         - Couple marginals with Copula_corr_matrix to obtain joint posterior p(Z | P_new).
+   6.4. Draw N_sample posterior samples {z_s} from p(Z | P_new).
+   6.5. For each sample z_s:
+         Reconstruct spectrum via inverse PCA:
+             s_s = mean(S_obs) + z_s @ U[:, 0:K_lat]^T
+   6.6. Aggregate reconstructions:
+         Ŝ_mean   = average(s_s over samples)
+         Ŝ_lower  = percentile(s_s, 2.5%)  # lower credible bound
+         Ŝ_upper  = percentile(s_s, 97.5%) # upper credible bound
+   6.7. Predict taxonomy:
+         class_probs = f_classifier(z_hat_mean)  # probability vector over classes
+
+7. **Return Results**
+   7.1. Output Ŝ_mean, Ŝ_lower, Ŝ_upper, class_probs.

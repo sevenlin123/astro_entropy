@@ -1,0 +1,69 @@
+--------------------------------------------------------------------
+INPUT:
+  S_real[1..N]        # Real near‑IR spectra (wavelength × flux)
+  λ_spec              # Wavelength grid of the spectra
+  f_filters[]         # Filter transmission curves {F_k(λ)}
+  K_pca               # Number of principal components to retain
+  h_kde                # KDE bandwidth
+  N_aug                # Number of synthetic latent samples to draw
+  σ_phot              # Relative photometric noise level (e.g., 0.20)
+
+--------------------------------------------------------------------
+PHASE 1 – TRAINING (performed once)
+--------------------------------------------------------------------
+
+1. // 1.1 Prepare Prior (PCA)
+   1.1.1 Center the spectra:
+          S_centered = S_real - mean(S_real over objects)
+   1.1.2 Compute covariance matrix C = (S_centered)^T * S_centered / (N-1)
+   1.1.3 Eigen‑decompose C → eigenvectors V[1..M], eigenvalues Λ
+   1.1.4 Sort eigenvectors by descending Λ
+   1.1.5 Select first K_pca eigenvectors -> V_K
+   1.1.6 Project spectra onto PC space:
+          L_real[i] = V_K^T * (S_real[i] - mean(S_real))
+          # L_real is N × K_pca matrix
+
+2. // 1.2 Augment Latent Space (KDE)
+   2.1 Fit multivariate KDE to L_real with bandwidth h_kde
+   2.2 Draw N_aug synthetic latent vectors:
+          L_syn[j] ~ KDE(L_real)
+   2.3 For each L_syn[j]:
+          // 1.3.1 Reconstruct synthetic spectrum
+          S_syn[j] = V_K * L_syn[j] + mean(S_real)
+          // 1.3.2 Forward‑model synthetic photometry
+          for each filter k:
+                m_syn[j][k] = ∫ S_syn[j](λ) * F_k(λ) dλ
+          // 1.3.3 Add Gaussian noise
+                m_syn[j][k] *= (1 + Normal(0, σ_phot))
+
+3. // 1.4 Train Encoder (AutoML Regressor)
+   3.1 Prepare training pairs:
+          X_train = { m_syn[j] | j = 1..N_aug }          # Input: noisy photometry (vector length = number of filters)
+          Y_train = { L_syn[j] | j = 1..N_aug }          # Target: latent coefficients (vector length = K_pca)
+   3.2 Instantiate AutoML regressor (e.g., AutoGluon)
+   3.3 Fit regressor on (X_train, Y_train)
+   3.4 Save trained model → Enc_model
+
+4. // 1.5 Train Taxonomy Classifier (optional)
+   4.1 Assign taxonomic label t_i to each real spectrum S_real[i]
+   4.2 Train classifier on (L_real, t) using AutoML
+   4.3 Save trained classifier → Clf_model
+
+--------------------------------------------------------------------
+PHASE 2 – INFERENCE (for any new object)
+--------------------------------------------------------------------
+
+Input: m_obs = observed photometry vector (length = number of filters)
+
+5. // 2.1 Predict latent coefficients
+   L_hat = Enc_model.predict(m_obs)    # Output: vector of length K_pca
+
+6. // 2.2 Reconstruct full spectrum
+   S_hat = V_K * L_hat + mean(S_real)  # High‑resolution spectrum
+
+7. // 2.3 Optional taxonomy prediction
+   t_prob = Clf_model.predict_proba(L_hat)   # Probability over taxonomic classes
+
+8. OUTPUT:
+      S_hat          # Reconstructed spectrum
+      t_prob         # (if classifier trained) class probabilities

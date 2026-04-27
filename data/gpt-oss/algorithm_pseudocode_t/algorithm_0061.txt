@@ -1,0 +1,67 @@
+INPUT:
+    P      // list of filter identifiers (bands)   e.g. ["g", "r", "i", "z"]
+    m      // vector of observed magnitudes in the bands P
+    σm     // vector of magnitude uncertainties in the bands P
+    Tset   // set of template spectra {S_k(λ)} for k = 1…K
+    Tband(b,λ) // transmission curve of band b
+
+OUTPUT:
+    R(λ)          // reconstructed reflectance spectrum
+    VarR(λ)       // variance of the reconstructed spectrum
+    Ptax[j]       // posterior probability of taxonomy class j
+
+PROCEDURE:
+
+1.  // Convert magnitudes to relative fluxes
+    for each band b in P:
+        fb = 10^( -0.4 * (m[b] - zeropoint[b]) )
+        σfb = ln(10)/2.5 * fb * σm[b]          // error propagation
+    end for
+    f_vec   = [fb]         // vector of fluxes
+    σf_vec  = [σfb]
+    N = diag(σf_vec²)      // noise covariance (assumed diagonal)
+
+2.  // Compute synthetic fluxes for each template in each band
+    for k = 1 … K:
+        for each band b in P:
+            numerator   = ∫ S_k(λ) * Tband(b,λ) * λ dλ
+            denominator = ∫ Tband(b,λ) * λ dλ
+            A[b,k] = numerator / denominator       // design matrix
+        end for
+    end for
+
+3.  // Bayesian linear model (Gaussian prior on coefficients)
+    τ² = chosen_variance_prior          // scalar, same for all k
+    Prior_cov = τ² * I_K                // I_K = identity matrix of size K
+
+    // Posterior covariance and mean
+    Σc = inverse( transpose(A) * inverse(N) * A + inverse(Prior_cov) )
+    μc = Σc * transpose(A) * inverse(N) * f_vec
+
+4.  // Reconstruct spectrum
+    for each wavelength λ on desired grid:
+        R(λ) = Σ_{k=1}^{K} μc[k] * S_k(λ)
+        VarR(λ) = Σ_{i=1}^{K} Σ_{j=1}^{K} 
+                   S_i(λ) * Σc[i,j] * S_j(λ)          // propagated variance
+    end for
+
+5.  // Taxonomy probabilities
+    // Assume class j corresponds to a subset K_j of templates
+    for each class j:
+        // Submatrix A_j and coefficient vector μc_j, Σc_j restricted to K_j
+        A_j   = columns of A indexed by K_j
+        μc_j  = μc entries indexed by K_j
+        Σc_j  = Σc rows/columns indexed by K_j
+
+        // Marginal likelihood (evidence) under class j
+        exp_term = exp( -0.5 * ( f_vec - A_j*μc_j )ᵀ * inverse(N) *
+                        ( f_vec - A_j*μc_j ) )
+        denom    = sqrt( det( 2π * Σc_j ) )
+        Z_j      = exp_term / denom
+    end for
+    Z_sum = Σ_j Z_j
+    for each class j:
+        Ptax[j] = Z_j / Z_sum
+    end for
+
+RETURN R(λ), VarR(λ), Ptax

@@ -1,0 +1,107 @@
+INPUT:
+    S_obs[1…N]   // Reference spectra (flux vs wavelength)
+    λ_grid       // High‑resolution wavelength grid
+    Filters[]    // Instrument filter transmission curves
+    K            // Desired number of PCA components (e.g., 8–10)
+    h            // KDE bandwidth (e.g., 0.5)
+    σ_phot       // Relative photometric noise level (e.g., 0.20)
+
+OUTPUT:
+    For any new photometric vector m_new:
+        – Posterior distribution p(coefficients | m_new)
+        – Reconstructed spectrum S_rec
+        – Taxonomy probability vector P_tax
+
+--------------------------------------------------------------------
+Phase 1: Prepare Latent Space (Prior)
+--------------------------------------------------------------------
+1.  // Standardize spectra (optional, e.g., normalize to unity at reference λ)
+    S_std[i] = normalize(S_obs[i])   for i = 1 … N
+
+2.  Perform Principal Component Analysis:
+        [U, Λ, V] = PCA(S_std, components=K)
+    // U: eigenvectors (size K × M), M = len(λ_grid)
+    // Λ: eigenvalues
+    // V: coefficient matrix (size N × K)
+
+3.  // Define latent coordinate distribution by KDE
+    3.1  Fit KDE to V with bandwidth h → KDE_model
+    3.2  Sample M_aug synthetic latent vectors:
+            V_synth[j] ~ KDE_model     for j = 1 … M_aug
+    3.3  For each V_synth[j], reconstruct synthetic spectrum:
+            S_synth[j] = inversePCA(V_synth[j], U, Λ)   // S_synth[j] on λ_grid
+
+--------------------------------------------------------------------
+Phase 2: Generate Synthetic Photometry (Forward Model)
+--------------------------------------------------------------------
+4.  For each synthetic spectrum S_synth[j]:
+        For each filter f in Filters:
+            R_f[j] = integrate( S_synth[j] * f_transmission(f) ) / integrate( solar_spectrum * f )
+        // Add Gaussian noise to each band:
+            r_f[j] = R_f[j] + Normal(0, σ_phot * R_f[j])
+
+5.  Assemble training set:
+        X_train = { r_f[j] }   // (M_aug × num_filters) matrix
+        Y_train = { V_synth[j] }   // (M_aug × K) matrix
+
+--------------------------------------------------------------------
+Phase 3: Train Encoder (Photometry → Latent Coefficients)
+--------------------------------------------------------------------
+6.  Use an AutoML regressor (e.g., AutoGluon, ensemble of GBDTs+NNs):
+        model_enc = AutoMLRegressor.train(X_train, Y_train)
+
+--------------------------------------------------------------------
+Phase 4: Train Taxonomy Classifier (Latent Space → Labels)
+--------------------------------------------------------------------
+7.  Assign taxonomy labels to each real spectrum S_std[i] → label[i]
+    (labels: H₂O, CO₂, Organic, Methanol, etc.)
+
+8.  Train classifier on latent coordinates of real spectra:
+        model_cls = AutoMLClassifier.train(V, label)
+
+--------------------------------------------------------------------
+Phase 5: Forward Inference for New Observation
+--------------------------------------------------------------------
+Input: m_new = [m₁, m₂, …, m_F]   // Observed photometry in F filters
+Steps:
+
+9.  // Encode photometry to latent coefficients
+        coeff_mean, coeff_cov = model_enc.predict_distribution(m_new)
+
+10. // Optional: draw samples from posterior
+        coeff_samples = sample_from_gaussian(coeff_mean, coeff_cov, N_samp)
+
+11. // Decode to spectra
+        S_samples = []
+        for coeff in coeff_samples:
+            S_rec = inversePCA(coeff, U, Λ)
+            S_samples.append(S_rec)
+
+12. // Compute summary statistics (mean spectrum, credible intervals)
+        S_mean = mean_over(S_samples)
+        S_cred_low, S_cred_high = percentile_bounds(S_samples, 2.5%, 97.5%)
+
+13. // Taxonomy probabilities
+        P_tax = model_cls.predict_probability(coeff_mean)
+
+14. Return:
+        – S_mean, S_cred_low, S_cred_high
+        – P_tax
+        – coeff_mean, coeff_cov (optional)
+
+--------------------------------------------------------------------
+Functions Used
+--------------------------------------------------------------------
+inversePCA(coeff, U, Λ):
+    // coeff: vector of length K
+    // U: eigenvectors (K × M)
+    // Λ: eigenvalues (diagonal)
+    return coeffᵀ * U           // gives spectrum on λ_grid
+
+normalize(S):
+    // Example: divide by flux at reference wavelength
+    return S / S[λ_ref]
+
+integrate(spec * filt):
+    // Numerical integration over wavelength grid
+    return sum(spec * filt) * Δλ

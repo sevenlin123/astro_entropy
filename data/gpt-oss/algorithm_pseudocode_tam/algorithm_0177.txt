@@ -1,0 +1,71 @@
+Input:
+    - Reference spectra S_ref[1..N_ref]      # reflectance vectors, λ₁…λ_L
+    - Filter response functions R_k[λ], k = 1..K_filters
+    - Photometric measurements m_new[1..K_filters] for an unknown object
+    - Desired number of synthetic latent samples M_syn
+    - KDE bandwidth h_KDE
+    - Noise level σ_noise (relative, e.g., 0.20)
+
+Output:
+    - Posterior samples of reconstructed spectrum S_post[1..L]
+    - Posterior probabilities p_taxonomy for each taxonomic class
+
+--------------------------------------------------------------------
+Step 1 – Latent Space Construction (Prior)
+--------------------------------------------------------------------
+1.1   Center spectra:  S_centered[i] = S_ref[i] – mean(S_ref)
+1.2   Compute PCA on {S_centered[i]}:
+        - Covariance matrix C = (1/(N_ref−1)) * S_centeredᵀ · S_centered
+        - Eigen‑decompose: C = U Λ Uᵀ
+        - Select first K_pc eigenvectors U_pc (columns of U), K_pc ≈ 5–10
+        - Project each reference spectrum onto PCs:
+              coeff_ref[i] = U_pcᵀ · S_centered[i]          # shape (K_pc,)
+1.3   Fit non‑parametric KDE to {coeff_ref[i]} with bandwidth h_KDE
+1.4   Sample M_syn latent vectors from the KDE:
+        coeff_syn[j] ~ KDE( coeff_ref ),   j = 1..M_syn
+
+--------------------------------------------------------------------
+Step 2 – Synthetic Spectrum Generation (Decoder + Forward Modelling)
+--------------------------------------------------------------------
+2.1   For each sampled latent vector coeff_syn[j]:
+        - Reconstruct high‑resolution spectrum:
+              S_syn[j] = U_pc · coeff_syn[j] + mean(S_ref)
+2.2   Convolve each synthetic spectrum with each filter response to obtain
+        ideal photometry:
+              m_syn[j,k] = ∫ S_syn[j](λ) · R_k(λ) dλ / ∫ R_k(λ) dλ
+2.3   Add Gaussian noise to mimic observational uncertainties:
+        m_syn_noisy[j,k] = m_syn[j,k] + Normal(0, σ_noise * m_syn[j,k])
+2.4   Store training pairs:
+        X_train = { m_syn_noisy[j,:] }          # shape (M_syn, K_filters)
+        Y_train = { coeff_syn[j] }              # shape (M_syn, K_pc)
+
+--------------------------------------------------------------------
+Step 3 – Model Training (Encoder & Classifier)
+--------------------------------------------------------------------
+3.1   Train an AutoML regression model (e.g., ensemble of GBDTs):
+        Regressor f_enc: K_filters → K_pc
+        Input: X_train
+        Target: Y_train
+3.2   Train a second AutoML classifier g_cls on the same latent set:
+        Classifier f_cls: K_pc → class probabilities
+        Input: Y_train (latent coefficients)
+        Target: known taxonomic labels of reference spectra
+
+--------------------------------------------------------------------
+Step 4 – Inference for New Observation
+--------------------------------------------------------------------
+4.1   Preprocess new photometry:
+        - Optionally normalize/mask missing bands
+4.2   Use the trained encoder to obtain posterior over latent space:
+        - Predict point estimate: coeff_hat = f_enc(m_new)
+        - Optionally sample S latent draws: coeff_samples = draw_from_prediction
+4.3   Decode each latent draw to a full spectrum:
+        - S_sample = U_pc · coeff_sample + mean(S_ref)
+        - Collect all S_sample → posterior spectrum samples
+4.4   Estimate posterior statistics (mean, confidence intervals) for each λ
+4.5   Pass coeff_hat (or coeff_samples) through the classifier:
+        p_taxonomy = f_cls(coeff_hat)           # or aggregate over samples
+
+Return:
+    - Posterior spectral samples or summary statistics
+    - Taxonomic probability distribution

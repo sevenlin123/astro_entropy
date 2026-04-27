@@ -1,0 +1,43 @@
+Input
+    M      : Photometry vector of length n_f (n_f = number of observed filters)
+    S_spec : Reference spectral library (N_ref × N_wl array, N_ref≈50, N_wl≈hundreds)
+    filt   : Instrument transmission curves for the n_f filters
+    h_kde  : KDE bandwidth (default 0.5)
+    N_syn  : Number of synthetic latent samples to generate (e.g., 5000)
+    σ_noise : Relative photometric noise level for forward modeling (default 0.20)
+
+Output
+    S_rec   : Reconstructed high‑resolution spectrum (length N_wl)
+    C_posterior : Posterior samples of latent coefficients (matrix K×N_samp)
+    P_class : Probabilities for each taxonomic class
+
+s_std_i = (s_i – μ_spec) / σ_spec          # μ_spec, σ_spec are mean & std over spectra
+
+z_i = U_Kᵀ · s_std_i          # z_i ∈ ℝ^K
+
+Z_syn = KDE.sample(N_syn)       # each sample z ∈ ℝ^K
+
+s_syn_j = U_K · z_j + μ_spec    # de‑standardise
+
+m_j = integrate( s_syn_j * filt ) / integrate( filt )
+
+m_noisy_j = m_j + Normal(0, σ_noise * m_j)
+
+f_enc : ℝ^{n_f} → ℝ^{K}
+
+ẑ_mean = f_enc(M)
+
+Z_samp = Normal(ẑ_mean, Σ_pred).sample(N_samp)
+
+s_k = U_K · z_k + μ_spec
+
+CI_low  = percentile(S_samples, 2.5, axis=0)
+     CI_high = percentile(S_samples, 97.5, axis=0)
+
+return {
+    'S_rec'         : S_rec,
+    'CI_low'        : CI_low,
+    'CI_high'       : CI_high,
+    'C_posterior'   : S_samples,          # optional: posterior samples
+    'P_class'       : P_class
+}

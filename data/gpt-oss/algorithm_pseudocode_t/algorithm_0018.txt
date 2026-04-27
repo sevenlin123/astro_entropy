@@ -1,0 +1,94 @@
+# ------------------------------------------------------------
+# INPUT:
+#   OBJ_DATA   – list of photometric measurements for one TNO
+#                each element: {filter_id, flux, flux_err}
+#   FILTERS    – dictionary: filter_id → transmission curve array
+#   BASIS_FUN  – set of spectral basis functions B_j(λ)
+#   TAXONOMIC  – optional: library of template spectra {class_name, S_class(λ)}
+#   PARAM_PRIOR– prior distribution for spectral coefficients θ
+#   N_MCMC     – number of Markov chain iterations
+#   BURN_IN    – number of initial samples to discard
+#
+# OUTPUT:
+#   POST_SAMPLES – posterior samples of θ
+#   PRED_FLUX    – posterior predictive fluxes for each filter
+#   CLASS_PROB   – posterior probability of each taxonomic class
+# ------------------------------------------------------------
+
+function RECONSTRUCT_SPECTRUM(OBJ_DATA, FILTERS, BASIS_FUN,
+                               TAXONOMIC=None, PARAM_PRIOR, 
+                               N_MCMC, BURN_IN):
+
+    # 1. Pre‑process data
+    N_obs = length(OBJ_DATA)
+    for i in 1..N_obs:
+        f[i]      = OBJ_DATA[i].flux
+        σ[i]      = OBJ_DATA[i].flux_err
+        filt[i]   = OBJ_DATA[i].filter_id
+
+    # 2. Construct design matrix X
+    #    X[i,j] = integral of B_j(λ) * FILTERS[filt[i]](λ) dλ
+    X = zeros(N_obs, N_basis)
+    for i in 1..N_obs:
+        for j in 1..N_basis:
+            X[i,j] = integrate( BASIS_FUN[j](λ) * FILTERS[filt[i]](λ) ) 
+
+    # 3. Define likelihood function
+    #    Likelihood: L(θ) = ∏_i N( f[i] | (Xθ)_i , σ[i]^2 )
+    function LIKELIHOOD(θ):
+        μ = X * θ                     # predicted fluxes
+        logL = sum( -0.5 * ((f - μ)/σ)^2 - 0.5*log(2π*σ^2) )
+        return exp(logL)
+
+    # 4. Set up MCMC sampler (Metropolis–Hastings)
+    θ_current = sample_from(PARAM_PRIOR)   # initial proposal
+    samples   = []
+
+    for k in 1..N_MCMC:
+        # Propose new state
+        θ_proposed = θ_current + random_normal(0, step_size, size=N_basis)
+
+        # Compute acceptance ratio
+        α = min(1, LIKELIHOOD(θ_proposed)*prior(θ_proposed) /
+                 (LIKELIHOOD(θ_current)*prior(θ_current)))
+
+        if uniform(0,1) < α:
+            θ_current = θ_proposed       # accept
+
+        append(samples, θ_current)
+
+    # 5. Discard burn‑in samples
+    POST_SAMPLES = samples[BURN_IN:]
+
+    # 6. Posterior predictive fluxes for all filters
+    PRED_FLUX = []
+    for i in 1..N_obs:
+        pred_i = mean( [ dot(X[i,:], θ) for θ in POST_SAMPLES ] )
+        σ_pred = std(  [ dot(X[i,:], θ) for θ in POST_SAMPLES ] )
+        append(PRED_FLUX, {filter_id:filt[i], mean_flux:pred_i, err:σ_pred})
+
+    # 7. Taxonomic classification (optional)
+    if TAXONOMIC is not None:
+        CLASS_COUNT = dict()
+        for θ in POST_SAMPLES:
+            # construct full spectral shape S(λ) = Σ_j θ_j B_j(λ)
+            S = sum( θ[j] * BASIS_FUN[j](λ) for j in 1..N_basis )
+
+            # find best matching template
+            best_class = None
+            best_dist  = +∞
+            for cls in TAXONOMIC:
+                dist = chi_square(S, TAXONOMIC[cls])   # or other metric
+                if dist < best_dist:
+                    best_dist = dist
+                    best_class = cls
+
+            increment(CLASS_COUNT[best_class])
+
+        # Convert counts to probabilities
+        CLASS_PROB = {cls: count / len(POST_SAMPLES) 
+                      for cls, count in CLASS_COUNT.items()}
+    else:
+        CLASS_PROB = {}
+
+    return POST_SAMPLES, PRED_FLUX, CLASS_PROB

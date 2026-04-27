@@ -1,0 +1,59 @@
+S_ref = load_high_res_spectra()          # shape: (N_spec, N_wavelength)
+labels = load_taxonomy_labels()          # shape: (N_spec,)
+
+mean_s = mean(S_ref, axis=0)
+std_s  = std(S_ref, axis=0)
+S_std  = (S_ref - mean_s) / std_s        # zero‑mean unit‑var
+
+K_pca   = choose_number_of_components() # e.g., 5–10
+U, Σ, V = svd(S_std, full_matrices=False)
+PC_basis = V[:K_pca]                    # shape: (K_pca, N_wavelength)
+coeffs  = dot(S_std, U[:, :K_pca].T)    # latent coordinates, shape: (N_spec, K_pca)
+
+bandwidth = 0.5
+kde_model = fit_kde(coeffs, bandwidth)   # non‑parametric density
+N_aug     = 5000                         # number of synthetic points
+coeff_aug = sample_from_kde(kde_model, N_aug)   # shape: (N_aug, K_pca)
+
+S_aug = dot(coeff_aug, PC_basis) * std_s + mean_s   # inverse standardization
+
+filters = load_filter_transmissions()             # list of N_filter effective curves
+def reflectance_to_photometry(spectrum):
+    phot = []
+    for f in filters:
+        eff_flux = integrate(spectrum * f.wavelength * f.transmission)
+        solar   = integrate(solar_spectrum * f.wavelength * f.transmission)
+        phot.append(eff_flux / solar)              # reflectance
+    return array(phot)
+
+phot_real = [reflectance_to_photometry(s) for s in S_ref]
+phot_aug  = [reflectance_to_photometry(s) for s in S_aug]
+
+noise_frac = 0.20                          # 20 % relative uncertainty
+for p in phot_aug:
+    p_noisy = p * (1 + normal(0, noise_frac, size=p.shape))
+    store(p_noisy)
+
+X_train = concatenate(phot_real, phot_aug_noisy)   # shape: (N_train, N_filter)
+Y_lat  = concatenate(coeffs, coeff_aug)           # shape: (N_train, K_pca)
+Y_cls  = concatenate(labels, replicate_aug_labels) # same class labels for augmented points
+
+encoder = AutoML_regressor()
+encoder.fit(X_train, Y_lat)
+
+classifier = AutoML_classifier()
+classifier.fit(Y_lat, Y_cls)
+
+m_obs = load_observed_photometry()            # shape: (N_filter,)
+
+lat_pred = encoder.predict(m_obs)              # shape: (K_pca,)
+
+s_rec = dot(lat_pred, PC_basis) * std_s + mean_s
+
+tax_prob = classifier.predict_proba(lat_pred)   # dict of class → probability
+
+return {
+    'reconstructed_spectrum': s_rec,
+    'latent_coordinates'     : lat_pred,
+    'taxonomy_probabilities': tax_prob
+}

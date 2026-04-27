@@ -1,0 +1,84 @@
+INPUT:
+    S      : training spectra matrix (N_spec × N_wave)
+    R_k(w) : transmission curve for each photometric filter k (k = 1 … K)
+    m_k    : observed magnitude or flux in filter k for target object
+    σ_k    : observational error in filter k
+    M_max  : maximum number of principal components to retain
+
+OUTPUT:
+    s_rec(w)   : reconstructed spectrum (mean)
+    Δs(w)      : spectral uncertainty (e.g., 68% credible interval)
+
+--------------------------------------------------------------------
+1. TRAINING PHASE – PCA ON SPECTRAL MANIFOLD
+--------------------------------------------------------------------
+1.1 Compute mean spectrum:
+        μ(w) = (1/N_spec) Σ_{i=1}^{N_spec} S_i(w)
+
+1.2 Center training spectra:
+        X = S − μ          # (N_spec × N_wave)
+
+1.3 Perform Singular Value Decomposition:
+        X = U · Σ · Vᵀ
+        # U: left singular vectors (principal directions in feature space)
+        # Σ: singular values
+        # V: right singular vectors (principal components)
+
+1.4 Select first M_max columns of V as principal component matrix:
+        PC = V[:, 1:M_max]   # (N_wave × M_max)
+
+1.5 Store eigenvalues (variance explained) λ_j = (Σ_j)^2 / (N_spec−1)
+
+--------------------------------------------------------------------
+2. RECONSTRUCTION PHASE – BAYESIAN INFERENCE
+--------------------------------------------------------------------
+FOR each target object:
+
+2.1 DEFINE MODEL PARAMETERS
+        c  : coefficient vector (size M_max)
+        s(c,w) = μ(w) + PC · c       # reconstructed spectrum
+
+2.2 SYNTHETIC PHOTOMETRY FOR GIVEN c
+        FOR each filter k:
+            p_k(c) = (∫ s(c,w) · R_k(w) · w dw) /
+                     (∫ R_k(w) · w dw)
+
+2.3 LOG‑LIKELIHOOD
+        ℓ(c) = −½ Σ_{k=1}^{K} [(p_k(c) − m_k)^2 / σ_k^2]
+
+2.4 LOG‑PRIOR (Gaussian on PCs)
+        Λ = diag(λ_1, …, λ_{M_max})
+        π(c) = −½ cᵀ Λ⁻¹ c
+
+2.5 LOG‑POSTERIOR
+        logP(c) = ℓ(c) + π(c)
+
+2.6 FIND MAP ESTIMATE OF c
+        • Initialize c₀ = 0
+        • Iterate until convergence:
+              c_{n+1} = c_n + H⁻¹ ∇logP(c_n)
+              where ∇logP = derivative of logP w.r.t. c
+                    H     = Hessian of logP at c_n
+        * (Alternative: use a robust optimizer such as L-BFGS)
+
+2.7 POSTERIOR COVARIANCE AT MAP
+        Σ_post = −H⁻¹  (negative inverse Hessian evaluated at MAP)
+
+2.8 GENERATE POSTERIOR SAMPLES
+        Draw N_samples (e.g., 500) coefficient vectors:
+            c^{(j)} ~ 𝒩( c_map , Σ_post )
+
+2.9 RECONSTRUCT SPECTRA FOR EACH SAMPLE
+        FOR j = 1 … N_samples:
+            s^{(j)}(w) = μ(w) + PC · c^{(j)}
+
+2.10 COMPUTE STATISTICAL SUMMARY
+        s_rec(w) = mean_{j} [ s^{(j)}(w) ]
+        Δs(w)    = 68% credible interval from {s^{(j)}(w)} at each wavelength
+
+END FOR
+
+--------------------------------------------------------------------
+3. OUTPUT
+--------------------------------------------------------------------
+Return s_rec(w) and Δs(w) for each target object.

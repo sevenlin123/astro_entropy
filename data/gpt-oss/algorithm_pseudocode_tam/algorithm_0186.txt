@@ -1,0 +1,140 @@
+text
+/* --------------------------------------------------------------
+   Core steps for probabilistic spectral reconstruction from
+   sparse photometry.
+   -------------------------------------------------------------- */
+
+MAIN():
+    # ------------------------------------------------------------------
+    # 1. Load reference spectra (seed set)
+    # ------------------------------------------------------------------
+    S_ref = LOAD_REF_SPECTRA()          # shape: (N_seed, N_wave_bins)
+
+    # ------------------------------------------------------------------
+    # 2. Build latent space via PCA
+    # ------------------------------------------------------------------
+    PCA_MODEL, PCs, mean_spectrum = RUN_PCA(S_ref, n_components = K)   # K ≈ 5–10
+
+    # ------------------------------------------------------------------
+    # 3. Augment latent distribution with Kernel Density Estimation
+    # ------------------------------------------------------------------
+    coeff_real = TRANSFORM_TO_LATENT(PCA_MODEL, S_ref)                # (N_seed, K)
+    LATENT_DENSITY = FIT_KDE(coeff_real, bandwidth = h)              # h ~ 0.5
+    coeff_aug = SAMPLE_FROM_KDE(LATENT_DENSITY, n_samples = M)        # M ≫ N_seed
+
+    # ------------------------------------------------------------------
+    # 4. Generate synthetic spectra for augmented latent vectors
+    # ------------------------------------------------------------------
+    S_aug = INVERSE_TRANSFORM(PCA_MODEL, coeff_aug, mean_spectrum)   # (M, N_wave_bins)
+
+    # ------------------------------------------------------------------
+    # 5. Forward‑model synthetic photometry and add realistic noise
+    # ------------------------------------------------------------------
+    FILTER_CURVES = LOAD_FILTER_CURVES()                             # list of N_filters
+    PHOTOMETRY_AUG = []
+    FOR each spectrum s in S_aug:
+        m = CONVOLVE_WITH_FILTERS(s, FILTER_CURVES)                  # (N_filters,)
+        m_noisy = ADD_GAUSSIAN_NOISE(m, rel_error = 0.20)            # 20 % std dev
+        PHOTOMETRY_AUG.append(m_noisy)
+    PHOTOMETRY_AUG = STACK(PHOTOMETRY_AUG)                           # (M, N_filters)
+
+    # ------------------------------------------------------------------
+    # 6. Train AutoML regressor: photometry → latent coefficients
+    # ------------------------------------------------------------------
+    REGRESSOR = TRAIN_AUTOML(PHOTOMETRY_AUG, coeff_aug)             # e.g., GBDT ensemble
+
+    # ------------------------------------------------------------------
+    # 7. Train AutoML classifier in latent space (optional)
+    # ------------------------------------------------------------------
+    CLASSIFIER = TRAIN_AUTOML_CLASSIFIER(coeff_real, LABELS_REF)    # labels from seed spectra
+
+    # ------------------------------------------------------------------
+    # 8. Store trained objects for inference
+    # ------------------------------------------------------------------
+    MODEL = { 'PCA': PCA_MODEL,
+              'Mean': mean_spectrum,
+              'Regressor': REGRESSOR,
+              'Classifier': CLASSIFIER }
+
+END MAIN
+
+
+/* --------------------------------------------------------------
+   Supporting routines
+   -------------------------------------------------------------- */
+
+FUNCTION RUN_PCA(data, n_components):
+    # Center data
+    mean_vec = MEAN(data, axis=0)
+    centered = data - mean_vec
+    # Compute covariance matrix
+    cov = COVARIANCE(centered)
+    # Eigen-decompose
+    eig_vals, eig_vecs = EIGEN_DECOMPOSE(cov)
+    # Select top n_components eigenvectors
+    PCs = eig_vecs[:, :n_components]
+    RETURN PCs, mean_vec
+
+FUNCTION TRANSFORM_TO_LATENT(model, data):
+    # Projects high‑dimensional spectra onto PCA basis
+    centered = data - model.Mean
+    coeff = DOT(centered, model.PCs)          # (N_samples, K)
+    RETURN coeff
+
+FUNCTION INVERSE_TRANSFORM(model, coeff, mean_vec):
+    # Reconstructs spectra from latent coefficients
+    reconstructed = DOT(coeff, TRANSPOSE(model.PCs)) + mean_vec
+    RETURN reconstructed
+
+FUNCTION FIT_KDE(data, bandwidth):
+    # Non‑parametric KDE over K‑dimensional latent vectors
+    kde = KDE(kernel='gaussian', bandwidth=bandwidth)
+    kde.fit(data)
+    RETURN kde
+
+FUNCTION SAMPLE_FROM_KDE(kde, n_samples):
+    samples = kde.sample(n_samples)
+    RETURN samples
+
+FUNCTION CONVOLVE_WITH_FILTERS(spectrum, filters):
+    # spectrum: (N_wave_bins,)
+    # filters: list of (efficiency_curve, wavelength_grid)
+    phot = []
+    FOR filt in filters:
+        response = filt.efficiency_curve
+        wave     = filt.wavelength_grid
+        # Interpolate spectrum onto filter grid if necessary
+        spec_interp = INTERPOLATE(spectrum, wave)
+        # Integrate: ∫ R(λ) * spec(λ) dλ
+        val = INTEGRATE(response * spec_interp, wave)
+        phot.APPEND(val)
+    RETURN ARRAY(phot)          # shape: (N_filters,)
+
+FUNCTION ADD_GAUSSIAN_NOISE(values, rel_error):
+    sigma = rel_error * values
+    noisy = values + NORMAL(mean=0, std=sigma, size=values.shape)
+    RETURN noisy
+
+FUNCTION TRAIN_AUTOML(X, y):
+    # AutoML handles hyper‑parameter search and ensembling
+    model = AUTOGLUON_REGRESSOR()
+    model.fit(train_data=X, label=y)
+    RETURN model
+
+FUNCTION TRAIN_AUTOML_CLASSIFIER(X, y):
+    model = AUTOGLUON_CLASSIFIER()
+    model.fit(train_data=X, label=y)
+    RETURN model
+
+text
+FUNCTION RECONSTRUCT_SPECTRUM(new_photometry, MODEL):
+    # 1. Predict latent coefficients
+    coeff_pred = MODEL.Regressor.predict(new_photometry)   # shape: (K,)
+
+    # 2. Reconstruct full spectrum
+    spectrum_rec = INVERSE_TRANSFORM(MODEL.PCA, coeff_pred, MODEL.Mean)
+
+    # 3. Optional taxonomy probabilities
+    tax_probs = MODEL.Classifier.predict_proba(coeff_pred)
+
+    RETURN spectrum_rec, tax_probs

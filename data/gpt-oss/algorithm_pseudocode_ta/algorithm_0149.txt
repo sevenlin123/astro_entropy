@@ -1,0 +1,95 @@
+Input
+-----
+  - Training spectra dataset S = {s_1,…,s_N}, each s_i defined on common
+    wavelength grid λ = {λ_1,…,λ_M}.
+  - New object photometry: measured fluxes F = {f_f} with uncertainties
+    σ = {σ_f} for filters f = 1,…,F.
+  - Filter transmission functions T_f(λ).
+  - Desired number of principal components K  (e.g., K=8 for full‑reconstruction).
+
+Output
+------
+  - Posterior predictive spectrum: mean spectrum μ̂(λ) and credible intervals.
+  - Posterior distribution over latent coefficients z.
+  - Optional taxonomy probabilities.
+
+--------------------------------------------------------------------
+1. PRE‑PROCESS TRAINING SPECTRA
+--------------------------------------------------------------------
+1.1   Normalize each spectrum s_i (e.g., unit area or median continuum).
+1.2   Interpolate all spectra onto common wavelength grid λ if necessary.
+1.3   Compute mean spectrum μ(λ) = (1/N) Σ_i s_i(λ).
+1.4   Center data: X = [s_i(λ) – μ(λ)]^T   (matrix of size M × N).
+
+--------------------------------------------------------------------
+2. PRINCIPAL COMPONENT ANALYSIS
+--------------------------------------------------------------------
+2.1   Perform Singular Value Decomposition: X = U Σ V^T.
+2.2   Select first K right singular vectors (columns of V):
+        V_K = [v_1,…,v_K]   (each v_k is length M).
+2.3   For each training spectrum i, compute latent vector
+        z_i = V_K^T · (s_i – μ).
+2.4   Estimate prior over latent space:
+        • Mean μ_z = (1/N) Σ_i z_i   (usually ≈ 0 after centering).
+        • Covariance Σ_z = cov({z_i})   (or use identity for a simple prior).
+
+--------------------------------------------------------------------
+3. FORWARD MODEL (Spectral Reconstruction)
+--------------------------------------------------------------------
+3.1   Define function `predict_spectrum(z)`:
+        s_pred(λ) = μ(λ) + Σ_{k=1}^{K} z_k · v_k(λ).
+
+--------------------------------------------------------------------
+4. PHOTOMETRIC LITERATURE MODEL
+--------------------------------------------------------------------
+4.1   For each filter f, define
+        FluxModel_f(z) = ∫ s_pred(λ) · T_f(λ) dλ
+                         ---------------------------------
+                         ∫ T_f(λ) dλ
+   (normalise by total filter throughput).
+4.2   Likelihood for observed flux f_f:
+        L_f(z) = Normal( f_f | FluxModel_f(z), σ_f ).
+
+--------------------------------------------------------------------
+5. POSTERIOR INFERENCE ON LATENT COEFFICIENTS
+--------------------------------------------------------------------
+5.1   Define prior density:
+        p(z) = MultivariateNormal( μ_z , Σ_z ).
+5.2   Define joint likelihood:
+        p(F | z) = Π_{f=1}^{F} L_f(z).
+5.3   Posterior density:
+        p(z | F) ∝ p(F | z) · p(z).
+5.4   Draw N_samples ≫ 1 samples {z^(s)} from p(z | F) using:
+        • Hamiltonian Monte Carlo,
+        • Slice sampler, or
+        • Variational approximation (if speed required).
+
+--------------------------------------------------------------------
+6. POSTERIOR PREDICTIVE SPECTRUM
+--------------------------------------------------------------------
+6.1   For each sample s, compute s_pred^(s)(λ) = predict_spectrum(z^(s)).
+6.2   Aggregate predictions:
+        • Posterior mean spectrum μ̂(λ) = (1/N_samples) Σ_s s_pred^(s)(λ).
+        • Credible interval at each λ:
+              Lower = percentile( s_pred^(s)(λ), α/2 )
+              Upper = percentile( s_pred^(s)(λ), 1-α/2 )
+          (with α = 0.05 for 95 % CI).
+
+--------------------------------------------------------------------
+7. OPTIONAL TAXONOMY PROBABILITIES
+--------------------------------------------------------------------
+7.1   Cluster the training latent vectors {z_i} into C taxonomic groups
+        (e.g., k‑means on first 4 PCs).
+7.2   For each posterior sample z^(s), assign it to nearest cluster.
+7.3   Count assignments to obtain probability of belonging to each
+        taxon:
+        p_taxon_c = (# samples assigned to c) / N_samples.
+
+--------------------------------------------------------------------
+8. RETURN RESULTS
+--------------------------------------------------------------------
+Return:
+  • μ̂(λ)  – posterior mean spectrum
+  • Credible intervals (lower, upper) for each λ
+  • Posterior samples {z^(s)} (optional)
+  • Taxonomy probabilities {p_taxon_c} (optional)

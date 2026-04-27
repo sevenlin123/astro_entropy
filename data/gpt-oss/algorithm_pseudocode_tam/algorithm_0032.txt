@@ -1,0 +1,75 @@
+# ------------------------------------------------------------------
+# 1. TRAINING PHASE
+# ------------------------------------------------------------------
+
+# 1.1 Load high‑resolution reference spectra (shape: [Nspectra, Nλ])
+spectra_ref  ← load_reference_spectra()
+
+# 1.2 Principal Component Analysis (PCA)
+K           ← choose_number_of_components()            # e.g. K = 8–10
+pca_model   ← PCA(n_components = K)
+coeff_ref   ← pca_model.fit_transform(spectra_ref)      # latent codes of real spectra
+
+# 1.3 Estimate prior density in latent space using KDE
+h           ← bandwidth_choice()                       # e.g. h = 0.5
+kde_prior   ← KernelDensity(kernel='gaussian', bandwidth=h).fit(coeff_ref)
+
+# 1.4 Sample synthetic latent codes (size M >> Nspectra)
+M           ← 5000                                      # number of synthetic points
+coeff_syn   ← kde_prior.sample(M)
+
+# 1.5 Reconstruct synthetic spectra from sampled latent codes
+spectra_syn ← pca_model.inverse_transform(coeff_syn)
+
+# 1.6 Generate synthetic photometry for each synthetic spectrum
+filters     ← load_filter_transmissions()               # dictionary: name → throughput
+phot_syn    ← []                                       # list of synthetic photometry arrays
+for spec in spectra_syn:
+    ph  ← convolve_with_filters(spec, filters)         # deterministic photometry
+    σph ← 0.2 * ph                                    # 20 % relative Gaussian noise
+    ph_noisy ← ph + normal(0, σph)                     # add Gaussian noise
+    phot_syn.append(ph_noisy)
+
+# 1.7 Assemble training data for the encoder (regressor)
+X_train ← array(phot_syn)                              # shape [M, Nfilters]
+Y_train ← array(coeff_syn)                             # shape [M, K]
+
+# 1.8 Train an AutoML regressor (ensemble of GBDTs, RFs, NN, …)
+encoder ← AutoMLRegressor()
+encoder.train(X_train, Y_train)
+
+# 1.9 Train a separate AutoML classifier on the *real* latent codes
+labels_ref ← load_taxonomy_labels(spectra_ref)          # e.g. ['H₂O','CO₂','Organic','Methanol']
+classifier ← AutoMLClassifier()
+classifier.train(coeff_ref, labels_ref)
+
+# 1.10 Save the fitted objects
+save(pca_model, encoder, classifier, kde_prior)
+
+
+# ------------------------------------------------------------------
+# 2. INFERENCE PHASE (NEW OBJECT)
+# ------------------------------------------------------------------
+
+def reconstruct_and_classify(photometry_obs):
+    """
+    Input:
+        photometry_obs – array of observed reflectances / fluxes in the chosen filters
+    Output:
+        spectrum_hat   – reconstructed high‑resolution spectrum (array[Nλ])
+        taxonomy_probs – dictionary: taxon → probability
+    """
+
+    # 2.1 Predict latent coefficients using the trained encoder
+    coeff_hat ← encoder.predict(photometry_obs)          # shape [K]
+
+    # 2.2 Optional: obtain uncertainty (e.g., via Monte‑Carlo or ensemble std)
+    # coeff_unc ← encoder.predict_variance(photometry_obs)
+
+    # 2.3 Decode latent coefficients to full spectrum
+    spectrum_hat ← pca_model.inverse_transform(coeff_hat)
+
+    # 2.4 Classify in latent space
+    taxonomy_probs ← classifier.predict_proba(coeff_hat)
+
+    return spectrum_hat, taxonomy_probs

@@ -1,0 +1,58 @@
+INPUT
+    Φ = {f_k, σ_k}   // observed fluxes and uncertainties in K filters
+    Λ = {S_n(λ)}     // spectral library of N reference spectra
+    R_k(λ)           // transmission curve of filter k
+    p_prior(n)       // prior weight for spectrum n (default = 1/N)
+
+PRECOMPUTATION
+    for n = 1 … N
+        for k = 1 … K
+            μ_k[n] ← ∫ S_n(λ) · R_k(λ) dλ   // model flux of spectrum n in filter k
+        end
+    end
+
+RECONSTRUCTION FOR ONE TARGET
+    for n = 1 … N
+        // ---------- scale factor ----------
+        numerator   ← Σ_k ( μ_k[n] · f_k / σ_k² )
+        denominator ← Σ_k ( μ_k[n]² / σ_k² )
+        α_n ← numerator / denominator         // least‑squares scale
+
+        // ---------- likelihood ----------
+        χ²_n ← Σ_k [ ( f_k – α_n·μ_k[n] )² / σ_k² ]
+        L_n  ← exp( –0.5·χ²_n ) / √[ (2π)^K · Π_k σ_k² ]
+
+        // ---------- unnormalised posterior ----------
+        w_raw[n] ← p_prior(n) · L_n
+    end
+
+    // ---------- normalise posterior ----------
+    W_tot ← Σ_n w_raw[n]
+    for n = 1 … N
+        w[n] ← w_raw[n] / W_tot
+    end
+
+    // ---------- expected spectrum ----------
+    S_expect(λ) ← Σ_n w[n] · S_n(λ)
+
+    // ---------- taxonomy assignment ----------
+    // (1) project S_expect onto taxonomic basis vectors B_j(λ)
+    // (2) compute distances d_j = ||S_expect – B_j||
+    // (3) assign class j* with minimum d_j
+    tax_class ← argmin_j d_j
+
+    // ---------- outlier check ----------
+    // residual of best‑fit spectrum
+    best_n ← argmax_n w[n]
+    res_best ← Σ_k ( f_k – α_best · μ_k[best_n] )² / σ_k²
+    if res_best > THRESHOLD then
+        flag_outlier ← TRUE
+    else
+        flag_outlier ← FALSE
+    end
+
+OUTPUT
+    Posterior weights w[n]   // probability that spectrum n represents the object
+    Expected spectrum S_expect(λ)
+    Taxonomic class tax_class
+    Outlier flag flag_outlier

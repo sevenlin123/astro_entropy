@@ -1,0 +1,121 @@
+Input
+ ----
+   1. Reference high‑resolution spectra {S_i}   (i = 1 … N)
+   2. Filter throughput curves {T_f}            (f = 1 … F)
+   3. New object photometry m_new              (vector length F)
+
+Parameters
+ ---------
+   K          – number of principal components to retain
+   h_KDE      – KDE bandwidth for latent density
+   n_samples  – number of synthetic latent draws per real spectrum
+   n_copula   – number of posterior samples to generate per object
+   σ_noise    – relative photometric noise level (default 20 %)
+
+Output
+ -----
+   • Posterior distribution over latent coefficients p(z | m_new)
+   • Ensemble of reconstructed spectra {S_j}  (j = 1 … n_copula)
+   • Credible interval curves for each wavelength
+   • Taxonomic class probabilities P(class | ẑ)
+   • Optional: expected photometry from posterior samples
+
+-----------------------------------------------------------------------
+Step 0 – Pre‑processing of reference spectra
+-----------------------------------------------------------------------
+For each spectrum S_i:
+   1. Normalize to reflectance (divide by solar spectrum).
+   2. Resample to common wavelength grid λ (length L).
+
+Collect matrix M_ref  (shape N × L).
+
+-----------------------------------------------------------------------
+Step 1 – Latent‑space definition (PCA)
+-----------------------------------------------------------------------
+1. Center M_ref by subtracting column means μ_S.
+2. Compute covariance matrix C = (M_ref − μ_S)^T · (M_ref − μ_S) / (N−1).
+3. Eigen‑decompose C → eigenvalues λ_k, eigenvectors V_k (k = 1 … L).
+4. Select first K eigenvectors → principal component matrix V_K  (shape L × K).
+5. Project all reference spectra to latent space:
+        Z_ref[i, k] = V_K^T · (S_i − μ_S)          (matrix shape N × K).
+
+-----------------------------------------------------------------------
+Step 2 – Construct continuous prior over latent space (KDE)
+-----------------------------------------------------------------------
+1. Fit a multivariate Gaussian kernel density estimator (KDE) to Z_ref
+   using bandwidth h_KDE.
+2. For each real spectrum i = 1 … N:
+       Draw n_samples latent vectors z^(i,s)  (s = 1 … n_samples)  
+       from the KDE conditioned on the neighbourhood of Z_ref[i].
+   Store all synthetic latent vectors in Z_syn  (size N·n_samples × K).
+
+-----------------------------------------------------------------------
+Step 3 – Generate synthetic training data (photometry + latent)
+-----------------------------------------------------------------------
+For each synthetic latent vector z in Z_syn:
+   1. Reconstruct high‑resolution spectrum:
+          S_syn = μ_S + V_K · z          (shape L).
+   2. Forward‑model photometry:
+          m_syn_f = ∫ S_syn(λ) · T_f(λ) dλ   for all f.
+   3. Add Gaussian noise:
+          m_syn_f ← m_syn_f + N(0, (σ_noise·m_syn_f)^2).
+   4. Store pair (m_syn, z)  → training example.
+
+Resulting training set:  {(m_syn, z)}  of size N·n_samples × (F + K).
+
+-----------------------------------------------------------------------
+Step 4 – Train encoder (photometry → latent)
+-----------------------------------------------------------------------
+Use an automated machine‑learning regressor (e.g., ensemble of GBDTs):
+   • Input features: m_syn (length F).
+   • Target: z (length K).
+   • Output: predictive distribution for z (mean μ_ẑ, covariance Σ_ẑ).
+Store trained model Enc.
+
+-----------------------------------------------------------------------
+Step 5 – Train classifier (latent → taxonomy)
+-----------------------------------------------------------------------
+1. Label each reference spectrum with taxonomy class C_i.
+2. For synthetic latent vectors z, assign the same class C_i as their source.
+3. Train a probabilistic classifier (e.g., RandomForest, XGBoost):
+   • Input: z (length K).
+   • Target: class probabilities P(C | z).
+Store trained model Clas.
+
+-----------------------------------------------------------------------
+Step 6 – Inference for a new object
+-----------------------------------------------------------------------
+Given m_new:
+
+   1. Encode:
+        • Predict posterior over latent coefficients:
+              μ_ẑ, Σ_ẑ = Enc.predict(m_new).
+   2. Sample posterior:
+        For j = 1 … n_copula:
+             draw z_j ~ GaussianCopula(μ_ẑ, Σ_ẑ)   // preserve correlations
+   3. Decode each sample:
+        For each z_j:
+             S_j = μ_S + V_K · z_j                  // high‑resolution spectrum
+   4. Assemble ensemble {S_j}:
+        • Compute median spectrum S_med(λ).
+        • For each wavelength λ, compute percentiles (e.g., 16th, 84th) to
+          form credible‑interval curves.
+   5. Taxonomy:
+        • Evaluate classifier on mean latent μ_ẑ:
+              P_class = Clas.predict_proba(μ_ẑ).
+
+Return:
+   • Posterior distribution of z (μ_ẑ, Σ_ẑ).
+   • Ensemble of spectra {S_j} and credible intervals.
+   • Taxonomic class probabilities P_class.
+
+-----------------------------------------------------------------------
+Optional Enhancements
+-----------------------------------------------------------------------
+• If desired, propagate photometric uncertainties by drawing m_new from
+  its observational error distribution before encoding.
+• For a small validation set, compare reconstructed spectra with
+  available spectroscopy to assess coverage (omit if only reconstruction
+  is required).
+-----------------------------------------------------------------------
+End of Algorithm

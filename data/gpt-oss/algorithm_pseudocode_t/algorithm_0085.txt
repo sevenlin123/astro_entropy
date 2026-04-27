@@ -1,0 +1,144 @@
+Algorithm ProbSpectralReconstruction
+Input: Observed fluxes F_obs[band], uncertainties sigma[band]
+       Filter transmission curves T_band[lambda]
+       Basis spectra B_k[lambda] for k=1..K
+       Prior distribution p(alpha) over coefficients alpha_k
+Output: Posterior samples {alpha} and derived reflectance spectrum R(lambda)
+
+Steps:
+1. Define wavelength grid λ_grid covering all filters.
+2. For each filter b, compute effective filter vector:
+      T_b[λ_grid] = T_band[b][λ_grid]
+   Normalize if necessary.
+3. For each basis spectrum k, evaluate on λ_grid:
+      B_k[λ_grid]
+4. Construct model matrix M of size (N_filters x K):
+      M[b,k] = ∫ B_k(λ) * T_b(λ) dλ
+5. Define likelihood function:
+      For given α vector,
+          F_model[b] = Σ_k α_k * M[b,k]
+          χ²(α) = Σ_b ((F_obs[b]-F_model[b]) / sigma[b])^2
+      Likelihood L(α) ∝ exp(-0.5 * χ²(α))
+6. Choose Bayesian sampler (e.g., Metropolis-Hastings or HMC).
+   Initialize α^(0) at prior mean or random draw.
+7. For iteration i=1..N_iter:
+      Propose α' from proposal distribution q(α'|α^(i-1)).
+      Compute L' = L(α'), p' = p(α').
+      Compute acceptance ratio:
+          r = (L'*p')/(L_prev*p_prev) * (q(α_prev|α')/q(α'|α_prev))
+      Accept α' with probability min(1,r);
+      If accepted, set α^(i)=α', update L_prev=L', p_prev=p'.
+      Else set α^(i)=α^(i-1).
+      Store α^(i) as sample.
+8. After burn-in, collect M samples of α.
+9. For each stored α sample:
+      Compute reflectance spectrum R_sample[λ] = Σ_k α_k * B_k[λ].
+10. Compute posterior mean spectrum:
+      R_mean[λ] = (1/M) Σ_j R_sample_j[λ].
+11. Compute credibility intervals per λ if desired.
+12. Optionally classify:
+      For each taxonomic class c with template spectrum T_c[λ]:
+          Compute distance d_c = ||R_mean - T_c|| (e.g., L2 norm weighted).
+          Assign class with minimal d_c; compute probability via Bayes rule.
+13. Return α_samples, R_mean, confidence intervals, classification.
+
+pseudocode
+PROCEDURE ProbSpectralReconstruction(
+    F_obs[1..N]          // observed fluxes in N filters
+    sigma[1..N]          // measurement uncertainties
+    T_filter[1..N][λ]    // filter transmission curves
+    B_basis[1..K][λ]     // K basis spectra sampled on common λ‑grid
+    prior_alpha          // prior distribution on coefficient vector α
+    sampler_settings     // sampler hyper‑parameters (iterations, burn‑in, etc.)
+)
+BEGIN
+    /* 1. Build common wavelength grid */
+    λ_grid ← union of all wavelengths present in T_filter and B_basis
+    L ← length(λ_grid)
+
+    /* 2. Compute filter–basis integrals */
+    FOR b FROM 1 TO N DO
+        FOR k FROM 1 TO K DO
+            M[b,k] ← Σ_{ℓ=1}^{L} B_basis[k][ℓ] * T_filter[b][ℓ] * Δλ_ℓ
+        END FOR
+    END FOR
+
+    /* 3. Define likelihood function */
+    FUNCTION Likelihood(α[1..K])
+        FOR b FROM 1 TO N DO
+            F_model[b] ← Σ_{k=1}^{K} α[k] * M[b,k]
+        END FOR
+        χ² ← Σ_{b=1}^{N} ((F_obs[b] – F_model[b]) / sigma[b])²
+        RETURN exp( –0.5 * χ² )
+    END FUNCTION
+
+    /* 4. Bayesian sampler initialization */
+    α_current ← DrawSample(prior_alpha)          // e.g., from Gaussian prior
+    L_current ← Likelihood(α_current)
+    P_current ← prior_pdf(α_current)
+    SAMPLE_SET ← EMPTY LIST
+
+    /* 5. Sampling loop (Metropolis‑Hastings) */
+    FOR iter FROM 1 TO sampler_settings.iterations DO
+        /* 5a. Propose new α */
+        α_proposal ← α_current + DrawNoise(σ_proposal)   // σ_proposal set in settings
+
+        /* 5b. Evaluate likelihood and prior */
+        L_proposal ← Likelihood(α_proposal)
+        P_proposal ← prior_pdf(α_proposal)
+
+        /* 5c. Acceptance probability */
+        r ← (L_proposal * P_proposal) / (L_current * P_current)
+        accept_prob ← MIN(1, r)
+
+        /* 5d. Accept or reject */
+        u ← Uniform(0,1)
+        IF u < accept_prob THEN
+            α_current ← α_proposal
+            L_current ← L_proposal
+            P_current ← P_proposal
+        END IF
+
+        /* 5e. Store after burn‑in */
+        IF iter > sampler_settings.burn_in THEN
+            APPEND α_current TO SAMPLE_SET
+        END IF
+    END FOR
+
+    /* 6. Construct posterior spectra */
+    NUM_SAMPLES ← LENGTH(SAMPLE_SET)
+    FOR ℓ FROM 1 TO L DO
+        R_mean[ℓ] ← 0
+        FOR s FROM 1 TO NUM_SAMPLES DO
+            α_s ← SAMPLE_SET[s]
+            R_s[ℓ] ← Σ_{k=1}^{K} α_s[k] * B_basis[k][ℓ]
+            R_mean[ℓ] ← R_mean[ℓ] + R_s[ℓ]
+        END FOR
+        R_mean[ℓ] ← R_mean[ℓ] / NUM_SAMPLES
+    END FOR
+
+    /* 7. Credibility intervals (optional) */
+    FOR ℓ FROM 1 TO L DO
+        COLLECT {R_s[ℓ]} over all samples into list L_R
+        SORT L_R
+        CI_lower[ℓ] ← L_R[ floor(0.025 * NUM_SAMPLES) ]
+        CI_upper[ℓ] ← L_R[ ceil(0.975 * NUM_SAMPLES) ]
+    END FOR
+
+    /* 8. Taxonomic classification (optional) */
+    FOR each class c WITH template spectrum T_c[1..L] DO
+        distance[c] ← sqrt( Σ_{ℓ=1}^{L} (R_mean[ℓ] – T_c[ℓ])² )
+    END FOR
+    best_class ← ARGMIN(distance)
+    CLASS_PROBABILITIES ← ApplyBayesRule(distance, prior_class_probs)
+
+    /* 9. Output results */
+    RETURN {
+        α_samples : SAMPLE_SET,
+        spectrum_mean : R_mean,
+        credibility_lower : CI_lower,
+        credibility_upper : CI_upper,
+        classification : best_class,
+        class_probabilities : CLASS_PROBABILITIES
+    }
+END PROCEDURE

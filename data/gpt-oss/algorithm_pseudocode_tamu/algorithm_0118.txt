@@ -1,0 +1,81 @@
+Input:
+    - Reference spectra S_ref[i]   (i = 1 … N_ref, each a high‑resolution reflectance vector)
+    - Filter transmission curves T_f[j]   (j = 1 … N_filt)
+    - Photometric observation m_obs      (length N_filt)
+    - Desired number of principal components K
+    - KDE bandwidth h
+    - Number of synthetic samples N_syn
+    - Number of posterior samples N_post
+
+Output:
+    - Reconstructed spectrum S_rec (high‑resolution vector)
+    - Spectrum confidence interval [S_low, S_high] (optional)
+    - Taxonomy probability vector P_tax (size = number of classes)
+
+----------------------------------------------------------------------
+Step 1 – Latent Space Construction
+----------------------------------------------------------------------
+1.1 Compute mean spectrum μ_S = mean(S_ref)
+1.2 Center spectra:  C[i] = S_ref[i] – μ_S
+1.3 Perform Singular Value Decomposition on C to obtain
+        principal components U[0…K-1]  (each a vector of length L_spectra)
+1.4 For each reference spectrum, project onto components:
+        coeff[i][k] = dot(C[i], U[k])    for k = 0 … K-1
+   Store coefficient matrix A_ref (size N_ref × K)
+
+----------------------------------------------------------------------
+Step 2 – Prior Density Estimation
+----------------------------------------------------------------------
+2.1 Fit a Gaussian Kernel Density Estimator (KDE) to A_ref
+        kernel(k) = exp(-||x – A_ref[i]||^2 / (2*h^2))
+2.2 Draw N_syn samples from KDE → synthetic latent vectors A_syn[j]
+2.3 For each synthetic vector a = A_syn[j]:
+        a. Reconstruct spectrum:  S_synth = μ_S + sum_k a_k * U[k]
+        b. Forward‑model photometry:
+               m_synth[f] = integrate( S_synth * T_f[f] ) / integrate( T_f[f] )
+        c. Add Gaussian noise (σ_rel = 0.20) to each m_synth[f]
+        d. Store pair (m_synth, a) in training set D_train
+
+----------------------------------------------------------------------
+Step 3 – Regresor Training (Encoder)
+----------------------------------------------------------------------
+3.1 Train an AutoML ensemble regressor R (e.g., XGBoost, RandomForest)
+        Input features: m_synth (length N_filt)
+        Target outputs: a (length K)
+   Output model R
+
+----------------------------------------------------------------------
+Step 4 – Classifier Training (Latent‑Space Taxonomy)
+----------------------------------------------------------------------
+4.1 Assign taxonomy labels to each reference spectrum
+        label[i] ∈ {Water, CO2, Organic, Methanol}
+4.2 Train a second AutoML classifier C
+        Input features: A_ref
+        Labels: label[i]
+   Output model C
+
+----------------------------------------------------------------------
+Step 5 – Inference on New Observation
+----------------------------------------------------------------------
+5.1 Feed m_obs into regressor R → predicted latent vector a_pred
+     (R may provide mean and variance; if only mean, use a_pred directly)
+5.2 Optional – posterior sampling:
+        For s = 1 … N_post:
+            Draw a_samp from Gaussian Copula constructed from
+                - marginal distributions given by R's predictive variances
+                - correlation matrix estimated from training residuals
+            Decode: S_samp[s] = μ_S + sum_k a_samp_k * U[k]
+5.3 Compute reconstructed spectrum:
+        If N_post > 1:
+            S_rec = median_over_s(S_samp)
+            S_low, S_high = percentile(S_samp, 2.5), percentile(S_samp, 97.5)
+        Else:
+            S_rec = μ_S + sum_k a_pred_k * U[k]
+5.4 Predict taxonomy:
+        P_tax = C.predict_proba(a_pred)   // probability vector over classes
+
+----------------------------------------------------------------------
+Return:
+    - S_rec (high‑resolution reconstructed spectrum)
+    - Optional confidence interval [S_low, S_high]
+    - Taxonomy probability vector P_tax

@@ -1,0 +1,98 @@
+text
+--------------------------------------------------------------------
+# 1. DATA PREPARATION
+--------------------------------------------------------------------
+Load high‑resolution reference spectra S_ref[n_spec][n_wave]
+Load instrument filter response curves F_i[λ]   (i = 1 … N_filt)
+Define wavelength grid λ_ref common to all spectra
+
+# Optional: normalise spectra to unity at a reference wavelength
+for each spectrum s in S_ref:
+    s_norm = s / s[reference_index]
+
+Store normalised spectra as matrix M_ref[n_spec][n_wave]
+--------------------------------------------------------------------
+# 2. LATENT SPACE (PRIOR) ESTABLISHMENT
+--------------------------------------------------------------------
+# 2.1 PCA on reference spectra
+Input: M_ref, desired number of components K  (e.g. K = 8)
+Compute mean spectrum μ_M  = mean(M_ref, axis=0)
+Center data: X = M_ref – μ_M
+Perform Singular Value Decomposition: X = U Σ Vᵀ
+Principal components: PCs = V[0:K]          # shape (K, n_wave)
+Explained variance:   EV  = Σ[0:K]² / sum(Σ²)
+
+# 2.2 Project reference spectra onto latent space
+Coeffs_ref = X @ PCsᵀ                       # shape (n_spec, K)
+
+# 2.3 Non‑parametric KDE on latent coefficients
+Set bandwidth h ≈ 0.5  (tunable)
+Fit KDE model  KDE_C ← KDE(Coeffs_ref, bandwidth=h)
+
+# 2.4 Sample synthetic latent vectors
+Set N_aug = 5 000     # number of synthetic samples
+Latents_aug = KDE_C.sample(N_aug)          # shape (N_aug, K)
+
+# 2.5 Reconstruct synthetic spectra from latent vectors
+function inverse_PCA(coeffs):
+    return coeffs @ PCs + μ_M                # shape (n_wave)
+
+Synthetic_spectra = [inverse_PCA(c) for c in Latents_aug]
+
+--------------------------------------------------------------------
+# 3. SYNTHETIC PHOTOMETRY GENERATION (LIKELIHOOD)
+--------------------------------------------------------------------
+For each synthetic spectrum s in Synthetic_spectra:
+    For each filter i in 1..N_filt:
+        # Convolution with filter throughput
+        flux_i = ∫ s(λ) · F_i(λ) dλ   (numerical integration)
+        Phot_i = flux_i / ∫ F_i(λ) dλ  # reflectance in band i
+    Photometry_s = [Phot_1 … Phot_N_filt]
+
+    # Add realistic Gaussian noise
+    For each band j:
+        σ_j = 0.20 * Photometry_s[j]          # 20 % relative error
+        Photometry_s[j] += Normal(0, σ_j)
+
+Collect pairs:  (Photometry_s , Latents_aug[s])  → training data D
+
+--------------------------------------------------------------------
+# 4. MODEL TRAINING (AUTOML REGRESSOR & CLASSIFIER)
+--------------------------------------------------------------------
+# 4.1 Regression: Photometry → Latent Coefficients
+Train an AutoML regressor R (ensemble of GBDT + NN) on D
+    Input: Photometry (vector length N_filt)
+    Target: Latent coefficients (length K)
+
+# 4.2 Classification: Latent Coefficients → Taxonomic Label
+Use the original reference spectra’s known taxonomic labels L_ref
+Train an AutoML classifier C on pairs (Coeffs_ref , L_ref)
+    Input: Latent coefficients (length K)
+    Output: Probabilities over taxonomic classes
+
+--------------------------------------------------------------------
+# 5. INFERENCE ON NEW PHOTOMETRIC OBSERVATIONS
+--------------------------------------------------------------------
+Input: observed photometry vector m_obs[1..N_filt]
+Normalize m_obs if the regressor expects normalised inputs
+    (e.g. subtract mean and divide by std computed on training set)
+
+# 5.1 Predict latent coefficients
+coeff_pred = R.predict(m_obs)           # shape (K,)
+
+# 5.2 Reconstruct full spectrum
+s_rec = inverse_PCA(coeff_pred)         # shape (n_wave,)
+
+# 5.3 Taxonomic probabilities
+tax_prob = C.predict_proba(coeff_pred)   # shape (n_classes,)
+
+Output: 
+    - Reconstructed spectrum s_rec(λ)
+    - Taxonomy probability vector tax_prob
+--------------------------------------------------------------------
+# 6. OPTIONAL: UNCERTAINTY PROPAGATION
+--------------------------------------------------------------------
+If uncertainty estimates are required:
+    Sample multiple predictions from R (e.g. bootstrap or posterior draw)
+    For each sample: compute s_rec_i and tax_prob_i
+    Aggregate to obtain confidence intervals on spectrum and class

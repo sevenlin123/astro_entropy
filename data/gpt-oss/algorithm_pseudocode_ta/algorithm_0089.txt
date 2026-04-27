@@ -1,0 +1,65 @@
+text
+INPUT
+  S          # Training spectra matrix (N_spec × N_wave)
+  F          # Filter response matrix (N_filter × N_wave)
+  y_obj      # Observed photometry for target (N_filter)
+  sigma_obj  # Measurement uncertainties for target (N_filter)
+  k          # Number of retained principal components (e.g., 8–10)
+
+OUTPUT
+  mean_spec   # Mean reconstructed spectrum (N_wave)
+  cred_int    # Credible‑interval envelope (N_wave × 2)
+  coeff_samples  # Draws from posterior of PC coefficients (N_sample × k)
+  spec_samples   # Corresponding reconstructed spectra (N_sample × N_wave)
+
+--------------------------------------------------------------------
+# 1. Train principal‑component basis from spectra
+--------------------------------------------------------------------
+1.1  mean_S ← column_mean(S)
+1.2  S_centered ← S – mean_S
+1.3  cov_S ← (S_centeredᵀ · S_centered) / (N_spec – 1)
+1.4  [eigvec, eigval] ← eigendecompose(cov_S)
+1.5  PCs ← eigvec[:, 1:k]           # First k eigenvectors (N_wave × k)
+1.6  coeffs_train ← S_centered · PCs   # Projection of spectra (N_spec × k)
+
+--------------------------------------------------------------------
+# 2. Map PC space → photometry
+--------------------------------------------------------------------
+2.1  # Synthetic photometry for each PC
+2.2  for p = 1 … k
+2.3      pc_phot[p, :] ← (PCs[:, p]ᵀ · Fᵀ) / (sum(F, axis=1))   # (N_filter)
+2.4  mean_phot ← (mean_Sᵀ · Fᵀ) / (sum(F, axis=1))              # (N_filter)
+2.5  # Linear relation: y ≈ mean_phot + pc_photᵀ · c
+--------------------------------------------------------------------
+# 3. Bayesian inference of coefficients for target
+--------------------------------------------------------------------
+3.1  # Likelihood: y | c ~ N(mean_phot + pc_photᵀ·c, diag(sigma_obj²))
+3.2  # Prior: c ~ N(0, Σ_prior)   where Σ_prior = diag(eigval[1:k])
+3.3  # Compute posterior analytically
+3.4  W ← diag(1 ./ sigma_obj²)                # Weight matrix (N_filter × N_filter)
+3.5  H ← pc_phot                               # (N_filter × k)
+3.6  Σ_post_inv ← Hᵀ · W · H + Σ_prior⁻¹       # (k × k)
+3.7  μ_post ← Σ_post_inv⁻¹ · (Hᵀ · W · (y_obj – mean_phot))
+3.8  Σ_post ← Σ_post_inv⁻¹
+--------------------------------------------------------------------
+# 4. Generate posterior samples
+--------------------------------------------------------------------
+4.1  N_sample ← 5000
+4.2  coeff_samples ← draw_multivariate_normal(μ_post, Σ_post, N_sample)
+--------------------------------------------------------------------
+# 5. Reconstruct spectra for each sample
+--------------------------------------------------------------------
+5.1  for s = 1 … N_sample
+5.2      spec_samples[s, :] ← mean_S + PCs · coeff_samples[s, :].ᵀ
+--------------------------------------------------------------------
+# 6. Summary statistics
+--------------------------------------------------------------------
+6.1  mean_spec ← column_mean(spec_samples)
+6.2  lower, upper ← percentile(spec_samples, [2.5, 97.5], axis=0)
+6.3  cred_int ← stack(lower, upper)   # (N_wave × 2)
+--------------------------------------------------------------------
+# 7. Optional outlier flag
+--------------------------------------------------------------------
+7.1  mahalanobis ← sqrt((coeff_samples – μ_post) · Σ_prior⁻¹ ·
+                        (coeff_samples – μ_post)ᵀ)   # (N_sample)
+7.2  outlier_flag ← any(mahalanobis > threshold)

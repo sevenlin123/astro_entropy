@@ -1,0 +1,44 @@
+function ReconstructSpectrum(m[1..N_fil], σ[1..N_fil]):
+    # 1. Define forward model for a given coefficient vector c[1..D]
+    function FluxPredict(c):
+        for each filter k:
+            numerator   = 0
+            denominator = 0
+            for each wavelength j:
+                s_λ = barS[j] + sum_{p=1..D} c[p] * e_p[j]
+                numerator   += s_λ * R_k[j]
+                denominator += R_k[j]
+            f_k = numerator / denominator
+        return f[1..N_fil]   # predicted fluxes in all filters
+
+    # 2. Likelihood function (Gaussian in flux space)
+    function LogLikelihood(c):
+        f = FluxPredict(c)
+        ll = 0
+        for k in 1..N_fil:
+            ll -= 0.5 * ((m[k] - f[k]) / σ[k])^2
+        return ll
+
+    # 3. Posterior log density (log prior + log likelihood)
+    function LogPosterior(c):
+        lp = LogLikelihood(c)
+        for p in 1..D:
+            lp += logNormalPdf(c[p], 0, σ_c[p])
+        return lp
+
+    # 4. Sample posterior over coefficients c
+    samples = MCMC_Sampler(LogPosterior, init=c0)
+
+    # 5. For each sample, reconstruct spectrum
+    spectra = []
+    for c in samples:
+        s_recon = array(N_λ)
+        for j in 1..N_λ:
+            s_recon[j] = barS[j] + sum_{p=1..D} c[p] * e_p[j]
+        spectra.append(s_recon)
+
+    # 6. Compute posterior statistics
+    mean_spectrum  = mean_over_samples(spectra)
+    lower, upper   = percentile_over_samples(spectra, 2.5, 97.5)
+
+    return mean_spectrum, lower, upper

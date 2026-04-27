@@ -1,0 +1,51 @@
+Input:
+    S_lib      – matrix (N_spec × N_wave) of training spectra
+    F_filters  – list of filter transmission curves {F_j(λ)} (j = 1…N_filt)
+    P_obs      – observed photometry vector (length N_filt)
+    U_obs      – diagonal matrix of photometric uncertainties σ_j²
+
+Output:
+    S_rec_mean – reconstructed mean spectrum (length N_wave)
+    S_rec_cov  – covariance matrix of reconstructed spectrum (N_wave × N_wave)
+
+Steps:
+
+1.   // ---------- 1. Principal Component Analysis ----------
+2.   μ_s  ← mean of S_lib along spectral axis   // shape: (1 × N_wave)
+3.   C_s  ← covariance of centered spectra
+          C_s = (S_lib - μ_sᵀ)(S_lib - μ_sᵀ)^T / (N_spec - 1)
+4.   [E, Λ] ← eigendecomposition of C_s
+          E – eigenvectors (N_wave × N_wave), columns sorted by decreasing λ
+          Λ – diagonal matrix of eigenvalues λ_k
+5.   Choose K (e.g., K=8) principal components to retain
+          E_K  ← first K columns of E                // shape: (N_wave × K)
+          Λ_K  ← first K eigenvalues (as vector)
+
+6.   // ---------- 2. Forward photometric model ----------
+7.   For each filter j = 1 … N_filt:
+          // Compute sensitivity matrix S_j (row vector length K)
+          // S_j(k) = ∫ E_K(:,k) · F_j(λ) dλ
+          S_j ← integrate_over_wavelength(E_K .* F_filters[j])
+   Construct S_mat ← [S_1; S_2; … ; S_N_filt]   // shape: (N_filt × K)
+
+8.   // Predicted photometry for any coefficient vector a ∈ ℝ^K:
+9.   p(a) = μ_p + S_mat · a
+          where μ_p = ∫ μ_s · F_j dλ  for each filter j
+
+10.  // ---------- 3. Bayesian inference on coefficients ----------
+11.  Prior on a:  a ~ Normal(0, diag(Λ_K))
+12.  Likelihood:  P(P_obs | a) ∝ exp( -½ (P_obs - p(a))^T U_obs^{-1} (P_obs - p(a)) )
+13.  Posterior (Gaussian) parameters:
+          // Posterior covariance
+          Σ_a⁻¹ = S_mat^T · U_obs⁻¹ · S_mat + diag(Λ_K)⁻¹
+          Σ_a   = inverse(Σ_a⁻¹)
+          // Posterior mean
+          μ_a   = Σ_a · (S_mat^T · U_obs⁻¹ · (P_obs - μ_p))
+
+14.  // ---------- 4. Reconstruct spectrum ----------
+15.  S_rec_mean = μ_sᵀ + E_K · μ_a            // shape: (1 × N_wave)
+16.  // Propagate coefficient uncertainty to spectrum:
+17.  // Covariance of spectrum = E_K · Σ_a · E_K^T
+18.  S_rec_cov  = E_K · Σ_a · E_K^T           // shape: (N_wave × N_wave)
+
+19.  Return S_rec_mean, S_rec_cov

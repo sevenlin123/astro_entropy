@@ -1,0 +1,83 @@
+INPUT:
+    • Photometry {F_j , σ_j}   for j = 1 … M  (fluxes and uncertainties)
+    • Filter transmission curves {T_j(λ)}  for each band j
+    • Library of N reference spectra {S_k(λ)}  (k = 1 … N)
+
+PARAMETERS:
+    • Number of MCMC iterations I
+    • Burn‑in length B
+    • Proposal covariance Σ for coefficients a
+
+ALGORITHM:
+
+1. Spectral Basis Construction
+   1.1 Define linear combination model:
+          S(λ | a) = Σ_{k=1}^{N} a_k · S_k(λ)
+   1.2 Impose simple priors on coefficients a_k:
+          a_k ≥ 0
+          Σ_k a_k = 1
+          (or Gaussian prior N(μ_k, τ_k^2))
+
+2. Forward Flux Model
+   FOR each band j:
+       f_j(a) ← [ ∫ S(λ | a) · T_j(λ) dλ ] / [ ∫ T_j(λ) dλ ]
+
+3. Likelihood Function
+   L(F | a) ← Π_{j=1}^{M} Normal( F_j | f_j(a), σ_j )
+
+4. Posterior Definition
+   p(a | F) ∝ L(F | a) · p(a)
+
+5. MCMC Sampling
+   Initialize a^(0) satisfying priors
+   FOR i = 1 TO I:
+        Propose a' ← a^(i-1) + ε,  where ε ~ N(0, Σ)
+        Enforce priors on a'
+        Compute acceptance ratio:
+              α = min{ 1,
+                       [L(F | a') · p(a')] /
+                       [L(F | a^(i-1)) · p(a^(i-1))] }
+        Draw u ~ Uniform(0,1)
+        IF u < α:
+              a^(i) ← a'
+        ELSE
+              a^(i) ← a^(i-1)
+   END FOR
+   Discard first B samples as burn‑in
+   Store { a^(s) } for s = B+1 … I
+
+6. Spectrum Estimation
+   FOR each retained sample a^(s):
+        Construct S^(s)(λ) = Σ_k a_k^(s) · S_k(λ)
+   Compute posterior mean spectrum:
+        Ŝ(λ) = (1/(I-B)) Σ_s S^(s)(λ)
+   Compute posterior variance spectrum:
+        Var_S(λ) = (1/(I-B)) Σ_s [S^(s)(λ) – Ŝ(λ)]²
+
+7. Posterior Predictive Photometry
+   FOR each band j:
+        Predictive distribution of f_j:
+            f_j^(s) = f_j( a^(s) )  for all samples
+        Compute predictive mean μ_fj = mean( f_j^(s) )
+        Compute predictive std σ_fj = std( f_j^(s) )
+
+8. Classification Probabilities
+   FOR each template k:
+        Define coefficient vector a_k* = (0,…,1_k,…,0)
+        Compute evidence Z_k:
+              Z_k = L(F | a_k*)   // analytic integral trivial for single template
+   Compute total evidence Z_tot = Σ_k Z_k
+   Posterior probability for class k:
+        P_k = Z_k / Z_tot
+
+9. Outlier Detection
+   FOR each band j:
+        Residual r_j = (F_j – μ_fj) / sqrt( σ_fj² + σ_j² )
+        IF |r_j| > 3 THEN flag band j as outlier
+   IF any band flagged THEN mark object as potential outlier
+
+OUTPUT:
+    • Posterior mean spectrum Ŝ(λ) and variance Var_S(λ)
+    • Posterior predictive means μ_fj and variances σ_fj² for each band
+    • Class probabilities {P_k}
+    • Outlier flags for bands and/or whole object

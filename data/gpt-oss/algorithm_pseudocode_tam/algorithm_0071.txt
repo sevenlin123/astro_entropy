@@ -1,0 +1,37 @@
+S_raw      – Set of N_ref reference spectra (wavelength × flux)
+F          – Set of M filter response curves (effective throughput)
+K          – Number of retained principal components
+h_band     – Bandwidth for Kernel Density Estimation
+N_aug      – Number of synthetic latent samples to generate
+
+μ_s = (1/N_ref) Σ_{i=1}^{N_ref} s_i
+
+S_centered = [s_i – μ_s] for i = 1 … N_ref
+
+C = (1/(N_ref-1)) * S_centered^T * S_centered
+
+[V, D] = eig(C)            // V: eigenvectors (columns), D: eigenvalues
+
+PC_mat = V[:, 1:K]         // K×L matrix (L = number of wavelength bins)
+
+Z_real = PC_mat^T * S_centered^T   // K×N_ref matrix
+
+Z_aug = KDE_sample(N_aug)
+
+S_aug = μ_s + PC_mat * Z_aug   // L×N_aug matrix
+
+f_j[m] = ∫ s_j(λ) * F_m(λ) dλ   (for m = 1 … M)
+
+y_j[m] = f_j[m] + N(0, σ^2)
+
+Training_Data = { (y_j , z_j) }  where z_j = column j of Z_aug
+
+f_reg : ℝ^M → ℝ^K
+
+f_clf : ℝ^K → Probabilities over classes
+
+z_hat = f_reg(y_new)        // Point estimate; optionally draw ensemble samples for posterior
+
+s_rec = μ_s + PC_mat * z_hat   // Length L
+
+p_class = f_clf(z_hat)          // Vector of class probabilities

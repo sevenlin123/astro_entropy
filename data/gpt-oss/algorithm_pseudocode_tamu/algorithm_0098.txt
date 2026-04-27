@@ -1,0 +1,119 @@
+# ------------------------------------------------------------------
+# 1. TRAINING PHASE
+# ------------------------------------------------------------------
+
+INPUT:
+    S_ref   :  N_spec × N_wave matrix of reflectance spectra
+    λ       :  N_wave-element wavelength array
+    F_thru  :  N_filter × N_wave matrix of filter throughput curves
+    labels  :  N_spec-element taxonomy label (optional for classifier)
+PARAMETERS:
+    K_pca   :  desired number of principal components (default 5–10)
+    h_kde   :  Gaussian KDE bandwidth (default 0.5)
+    M_aug   :  number of synthetic latent samples (default 5000)
+    σ_noise :  relative photometric noise (default 0.20)
+
+PROCEDURE:
+
+1.1  PREPROCESS SPECTRA
+    For each spectrum i:
+        - Normalize reflectance so that ∑_λ S_ref[i,λ] = 1   # optional
+        - Interpolate to common wavelength grid λ (if needed)
+
+1.2  PERFORM PCA
+    Fit PCA on S_ref → eigenvectors V (N_wave × K_pca),
+                       mean μ_s (1 × N_wave),
+                       explained_variance E
+    Retain first K_pca components (E cumulative ≥ target)
+
+1.3  PROJECT ONTO LATENT SPACE
+    C_real = (S_ref – μ_s) · V   # N_spec × K_pca matrix of coefficients
+
+1.4  ESTIMATE PRIOR WITH KDE
+    KDE_K(x) = Σ_{i=1}^{N_spec}  exp(−‖x−C_real[i]‖²/(2h_kde²))
+    Normalize KDE to unit integral.
+    Sample M_aug synthetic coefficient vectors C_syn ~ KDE_K
+
+1.5  RECONSTRUCT SYNTHETIC SPECTRA
+    For each synthetic coefficient vector c in C_syn:
+        S_syn = μ_s + V · cᵀ
+        Store S_syn (N_wave)
+
+1.6  FORWARD‑MODEL PHOTOMETRY
+    For each S_syn:
+        For each filter j:
+            m_j = ∫ S_syn(λ) · F_thru[j,λ] dλ          # reflectance in band j
+        Add Gaussian noise:
+            m_j_noisy = m_j + Normal(0, σ_noise · m_j)
+        Store noisy photometry vector m_noisy   # size N_filter
+
+    Combine all pairs (m_noisy, c) → training set for regressor
+
+1.7  TRAIN AutoML REGRESSOR (Encoder)
+    Use AutoML framework (e.g., AutoGluon) to learn mapping:
+        Input  : m_noisy  (N_filter)
+        Output : latent coefficients (K_pca)
+    The trained regressor returns:
+        - Predictive mean μ̂_c
+        - Predictive covariance Σ̂_c  (or ensemble of predictions)
+
+1.8  TRAIN AutoML CLASSIFIER (optional)
+    Use the same AutoML system to learn mapping:
+        Input  : C_real   (K_pca)
+        Output : taxonomy label
+    Store model and probability outputs P_taxon.
+
+OUTPUT:
+    PCA model (μ_s, V, K_pca)
+    Trained regressor (Encoder)
+    Trained classifier (Classifier)
+    KDE parameters (h_kde, sample function)
+
+
+# ------------------------------------------------------------------
+# 2. INFERENCE PHASE (FOR A NEW OBJECT)
+# ------------------------------------------------------------------
+
+INPUT:
+    m_obs      : observed photometry vector (N_filter)
+    Cov_obs    : photometric covariance matrix (N_filter × N_filter)
+    PCA model
+    Encoder
+    Classifier
+PARAMETERS:
+    L_sample   : number of posterior samples (default 1000)
+
+PROCEDURE:
+
+2.1  PREDICT LATENT COEFFICIENT DISTRIBUTION
+    μ̂_c , Σ̂_c = Encoder.predict_with_uncertainty(m_obs, Cov_obs)
+    # Returns predictive mean and covariance of latent vector
+
+2.2  POSTERIOR SAMPLING VIA GAUSSIAN COPULA
+    # Construct correlation matrix R from Σ̂_c
+    R = Σ̂_c / sqrt(diag(Σ̂_c) @ diag(Σ̂_c)^T)
+    # Sample L_sample draws z ~ N(0, R)
+    For l = 1 … L_sample:
+        c_l = μ̂_c + Σ̂_c^(1/2) · z_l          # Cholesky decomposition
+        Store c_l
+
+2.3  DECODE TO FULL‑SPECTRUM
+    For each sampled coefficient vector c_l:
+        S_l = μ_s + V · c_lᵀ                    # size N_wave
+        Store S_l
+
+2.4  COMPUTE POSTERIOR SUMMARY
+    For each wavelength λ_k:
+        mean_S(λ_k)  = mean_l S_l(λ_k)
+        std_S(λ_k)   = std_l  S_l(λ_k)
+    # mean_S is the reconstructed spectrum,
+    # std_S gives 1σ confidence interval.
+
+2.5  TAXONOMY PROBABILITY
+    P_taxon = Classifier.predict_proba(μ̂_c)
+
+OUTPUT:
+    mean_S          : posterior mean reconstructed spectrum
+    std_S           : 1σ uncertainty envelope
+    P_taxon         : probability distribution over taxonomy classes
+    Optional: full list of sampled spectra {S_l}

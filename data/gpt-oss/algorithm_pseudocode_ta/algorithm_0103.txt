@@ -1,0 +1,39 @@
+1.1  Compute mean spectrum μ[λ] = average over all training spectra.
+1.2  Center spectra:  C[i, λ] = Spectra[i, λ] – μ[λ]    for i = 1…N_s.
+1.3  Compute covariance matrix Σ[λ, λ'] = (Cᵀ · C) / (N_s – 1).
+1.4  Eigen‑decompose Σ → eigenvectors V_k[λ] and eigenvalues λ_k.
+1.5  Select first K eigenvectors:  PC[k, λ] = V_k[λ],   k = 1…K.
+1.6  Project every training spectrum onto the PC basis:  
+       coeffs[i, k] = Σ_{λ} PC[k, λ] · C[i, λ].
+
+2.1  For each wavelength λ, compute projected basis contribution:  
+        PB_bk = Σ_{λ} R_b[λ] · PC[k, λ]   (for k = 1…K).
+2.2  Compute band‑mean contribution from the mean spectrum:  
+        μ_b = Σ_{λ} R_b[λ] · μ[λ].
+
+F_b(c) = μ_b + Σ_{k=1..K} PB_bk · c_k      (linear in c).
+
+3.1  Prior mean μ_c = 0
+3.2  Prior covariance Λ = diag(λ_1, …, λ_K)   (using eigenvalues from step 1.4).
+
+4.1  For each band b, construct vector p_b = [PB_b1, …, PB_bK].
+4.2  Stack all bands into matrix P[M, K] where P[b, k] = PB_bk.
+4.3  Stack observed fluxes into vector y[M] = ObsFlux[b].
+4.4  Stack uncertainties into diagonal matrix Σ_y[M, M] with entries σ_b².
+
+4.5  Posterior covariance:
+        Σ_post = (Λ⁻¹ + Pᵀ · Σ_y⁻¹ · P )⁻¹
+
+4.6  Posterior mean:
+        μ_post = Σ_post · ( Pᵀ · Σ_y⁻¹ · y )
+
+5.1  Draw S samples {c^{(s)}} from N(μ_post, Σ_post)   (e.g. S = 1000).
+5.2  For each sample s:
+        Spec_s[λ] = μ[λ] + Σ_{k=1..K} PC[k, λ] · c^{(s)}_k
+5.3  For each wavelength λ:
+        SpecMean[λ]  = mean over s of Spec_s[λ]
+        SpecStd[λ]   = std. dev. over s of Spec_s[λ]
+        SpecCI_low[λ], SpecCI_high[λ] = 
+            quantile( Spec_s[λ], 0.025 ), quantile( Spec_s[λ], 0.975 )
+
+6.1  Output SpecMean[λ], SpecCI_low[λ], SpecCI_high[λ].

@@ -1,0 +1,106 @@
+INPUT
+    N            – number of photometric filters
+    M_obs[1…N]   – observed apparent magnitudes in each filter
+    σ_obs[1…N]   – measurement uncertainties (Gaussian σ)
+    T_i(λ)       – transmission curve of filter i   (i = 1…N)
+    K            – number of basis reflectance spectra
+    B_k(λ)       – basis spectrum k                     (k = 1…K)
+    P_prior(w)   – prior density for weight vector w     (Dirichlet or similar)
+    N_iter       – total MCMC iterations
+    N_burnin     – number of initial iterations to discard
+    thin         – thinning interval for storage
+    C            – zero‑point constant (common to all filters)
+
+OUTPUT
+    {w_samp[j]}  – retained MCMC samples of weight vector w
+    R_post(λ)    – posterior‑mean reconstructed spectrum
+    R_unc(λ)     – posterior standard‑deviation of spectrum
+    P_taxonomy   – probability vector over predefined taxonomic classes
+
+--------------------------------------------------------------------
+1.  INITIALISATION
+    ---------------------------------------------------------------
+    • Initialise weight vector w_curr ← (1/K, …, 1/K)          // uniform
+    • Compute R_curr(λ)  = Σ_{k=1}^{K} w_curr[k] · B_k(λ)
+    • FOR i = 1 … N
+          m_pred_curr[i] = -2.5·log10( ∫ R_curr(λ)·T_i(λ) dλ ) + C
+      END FOR
+    • Log‑likelihood L_curr =
+          -0.5 · Σ_{i=1}^{N} [ (M_obs[i]-m_pred_curr[i])² / σ_obs[i]²
+                               + ln(2π·σ_obs[i]²) ]
+    • Log‑prior  P_curr = ln P_prior( w_curr )
+
+--------------------------------------------------------------------
+2.  MCMC SAMPLING (Metropolis–Hastings)
+    ---------------------------------------------------------------
+    FOR it = 1 TO N_iter
+        a.  PROPOSE new weights
+                w_prop = w_curr + η · randn(K)
+           // η is a tuning step size; enforce constraints:
+           IF any w_prop[k] < 0 THEN
+                 w_prop[k] = max(w_prop[k], 0)
+           END IF
+           // optional normalisation to Σ w_prop = 1
+           w_prop = w_prop / Σ w_prop
+
+        b.  COMPUTE proposed spectrum
+                R_prop(λ) = Σ_{k=1}^{K} w_prop[k] · B_k(λ)
+
+        c.  COMPUTE proposed predicted magnitudes
+                FOR i = 1 … N
+                    m_pred_prop[i] = -2.5·log10( ∫ R_prop(λ)·T_i(λ) dλ ) + C
+                END FOR
+
+        d.  CALCULATE log‑likelihood and log‑prior
+                L_prop = -0.5 · Σ_{i=1}^{N} [ (M_obs[i]-m_pred_prop[i])²
+                                           / σ_obs[i]²
+                                         + ln(2π·σ_obs[i]²) ]
+                P_prop = ln P_prior( w_prop )
+
+        e.  ACCEPT/REJECT
+                α = min( 1,
+                         exp( (L_prop+P_prop) - (L_curr+P_curr) ) )
+                u = Uniform(0,1)
+                IF u < α THEN
+                        w_curr  = w_prop
+                        L_curr  = L_prop
+                        P_curr  = P_prop
+                END IF
+
+        f.  STORE sample after burn‑in and thinning
+                IF (it > N_burnin) AND ((it-N_burnin) mod thin == 0) THEN
+                        store w_curr in {w_samp}
+                END IF
+    END FOR
+
+--------------------------------------------------------------------
+3.  POSTERIOR SUMMARY
+    ---------------------------------------------------------------
+    a.  Spectrum reconstruction
+            FOR each stored sample w_j in {w_samp}
+                R_j(λ) = Σ_{k=1}^{K} w_j[k] · B_k(λ)
+            END FOR
+            R_post(λ) = mean over j of R_j(λ)
+            R_unc(λ)  = std‑dev over j of R_j(λ)
+
+    b.  Taxonomic classification
+            FOR each taxonomy class c with template spectrum T_c(λ)
+                d_c = mean over λ of [ (R_post(λ) - T_c(λ))² ]
+            END FOR
+            // convert distances to probabilities
+            P_taxonomy[c] = exp( -d_c ) / Σ_{c'} exp( -d_c' )
+
+--------------------------------------------------------------------
+4.  OUTLIER CHECK (optional)
+    ---------------------------------------------------------------
+    FOR each filter i
+        Predictive distribution of m_pred given posterior samples:
+                m_pred_samples = { m_pred_j[i] } for all samples j
+        Compute predictive mean μ_i and variance τ_i²
+        IF | M_obs[i] - μ_i | > k · sqrt(σ_obs[i]² + τ_i²)   // e.g. k=3
+                Flag data point i as potential outlier
+        END IF
+    END FOR
+
+RETURN
+    {w_samp}, R_post(λ), R_unc(λ), P_taxonomy, (optional outlier flags)

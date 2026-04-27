@@ -1,0 +1,53 @@
+1.1  Interpolate every spectrum in S_train onto a common wavelength grid λ[1..N_λ].
+1.2  Normalize each spectrum (e.g., divide by its mean or integrate to unity) to remove absolute flux scale.
+1.3  Compute mean spectrum μ[1..N_λ] = average over all S_train rows.
+1.4  Center spectra:  S_centered[i] = S_train[i] – μ   for i=1..N_s.
+
+2.1  Compute covariance matrix C = (1/(N_s-1)) * S_centeredᵀ · S_centered.
+2.2  Eigendecompose C → eigenvalues λ_k and orthonormal eigenvectors e_k[1..N_λ].
+2.3  Sort eigenpairs by decreasing λ_k.
+2.4  Form matrix E_K = [e_1 … e_K]  (size N_λ × K).
+
+3.1  For latent vector z ∈ ℝ^K, set prior   p(z) = N(0, I_K)   (standard normal).
+
+4.1  For any latent vector z, construct a model spectrum:
+        s_model(λ) = μ(λ) + E_K · z   (matrix multiplication, size N_λ).
+4.2  For each filter f, compute model flux:
+        g_f(z) = (∑_λ s_model(λ) * R_f(λ) * Δλ) /
+                 (∑_λ R_f(λ) * Δλ)
+    (Δλ is wavelength step; integration performed discretely).
+
+5.1  For filters with available data:
+        L(z) = ∏_{f}  N( F_obs[f] | g_f(z), σ_f² )
+    (product over filters; missing filters omitted automatically).
+
+6.1  Define unnormalised posterior: p(z | F_obs) ∝ L(z) * p(z).
+6.2  Choose an MCMC sampler (e.g., Metropolis–Hastings or Hamiltonian MC).
+6.3  Initialise z₀ (e.g., zero vector).
+6.4  For iteration t = 1 to N_iter:
+        propose z' = z_{t-1} + ε   (ε drawn from proposal distribution)
+        compute acceptance ratio α = min(1, p(z'|F_obs)/p(z_{t-1}|F_obs))
+        accept or reject accordingly to obtain z_t.
+6.5  Store a chain of samples {z_samples[1..N_burn+N_thin]} after discarding burn‑in
+     and thinning to reduce autocorrelation.
+
+7.1  For each stored sample z_s:
+        s_recon[s] = μ + E_K · z_s     (size N_λ).
+7.2  For each wavelength λ_j:
+        Collect values { s_recon[s][j] } over all samples.
+        Compute:
+            - Posterior mean spectrum:  μ_recon[j] = mean over samples.
+            - 95 % credible interval:  CI_low[j], CI_high[j] from 2.5th and 97.5th percentiles.
+
+8.1  Project training spectra into latent space:
+        z_train[i] = E_Kᵀ · (S_train[i] – μ).
+8.2  Estimate density of training points (e.g., Gaussian mixture or k‑nearest neighbours).
+8.3  For each posterior sample z_s, compute density value ρ(z_s).
+8.4  If a significant fraction of samples lie below a chosen density threshold,
+     flag the object as a potential rare spectral type.
+
+Return:
+    - Posterior latent samples {z_samples}
+    - Mean reconstructed spectrum μ_recon[1..N_λ]
+    - Credible interval bounds CI_low, CI_high
+    - (Optional) Rare‑type flag

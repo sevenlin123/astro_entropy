@@ -1,0 +1,90 @@
+INPUT
+    S_spec_raw   : array of N_ref spectra (λ × N_ref)
+    T_thru       : list of M filter transmission curves
+    phot_obs     : array of K photometric measurements (K ≤ M)
+    unc_phot     : measurement uncertainties for phot_obs
+
+OUTPUT
+    spec_rec     : reconstructed high‑resolution spectrum (λ)
+    tax_prob     : probability vector over taxonomic classes
+
+--------------------------------------------------------------------
+STEP 0: PRE‑PROCESSING
+--------------------------------------------------------------------
+1. Normalize each reference spectrum to unity at a chosen anchor wavelength λ₀.
+   S_norm = normalize(S_spec_raw, λ₀)
+
+2. Compute mean spectrum μ_S and subtract it:
+   S_centered = S_norm – μ_S
+
+--------------------------------------------------------------------
+STEP 1: BUILD PRIOR (Latent Manifold)
+--------------------------------------------------------------------
+3. Perform Principal Component Analysis (PCA):
+       [U, Σ, Vᵀ] = svd(S_centered)
+   Select first K_pca components (e.g., 5–10) that capture >90% variance.
+   Let PC_basis = Vᵀ[:K_pca, :]    // K_pca × N_wavelength
+
+4. Project all centered spectra onto the PCA basis:
+       coeff_real = PC_basis @ S_centered          // shape: (K_pca, N_ref)
+
+5. Estimate density in latent space using Kernel Density Estimation (KDE):
+       kde_model = KDE(coeff_real.T, bandwidth = h_opt)   // h_opt ≈ 0.5
+
+6. Sample N_aug synthetic latent vectors from KDE:
+       coeff_syn = kde_model.sample(N_aug)             // shape: (N_aug, K_pca)
+
+--------------------------------------------------------------------
+STEP 2: SYNTHETIC PHOTOMETRY GENERATION
+--------------------------------------------------------------------
+7. For each synthetic latent vector c in coeff_syn:
+       a. Reconstruct full spectrum:
+              s_syn = μ_S + PC_basisᵀ @ cᵀ                // shape: (N_wavelength,)
+       b. Convolve with each filter transmission T_thru[j]:
+              m_j = ∫ s_syn(λ) · T_thru[j](λ) dλ / ∫ T_thru[j](λ) dλ
+       c. Store vector m_syn = [m_1 … m_M]             // shape: (M,)
+
+8. Add Gaussian noise to each photometric point:
+       σ_noise = 0.20 * m_syn   // 20 % relative uncertainty
+       m_syn_noisy = m_syn + N(0, σ_noise²)
+
+--------------------------------------------------------------------
+STEP 3: TRAIN ENCODER (Photometry → Latent Coefficients)
+--------------------------------------------------------------------
+9. Prepare training dataset:
+       X_train = m_syn_noisy            // shape: (N_aug, M)
+       Y_train = coeff_syn              // shape: (N_aug, K_pca)
+
+10. Train an AutoML regressor (ensemble of GBDTs & neural nets):
+        regressor = AutoMLRegressor()
+        regressor.fit(X_train, Y_train)
+
+--------------------------------------------------------------------
+STEP 4: TRAIN CLASSIFIER (Latent Coefficients → Taxonomy)
+--------------------------------------------------------------------
+11. Assign taxonomic labels to the real reference spectra:
+        labels_real = taxonomy_labels(S_spec_raw)
+
+12. Train an AutoML classifier on latent space:
+        classifier = AutoMLClassifier()
+        classifier.fit(coeff_real.T, labels_real)
+
+--------------------------------------------------------------------
+STEP 5: INFERRING ON NEW OBSERVATIONS
+--------------------------------------------------------------------
+13. Input new photometric measurements phot_obs (length K).
+    If K < M, fill missing filters with NaNs or use interpolation.
+
+14. Apply the trained regressor to obtain predicted latent coefficients:
+        c_pred = regressor.predict(phot_obs)   // shape: (K_pca,)
+
+15. Reconstruct full spectrum:
+        s_rec = μ_S + PC_basisᵀ @ c_predᵀ       // shape: (N_wavelength,)
+
+16. Classify taxonomic type:
+        tax_prob = classifier.predict_proba(c_pred)   // probabilities per class
+
+--------------------------------------------------------------------
+RETURN
+--------------------------------------------------------------------
+17. Return s_rec (continuous spectrum) and tax_prob (class probabilities).

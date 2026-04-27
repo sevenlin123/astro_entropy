@@ -1,0 +1,119 @@
+Input
+------
+- Reference spectra matrix R   (N_ref × L):  N_ref spectra, L wavelength points
+- Associated taxonomic labels L_ref (length N_ref)
+- Filter transmission curves {T_k(λ)}   (K filters)
+- Desired number of principal components K_pc  (e.g., 5–10)
+- KDE bandwidth h_KDE  (≈0.5)
+- Number of synthetic latent samples N_aug  (e.g., 5 000)
+- Encoder training hyper‑parameters (AutoML settings)
+- Classifier training hyper‑parameters (AutoML settings)
+
+Output
+------
+For any new photometric observation m_new (length K):
+- Reconstructed high‑resolution spectrum S_rec (length L)
+- Probabilities P(type | m_new) for each taxonomic class
+
+--------------------------------------------------------------------
+STEP 0: Pre‑processing
+--------------------------------------------------------------------
+1.1  Normalize each reference spectrum to a common scale
+     (e.g., divide by mean reflectance in a reference band or
+      subtract mean spectrum later).
+
+--------------------------------------------------------------------
+STEP 1: Latent‑space construction (the Prior)
+--------------------------------------------------------------------
+2.1  Compute mean spectrum μ  = mean(R, axis=0)          // shape (L,)
+2.2  Center reference spectra:  R_c = R – μ              // shape (N_ref × L)
+2.3  Perform Singular Value Decomposition (SVD) on R_c:
+       R_c = U Σ Vᵀ
+2.4  Keep first K_pc right‑singular vectors:
+       V_pc = Vᵀ[:K_pc, :]   // shape (K_pc × L)
+2.5  Project reference spectra onto PCs to obtain latent codes:
+       C_ref = R_c @ V_pcᵀ    // shape (N_ref × K_pc)
+
+--------------------------------------------------------------------
+STEP 2: KDE augmentation (continuous manifold)
+--------------------------------------------------------------------
+3.1  Fit a non‑parametric KDE to the latent codes C_ref
+       using bandwidth h_KDE (e.g., via scipy.stats.gaussian_kde).
+3.2  Sample N_aug latent vectors from the KDE:
+       C_aug = KDE.sample(N_aug)   // shape (N_aug × K_pc)
+
+--------------------------------------------------------------------
+STEP 3: Synthetic photometry generation
+--------------------------------------------------------------------
+4.1  For each augmented latent vector c_i in C_aug:
+        4.1.1  Reconstruct synthetic spectrum:
+               S_syn_i = μ + (c_i @ V_pc)   // shape (L,)
+        4.1.2  For each filter k in {1,…,K}:
+               - Integrate S_syn_i with filter T_k(λ) to obtain flux:
+                     f_k = ∫ S_syn_i(λ) · T_k(λ) dλ
+               - Store flux vector f_i = [f_1,…,f_K]
+        4.1.3  Inject Gaussian noise:
+               σ_k = 0.20 * f_k      // 20 % relative uncertainty
+               f_noisy_k = f_k + Normal(0, σ_k)
+               Store noisy photometry m_i = [f_noisy_1,…,f_noisy_K]
+
+--------------------------------------------------------------------
+STEP 4: Training data assembly
+--------------------------------------------------------------------
+5.1  Assemble training pairs:
+       X_train = {m_i}  // shape (N_aug × K)
+       Y_train = {c_i}  // shape (N_aug × K_pc)
+
+5.2  (Optional) Append original seed spectra with noiseless photometry
+     and their exact latent codes to enrich training.
+
+--------------------------------------------------------------------
+STEP 5: Encoder (photometry → latent) training
+--------------------------------------------------------------------
+6.1  Feed (X_train, Y_train) into an AutoML regressor:
+        - AutoML selects best model(s) (e.g., gradient‑boosted trees,
+          neural nets) and performs internal hyper‑parameter search.
+6.2  Train encoder E:  ĉ = E(m)  // maps K‑dimensional photometry
+                                         to K_pc‑dimensional latent vector
+6.3  Evaluate basic diagnostics (RMSE) on a hold‑out subset
+     – **No validation loops are included in the core pipeline**.
+
+--------------------------------------------------------------------
+STEP 6: Classifier (latent → taxonomy) training
+--------------------------------------------------------------------
+7.1  Use latent codes from Step 2 (C_ref) and their labels L_ref
+     as training data for a separate AutoML classifier.
+7.2  Train classifier C:  p(type | c)  (probability over classes)
+7.3  Store classifier and its probability output function.
+
+--------------------------------------------------------------------
+STEP 7: Forward inference on new data
+--------------------------------------------------------------------
+8.1  Receive new photometric observation m_new (shape (K,)).
+8.2  Predict latent vector:
+        ĉ = E(m_new)                // encoder output
+8.3  (Optional) If encoder provides predictive uncertainty,
+     sample multiple ĉ_j from predictive distribution.
+
+8.4  Decode to high‑resolution spectrum:
+        S_rec = μ + (ĉ @ V_pc)     // shape (L,)
+
+8.5  Classify taxonomy:
+        P_type = C(ĉ)              // probability vector over classes
+
+--------------------------------------------------------------------
+Result
+------
+Return S_rec and P_type for the new observation.
+
+--------------------------------------------------------------------
+Remarks
+-------
+- All operations are linear algebra (matrix multiplications and
+  dot products); the heavy lifting occurs in the training phase.
+- The KDE augmentation is purely for stabilising the regressor; it
+  does not influence the evaluation of held‑out real spectra.
+- No cross‑validation, bootstrapping, or plotting steps are part of
+  the core algorithm.  The above sequence constitutes the minimal
+  computational pipeline required to reconstruct spectra from sparse
+  photometry using the described probabilistic latent‑space method.

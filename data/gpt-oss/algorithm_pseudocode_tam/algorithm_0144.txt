@@ -1,0 +1,58 @@
+1.1  // Principal‑Component Basis
+      Compute mean spectrum μ_S = mean(S_ref).
+      Center data: X = S_ref – μ_S.
+      Perform PCA on X → eigenvectors V[1..K], eigenvalues λ[1..K].
+      // Keep first K_pca components (K_pca ≈ 5–10).
+      Project each reference spectrum onto basis: 
+          c_i = Vᵀ · (S_ref[i] – μ_S)   // i = 1..N
+      Store coefficient matrix C[N × K_pca].
+
+1.2  // Latent‑Space Augmentation
+      Fit a Kernel‑Density Estimate (KDE) on C → pdf_KDE(c).
+      Sample S_aug = {c^(j)}_{j=1..N_aug} from pdf_KDE  (e.g., N_aug = 5000).
+
+1.3  // Forward Photometry Generation
+      For each synthetic coefficient vector c^(j):
+          Reconstruct spectrum: S_j = μ_S + V · c^(j).
+          For each filter m=1..M:
+              Integrate S_j over F_m to obtain ideal photometry p_j[m].
+          Add Gaussian noise: p̃_j[m] = p_j[m] · (1 + 𝒩(0, σ_phot)).
+      Collect training set:
+          Phot_train = {p̃_j[1..M]}   // size N_aug × M
+          Coeff_train = {c^(j)}       // size N_aug × K_pca
+
+1.4  // Train Encoder (Regression Model)
+      Use an AutoML regressor (e.g., AutoGluon) to learn mapping:
+          f_enc : Phot_train → Coeff_train
+      Train model R on (Phot_train, Coeff_train).
+
+1.5  // Train Taxonomy Classifier
+      Label each reference spectrum with its class label L[i].
+      Train classifier C_cls on (C, L)   // operates in latent space
+
+2.1  // Encode photometry to latent coordinates
+      Input photometry vector p_in[1..K]  (K ≤ M).
+      Pad or interpolate to length M if necessary.
+      Predict latent coefficients:  ĉ = R.predict(p_in).
+
+2.2  // Decode to full spectrum
+      Reconstructed spectrum: S_rec = μ_S + V · ĉ.
+
+2.3  // Taxonomy probabilities
+      Obtain class probabilities: p_tax = C_cls.predict_proba(ĉ).
+
+3.1  // Uncertainty Propagation (Monte Carlo)
+      Sample multiple photometric realizations p_in^i by adding noise.
+      For each sample, repeat 2.1–2.3 to obtain distribution of S_rec.
+      Compute mean and credible intervals per wavelength.
+
+3.2  // Feature Extraction (optional)
+      From S_rec compute spectral slopes, band depths, etc., for further analysis.
+
+TRAINING PHASE:
+    → Load spectra → PCA → KDE → Synthetic photometry + noise → 
+    → Train encoder R (phot→coeff) → Train classifier C_cls (coeff→class)
+
+INFERENCE PHASE:
+    → New photometry → Encode → Decoding → Reconstructed spectrum
+    → Classify → Output S_rec & p_tax

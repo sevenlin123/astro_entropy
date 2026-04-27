@@ -1,0 +1,73 @@
+# ------------------------------------------------------------------
+# Phase 1 – Preparation (define latent manifold and augment training data)
+# ------------------------------------------------------------------
+
+# INPUT
+#   S_ref  : 2D array of reference spectra (N_ref x L)   # L = spectral bins
+#   filt   : list of filter transmission curves (N_filt)
+#   h_kde  : bandwidth for KDE (default 0.5)
+
+# STEP 1 – Principal Component Analysis (PCA)
+PCA_model = PCA(n_components = K)            # choose K ≈ 8–10
+PC_vectors  = PCA_model.fit_transform(S_ref) # latent coefficients (N_ref x K)
+PC_mean     = mean(PC_vectors, axis=0)
+PC_std      = std(PC_vectors, axis=0)
+
+# STEP 2 – Kernel Density Estimation (KDE) in latent space
+kde = KernelDensity(kernel='gaussian', bandwidth=h_kde)
+kde.fit(PC_vectors)                          # density over K‑dimensional space
+
+# STEP 3 – Generate synthetic latent samples
+N_aug = 5000                                  # number of synthetic samples
+latent_aug = kde.sample(N_aug)                # draws from KDE (N_aug x K)
+
+# STEP 4 – Reconstruct spectra from synthetic latent vectors
+S_aug = PCA_model.inverse_transform(latent_aug)   # (N_aug x L)
+
+# STEP 5 – Forward‑model synthetic photometry
+def compute_photometry(spectrum, filt):
+    # convolve spectrum with each filter transmission
+    return [∫ spectrum(λ) * filt[i](λ) dλ / ∫ filt[i](λ) dλ for i in range(N_filt)]
+
+phot_aug = []                                 # list of photometry arrays
+for s in S_aug:
+    m = compute_photometry(s, filt)           # noiseless photometry
+    # add Gaussian noise (relative 20 % on each band)
+    noise = np.random.normal(0, 0.2 * m)
+    phot_aug.append(m + noise)
+
+# ------------------------------------------------------------------
+# Phase 2 – Training (regressor & classifier)
+# ------------------------------------------------------------------
+
+# 2a – Train photometry → latent regressor
+X_train = np.array(phot_aug)                  # shape (N_aug x N_filt)
+y_train = latent_aug                         # shape (N_aug x K)
+
+Regressor = AutoML_Regression()               # e.g., ensemble of GBDTs & NNs
+Regressor.fit(X_train, y_train)
+
+# 2b – Train latent → taxonomy classifier
+labels = assign_taxonomic_labels(S_ref)       # from known spectra
+Classifier = AutoML_Classification()
+Classifier.fit(latent_aug, labels)            # can also train on real latent vectors if desired
+
+# ------------------------------------------------------------------
+# Phase 3 – Forward Inference (apply to new photometry)
+# ------------------------------------------------------------------
+
+# INPUT
+#   m_new   : observed photometry vector (length N_filt)
+
+# STEP 1 – Predict latent coefficients
+latent_pred = Regressor.predict(m_new)        # shape (K,)
+
+# STEP 2 – Reconstruct full spectrum
+S_rec = PCA_model.inverse_transform(latent_pred)   # shape (L,)
+
+# STEP 3 – Optional taxonomy prediction
+tax_prob = Classifier.predict_proba(latent_pred)    # probabilities over classes
+
+# OUTPUT
+#   S_rec    : reconstructed high‑resolution spectrum
+#   tax_prob : taxonomic probability vector

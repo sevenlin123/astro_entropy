@@ -1,0 +1,69 @@
+Input:
+    PHOTOMETRY   // list of {obj_id, band, mag, err}
+    LIBRARY      // list of {basis_id, λ_grid, flux_array}
+    FILTERS      // dict {band : {λ_grid, response_array}}
+    ZERO_POINT   // magnitude zero‑point (for flux conversion)
+
+Parameters:
+    N_SAMPLES    // number of MCMC samples per object
+    BURN_IN      // number of burn‑in iterations
+    PRIOR_SIGMA  // standard deviation for coefficient priors
+    RHO          // step size scaling factor for proposal
+
+Procedure:
+
+1. Preprocess library
+   1.1 Interpolate each basis spectrum onto a common λ_grid.
+   1.2 Normalize each basis to unit area or reflectance scale.
+
+2. Convert photometry to fluxes
+   For each record in PHOTOMETRY:
+       F_obs = 10^(-0.4 * (mag - ZERO_POINT))
+       σ_F  = ln(10)/2.5 * F_obs * err
+       Store {obj_id, band, F_obs, σ_F}
+
+3. For each unique obj_id in PHOTOMETRY:
+   3.1 Gather all records belonging to obj_id → DATA
+   3.2 Define measurement model:
+        For a coefficient vector a = [a_1 … a_K] (K = #bases)
+            Spectrum S_a(λ) = Σ_k a_k * Basis_k(λ)
+            For each band j in DATA:
+                I_j(a) = ∫ S_a(λ) * R_j(λ) dλ / ∫ R_j(λ) dλ
+                μ_j(a) = I_j(a)   // predicted flux in band j
+   3.3 Define prior on a:
+        Prior(a) = Π_k N(a_k | 0, PRIOR_SIGMA^2)  subject to a_k ≥ 0 and Σ a_k = 1
+   3.4 Define log‑posterior:
+        logp(a) = Σ_{j∈DATA} [ -0.5 * ((F_obs_j - μ_j(a))/σ_F_j)^2
+                               - ln(σ_F_j * √(2π)) ] + ln(Prior(a))
+   3.5 Initialize MCMC chain:
+        a_current = uniform([0,1]) normalized to sum 1
+        Accept a_current
+   3.6 Run MCMC for (BURN_IN + N_SAMPLES) iterations:
+        For iter = 1 to BURN_IN + N_SAMPLES:
+            Propose a_prop = a_current + Normal(0, RHO^2 * I_K)
+            If any a_prop_k < 0 or Σ a_prop ≠ 1:
+                Reject; continue
+            Compute logp_prop = logp(a_prop)
+            α = min(1, exp(logp_prop - logp(a_current)))
+            Draw u ~ Uniform(0,1)
+            If u < α:
+                a_current = a_prop
+                logp(a_current) = logp_prop
+            If iter > BURN_IN:
+                Save a_current as sample
+   3.7 Posterior summaries:
+        a_mean = average of saved samples
+        S_recon(λ) = Σ_k a_mean_k * Basis_k(λ)
+        For each band j:
+            I_j_recon = ∫ S_recon(λ) * R_j(λ) dλ / ∫ R_j(λ) dλ
+            mag_pred_j = -2.5 * log10(I_j_recon) + ZERO_POINT
+   3.8 Classification (optional):
+        Compute χ² between S_recon and each class prototype spectrum.
+        Assign class with minimum χ².
+
+Output per obj_id:
+    Posterior samples {a^(n)}_{n=1}^{N_SAMPLES}
+    Posterior mean coefficients a_mean
+    Reconstructed spectrum S_recon(λ)
+    Synthetic magnitudes {mag_pred_j}
+    Optional taxonomy label

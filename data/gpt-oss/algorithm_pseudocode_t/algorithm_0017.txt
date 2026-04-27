@@ -1,0 +1,74 @@
+FOR each object O IN Objects DO
+
+    /* 1. Build spectral basis */
+    DEFINE BasisFunctions B_m(λ)   // e.g., orthogonal polynomials or
+                                  // weighted sums of SpectralLibrary spectra
+    FOR m = 1 TO M DO
+        SET B_m(λ) = linear_combination_of(SpectralLibrary, weights_w_m)
+    END FOR
+
+    /* 2. Forward model: synthetic magnitudes */
+    FUNCTION SyntheticMag(coeffs a[1..M]) RETURNS vector M_syn[1..J]
+        FOR j = 1 TO J DO
+            // Construct flux from basis
+            F(λ) = Σ_{m=1}^{M} a[m] * B_m(λ)
+
+            // Integrate over filter bandpass
+            I_j = ∫ F(λ) * FilterCurves[Filters[j]](λ) dλ
+
+            // Convert to magnitude (AB system)
+            M_syn[j] = -2.5 * log10(I_j) + ZP_j
+        END FOR
+        RETURN M_syn
+    END FUNCTION
+
+    /* 3. Likelihood */
+    FUNCTION LogLikelihood(a[1..M]) RETURNS ℓ
+        M_syn = SyntheticMag(a)
+        ℓ = 0
+        FOR j = 1 TO J DO
+            ℓ += -0.5 * ((O.Mag[j] - M_syn[j]) / O.Err[j])^2
+        END FOR
+        RETURN ℓ
+    END FUNCTION
+
+    /* 4. Priors on coefficients */
+    FOR m = 1 TO M DO
+        PRIOR[a[m]] ~ Normal(μ_m, σ_m)       // e.g., μ_m = 0, σ_m = 1
+    END FOR
+
+    /* 5. Posterior sampling (Metropolis–Hastings) */
+    INITIALIZE a_current = zeros(M)
+    INITIALIZE samples = []
+    FOR n = 1 TO N_iter DO
+        PROPOSE a_proposed = a_current + RandomGaussian(0, step_size)
+        Δℓ = LogLikelihood(a_proposed) - LogLikelihood(a_current)
+        ACCEPT = min(1, exp(Δℓ))
+        IF Uniform(0,1) < ACCEPT THEN
+            a_current = a_proposed
+        END IF
+        APPEND a_current TO samples
+    END FOR
+
+    /* 6. Spectral reconstruction */
+    COMPUTE posterior_mean_a = mean(samples)
+    COMPUTE posterior_cov_a  = covariance(samples)
+    DEFINE R(λ) = Σ_{m=1}^{M} posterior_mean_a[m] * B_m(λ)
+
+    /* 7. Taxonomic classification */
+    FOR each taxonomy class C DO
+        DEFINE TemplateSpectrum_C(λ)
+        COMPUTE χ²_C = Σ_{j=1}^{J} ((O.Mag[j] - SyntheticMag_C[j]) / O.Err[j])^2
+        // Convert χ² to probability (assuming Gaussian errors)
+        P_C = exp(-0.5 * χ²_C)
+    END FOR
+    NORMALIZE {P_C} so that Σ P_C = 1
+
+    /* 8. Store results */
+    O.Result = {
+        CoefficientsPosterior: samples,
+        Spectrum: R(λ),
+        ClassificationProbabilities: {P_C}
+    }
+
+END FOR

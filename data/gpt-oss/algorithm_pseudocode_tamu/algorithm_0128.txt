@@ -1,0 +1,81 @@
+INPUT
+  S_train[1..N]      # high‑resolution reflectance spectra of training TNOs
+  λ[1..L]            # wavelength grid of spectra
+  T_filters[1..F]    # filter throughput curves (e.g., JWST NIRCam)
+  m_new[1..M]        # sparse photometric measurements of new object
+  err_new[1..M]      # 1σ uncertainties on m_new
+  K                  # number of principal components to retain
+  h_bandwidth        # KDE bandwidth (≈0.5)
+  σ_noise_rel        # relative noise to inject into synthetic photometry (0.20)
+
+OUTPUT
+  μ_S                # posterior mean spectrum (λ → reflectance)
+  CI_S[α][1..L]      # α‑percentile credible interval per wavelength
+  tax_prob[4]        # posterior probabilities of H₂O, CO₂, Organic, Methanol classes
+
+--------------------------------------------------------------------
+STEP 1 : Build Prior (latent manifold)
+--------------------------------------------------------------------
+1.1  Perform PCA on S_train:
+       • Center spectra: S_c[i] = S_train[i] – mean_over_samples
+       • Compute covariance C = cov(S_c)
+       • Eigen‑decompose C → eigenvalues λ_e[1..L], eigenvectors V[1..L]
+       • Select first K eigenvectors: V_K[1..K]
+1.2  Project each training spectrum onto K PCs:
+       FOR i = 1 TO N:
+           c[i][1..K] = transpose(V_K) · S_c[i]     # PCA coefficients
+1.3  Fit Kernel Density Estimate (Gaussian kernel) on {c[i]}:
+       KDE(c) with bandwidth = h_bandwidth
+1.4  Draw N_aug synthetic coefficient vectors:
+       FOR j = 1 TO N_aug:
+           c_synth[j] ~ KDE(c)
+1.5  Reconstruct synthetic spectra:
+       FOR j = 1 TO N_aug:
+           S_synth[j] = mean_over_samples + V_K · c_synth[j]   # inverse PCA
+1.6  Forward‑model photometry:
+       FOR j = 1 TO N_aug:
+           FOR k = 1 TO F:
+               m_synth[j][k] = ∫ S_synth[j](λ) * T_filters[k](λ) dλ
+1.7  Inject observational noise:
+       FOR j = 1 TO N_aug:
+           FOR k = 1 TO F:
+               m_noisy[j][k] = m_synth[j][k] * (1 + Normal(0, σ_noise_rel))
+--------------------------------------------------------------------
+STEP 2 : Train Encoder (photometry → PCA space)
+--------------------------------------------------------------------
+2.1  Assemble training dataset:
+       X_train = {m_noisy[j]}          # shape (N_aug, F)
+       Y_train = {c_synth[j]}          # shape (N_aug, K)
+2.2  Use AutoML regressor (e.g., AutoGluon Ensemble of GBDT & NN):
+       EncoderModel = AutoML_Regress(X_train → Y_train)
+2.3  (Optional) Train latent‑space classifier:
+       Labels = taxonomy tags for original training spectra
+       ClassifierModel = AutoML_Classifier({c[i]} → Labels)
+--------------------------------------------------------------------
+STEP 3 : Inference for a New Object
+--------------------------------------------------------------------
+3.1  Generate photometric realizations to propagate measurement noise:
+       FOR s = 1 TO N_real:
+           FOR k = 1 TO M:
+               m_samp[s][k] = m_new[k] + Normal(0, err_new[k])
+3.2  Predict latent coefficients for each realization:
+       FOR s = 1 TO N_real:
+           c_pred[s] = EncoderModel.predict(m_samp[s])      # shape (K)
+3.3  Preserve joint posterior correlations (optional):
+       • Estimate covariance Σ_c from {c_pred[s]}
+       • Sample from multivariate normal N(mean=c̄, Σ=Σ_c) or use Gaussian Copula
+       For simplicity, we keep the empirical samples {c_pred[s]}.
+3.4  Reconstruct spectra for each sampled coefficient vector:
+       FOR s = 1 TO N_real:
+           S_recon[s] = mean_over_samples + V_K · c_pred[s]   # shape (L)
+3.5  Compute posterior statistics per wavelength:
+       μ_S[λ]   = mean_over_samps(S_recon[:, λ])
+       CI_S[α][λ] = percentile_of(S_recon[:, λ], α)   # e.g., 2.5%, 97.5%
+3.6  Taxonomy probabilities:
+       • Convert each c_pred[s] to class probability via ClassifierModel
+         p_class[s] = ClassifierModel.predict_proba(c_pred[s])
+       • Average over realizations:
+         tax_prob = mean_over_samps(p_class)
+--------------------------------------------------------------------
+RETURN
+  μ_S, CI_S, tax_prob

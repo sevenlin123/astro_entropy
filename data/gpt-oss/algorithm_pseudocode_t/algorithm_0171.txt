@@ -1,0 +1,49 @@
+Input
+------
+- Photometric measurements          :  m[1..N]          (flux or magnitude)
+- Measurement uncertainties         :  σ[1..N]
+- Filter transmission curves       :  T[f][λ]          for f = 1..N
+- Spectral basis functions (PCA or templates) :  E[k][λ]     for k = 1..K
+- Mean spectrum (optional)           :  μ[λ]
+- Prior variance for coefficients    :  τ²   (scalar or array τ²[k])
+
+Output
+------
+- Posterior mean of basis coefficients :  c̄[1..K]
+- Posterior covariance of coefficients :  Σc[K][K]
+- Reconstructed spectrum on wavelength grid λ:  Ŝ[λ]
+- Spectrum variance on λ                         :  VarS[λ]
+
+A[f][k] = Σ_λ  T[f][λ] · E[k][λ]               // weighted integral
+
+b[f]   = Σ_λ  T[f][λ] · μ[λ]
+
+p_f(c) = Σ_k  A[f][k] · c[k] + b[f]      ,   f = 1..N
+
+A_mat  = A              // N × K matrix
+b_vec  = b              // N–vector
+p_vec  = A_mat · c + b_vec
+
+L(c | m) ∝ exp( -½ · (m – p_vec(c))ᵀ · W · (m – p_vec(c)) )
+W = diag( 1 / σ² )           // N × N weight matrix
+
+π(c) ∝ exp( -½ · cᵀ · Λ⁻¹ · c )
+Λ⁻¹ = diag( 1 / τ² )         // K × K prior precision
+
+Σ⁻¹ = A_matᵀ · W · A_mat + Λ⁻¹
+
+Σc = inverse( Σ⁻¹ )          // K × K matrix
+
+c̄ = Σc · ( A_matᵀ · W · ( m – b_vec ) )
+
+c_sample ~ Normal( c̄ , Σc )
+
+Ŝ[λ]   = μ[λ] + Σ_k  c_sample[k] · E[k][λ]            // reconstructed spectrum
+VarS[λ] = Σ_{k,l}  E[k][λ] · E[l][λ] · Σc[k,l]        // propagated variance
+
+return {
+    coefficients_mean : c̄,
+    coefficients_cov  : Σc,
+    spectrum          : Ŝ,
+    spectrum_variance : VarS
+}

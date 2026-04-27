@@ -1,0 +1,91 @@
+1.1   INPUT:  Set of training spectra S = { s_i(λ) }  (i = 1 … K)
+        Common wavelength grid Λ = { λ_k }           (k = 1 … L)
+
+1.2   NORMALIZE EACH s_i to unit integrated flux or
+      remove absolute albedo to isolate spectral shape.
+      Store normalized spectra S_norm.
+
+1.3   COMPUTE MEAN SPECTRUM:
+        μ(λ_k) = (1/K) Σ_i s_i(λ_k)
+
+1.4   SUBTRACT MEAN:
+        For each i: r_i(λ_k) = s_i(λ_k) – μ(λ_k)
+
+1.5   PERFORM PRINCIPAL COMPONENT ANALYSIS (PCA):
+        – Build data matrix R of size (K × L) with rows r_i.
+        – Compute covariance C = (1/(K−1)) Rᵀ R
+        – Eigen‑decompose C → eigenvalues λ_j and orthonormal eigenvectors v_j(λ)
+          (j = 1 … L).
+        – ORDER eigenvectors by descending λ_j.
+        – SELECT N leading PCs (N ≈ 8–10 for reconstruction).
+
+1.6   STORE:
+        • Mean spectrum μ(λ)
+        • Projection matrix V_N = [ v_1 … v_N ]  (L × N)
+        • Training coefficients A = { a_i } where
+              a_i = V_Nᵀ · r_i          (N‑dimensional column vector)
+        • Coefficient covariance Σ_a = cov(A)
+
+2.1   INPUT:  Set of M filter transmission curves { f_m(λ) }  (m = 1 … M)
+
+2.2   FOR each filter m:
+        – INTERPOLATE f_m onto the common grid Λ.
+        – NORMALISE so that ∫ f_m(λ) dλ = 1.
+
+2.3   COMPUTE “Mean Photometry” vector F:
+        For each m:  F_m = ∑_k f_m(λ_k) · μ(λ_k) · Δλ_k
+
+2.4   COMPUTE “PC Contribution Matrix” G:
+        For each m and j:
+            G_{m,j} = ∑_k f_m(λ_k) · v_j(λ_k) · Δλ_k
+
+3.1   INPUT:
+        • Measured photometry vector y = { y_m }  (m = 1 … M)
+        • Measurement uncertainties σ = { σ_m }  (assumed independent)
+
+3.2   DEFINE:
+        – Observation covariance Σ_y = diag( σ₁² , … , σ_M² )
+        – Likelihood:  y | a  ~  Normal( F + G a , Σ_y )
+
+3.3   PRIOR ON COEFFICIENTS:
+        – a  ~  Normal( 0 , Σ_a )     (from training phase)
+
+3.4   POSTERIOR (analytic Gaussian):
+        – Compute precision matrix:
+              P = Gᵀ Σ_y⁻¹ G + Σ_a⁻¹
+        – Posterior covariance:
+              Σ_post = P⁻¹
+        – Posterior mean:
+              â  = Σ_post ( Gᵀ Σ_y⁻¹ ( y – F ) )
+
+3.5   OPTIONAL:  DRAW SAMPLES from posterior:
+        For t = 1 … N_samples:
+            a_t  ~  Normal( â , Σ_post )
+            s_t(λ) = μ(λ) + V_N · a_t
+        Use samples to estimate credible intervals at each λ.
+
+4.1   RECONSTRUCT POINT ESTIMATE:
+        ŝ(λ) = μ(λ) + V_N · â
+
+4.2   UNCERTAINTY CALIBRATION (if sampling used):
+        • At each λ_k, collect values { s_t(λ_k) } from all samples.
+        • Compute desired quantiles (e.g., 2.5 % and 97.5 %) → 95 % CI.
+
+4.3   OUTPUT:
+        • Reconstructed spectrum ŝ(λ)  (full wavelength coverage)
+        • Credible‑interval band (optional)
+
+5.1   FOR any candidate filter set S′ ⊆ {f_m}:
+        – Repeat Steps 2.2–2.4 to obtain F′ and G′.
+        – Compute posterior covariance Σ_post′ using the same formula.
+        – Evaluate criterion:
+              Expected entropy ≈ 0.5 * ln(det(Σ_post′))
+          or
+              Trace(Σ_post′)  (total variance).
+        – Rank filter sets by minimal entropy/variance.
+
+6.1   After reconstructing a large sample:
+        – Compare reconstructed spectra to a distance metric
+          (e.g., Mahalanobis distance in PC space).
+        – Flag spectra with posterior probability below threshold
+          (e.g., 1 % tail) as potential outliers.

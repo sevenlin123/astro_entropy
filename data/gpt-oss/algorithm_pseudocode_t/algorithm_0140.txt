@@ -1,0 +1,80 @@
+Input:
+    N objects, each with m photometric measurements {f_i, σ_i, R_i(λ)}  
+        (f_i : observed flux, σ_i : flux uncertainty, R_i(λ) : filter transmission)
+    K spectral basis functions {B_j(λ)}  (j = 1 … K)
+
+Output for each object:
+    Reconstructed spectrum S(λ) and associated uncertainty band
+
+--------------------------------------------------------------------
+Step 0: Pre‑compute synthetic fluxes for basis–filter combinations
+--------------------------------------------------------------------
+for j = 1 to K:
+    for i = 1 to m:
+        F_basis[j][i] ← ∫ B_j(λ) * R_i(λ) dλ          // numerical quadrature
+
+--------------------------------------------------------------------
+Step 1: Define parameterisation of the spectrum
+--------------------------------------------------------------------
+Let c = (c_1 … c_K)^T be the coefficient vector.
+The physical spectrum is S(λ) = Σ_{j=1}^{K} c_j * B_j(λ).
+
+--------------------------------------------------------------------
+Step 2: Construct the likelihood
+--------------------------------------------------------------------
+For given c, the model flux in filter i is
+    f_model(i; c) = Σ_{j=1}^{K} c_j * F_basis[j][i]
+
+Assume Gaussian photometric noise:
+    logL(c) = –½ Σ_{i=1}^{m} [ (f_i – f_model(i; c)) / σ_i ]²
+
+--------------------------------------------------------------------
+Step 3: Specify a prior on the coefficients
+--------------------------------------------------------------------
+Choose a zero‑mean multivariate normal prior:
+    logP(c) = –½ c^T Σ_prior⁻¹ c + const
+where Σ_prior is a K×K covariance matrix (e.g. diagonal with large variances).
+
+--------------------------------------------------------------------
+Step 4: Find the MAP estimate of the coefficients
+--------------------------------------------------------------------
+Define the log‑posterior:
+    logπ(c) = logL(c) + logP(c)
+
+Use a quasi‑Newton optimiser (e.g., LBFGS) to maximise logπ(c):
+    c_MAP ← argmax_c logπ(c)
+
+--------------------------------------------------------------------
+Step 5: Estimate posterior curvature (uncertainty)
+--------------------------------------------------------------------
+Compute the Hessian H at c_MAP:
+    H = ∇²[–logπ(c)] evaluated at c_MAP
+
+Posterior covariance approximation:
+    Σ_post = H⁻¹
+
+--------------------------------------------------------------------
+Step 6: Generate an ensemble of spectra for uncertainty propagation
+--------------------------------------------------------------------
+Draw N_samples (e.g., 1000) coefficient vectors from
+    c ~ N(c_MAP, Σ_post)
+
+For each sample s_k (k = 1 … N_samples):
+    S_k(λ) = Σ_{j=1}^{K} c_k_j * B_j(λ)
+
+--------------------------------------------------------------------
+Step 7: Assemble the mean spectrum and confidence interval
+--------------------------------------------------------------------
+For each wavelength λ:
+    μ_S(λ)     = (1/N_samples) Σ_{k=1}^{N_samples} S_k(λ)
+    σ_S(λ)     = sqrt( (1/(N_samples-1)) Σ_{k=1}^{N_samples} [S_k(λ) – μ_S(λ)]² )
+    Upper95(λ) = μ_S(λ) + 1.96 * σ_S(λ)
+    Lower95(λ) = μ_S(λ) – 1.96 * σ_S(λ)
+
+--------------------------------------------------------------------
+Step 8: Return results
+--------------------------------------------------------------------
+For each object, output:
+    • Mean spectrum μ_S(λ)
+    • 95 % confidence band [Lower95(λ), Upper95(λ)]
+    • Optional: MAP coefficients c_MAP

@@ -1,0 +1,87 @@
+Input:
+  • Training spectra {S_i(λ)}   i = 1 … N , each sampled at L wavelengths
+  • Set of M photometric filters {T_j(λ)} , j = 1 … M
+  • New object photometry y_obs(j) with measurement uncertainties σ_obs(j)
+  • Number of principal components to retain K  (e.g. K = 8–10)
+
+Output:
+  • Mean reconstructed spectrum  ŝ(λ)
+  • Posterior covariance of the spectrum  Cov_s(λ,λ′)
+  • (Optional) Sampled spectra {s_k(λ)} from posterior
+
+--------------------------------------------------------------------
+Step 1 – Principal‑Component Basis (training phase)
+--------------------------------------------------------------------
+1.1 Compute the mean spectrum
+    μ(λ) ← (1/N) Σ_i S_i(λ)
+
+1.2 Center the training data
+    X_i(λ) ← S_i(λ) – μ(λ)      for all i
+
+1.3 Form the covariance matrix
+    C ← (1/(N–1)) Σ_i X_i X_iᵀ   (size L×L)
+
+1.4 Eigendecompose C
+    C = V Λ Vᵀ      → eigenvalues λ_k sorted descending
+                     eigenvectors v_k (columns of V)
+
+1.5 Retain the first K eigenvectors
+    P ← [v_1 … v_K]                (size L×K)
+    λ̃ ← diag(λ_1 … λ_K)           (K×K)
+
+Store μ(λ), P, and λ̃ for later use.
+
+--------------------------------------------------------------------
+Step 2 – Linear mapping from PCs to photometry
+--------------------------------------------------------------------
+For each filter j = 1 … M
+   For each component k = 1 … K
+        R(j,k) ← ∫ T_j(λ) · P(:,k)(λ) dλ          // filter response to PC
+   m(j) ← ∫ T_j(λ) · μ(λ) dλ                       // mean photometry
+
+Result:  A (M×K) matrix with entries A(j,k)=R(j,k),
+         mean photometry vector m (M×1).
+
+--------------------------------------------------------------------
+Step 3 – Bayesian inference for a new object
+--------------------------------------------------------------------
+3.1 Define likelihood
+    y_obs | c  ~  N( m + A·c , W⁻¹ )            // W = diag(1/σ_obs²)
+
+3.2 Prior on coefficients
+    c ~ N(0 , I_K)                              // zero‑mean unit variance
+
+3.3 Compute posterior precision
+    Λ ← Aᵀ·W·A + I_K                            // K×K matrix
+
+3.4 Compute posterior mean
+    μ_c ← Λ⁻¹ · Aᵀ·W · (y_obs – m)
+
+3.5 Compute posterior covariance
+    Σ_c ← Λ⁻¹
+
+--------------------------------------------------------------------
+Step 4 – Spectrum reconstruction & uncertainty
+--------------------------------------------------------------------
+4.1 Mean reconstructed spectrum
+    ŝ(λ) ← μ(λ) + P · μ_c                      // size L×1
+
+4.2 Posterior covariance of the spectrum
+    Cov_s(λ,λ′) ← P · Σ_c · Pᵀ                 // size L×L
+
+4.3 (Optional) Generate posterior samples
+    For t = 1 … N_samples
+         c_t ~ N( μ_c , Σ_c )
+         s_t(λ) ← μ(λ) + P · c_t
+
+Return ŝ(λ), Cov_s(λ,λ′) and optionally {s_t(λ)}.
+
+--------------------------------------------------------------------
+Step 5 – (Optional) Flagging rare spectral types
+--------------------------------------------------------------------
+Compute the Mahalanobis distance of μ_c from the training PC distribution:
+    D² ← μ_cᵀ · λ̃⁻¹ · μ_c
+If D² > threshold (e.g., 95th percentile of χ²_K) → flag object as potential rare type.
+
+--------------------------------------------------------------------
+End of Algorithm

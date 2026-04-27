@@ -1,0 +1,80 @@
+text
+INPUT
+  - Spectral dataset S_raw = { s_i[λ] }   // high‑resolution near‑IR spectra of N ≈ 50 TNOs
+  - Filter set F = { f_k(λ) }              // JWST NIRCam effective throughput curves
+  - Photometry for new target p_obs[ k ]    // sparse reflectance (or magnitude) measurements
+
+OUTPUT
+  - Reconstructed high‑resolution spectrum S_rec[ λ ]
+  - Posterior samples of S[ λ ] (uncertainty bounds)
+  - Taxonomic probability vector P_tax
+
+--------------------------------------------------------------------
+1. Pre‑processing
+   1.1 Convert all spectra to reflectance units if necessary.
+   1.2 Interpolate spectra onto a common wavelength grid λ_grid.
+
+--------------------------------------------------------------------
+2. Latent‑space construction (Prior)
+   2.1 Perform Principal Component Analysis (PCA) on S_raw:
+        • Compute mean spectrum μ_S
+        • Compute covariance matrix C
+        • Obtain eigenvectors V = [v_1 … v_K] (K = desired dimensionality, e.g. 5–10)
+        • Project each spectrum onto PCs: 
+              z_i = Vᵀ · (s_i – μ_S)      // latent coefficients
+   2.2 Estimate probability density of latent coefficients:
+        • Use Gaussian Kernel Density Estimation (KDE) on { z_i }
+          * Bandwidth h ≈ 0.5 (tuned empirically)
+        • Sample M synthetic latent vectors { z_syn_j } from KDE
+   2.3 Generate synthetic spectra:
+        • For each z_syn_j, reconstruct spectrum:
+              s_syn_j = μ_S + V · z_syn_j
+        • Store { s_syn_j } as synthetic training spectra
+
+--------------------------------------------------------------------
+3. Forward photometry generation (Implicit Likelihood)
+   3.1 For every synthetic spectrum s_syn_j:
+        • Convolve with each filter throughput f_k:
+              m_syn_j[k] = ∫ s_syn_j(λ) · f_k(λ) dλ / ∫ f_k(λ) dλ
+        • Add Gaussian noise to each band:
+              m_syn_noisy_j[k] = m_syn_j[k] + ε_k
+              ε_k ~ Normal(0, σ_rel * m_syn_j[k]),   σ_rel = 0.20
+   3.2 Pair each noisy photometry vector m_syn_noisy_j with its latent vector z_syn_j.
+
+--------------------------------------------------------------------
+4. Encoder training (AutoML regressor)
+   4.1 Assemble training set T_enc = { (m_syn_noisy_j , z_syn_j) }.
+   4.2 Feed T_enc to an AutoML framework (e.g., AutoGluon):
+        • Hyper‑parameter search over tree‑based ensembles (XGBoost, LightGBM, CatBoost).
+        • Train model R_enc:  m → ẑ
+   4.3 Validate internal cross‑validation performance (ignored in final pipeline).
+
+--------------------------------------------------------------------
+5. Taxonomy classifier (latent‑space)
+   5.1 Label each synthetic spectrum s_syn_j with its known taxonomic class (from original seed labels).
+   5.2 Train separate AutoML classifier C_cls on latent space:
+        • Input: z_syn_j
+        • Output: class probabilities P_class
+   5.3 (Optional) Combine with encoder outputs for end‑to‑end probability estimation.
+
+--------------------------------------------------------------------
+6. Inference on new observation
+   6.1 Input photometry p_obs (length K_filt) into encoder:
+        z_pred = R_enc( p_obs )
+   6.2 Generate multiple posterior samples:
+        • Draw N_post samples { z_samp_n } from a Gaussian Copula
+            – Marginals centered at z_pred with covariance from encoder’s prediction uncertainty
+            – Preserve pairwise correlations derived from KDE or training data
+        • For each z_samp_n, reconstruct spectrum:
+              S_n[λ] = μ_S + V · z_samp_n
+   6.3 Estimate posterior mean and credible intervals:
+        • Mean spectrum S_mean = average( { S_n } )
+        • Credible interval per λ: percentile bounds of { S_n[λ] }
+   6.4 Classify:
+        • Pass z_pred into classifier C_cls → P_tax = C_cls( z_pred )
+
+--------------------------------------------------------------------
+7. Return results
+   • S_rec = S_mean
+   • Uncertainty bounds from { S_n }
+   • Taxonomic probabilities P_tax

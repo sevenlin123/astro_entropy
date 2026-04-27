@@ -1,0 +1,68 @@
+INPUT:
+    - Training spectra matrix S  (N_spectra × N_wavelengths)
+    - Filter set F = {f_1,…,f_M}
+    - Photometric data for target object P = {p_k, σ_k}   (k=1…M)
+    - Number of principal components K (typically 8–10)
+
+OUTPUT:
+    - Reconstructed spectrum Ŝ(λ)
+    - Credible interval bands Ŝ_low(λ), Ŝ_high(λ)
+
+--------------------------------------------------------------------
+1.  Pre‑processing
+--------------------------------------------------------------------
+1.1  Normalize each training spectrum to its mean reflectance
+1.2  Compute mean spectrum μ(λ) across all training spectra
+
+--------------------------------------------------------------------
+2.  Principal Component Analysis (PCA)
+--------------------------------------------------------------------
+2.1  Center spectra:  C = S – μ
+2.2  Compute covariance matrix Σ = (Cᵀ·C)/(N_spectra-1)
+2.3  Perform eigendecomposition:  Σ = U·Λ·Uᵀ
+2.4  Select first K eigenvectors → principal basis B = U[:,1:K]
+2.5  Project each centered spectrum onto basis:
+        a_i = C_i · B   for i=1…N_spectra
+   Store coefficient matrix A (N_spectra × K)
+
+--------------------------------------------------------------------
+3.  Build forward photometric model
+--------------------------------------------------------------------
+For each filter f_m:
+    3.1  Compute synthetic filter transmission vector t_m(λ)
+    3.2  Define measurement operator M_m acting on spectrum:
+            M_m(ŝ) = ∫ t_m(λ) · ŝ(λ) dλ
+    3.3  Express M_m in latent space:
+            M_m(ŝ) = μ_fm + v_mᵀ · a
+        where
+            μ_fm = ∫ t_m(λ)·μ(λ)dλ
+            v_m   = ∫ t_m(λ)·B(λ) dλ          (vector length K)
+
+--------------------------------------------------------------------
+4.  Bayesian inference of latent coefficients
+--------------------------------------------------------------------
+4.1  Prior on coefficients:  a ~ N(0, I_K)   (standard normal)
+4.2  Likelihood for each observation:
+        p(p_k | a) = Normal( μ_fk + v_kᵀ·a , σ_k² )
+4.3  Posterior distribution:
+        p(a | P) ∝  exp( -½ aᵀa )   ×
+                     ∏_{k=1}^{M} exp( -½ (p_k - μ_fk - v_kᵀ·a)² / σ_k² )
+
+4.4  Draw N_samples from posterior using e.g. Hamiltonian Monte Carlo
+        For each sample s:
+            a_s  ← draw from p(a | P)
+            ŝ_s(λ) = μ(λ) + B(λ) · a_s      // reconstruct spectrum
+            store ŝ_s
+
+--------------------------------------------------------------------
+5.  Construct summary statistics
+--------------------------------------------------------------------
+5.1  Point estimate: Ŝ(λ) = median over {ŝ_s(λ)}  (or mean)
+5.2  Credible intervals:
+        Ŝ_low(λ)  = 2.5th percentile of {ŝ_s(λ)}
+        Ŝ_high(λ) = 97.5th percentile of {ŝ_s(λ)}
+
+--------------------------------------------------------------------
+6.  Return output
+--------------------------------------------------------------------
+Return Ŝ(λ), Ŝ_low(λ), Ŝ_high(λ)

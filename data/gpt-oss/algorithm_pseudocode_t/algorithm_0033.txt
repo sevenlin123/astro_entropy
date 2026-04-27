@@ -1,0 +1,99 @@
+INPUT:
+  F_i          – observed fluxes (or magnitudes) for each object i in N_f filters
+  σ_i          – measurement uncertainties for each F_i
+  R_k(λ)       – relative response curve of filter k
+  S_train[ℓ]   – training set of ℓ known spectra (reflectance vs wavelength)
+  λ_grid       – wavelength grid common to all spectra
+  B            – number of basis functions to represent spectra
+  MCMC_iters   – number of MCMC iterations
+  burnin       – number of initial iterations discarded
+
+OUTPUT:
+  For each object i:
+    ŝ_i(λ)      – posterior‑mean reconstructed spectrum
+    Σ_s_i(λ)     – posterior covariance of reconstructed spectrum
+    T_i          – taxonomy assignment probability vector
+
+----------------------------------------------------------------------
+1. Construct Basis Functions
+----------------------------------------------------------------------
+1.1   Perform PCA (or other linear decomposition) on S_train[ℓ] over λ_grid:
+        • Center the training spectra.
+        • Compute covariance matrix C.
+        • Extract first B eigenvectors {ϕ_b(λ)}_b=1^B.
+1.2   Store the basis matrix Φ = [ϕ_1, ϕ_2, …, ϕ_B]  (size |λ_grid| × B).
+
+----------------------------------------------------------------------
+2. Fit Prior Distribution to Training Weights
+----------------------------------------------------------------------
+2.1   Project each training spectrum onto the basis:
+        w_ℓ = Φᵀ * S_train[ℓ]
+2.2   Fit a Gaussian Mixture Model (GMM) with K components to the set
+        {w_ℓ}:
+        • Initialize means μ_k, covariances Σ_k, and mixing weights π_k.
+        • Run EM until convergence.
+2.3   Store the GMM parameters {π_k, μ_k, Σ_k}_k=1^K.
+
+----------------------------------------------------------------------
+3. Forward Model for an Object
+----------------------------------------------------------------------
+Define for any weight vector w:
+  s(λ) = Φ * w                           // reconstructed spectrum
+  F_pred(k) = ∫ s(λ) * R_k(λ) dλ          // expected flux in filter k
+  (Numerically approximate integral using trapezoid rule.)
+
+Log–likelihood for observed fluxes:
+  lnL(w) = Σ_{k=1}^{N_f} [ -0.5 * ((F_obs(k)-F_pred(k))^2 / σ(k)^2)
+                            - 0.5 * ln(2πσ(k)^2) ]
+
+Log–prior from GMM:
+  lnP(w) = ln( Σ_{k=1}^{K} π_k *
+                 exp( -0.5*(w-μ_k)ᵀ Σ_k^{-1} (w-μ_k) ) )
+
+Log–posterior:
+  lnPosterior(w) = lnL(w) + lnP(w)
+
+----------------------------------------------------------------------
+4. MCMC Sampling of Posterior
+----------------------------------------------------------------------
+Initialize w^(0) (e.g., draw from GMM).
+For t = 1 to MCMC_iters:
+  4.1   Propose new weight vector:
+          w* = w^(t-1) + η   // η ~ Normal(0, ε² I_B), ε chosen by tuning
+  4.2   Compute lnPosterior(w*) and lnPosterior(w^(t-1)).
+  4.3   Acceptance probability:
+          α = min(1, exp( lnPosterior(w*) - lnPosterior(w^(t-1)) ))
+  4.4   Draw u ~ Uniform(0,1).
+          If u < α:
+              w^(t) = w*
+          Else:
+              w^(t) = w^(t-1)
+
+After all iterations, discard first burnin samples.
+Store the remaining samples {w^(t)}_{t=burnin+1}^{MCMC_iters}.
+
+----------------------------------------------------------------------
+5. Reconstruct Spectrum and Statistics
+----------------------------------------------------------------------
+5.1   Compute posterior mean of weights:
+        w̄ = (1 / N_samp) Σ_{t=burnin+1}^{MCMC_iters} w^(t)
+5.2   Compute posterior covariance of weights:
+        Σ_w = (1 / (N_samp-1)) Σ (w^(t)-w̄)(w^(t)-w̄)ᵀ
+5.3   Reconstructed spectrum:
+        ŝ(λ) = Φ * w̄
+5.4   Spectrum covariance:
+        Σ_s = Φ * Σ_w * Φᵀ
+
+----------------------------------------------------------------------
+6. Taxonomy Assignment (optional)
+----------------------------------------------------------------------
+6.1   Define prototype spectra {T_j(λ)} for each taxonomic class j.
+6.2   For each prototype, compute similarity score:
+        S_j = exp( -0.5 * (ŝ - T_j)ᵀ Σ_s^{-1} (ŝ - T_j) )
+6.3   Normalize scores to obtain probability vector:
+        P_j = S_j / Σ_k S_k
+6.4   Set T_i = P (taxonomy probability vector for object i).
+
+----------------------------------------------------------------------
+7. Repeat Steps 3–6 for every object in the dataset.
+----------------------------------------------------------------------

@@ -1,0 +1,78 @@
+INPUT
+    PHOTOMETRY   : vector y[i]   (i = 1…N_filt)  – measured apparent magnitudes (or fluxes)
+    ERRORS       : vector σ[i]   – 1‑σ uncertainties in y
+    FILTERS      : list of N_filt filter transmission curves R_i(λ)
+    LIB_SPECTRA  : list of K spectra S_k(λ)  (k = 1…K)
+    PRIOR_WEIGHTS: vector π[k]   – prior probability for each class k (∑π=1)
+
+OUTPUT
+    CLASS_PROBS  : vector P[k]   – posterior probability for each class
+    RECONSTRUCTED_REFLECTANCE: function S_rec(λ)
+    OUTLIER_FLAG : boolean
+
+--------------------------------------------------------------------
+STEP 0 – Pre‑processing
+--------------------------------------------------------------------
+1. For every filter i and every library spectrum k:
+       Compute the synthetic photometry m[i][k] by integrating
+           m[i][k] = ∫ S_k(λ) * R_i(λ) dλ  /  ∫ R_i(λ) dλ
+   (If magnitudes are used, convert to fluxes first or use magnitude
+   conversion formula.)
+
+2. Construct the design matrix M of size (N_filt × K):
+       M[i][k] = m[i][k]   (synthetic magnitude or flux for filter i, class k)
+
+3. Build the weight matrix W (diagonal) from measurement errors:
+       W[i][i] = 1 / σ[i]^2
+
+--------------------------------------------------------------------
+STEP 1 – Estimate class contribution coefficients
+--------------------------------------------------------------------
+4. Solve the weighted non‑negative least‑squares problem
+       minimise  χ²(c) = (y – M·c)ᵀ · W · (y – M·c)
+       subject to   c[k] ≥ 0  for all k
+   Use any efficient NNLS solver (e.g., Lawson & Hanson algorithm).
+
+5. Normalise the solution to obtain a convex combination:
+       c_norm[k] = c[k] / Σ_j c[j]
+   (If Σ_j c[j] ≈ 0, set all c_norm = 0.)
+
+--------------------------------------------------------------------
+STEP 2 – Compute posterior class probabilities
+--------------------------------------------------------------------
+6. For each class k:
+       Compute the likelihood
+           L[k] = exp( –0.5 * χ²_k ) ,
+       where χ²_k = (y – M·e_k)ᵀ · W · (y – M·e_k),
+       e_k is a unit vector with 1 at position k (only class k present).
+
+7. Compute unnormalised posterior:
+       P_raw[k] = π[k] * L[k]
+
+8. Normalise to obtain posterior probabilities:
+       P[k] = P_raw[k] / Σ_j P_raw[j]
+
+--------------------------------------------------------------------
+STEP 3 – Reconstruct the full‑spectral reflectance
+--------------------------------------------------------------------
+9. Build the spectral reconstruction as a weighted sum of the library
+   spectra:
+       S_rec(λ) = Σ_k c_norm[k] * S_k(λ)
+
+--------------------------------------------------------------------
+STEP 4 – Outlier detection (optional simple criterion)
+--------------------------------------------------------------------
+10. Evaluate the overall fit quality:
+        χ²_total = (y – M·c)ᵀ · W · (y – M·c)
+
+11. Flag as outlier if either
+        • max(P[k]) < P_thresh   (e.g., 0.05)   OR
+        • χ²_total / N_filt  >  χ²_thresh   (e.g., 4.0)
+   Set OUTLIER_FLAG accordingly.
+
+--------------------------------------------------------------------
+RETURN
+--------------------------------------------------------------------
+   Return CLASS_PROBS = P[1..K],
+          RECONSTRUCTED_REFLECTANCE = S_rec(λ),
+          OUTLIER_FLAG

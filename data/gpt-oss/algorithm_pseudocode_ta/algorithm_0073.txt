@@ -1,0 +1,82 @@
+pseudocode
+INPUT:
+    – Training spectra {S_j(λ_k)}  , j = 1…N, k = 1…L   (λ_k are discrete wavelengths)
+    – Filter responses {R_f(λ)} , f = 1…F
+    – New photometry {F_f, σ_f} for an object
+    – Number of principal components K  (e.g. K = 8 for reconstruction)
+
+OUTPUT:
+    – Posterior‑mean reconstructed spectrum  Ŝ(λ_k)
+    – Posterior variance of the spectrum  Var[Ŝ(λ_k)]
+    – Optional outlier score  p_outlier
+
+--------------------------------------------------------------------
+STEP 1 – Principal‑Component Basis Construction
+--------------------------------------------------------------------
+1.1 Compute mean spectrum μ(λ_k)  = (1/N) Σ_j S_j(λ_k)
+1.2 Center spectra:  C_j(λ_k) = S_j(λ_k) – μ(λ_k)
+1.3 Form data matrix C [N × L]  (rows = centered spectra)
+1.4 Perform Singular Value Decomposition:
+        C = U · Σ · Vᵀ
+    – Columns of V (size L × L) are eigenvectors (principal components).
+1.5 Select first K columns → PC_i(λ_k),  i = 1…K
+    – Corresponding singular values give standard deviations σ_i.
+
+--------------------------------------------------------------------
+STEP 2 – Projection of Filters onto Component Space
+--------------------------------------------------------------------
+For each filter f:
+    2.1 Compute projected mean flux:
+            r_f⁰ = Σ_k R_f(λ_k) · μ(λ_k) Δλ
+    2.2 For each component i:
+            r_f,i = Σ_k R_f(λ_k) · PC_i(λ_k) Δλ
+    2.3 Store vector r_f = [r_f⁰, r_f,1 … r_f,K]
+
+--------------------------------------------------------------------
+STEP 3 – Likelihood Model for Photometry
+--------------------------------------------------------------------
+Assume observed fluxes are independent Gaussians:
+    P(F | z) = Π_f N( F_f | r_f⁰ + Σ_i r_f,i z_i , σ_f² )
+where z = (z₁ … z_K) are component amplitudes for the target object.
+
+--------------------------------------------------------------------
+STEP 4 – Gaussian Prior on Component Amplitudes
+--------------------------------------------------------------------
+    P_prior(z) = Π_i N( z_i | 0 , σ_i² )
+
+--------------------------------------------------------------------
+STEP 5 – Posterior over Component Amplitudes
+--------------------------------------------------------------------
+Because both prior and likelihood are Gaussian, posterior is Gaussian:
+    – Construct design matrix A [F × K] where A_{f,i} = r_f,i
+    – Vector b [F] where b_f = F_f – r_f⁰
+    – Observation covariance: Σ_obs = diag(σ_f²)
+
+    Posterior precision matrix:
+        Λ = Aᵀ Σ_obs⁻¹ A + diag(1/σ_i²)
+    Posterior covariance:
+        Σ_z = Λ⁻¹
+    Posterior mean:
+        μ_z = Σ_z · (Aᵀ Σ_obs⁻¹ b)
+
+--------------------------------------------------------------------
+STEP 6 – Reconstruct Spectrum and Uncertainty
+--------------------------------------------------------------------
+For each wavelength λ_k:
+    6.1 Compute mean spectrum:
+            Ŝ(λ_k) = μ(λ_k) + Σ_i μ_z,i · PC_i(λ_k)
+    6.2 Compute variance:
+            Var[Ŝ(λ_k)] = Σ_i,j Σ_z(i,j) · PC_i(λ_k) · PC_j(λ_k)
+
+--------------------------------------------------------------------
+STEP 7 – Optional Outlier Flagging
+--------------------------------------------------------------------
+7.1 Compute predictive likelihood of observed photometry under posterior:
+        p_data = N( b | A μ_z , Σ_obs + A Σ_z Aᵀ )
+7.2 If p_data < threshold (e.g., 1e‑5) → flag object as outlier.
+
+--------------------------------------------------------------------
+RETURN:
+    – Ŝ(λ_k)  (posterior‑mean reconstructed spectrum)
+    – Var[Ŝ(λ_k)]  (posterior variance at each wavelength)
+    – (optional) outlier score p_data

@@ -1,0 +1,81 @@
+Input:
+  J = number of filters
+  K = number of template spectra
+  m[1..J]   // observed magnitudes
+  sigma[1..J] // photometric uncertainties
+  R[j][lambda] // filter transmission curves
+  Ssolar[lambda] // solar spectrum
+  s[k][lambda] // template spectra
+  f0[j]   // zero‑point fluxes for each filter
+
+Output:
+  c[1..K]   // posterior mean of template weights
+  S_recon[lambda] // reconstructed spectrum
+  chi2      // goodness‑of‑fit
+
+Also classification: assign taxonomy class by largest coefficient.
+
+I think this meets the requirement.
+
+Let's produce final structured algorithm in pseudocode.assistantfinal**Algorithm – Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+---
+
+### Inputs
+
+| Symbol | Meaning |
+|--------|---------|
+| `J` | Number of photometric filters |
+| `K` | Number of template spectra (taxonomic classes) |
+| `m[j]` | Observed apparent magnitude in filter `j` (`j = 1 … J`) |
+| `σ[j]` | Photometric uncertainty for filter `j` |
+| `R[j][λ]` | Transmission curve of filter `j` as a function of wavelength `λ` |
+| `S_solar[λ]` | Solar spectral energy distribution (SED) |
+| `s[k][λ]` | Reflectance spectrum of template class `k` (`k = 1 … K`) |
+| `f0[j]` | Zero‑point flux density for filter `j` (e.g. AB or Vega zero‑point) |
+
+### Outputs
+
+| Symbol | Meaning |
+|--------|---------|
+| `c[k]` | Posterior mean weight of template `k` (probability of belonging to class `k`) |
+| `S_recon[λ]` | Reconstructed reflectance spectrum |
+| `χ²` | Weighted chi‑square goodness‑of‑fit |
+| `taxonomy` | Dominant taxonomic class (argmax of `c`) |
+
+---
+
+## Step‑by‑step Procedure
+
+1. **Pre‑compute filter–template flux ratios**
+
+2. **Convert observed magnitudes to flux densities**
+
+3. **Build design matrix**
+
+4. **Solve constrained linear least‑squares (non‑negative)**  
+
+   Minimise  
+   \[
+   \| A\,c - f_{\text{obs}} \|_2^2
+   \]
+   subject to  
+   \[
+   c_k \ge 0,\;\;\forall k .
+   \]
+   Optionally enforce normalisation \( \sum_k c_k = 1 \) by appending one extra row
+   to `A` filled with ones and an extra target value `1`.
+
+5. **Compute predicted fluxes and residuals**
+
+6. **Evaluate weighted chi‑square**
+
+7. **Compute Gaussian likelihood**
+
+8. **Posterior sampling (optional, for full uncertainty)**
+
+9. **Reconstruct full spectrum**
+
+10. **Assign taxonomy**
+
+11. **Return results**

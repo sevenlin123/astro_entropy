@@ -1,0 +1,184 @@
+Algorithm ReconstructSpectrum(objectPhotometry):
+    Input: photometric measurements D = {(m_i, σ_i, filter_i, epoch_i, phase_i)} for i=1..M
+    Output: posterior samples of spectrum S(λ), albedo, taxonomy, outlier flags
+
+    1. Define wavelength grid Λ = {λ_j}_{j=1}^{N}
+    2. For each filter k:
+          Retrieve transmission curve T_k(λ)
+          Compute effective response R_k(λ) = T_k(λ) * instrument sensitivity
+          Precompute matrix A_{k,j} = ∫_Λ R_k(λ) * φ_j(λ) dλ
+          // φ_j are basis functions or delta at λ_j
+
+    3. Initialize spectrum vector s = [s_j] with constant value
+    4. Set GP hyperparameters:
+          l = initial lengthscale
+          σ_f^2 = initial variance
+    5. Set outlier parameters:
+          p_out = 0.01
+          τ_out = 5.0  // magnitude units
+    6. Define GP covariance K_{jk} = σ_f^2 * exp(- (λ_j - λ_k)^2 / (2 l^2))
+    7. Compute prior density:
+          logPrior_s = -0.5 * s^T * K^{-1} * s - 0.5 * log|K| - (N/2) log(2π)
+          logPrior_p = logBeta(p_out | a,b)   // e.g., Beta(1,99)
+          logPrior_τ = logInvGamma(τ_out | α, β)
+
+    8. Define function ModelMagnitude(s, k):
+          F_k = Σ_j A_{k,j} * s_j
+          m_mod_k = -2.5 log10(F_k) + ZP_k + phaseCorrection(phase_k)
+          return m_mod_k
+
+    9. Define logLikelihood(D, s, p_out, τ_out):
+          L = 0
+          For each data point i:
+              k_i = filter_i
+              m_mod = ModelMagnitude(s, k_i)
+              inlier = NormalPDF(m_i | m_mod, σ_i^2)
+              outlier = NormalPDF(m_i | m_mod, τ_out^2)
+              L += log((1 - p_out) * inlier + p_out * outlier)
+          return L
+
+    10. Define joint logPosterior(s, p_out, τ_out) = logLikelihood + logPrior_s + logPrior_p + logPrior_τ
+
+    11. Sample posterior using Hamiltonian Monte Carlo:
+          Initialize θ = (s, p_out, τ_out)
+          For iter = 1 to N_iter:
+              Propose θ' using leapfrog steps with step size ε, L steps
+              Compute Δ = jointLogPosterior(θ') - jointLogPosterior(θ)
+              Accept θ' with probability min(1, exp(Δ))
+              Record θ if iter > burn_in
+
+    12. Post-processing:
+          For each wavelength λ_j:
+              Compute median and 68% CI of s_j from samples
+          Compute albedo:
+              Reflectance = exp(s_j * ln(10)/-2.5)
+              IntegratedFlux = Σ_j Reflectance_j * Δλ_j
+              Albedo = 2 * IntegratedFlux / π  // approximate formula
+          Compute colors:
+              For filter pairs (k,l):
+                  color_k_l = median(ModelMagnitude(s, k)) - median(ModelMagnitude(s, l))
+          Classify taxonomy:
+              For each taxonomic template T:
+                  Compute χ^2(T) = Σ_k (color_k - T_color_k)^2 / σ_color_k^2
+              Assign class with minimum χ^2
+
+    13. Identify outliers:
+          For each data point i:
+              Compute posterior probability of outlier:
+                  p_out_i = ∫ P(outlier | θ, data_i) dθ
+              Flag if p_out_i > 0.5
+
+    14. Return posterior spectrum, albedo, taxonomy, outlier flags
+
+pseudo
+Algorithm RECONSTRUCT_TNO_SPECTRUM
+Input:
+    D = {(m_i, σ_i, filter_i, epoch_i, phase_i)}   // i = 1 … M
+    FILTER_CURVES = {T_k(λ)}                         // k = 1 … K
+    INSTRUMENT_RESPONSE = R_inst(λ)
+    ZERO_POINT_k, PHASE_MODEL(phase)
+Parameters (to be inferred):
+    Spectrum S(λ)            // sampled on grid Λ = {λ_j}, j = 1 … N
+    Outlier probability p_out
+    Outlier noise τ_out
+
+Output:
+    Posterior samples of S(λ)
+    Median spectrum + 68% CI
+    Derived albedo, taxonomy, outlier flags
+
+--------------------------------------------------------------------
+1. PRE‑COMPUTATION
+--------------------------------------------------------------------
+1.1 Define wavelength grid Λ = {λ_j}_{j=1}^N
+1.2 For each filter k:
+        R_k(λ) = T_k(λ) * R_inst(λ)                      // photon‑weighted response
+        For each λ_j:
+            A_{k,j} = ∫_Λ R_k(λ) * δ(λ−λ_j) dλ           // matrix of filter–spectral coupling
+1.3 Compute phase correction values PHASE_k for each filter
+1.4 Set Gaussian Process (GP) prior hyperparameters:
+        length‑scale l, variance σ_f^2
+    K_jk = σ_f^2 * exp(−(λ_j−λ_k)^2/(2l^2))              // GP covariance matrix
+
+--------------------------------------------------------------------
+2. MODEL FUNCTIONS
+--------------------------------------------------------------------
+2.1 Function MODEL_MAGNITUDE(s, k):
+        // s = vector of log‑fluxes at λ_j
+        F_k = Σ_j A_{k,j} * exp(s_j * ln(10)/−2.5)        // flux through filter k
+        m_mod = −2.5 * log10(F_k) + ZERO_POINT_k + PHASE_k
+        return m_mod
+
+2.2 Function LOG_LIKELIHOOD(D, s, p_out, τ_out):
+        L = 0
+        For each data point i:
+            k_i = filter_i
+            m_mod = MODEL_MAGNITUDE(s, k_i)
+            inlier_pdf  = NormalPDF(m_i | m_mod, σ_i^2)
+            outlier_pdf = NormalPDF(m_i | m_mod, τ_out^2)
+            L += log( (1−p_out) * inlier_pdf + p_out * outlier_pdf )
+        return L
+
+2.3 Function LOG_PRIOR(s, p_out, τ_out):
+        // GP prior for s
+        logp_s = −0.5 * sᵀ K⁻¹ s − 0.5 * log|K| − (N/2)log(2π)
+        // Beta prior for p_out (e.g., Beta(1,99))
+        logp_po = logBeta(p_out | 1, 99)
+        // Inverse‑Gamma prior for τ_out (e.g., α=1, β=10)
+        logp_tau = logInvGamma(τ_out | 1, 10)
+        return logp_s + logp_po + logp_tau
+
+--------------------------------------------------------------------
+3. POSTERIOR SAMPLING (HAMILTONIAN MONTE CARLO)
+--------------------------------------------------------------------
+3.1 Initialize:
+        s ← zeros(N)
+        p_out ← 0.01
+        τ_out ← 5.0
+        θ ← (s, p_out, τ_out)
+3.2 For iteration r = 1 … R:
+        Propose θ' using leapfrog integrator with step size ε, L steps
+        Compute Δ = LOG_POSTERIOR(θ') − LOG_POSTERIOR(θ)
+        Accept θ' with probability min(1, exp(Δ)); otherwise keep θ
+        If r > BURN_IN:
+            Store θ in sample set
+3.3 LOG_POSTERIOR(θ) = LOG_LIKELIHOOD(D, s, p_out, τ_out) +
+                       LOG_PRIOR(s, p_out, τ_out)
+
+--------------------------------------------------------------------
+4. POST‑PROCESSING
+--------------------------------------------------------------------
+4.1 Spectral Statistics:
+        For each λ_j:
+            median_s_j = median{ s_j^(sample) }
+            ci_low_j  = percentile{ s_j^(sample), 16 }
+            ci_high_j = percentile{ s_j^(sample), 84 }
+
+4.2 Reflectance and Albedo:
+        For each λ_j:
+            refl_j = 10^(−0.4 * median_s_j)
+        IntegratedFlux = Σ_j refl_j * Δλ_j
+        Albedo ≈ (2 * IntegratedFlux) / π             // Lambertian assumption
+
+4.3 Colors and Taxonomy:
+        For each filter pair (k, l):
+            color_k_l = median{ MODEL_MAGNITUDE(s, k) } − median{ MODEL_MAGNITUDE(s, l) }
+        For each taxonomic template T:
+            χ²_T = Σ_k (color_k_l − T.color_k_l)² / σ_color_k_l²
+        Taxonomy = argmin_T χ²_T
+
+4.4 Outlier Detection:
+        For each data point i:
+            p_outlier_i = average over samples of
+                          p_out * outlier_pdf / ((1−p_out)*inlier_pdf + p_out*outlier_pdf)
+            Flag_i = (p_outlier_i > 0.5)
+
+--------------------------------------------------------------------
+5. RETURN
+--------------------------------------------------------------------
+Return:
+    Sampled spectra {s^(sample)}
+    Median spectrum {median_s_j} with CI
+    Albedo
+    Taxonomy label
+    Outlier flags {Flag_i}

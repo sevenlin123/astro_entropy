@@ -1,0 +1,86 @@
+INPUT
+    S_ref[1..N]   – Reference near‑IR spectra (high‑resolution vectors)
+    λ_ref[1..L]   – Wavelength grid of S_ref
+    F[1..M]       – Instrument filter transmission curves
+    σ_phot[1..M]  – Expected photometric uncertainties (optional)
+
+OUTPUT
+    Sampled spectra {S_k} (k = 1..K_post)
+    Posterior statistics (mean, variance, credible intervals)
+    Taxonomy probability vector p_tax
+
+--------------------------------------------------------------------
+STEP 1 – Construct Latent Space (Prior)
+--------------------------------------------------------------------
+1.1 Normalise each reference spectrum to unit albedo or reflectance.
+1.2 Center the spectra:  S_centered[i] = S_ref[i] – mean(S_ref)
+1.3 Perform Singular Value Decomposition (SVD) or PCA:
+        [U, Σ, Vᵀ] = svd(S_centered, full_matrices=False)
+   - Columns of U are eigenvectors (principal components).
+   - Eigenvalues stored in Σ.
+1.4 Decide number of components K (e.g., 8–10 for reconstruction).
+   - Keep the first K columns of U → PC_basis[1..K][1..L].
+1.5 Project each reference spectrum onto the first K PCs:
+        z_ref[i] = PC_basisᵀ · S_centered[i]      // z_ref is K‑vector
+1.6 Estimate density over latent space using Kernel Density Estimator (KDE):
+        KDE_model = fit_KDE(z_ref, bandwidth = h ≈ 0.5)
+1.7 Generate synthetic latent vectors:
+        for j = 1 to N_syn:
+            z_syn[j] = sample_from(KDE_model)
+
+--------------------------------------------------------------------
+STEP 2 – Forward Modelling (Implicit Likelihood)
+--------------------------------------------------------------------
+2.1 For each synthetic latent vector z_syn[j]:
+        a) Reconstruct synthetic spectrum:
+                S_syn[j] = PC_basis · z_syn[j] + mean(S_ref)
+        b) Convolve with each filter F[m] to obtain synthetic photometry:
+                m_syn[j,m] = ∫ S_syn[j](λ) · F[m](λ) dλ / ∫ F[m](λ) dλ
+        c) Add Gaussian noise to mimic observational errors:
+                m_noisy[j,m] = m_syn[j,m] + N(0, σ_phot[m])
+2.2 Collect training pairs:
+        X_train = { m_noisy[j] }      // M‑dimensional photometry
+        Y_train = { z_syn[j] }        // K‑dimensional latent coeffs
+2.3 Train an AutoML regressor R (e.g., Gradient‑Boosted Trees ensemble):
+        R.fit(X_train, Y_train)
+   – Output of R is a probabilistic prediction of latent vector
+   – Store predictive mean μ_z and covariance Σ_z for each input.
+
+--------------------------------------------------------------------
+STEP 3 – Taxonomy Classifier
+--------------------------------------------------------------------
+3.1 From the original reference set z_ref, assign discrete labels
+        (Water, CO₂, Organic, Methanol).
+3.2 Train a second AutoML classifier C on (z_ref, label):
+        C.fit(z_ref, label)
+   – Output C.probs(z) gives posterior taxonomy probabilities.
+
+--------------------------------------------------------------------
+STEP 4 – Inference for New Observation
+--------------------------------------------------------------------
+4.1 Input new photometric vector m_new[1..M].
+4.2 Predict latent coefficient distribution with regressor R:
+        μ_z, Σ_z = R.predict_distribution(m_new)
+4.3 Optional: refine distribution using Gaussian Copula to preserve
+        inter‑component correlations from KDE_model.
+4.4 Generate posterior sample of latent vectors:
+        for k = 1 to K_post:
+            z_k = sample_multivariate_normal(μ_z, Σ_z)
+5.0 (or 4.4) If desired, enforce bounds by rejecting samples outside KDE support.
+6.5 For each sampled latent z_k, reconstruct spectrum:
+        S_k = PC_basis · z_k + mean(S_ref)
+6.6 Collect {S_k} – posterior samples of the full spectrum.
+6.7 Compute summary statistics:
+        S_mean = average(S_k)
+        S_std  = stddev(S_k)
+        Credible intervals per wavelength = percentile(S_k, [2.5%,97.5%], axis=0)
+7.0 Taxonomy probability:
+        p_tax = C.probs(μ_z)   // or average C.probs(z_k) over samples
+
+--------------------------------------------------------------------
+STEP 5 – Output
+--------------------------------------------------------------------
+Return:
+    - Posterior spectrum samples {S_k}
+    - Mean spectrum S_mean, variance S_std, credible intervals
+    - Taxonomy probability vector p_tax

@@ -1,0 +1,64 @@
+text
+Inputs
+------
+S            : matrix of N_spec training spectra (rows: spectra, columns: λ grid)
+F[1…M]       : M filter transmission curves (functions of λ)
+P_obs         : vector of observed photometric fluxes for one target (length M)
+σ_obs         : vector of photometric uncertainties for one target (length M)
+K             : number of principal components to retain (4–10)
+
+Output
+------
+Spec_mean[λ]   : reconstructed spectrum (mean over posterior samples)
+Spec_std[λ]    : 1‑σ uncertainty spectrum (standard deviation over posterior samples)
+Coeff_mean[k]  : posterior mean of component coefficients
+Coeff_cov[k,k] : posterior covariance of component coefficients
+
+# 1.1 Center spectra
+μ_spec = mean(S, axis=0)                      # average spectrum over training set
+S_centered = S - μ_spec                       # subtract mean
+
+# 1.2 Compute covariance matrix (λ × λ)
+C = (S_centered.T @ S_centered) / (N_spec-1)
+
+# 1.3 Eigen‑decomposition
+eig_vals, eig_vecs = eig(C)                   # eig_vecs[:,k] is eigenvector k
+sort indices by decreasing eig_vals
+eig_vals = eig_vals[sorted]
+eig_vecs = eig_vecs[:, sorted]
+
+# 1.4 Select first K components
+Basis[k, λ] = eig_vecs[:, k]  for k=1…K
+Variance_k  = eig_vals[k]     # variance explained by component k
+
+# Integrate basis spectrum through filter transmission
+A[i, k] = ∫ Basis[k, λ] * F[i](λ) dλ          # numerical quadrature over λ grid
+
+Prior_mean = zeros(K)
+Prior_cov  = diag(Variance_1…Variance_K)      # K×K diagonal matrix
+
+# 4.1 Construct noise covariance matrix
+Noise_cov = diag(σ_obs^2)                     # M×M diagonal
+
+# 4.2 Compute posterior for linear Gaussian model
+# Posterior covariance
+Posterior_cov = inv( inv(Prior_cov) + A.T @ inv(Noise_cov) @ A )
+
+# Posterior mean
+Posterior_mean = Posterior_cov @ ( A.T @ inv(Noise_cov) @ P_obs )
+
+num_samples = 1000                           # e.g., Monte‑Carlo sample size
+
+for s = 1 … num_samples
+    # Sample coefficient vector from posterior
+    c_s = mvn_sample(mean=Posterior_mean, cov=Posterior_cov)
+
+    # Reconstruct full spectrum
+    Spec_s[λ] = μ_spec[λ] + Σ_{k=1}^{K} c_s[k] * Basis[k, λ]
+end
+
+# 5.1 Compute summary statistics
+Spec_mean[λ] = mean( Spec_s over s )
+Spec_std[λ]  = std(  Spec_s over s )
+Coeff_mean   = mean( c_s over s )
+Coeff_cov    = cov( c_s over s )

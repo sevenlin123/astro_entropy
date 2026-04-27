@@ -1,0 +1,79 @@
+INPUT:
+    - High‑resolution reference spectra {S_i}   // i = 1 … N (e.g., 51 spectra)
+    - Instrument filter response curves {T_j}    // j = 1 … M (e.g., NIRCam filters)
+    - Desired number of principal components K
+    - KDE bandwidth h
+    - Noise level σ_noise (relative reflectance, e.g., 20%)
+    - New object photometry vector m_obs   // length M
+
+OUTPUT:
+    - Posterior samples of latent coefficients θ      // length K
+    - Reconstructed spectrum samples S_rec           // high‑res vector
+    - Taxonomic posterior probabilities p_tax
+
+--------------------------------------------------------------------
+STEP 1 – Build Prior (PCA & Latent Density)
+--------------------------------------------------------------------
+1.1 Standardize reference spectra:
+        For each wavelength λ:
+            μ_λ = mean(S_i(λ))
+            σ_λ = std(S_i(λ))
+            S_std_i(λ) = (S_i(λ) – μ_λ) / σ_λ
+1.2 Compute covariance matrix C = cov(S_std)
+1.3 Perform eigen‑decomposition of C → eigenvalues {λ_k}, eigenvectors {e_k}
+1.4 Select first K eigenvectors → PCA basis E_K  (matrix of size L × K)
+1.5 Project each standardized spectrum onto PCA basis:
+        θ_i = E_K^T * S_std_i          // θ_i ∈ ℝ^K
+1.6 Fit a non‑parametric Kernel Density Estimate (KDE) to {θ_i} with bandwidth h
+1.7 Sample synthetic latent vectors {θ_syn} from KDE  // e.g., 10,000 samples
+1.8 For each θ_syn:
+        Reconstruct synthetic spectrum:
+            S_syn = μ + σ ∘ (E_K * θ_syn)      // μ,σ element‑wise operations
+        Forward‑model synthetic photometry:
+            For each filter j:
+                F_j = ∫ S_syn(λ) * T_j(λ) dλ / ∫ T_j(λ) dλ
+        Add Gaussian noise:
+            F_j_noisy = F_j * (1 + Normal(0, σ_noise))
+        Store pair (F_noisy, θ_syn)
+
+Result: Training set T = {(F_noisy, θ_syn)} for encoder regression.
+
+--------------------------------------------------------------------
+STEP 2 – Train Encoder (Photometry → Latent)
+--------------------------------------------------------------------
+2.1 Use an AutoML framework (e.g., AutoGluon) to train a regression model R:
+        Input: Photometry vector F_noisy (length M)
+        Output: Latent coefficient vector θ_pred (length K)
+2.2 Validate R on synthetic hold‑out samples (optional cross‑validation).
+2.3 Save trained encoder R.
+
+--------------------------------------------------------------------
+STEP 3 – Train Classifier (Latent → Taxonomy)
+--------------------------------------------------------------------
+3.1 Label each reference spectrum S_i with taxonomy label y_i
+3.2 Build training set C = {(θ_i, y_i)}  // θ_i from Step 1.5
+3.3 Use AutoML to train a multiclass classifier Q:
+        Input: θ_i
+        Output: Probability vector over taxonomic classes
+3.4 Save trained classifier Q.
+
+--------------------------------------------------------------------
+STEP 4 – Forward Inference for New Object
+--------------------------------------------------------------------
+4.1 Preprocess observed photometry m_obs:
+        4.1.1 If necessary, normalize or standardize using same scheme as Step 1.1
+4.2 Pass m_obs through encoder R to obtain posterior distribution over θ:
+        4.2.1 Draw N_samples latent vectors {θ^(n)} from R (e.g., via Bayesian mode,
+              or approximate posterior if R outputs mean/variance)
+4.3 For each sampled θ^(n):
+        4.3.1 Reconstruct spectrum:
+                S_rec^(n) = μ + σ ∘ (E_K * θ^(n))
+4.4 Aggregate reconstructed spectra:
+        4.4.1 Compute mean spectrum = (1/N) Σ S_rec^(n)
+        4.4.2 Compute uncertainty band (e.g., 68% CI) from {S_rec^(n)}
+4.5 Classify taxonomy:
+        4.5.1 Compute class probabilities p_tax = Q(θ_mean)  // or average over samples
+4.6 Return:
+        • Posterior samples {θ^(n)}
+        • Mean reconstructed spectrum and uncertainty band
+        • Taxonomic probability vector p_tax

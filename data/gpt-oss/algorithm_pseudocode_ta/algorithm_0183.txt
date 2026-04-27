@@ -1,0 +1,50 @@
+Input
+    S_train      : Training set of near‑IR spectra (N_spec × N_wave)
+    filt_resp    : List of filter transmission curves (N_filt × N_wave)
+    phot_obs     : Observed photometry for one target (vector of length N_filt)
+    phot_err     : Measurement uncertainties for phot_obs (vector of length N_filt)
+    k            : Number of principal components to retain (default 8–10)
+
+Output
+    spec_mean    : Reconstructed mean spectrum (length N_wave)
+    spec_std     : One‑sigma uncertainty spectrum (length N_wave)
+    coeff_posterior_mean  : Posterior mean of PC coefficients (length k)
+    coeff_posterior_cov   : Posterior covariance matrix (k × k)
+
+Procedure
+1.  // ----- PCA on training spectra ------------------------------------
+2.  mean_spectrum  ← mean(S_train, axis=0)                # average spectrum
+3.  centered       ← S_train – mean_spectrum             # center data
+4.  U, Σ, Vt       ← svd(centered, full_matrices=False)  # singular value decomposition
+5.  PC_basis       ← first k columns of U                  # k principal component eigenvectors
+                                                     #   each PC has length N_wave
+
+6.  // ----- Project each PC into filter space --------------------------
+7.  for i = 1 … k:
+8.      PC_filter[i] ← ∑_λ (PC_basis[:,i] * filt_resp[λ])  # dot product over wavelengths
+9.  end for
+10. mean_filter   ← ∑_λ (mean_spectrum * filt_resp[λ])      # mean spectrum integrated per filter
+
+11. // ----- Build design matrix for Bayesian linear regression --------
+12. A ← [PC_filter[1], PC_filter[2], … , PC_filter[k]]     # matrix (N_filt × k)
+
+13. // ----- Bayesian inference for PC coefficients ---------------------
+14. C   ← diag(phot_err^2)                                 # measurement covariance
+15. prior_precision ← I_k / τ^2                            # prior precision matrix (τ set e.g. to 1)
+16. post_precision  ← Aᵀ · C⁻¹ · A + prior_precision       # posterior precision
+17. post_cov        ← inverse(post_precision)              # posterior covariance
+18. post_mean       ← post_cov · (Aᵀ · C⁻¹ · (phot_obs – mean_filter))
+                                                     # posterior mean of coefficients
+
+19. // ----- Reconstruct full spectrum ----------------------------------
+20. spec_mean ← mean_spectrum + PC_basis · post_mean          # mean reconstructed spectrum
+21. // Propagate coefficient uncertainty into spectrum uncertainty:
+22. // Var(spec) = PC_basis · post_cov · PC_basisᵀ
+23. spec_variance ← diag(PC_basis · post_cov · PC_basisᵀ)   # take diagonal (per wavelength)
+24. spec_std     ← sqrt(spec_variance)                      # standard deviation per wavelength
+
+25. // ----- Optional credible interval (e.g., 95%) ----------------------
+26. lower_bound ← spec_mean – 1.96 * spec_std
+27. upper_bound ← spec_mean + 1.96 * spec_std
+
+28. Return spec_mean, spec_std, post_mean, post_cov, lower_bound, upper_bound

@@ -1,0 +1,71 @@
+PROCEDURE RECONSTRUCT_SPECTRUM(observations, filter_curves, ref_spectra)
+   # ------------------------------------------------------------------
+   # INPUTS
+   #   observations : list of (mag_i, err_i, filter_name_i) for i = 1…M
+   #   filter_curves: dictionary {filter_name -> transmission function T(λ)}
+   #   ref_spectra   : list of N reference spectra S_j(λ), j = 1…N
+   #
+   # OUTPUT
+   #   posterior_samples : samples of weight vectors w = (w_1 … w_N)
+   #   reconstructed_spectrum(λ) : weighted sum of reference spectra
+   #   uncertainty_band(λ)       : e.g., 16th–84th percentile bounds
+   # ------------------------------------------------------------------
+
+   # 1. Convert magnitudes to absolute fluxes
+   FOR each observation i IN 1…M DO
+        f_obs[i]   ← MAG_TO_FLUX(observations[i].mag)
+        err_flux[i]← MAG_ERR_TO_FLUX_ERR(observations[i].err, observations[i].mag)
+        filter_i   ← observations[i].filter_name
+   END FOR
+
+   # 2. Pre‑compute filter‑integrated flux contributions for all refs
+   FOR each reference j IN 1…N DO
+        FOR each filter i IN 1…M DO
+            F[j][i] ← ∫ S_j(λ) * T_filter_i(λ) dλ          # numerical integration
+        END FOR
+   END FOR
+
+   # 3. Assemble linear model:   f_obs = Fᵀ · w + ε
+   #    where w is an N‑dimensional weight vector (non‑negative, optional sum‑to‑one)
+
+   # 4. Define prior on w
+   PRIOR_w(w) ← 
+        IF sum(w) ≠ 1 THEN 0
+        ELSE Π_{j=1}^N Uniform(0,1)          # uniform over simplex
+        END IF
+
+   # 5. Define Gaussian likelihood
+   LOG_LIKELIHOOD(w) ←
+        -½ Σ_{i=1}^M [ (f_obs[i] - Σ_{j=1}^N w_j * F[j][i])² / err_flux[i]²
+                       + ln(2π * err_flux[i]²) ]
+
+   # 6. Posterior sampling via Metropolis–Hastings or Hamiltonian Monte Carlo
+   INITIALIZE w⁰ ← (1/N, …, 1/N)
+   FOR iter = 1 TO Nsamples DO
+        Propose w* from proposal_distribution(w^{iter-1})
+        IF any(w*_j < 0) THEN REJECT
+           CONTINUE
+        END IF
+        IF sum(w*) ≠ 1 THEN NORMALIZE w* ← w*/sum(w*)
+        END IF
+        α ← min(1, exp[ LOG_LIKELIHOOD(w*) + log(PRIOR_w(w*)) 
+                         - LOG_LIKELIHOOD(w^{iter-1}) - log(PRIOR_w(w^{iter-1})) ])
+        DRAW u ~ Uniform(0,1)
+        IF u < α THEN
+             w^{iter} ← w*
+        ELSE
+             w^{iter} ← w^{iter-1}
+        END IF
+   END FOR
+   posterior_samples ← { w^{iter} | iter = 1…Nsamples }
+
+   # 7. Compute reconstructed spectrum and uncertainties
+   FOR each λ IN wavelength_grid DO
+        RECONSTRUCTED(λ) ← Σ_{j=1}^N (1/Nsamples) * Σ_{s=1}^{Nsamples} w_s[j] * S_j(λ)
+        LOW(λ) ← percentile of { Σ_j w_s[j]*S_j(λ) } at 16%
+        HIGH(λ)← percentile of { Σ_j w_s[j]*S_j(λ) } at 84%
+        UNCERTAINTY_BAND(λ) ← (LOW(λ), HIGH(λ))
+   END FOR
+
+   RETURN posterior_samples, RECONSTRUCTED, UNCERTAINTY_BAND
+END PROCEDURE

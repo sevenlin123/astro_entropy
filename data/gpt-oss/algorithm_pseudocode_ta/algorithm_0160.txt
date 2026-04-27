@@ -1,0 +1,83 @@
+Input:
+    S_train[1..N][1..M]          # Training spectra, sampled at wavelengths λ[1..M]
+    T_filters[1..K][1..M]       # Filter transmission curves for K filters
+    F_obs[1..K]                 # Observed photometric fluxes for target object
+    sigma_obs[1..K]             # Measurement uncertainties for observed fluxes
+    L                            # Number of principal components to retain
+    N_MC                         # Number of posterior Monte‑Carlo samples
+
+Output:
+    Spectrum_mean[1..M]          # Posterior mean spectrum
+    Spectrum_CI_low[1..M]        # Lower bound of credible interval (e.g., 2.5%)
+    Spectrum_CI_high[1..M]       # Upper bound of credible interval (e.g., 97.5%)
+
+--------------------------------------------------------------------
+STEP 1 – Pre‑process training spectra
+--------------------------------------------------------------------
+1.1 Compute mean spectrum:
+        μ[λ] = (1/N) * Σ_{i=1}^{N} S_train[i][λ]      for all λ
+1.2 Center training spectra:
+        S_centered[i][λ] = S_train[i][λ] – μ[λ]
+1.3 Perform Singular Value Decomposition (SVD) or PCA:
+        [U, Σ, V^T] = SVD(S_centered)                # U: left singular vectors,
+                                                      # Σ: singular values,
+                                                      # V^T: right singular vectors
+1.4 Select first L principal components:
+        PC[1..L][λ] = rows 1..L of V^T                # Each PC is a vector over λ
+1.5 Project training spectra onto PCs to obtain coefficients:
+        for i = 1 to N:
+            for l = 1 to L:
+                a_coeff[i][l] = Σ_{λ} S_centered[i][λ] * PC[l][λ]   # inner product
+
+--------------------------------------------------------------------
+STEP 2 – Construct filter–PC integral matrix
+--------------------------------------------------------------------
+2.1 For each filter k and component l compute:
+        P[k][l] = Σ_{λ} PC[l][λ] * T_filters[k][λ]      # ∫ PC_l * T_k
+2.2 Compute mean flux contribution of each filter:
+        m[k] = Σ_{λ} μ[λ] * T_filters[k][λ]              # ∫ μ * T_k
+
+--------------------------------------------------------------------
+STEP 3 – Define probabilistic model
+--------------------------------------------------------------------
+3.1 Forward model for photometry given coefficient vector a[1..L]:
+        f_pred(k, a) = m[k] + Σ_{l=1}^{L} a[l] * P[k][l]
+3.2 Likelihood (Gaussian):
+        logL(a) = -0.5 * Σ_{k=1}^{K} ((F_obs[k] - f_pred(k,a)) / sigma_obs[k])^2
+3.3 Prior on coefficients a:
+        # Use empirical covariance from training set:
+        Cov_a[l,l'] = covariance of a_coeff[:,l] and a_coeff[:,l']
+        Prior: a ~ MVN(0, Cov_a)
+
+--------------------------------------------------------------------
+STEP 4 – Sample posterior distribution of a
+--------------------------------------------------------------------
+4.1 Initialize a_current = 0 vector (or random draw from prior)
+4.2 For n = 1 to N_MC:
+        # Propose new a using e.g., Gaussian random walk:
+        a_proposed = a_current + Normal(0, step_size * sqrt(diag(Cov_a)))
+        Compute logL_proposed = logL(a_proposed)
+        Compute logL_current = logL(a_current)
+        Compute acceptance probability:
+                alpha = min(1, exp(logL_proposed - logL_current))
+        Draw u ~ Uniform(0,1)
+        If u < alpha:
+                a_current = a_proposed
+        Store a_current in samples[n][1..L]
+
+--------------------------------------------------------------------
+STEP 5 – Reconstruct spectra from posterior samples
+--------------------------------------------------------------------
+5.1 For each sample s = 1..N_MC:
+        for λ = 1 to M:
+            Spectrum_sample[s][λ] = μ[λ] + Σ_{l=1}^{L} samples[s][l] * PC[l][λ]
+5.2 Compute posterior mean and credible intervals:
+        for λ = 1 to M:
+            Spectrum_mean[λ] = mean_s( Spectrum_sample[s][λ] )
+            Spectrum_CI_low[λ] = percentile_s( Spectrum_sample[s][λ], 2.5 )
+            Spectrum_CI_high[λ] = percentile_s( Spectrum_sample[s][λ], 97.5 )
+
+--------------------------------------------------------------------
+RETURN:
+    Spectrum_mean, Spectrum_CI_low, Spectrum_CI_high
+--------------------------------------------------------------------

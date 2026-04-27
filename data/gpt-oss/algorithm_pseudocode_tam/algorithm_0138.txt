@@ -1,0 +1,90 @@
+Input:
+    - Seed spectra S_real[1..N]   // 51 high‑resolution TNO spectra
+    - Filter response curves {R_f}   // e.g., JWST NIRCam bands
+    - Desired number of PCA components K (e.g., K = 8)
+    - KDE bandwidth h (e.g., h = 0.5)
+    - Noise level σ_noise (relative, e.g., 0.20)
+
+Output for a new object:
+    - Posterior samples of reconstructed spectra {S_i}
+    - Taxonomic class probability vector P(class)
+
+--------------------------------------------------------------------
+1.  PREPARATION PHASE  ------------------------------------------------
+    1.1  Standardise each spectrum:
+          For each wavelength λ:  
+              μ_λ = mean(S_real[:,λ])  
+              σ_λ = std(S_real[:,λ])
+              S_std[:,λ] = (S_real[:,λ] - μ_λ)/σ_λ
+
+    1.2  Compute PCA on S_std:
+          - Assemble matrix M (N × L) where L = number of wavelength bins
+          - Perform eigen‑decomposition of covariance(M)
+          - Retain top K eigenvectors V[1..K]
+          - Project spectra to latent space:
+                z_real[i] = Vᵀ * (S_std[i] – 0)     // N × K matrix
+
+    1.3  Build KDE density p(z) on latent vectors {z_real}:
+          - Use Gaussian kernel with bandwidth h
+          - Store KDE model for sampling
+
+    1.4  Generate synthetic latent samples:
+          - Draw M_synth synthetic vectors z_syn ~ p(z)   // e.g., 10,000 samples
+          - For each z_syn, compute synthetic spectrum:
+                S_synth = V * z_syn + μ         // inverse PCA + re‑standardise
+          - Store pairs (z_syn, S_synth)
+
+    1.5  Forward‑model synthetic photometry:
+          For each synthetic spectrum S_synth:
+              For each filter f:
+                  m_f = ∫ S_synth(λ) * R_f(λ) dλ      // monochromatic reflectance
+              Add Gaussian noise:
+                  m_f_noisy = m_f + N(0, σ_noise*m_f)
+              Store training pair (m_noisy, z_syn)
+
+    1.6  Train encoder (AutoML regressor):
+          - Input: noisy photometry vector m_noisy  (length = number of filters)
+          - Target: latent vector z_syn  (length = K)
+          - Use AutoML framework to find best ensemble (GBDT, NN, etc.)
+          - Save trained model Enc
+
+    1.7  Train classifier on latent space:
+          - Label each z_real by its taxonomic class
+          - Train AutoML classifier Classifier on (z_real, label)
+          - Save trained model Classifier
+
+--------------------------------------------------------------------
+2.  INFERENCE PHASE  --------------------------------------------------
+    Given observed photometry m_obs for a new TNO:
+
+    2.1  Predict latent distribution:
+          - Use Enc to obtain point estimate z_hat
+          - Optionally, compute predictive variance or draw B bootstrap samples:
+                For b = 1 … B:
+                    Sample noise ε_b ~ N(0, diag(Enc.var))
+                    z_b = z_hat + ε_b
+          - Collect samples {z_b}
+
+    2.2  Map to spectra:
+          For each sampled latent vector z_b:
+              S_b = V * z_b + μ      // inverse PCA + re‑standardise
+          Resulting set {S_b} is a Monte‑Carlo posterior over spectra.
+
+    2.3  Taxonomic probabilities:
+          - Pass each z_b through Classifier to obtain class probability vector p_b
+          - Average over B samples:
+                P(class) = (1/B) Σ_b p_b
+          - Optionally report confidence intervals from spread of p_b.
+
+--------------------------------------------------------------------
+3.  POST‑PROCESSING  -----------------------------------------------
+    3.1  Compute summary statistics of posterior spectra:
+          - Mean spectrum μ_S(λ) = (1/B) Σ_b S_b(λ)
+          - Credible interval at each λ (e.g., 95%): lower, upper bounds
+    3.2  Derive diagnostic quantities (slope, band depths) from μ_S(λ).
+
+--------------------------------------------------------------------
+4.  RETURN
+    - Posterior spectra {S_b}
+    - Taxonomic probability vector P(class)
+    - Summary diagnostics (mean, CI, slopes, band depths)

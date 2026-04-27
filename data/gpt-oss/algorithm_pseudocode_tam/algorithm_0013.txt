@@ -1,0 +1,80 @@
+text
+# ------------------------------------------------------------------
+# 1. TRAINING PHASE
+# ------------------------------------------------------------------
+
+# 1.1 Load reference spectra
+INPUT: S_ref[1..N]  # each S_ref[i] = vector of reflectance at L wavelength points
+
+# 1.2 Compute Principal Component Basis (Latent Space)
+STEP 1: Center spectra:
+        μ_S = mean(S_ref)
+        S_centered = S_ref - μ_S
+STEP 2: Perform PCA on S_centered:
+        [U, Σ, V] = SVD(S_centered)          # U: left singular vectors (L×K)
+        PC_basis = U[:, 1..K]                # choose K principal components
+STEP 3: Project spectra onto latent space:
+        Z_real = PC_basisᵀ * (S_ref - μ_S)    # Z_real: K×N matrix of latent coeffs
+
+# 1.3 Build Continuous Latent Prior with Kernel Density Estimation (KDE)
+STEP 4: Fit KDE to Z_real:
+        kde_prior = KDE(Z_real, bandwidth = h)   # h ≈ 0.5 (empirically tuned)
+
+# 1.4 Generate Synthetic Training Set
+STEP 5: Sample M latent vectors from kde_prior:
+        Z_syn[1..M] = kde_prior.sample()
+STEP 6: Decode sampled latents to full spectra:
+        S_syn[1..M] = PC_basis * Z_syn + μ_S
+STEP 7: FOR each synthetic spectrum S_syn[j]:
+            (a) Convolve with filter throughputs to produce synthetic photometry:
+                m_true[j] = forward_model(S_syn[j], Filters)
+            (b) Add Gaussian noise (σ_rel = 0.20) to each band:
+                m_noisy[j] = m_true[j] + N(0, 0.20*m_true[j])
+END FOR
+        # Result: training pairs {(m_noisy[j], Z_syn[j])}
+
+# 1.5 Train Encoder (Photometry → Latent) with AutoML
+STEP 8: Train AutoML regressor R on training pairs:
+        R = AutoML_Regressor.fit(m_noisy, Z_syn)
+        # R outputs a multivariate prediction (mean and covariance) for latent vector
+
+# 1.6 Train Classifier (Latent → Taxonomy)
+STEP 9: Assign taxonomy labels to each real spectrum in S_ref:
+        labels = taxonomy_labels(S_ref)        # e.g., H₂O, CO₂, Organic, Methanol
+STEP 10: Train AutoML classifier C on {Z_real, labels}:
+        C = AutoML_Classifier.fit(Z_real, labels)
+
+# ------------------------------------------------------------------
+# 2. INFERENCE PHASE
+# ------------------------------------------------------------------
+
+# INPUT: new sparse photometry m_new (vector of observed reflectance or magnitudes)
+# OUTPUT: posterior predictive spectrum S_post and taxonomy probabilities
+
+STEP 11: Predict latent distribution:
+        (μ_Z, Σ_Z) = R.predict(m_new)           # mean and covariance of latent
+
+STEP 12: Sample S_samples from posterior (optional, for uncertainty):
+        FOR k = 1..N_sample:
+            z_k ~ MVN(μ_Z, Σ_Z)
+            S_k  = PC_basis * z_k + μ_S
+        END FOR
+        # Each S_k is a full‑resolution spectrum realization
+
+STEP 13: Construct posterior predictive spectrum:
+        If N_sample == 1:  S_post = S_k
+        Else:
+            S_mean  = mean(S_samples, axis=0)
+            S_std   = std(S_samples, axis=0)      # per‑wavelength uncertainty
+            S_post  = (S_mean, S_std)
+
+STEP 14: Taxonomy prediction:
+        taxonomy_probs = C.predict_proba(μ_Z)    # probability vector over classes
+
+# ------------------------------------------------------------------
+# 3. RETURN RESULTS
+# ------------------------------------------------------------------
+RETURN: {
+    "spectrum": S_post,              # reconstructed spectrum (mean ± uncertainty)
+    "taxonomy": taxonomy_probs       # probability distribution over classes
+}

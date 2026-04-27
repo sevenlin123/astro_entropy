@@ -1,0 +1,61 @@
+# ----------------------------------------------------
+# 1. Train Principal‑Component Basis (offline)
+# ----------------------------------------------------
+INPUT: Spectral library {x_i(λ)} , i = 1…N  (flux vs λ)
+PARAMETERS: k_pc   # number of principal components retained
+OUTPUT: μ_x(λ),  V_k(λ,j)   # mean spectrum and first k_pc eigenvectors
+
+1.1  Resample all spectra to a common wavelength grid {λ_l}.
+1.2  Form data matrix X ∈ ℝ^(N×L) where each row is a spectrum.
+1.3  Compute mean spectrum μ_x = mean(X, axis=0).
+1.4  Center spectra: X_c = X – μ_x.
+1.5  Perform singular value decomposition: X_c = U Σ Vᵀ.
+1.6  Select first k_pc columns of Vᵀ: V_k ∈ ℝ^(k_pc×L).
+1.7  Store μ_x and V_k.
+
+# ----------------------------------------------------
+# 2. Build Photometric Forward Model (per filter set)
+# ----------------------------------------------------
+INPUT: Filter transmission curves {T_f(λ)} , f = 1…F
+OUTPUT: Design matrix H ∈ ℝ^(F×k_pc)
+
+2.1  For each filter f:
+2.1.1  Compute photometric response vector h_f(j) = ∫ T_f(λ) V_k(j,λ) dλ    for j = 1…k_pc
+2.2  Assemble H whose rows are h_f.
+2.3  Pre‑compute Hᵀ H and store.
+
+# ----------------------------------------------------
+# 3. Bayesian Inference of PC Coefficients (online)
+# ----------------------------------------------------
+INPUT: Observed photometry d_f (fluxes) with uncertainties σ_f,
+       filter set {T_f}, prior covariance Σ_prior (from training),
+       design matrix H.
+OUTPUT: Posterior mean â and covariance Σ_post of PC coefficients.
+
+3.1  Construct weight matrix W = diag(1/σ_f²).
+3.2  Compute A = Σ_prior⁻¹ + Hᵀ W H          # precision matrix
+3.3  Compute b = Hᵀ W d                      # weighted projected data
+3.4  Solve A â = b  →  â = A⁻¹ b             # posterior mean of coefficients
+3.5  Compute Σ_post = A⁻¹                      # posterior covariance
+
+# ----------------------------------------------------
+# 4. Spectrum Reconstruction and Uncertainty Propagation
+# ----------------------------------------------------
+INPUT: μ_x, V_k, â, Σ_post
+OUTPUT: Reconstructed spectrum ŷ(λ) with per‑wavelength variance Var(ŷ).
+
+4.1  Reconstruct mean spectrum: ŷ_mean(λ) = μ_x(λ) + Σ_{j=1}^{k_pc} â_j V_k(j,λ).
+4.2  Propagate coefficient covariance to spectrum:
+     For each wavelength λ_l:
+        v_l = [V_k(1,l), …, V_k(k_pc,l)]ᵀ   # column vector of PC basis at λ_l
+        Var(ŷ_l) = v_lᵀ Σ_post v_l          # variance at λ_l
+4.3  Return ŷ_mean(λ_l) and Var(ŷ_l) for all λ_l.
+
+# ----------------------------------------------------
+# 5. Optional: Rare Type Detection (optional post‑processing)
+# ----------------------------------------------------
+INPUT: Posterior density p(a | d)  (Gaussian N(â, Σ_post))
+OUTPUT: Flag if a lies outside high‑probability region of training manifold.
+
+5.1  Compute Mahalanobis distance D² = (â – μ_a)ᵀ Σ_prior⁻¹ (â – μ_a).
+5.2  If D² > threshold (e.g., corresponding to 95 % contour), flag as potential outlier.

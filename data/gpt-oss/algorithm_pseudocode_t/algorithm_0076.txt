@@ -1,0 +1,92 @@
+INPUT
+  D           – List of photometric measurements:  (object_id, filter_id, mag, sigma_mag)
+  S_lib       – Library of M reference spectra S_j(λ)  (j = 1 … M)
+  R_lib       – Filter response curves R_k(λ)          (k = 1 … K)
+  α_dir       – Dirichlet prior concentration vector (length M)
+  N_samp      – Number of MCMC samples per object
+  THRESH_OUT  – Outlier significance threshold (e.g., 3σ)
+
+PREPROCESSING
+  1. Choose a wavelength grid {λ_l} (l = 1 … L) covering all spectra and filters.
+  2. Convert all magnitudes to fluxes using zero‑point ZP_k for each filter:
+        F_ik = 10^(-0.4*(mag_ik – ZP_k))
+     Store measurement errors in flux units:
+        σ_F_ik = ln(10)/2.5 * F_ik * σ_mag_ik
+  3. For every filter k and reference spectrum j, compute the *design matrix*
+        A[k,j] = ∫_λ S_j(λ) R_k(λ) dλ   (numerical integration on the chosen grid)
+     (A is a K×M matrix.)
+
+FOR EACH OBJECT i
+  --------------------------------------------------------------
+  4. Gather the observations for this object:
+        O_i = { (k, F_ik, σ_F_ik) for all filters k where object i was observed }
+     Let K_i be the number of observed filters for object i.
+
+  5. Define the likelihood for the weight vector w_i (size M):
+        ℒ_i(w_i) = Π_{k∈O_i}
+                     Normal( F_ik  |  Σ_{j=1}^{M} w_{ij} A[k,j] , σ_F_ik^2 )
+
+  6. Set the prior on weights:
+        p_prior(w_i) = Dirichlet( w_i | α_dir )
+        (This enforces w_{ij} ≥ 0 and Σ_j w_{ij} = 1.)
+
+  7. Posterior density:
+        p_post(w_i | O_i) ∝ ℒ_i(w_i) · p_prior(w_i)
+
+  8. Sample from the posterior using an MCMC routine (e.g., Hamiltonian
+     Monte Carlo, slice sampler, or Metropolis‑Hastings):
+        Initialize w_i^(0) (e.g., α_dir / Σα_dir).
+        For t = 1 … N_samp:
+            Propose w_i'  (respecting simplex constraints).
+            Compute acceptance ratio r = p_post(w_i' | O_i) / p_post(w_i^(t-1) | O_i).
+            Accept w_i^(t) = w_i' with probability min(1, r); otherwise
+                              w_i^(t) = w_i^(t-1).
+        Store the N_samp samples { w_i^(t) }.
+
+  9. Compute posterior summaries:
+        • Mean weight vector:  μ_i = (1/N_samp) Σ_{t=1}^{N_samp} w_i^(t)
+        • Standard deviation per component:  σ_i(j) = sqrt( (1/(N_samp-1)) Σ_t (w_i^(t)(j)-μ_i(j))^2 )
+
+ 10. Reconstruct the continuous spectrum:
+        S_i_recon(λ) = Σ_{j=1}^{M} μ_i(j) · S_j(λ)
+        (Store or output S_i_recon on the same λ grid.)
+
+ 11. Predictive fluxes for any filter (including unobserved ones):
+        For each filter k′:
+             F_pred_i(k′) = Σ_{j=1}^{M} μ_i(j) · A[k′, j]
+             If desired, convert back to magnitude:
+                mag_pred_i(k′) = -2.5 log10(F_pred_i(k′) / F0_k′)
+
+ 12. Outlier detection for observed filters:
+        For each observed filter k:
+             Compute predictive distribution of flux using samples:
+                F_pred_samples = [ Σ_j w_i^(t)(j) · A[k,j]  for t=1…N_samp ]
+             Compute predictive mean μ_pred = mean(F_pred_samples)
+             Compute predictive std σ_pred = std(F_pred_samples)
+             Standardized residual:
+                r_ik = (F_ik - μ_pred) / σ_pred
+             If |r_ik| > THRESH_OUT, flag (i,k) as an outlier.
+
+END FOR
+
+POST‑PROCESSING ACROSS OBJECTS
+  13. Assemble all posterior mean weight vectors { μ_i } into matrix M_mat (N_objects × M).
+
+  14. Taxonomic clustering:
+        • Apply a clustering algorithm (e.g., k‑means, Gaussian mixture, hierarchical)
+          to { μ_i } to obtain class assignments for each object.
+        • Optionally compute silhouette scores or other cluster quality metrics.
+
+  15. Survey optimization (optional):
+        For a candidate new filter k*:
+            For each object i, estimate posterior variance of predicted flux
+                Var_i(k*) ≈ (1/(N_samp-1)) Σ_t ( Σ_j w_i^(t)(j)·A[k*,j] - μ_pred_i(k*) )^2
+            Aggregate over all objects (e.g., mean or sum).
+            Select the filter k* that minimizes the aggregate variance or maximizes
+            expected information gain.
+
+OUTPUT
+  • For each object: posterior mean weights μ_i, reconstructed spectrum S_i_recon(λ),
+    predictive magnitudes for all filters, outlier flags.
+  • Cluster assignments for taxonomy.
+  • Recommended filters for future observations (survey optimization).

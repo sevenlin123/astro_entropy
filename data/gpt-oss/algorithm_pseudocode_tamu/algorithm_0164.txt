@@ -1,0 +1,88 @@
+INPUT:
+    S_obs   : set of observed TNO spectra (length M, each spectrum length L)
+    F       : list of filter transmission curves {F_j(t)} for j = 1 … J
+    Phot_obs: new photometric measurements for a target object
+    σ_rel   : assumed relative photometric noise (default 0.20)
+
+PARAMETERS:
+    K       : number of principal components to retain (e.g. K = 8)
+    h_KDE   : bandwidth for kernel density estimation (e.g. h_KDE = 0.5)
+    N_aug   : number of synthetic latent samples to generate (e.g. N_aug = 10⁴)
+
+OUTPUT:
+    S_rec   : reconstructed high‑resolution spectrum
+    COV_S   : covariance matrix for S_rec
+    P_tax   : probability vector over taxonomic classes
+
+--------------------------------------------------------------------
+STEP 0 – Pre‑processing of reference spectra
+--------------------------------------------------------------------
+FOR each spectrum s ∈ S_obs:
+    • Normalize s to unit area (optional)
+    • Store as vector of length L
+END FOR
+
+--------------------------------------------------------------------
+STEP 1 – Principal Component Analysis (PCA)
+--------------------------------------------------------------------
+1.1 Construct data matrix X (M × L) from S_obs.
+1.2 Subtract column means → X_centered.
+1.3 Compute covariance matrix Σ = (1/(M−1)) * X_centeredᵀ * X_centered.
+1.4 Perform eigen‑decomposition of Σ:
+        Σ = U Λ Uᵀ
+    – U: L × L eigenvector matrix (columns are PCs)
+    – Λ: diagonal eigenvalue matrix
+1.5 Select first K columns of U → U_K (L × K).
+1.6 Project each spectrum onto PCs:
+        a_i = U_Kᵀ * (s_i − μ)      # μ = mean spectrum
+    – Store coefficient vectors a_i (size K).
+
+--------------------------------------------------------------------
+STEP 2 – Build continuous prior in latent space
+--------------------------------------------------------------------
+2.1 Estimate density p(a) over {a_i} using kernel density estimation:
+        For any point a:  p(a) = (1/M) * Σ_{i=1}^{M} K_h(a − a_i),
+        where K_h is Gaussian kernel with bandwidth h_KDE.
+2.2 Sample N_aug latent vectors {ã_j} from p(a):
+        ã_j ← draw from KDE
+--------------------------------------------------------------------
+STEP 3 – Forward model: synthetic photometry
+--------------------------------------------------------------------
+For each synthetic latent vector ã_j:
+    3.1 Reconstruct synthetic spectrum:
+            s̃_j = μ + U_K * ã_j          # length L
+    3.2 Convolve s̃_j with each filter F_j:
+            m_jk = ∫ s̃_j(λ) * F_k(λ) dλ / ∫ F_k(λ) dλ
+    3.3 Add Gaussian noise to each band:
+            m'_jk = m_jk * (1 + ε),  ε ~ N(0, σ_rel²)
+    3.4 Store pair (m'_j, ã_j) for training.
+--------------------------------------------------------------------
+STEP 4 – Train encoder (photometry → latent)
+--------------------------------------------------------------------
+4.1 Assemble training set:
+        Inputs   : noisy photometry vectors {m'_j} (length J)
+        Targets  : corresponding latent vectors {ã_j} (length K)
+4.2 Use an AutoML regression engine (e.g. gradient‑boosted trees, neural nets):
+        Train model R to minimize mean‑squared error between R(m) and ã.
+4.3 Validate R on held‑out synthetic samples (cross‑validation optional).
+--------------------------------------------------------------------
+STEP 5 – Train latent‑space taxonomic classifier
+--------------------------------------------------------------------
+5.1 Label each coefficient vector a_i with its known taxonomic class.
+5.2 Train classifier C (ensemble or neural net) on {a_i, label_i}.
+--------------------------------------------------------------------
+STEP 6 – Inference on new observation
+--------------------------------------------------------------------
+6.1 Input Phot_obs (length J) into encoder R:
+        â = R(Phot_obs)              # point estimate of latent coeffs
+6.2 Sample posterior of latent coeffs (optional):
+        • Draw N_post samples {â_p} from Gaussian centered at â with covariance Σ_a (estimated from R’s residuals)
+        • Optionally apply Gaussian copula to preserve latent correlations.
+6.3 Decode each latent sample to a spectrum:
+        ŝ_p = μ + U_K * â_p          # length L
+    – Compute mean spectrum S_rec = mean({ŝ_p})
+    – Compute spectrum covariance COV_S = covariance({ŝ_p})
+6.4 Classify taxonomic probabilities:
+        P_tax = C(â)                 # vector of class probabilities
+--------------------------------------------------------------------
+RETURN S_rec, COV_S, P_tax

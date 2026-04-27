@@ -1,0 +1,98 @@
+Input:
+    - Reference spectra S_ref = {s_i[λ]}  i = 1 … N_ref
+    - Filter transmission curves T_j[λ]  j = 1 … M
+    - Observed photometry m_obs = {m_k}   k = 1 … M_phot   (wavelength indices of available filters)
+    - Number of principal components K (≈ 5–10)
+    - KDE bandwidth h (≈ 0.5)
+
+Output:
+    - Reconstructed high‑resolution spectrum s_rec[λ]
+    - Taxonomic probability vector p_tax (e.g., H₂O, CO₂, Organics, Methanol)
+    - Uncertainty band for s_rec[λ] (optional)
+
+--------------------------------------------------------------------
+Step 0 – Pre‑processing (executed once)
+--------------------------------------------------------------------
+
+1. **Spectral Normalization**
+   For each reference spectrum s_i[λ], divide by the solar spectrum at the same λ
+   to obtain reflectance R_i[λ].
+
+2. **Principal Component Analysis (PCA)**
+   a. Build data matrix X of size (N_ref × L) where each row is R_i[λ].
+   b. Center X by subtracting column means μ[λ].
+   c. Compute covariance matrix C = (Xᵀ X)/(N_ref−1).
+   d. Obtain eigenvalues λ₁≥…≥λ_L and eigenvectors v₁,…,v_L.
+   e. Select first K eigenvectors V_K = [v₁ … v_K].
+   f. For each spectrum, compute PCA coefficients:
+        c_i = V_Kᵀ (R_i[λ] − μ[λ])      // length K vector
+
+3. **Kernel Density Estimation (KDE) in Latent Space**
+   a. Treat the set {c_i} as sample points in ℝᴷ.
+   b. Use a Gaussian kernel with bandwidth h to construct density p(c).
+   c. Sample N_aug synthetic coefficient vectors {c_syn} from p(c)
+      (e.g., N_aug ≈ 5000).
+
+4. **Generate Synthetic Spectra**
+   For each sampled coefficient c_syn:
+        r_syn[λ] = μ[λ] + V_K * c_syn          // inverse PCA
+        s_syn[λ] = r_syn[λ] * solar[λ]        // multiply back by solar if desired
+
+5. **Forward Model Photometry (Simulation‑Based Likelihood)**
+   For each synthetic spectrum s_syn[λ]:
+        For each filter j = 1 … M:
+            f_j = ∫ s_syn[λ] * T_j[λ] dλ   // convolve with filter curve
+            m_j = reflectance_normalization(f_j)   // convert to reflectance or magnitude
+        Add Gaussian noise to each m_j with σ_rel = 0.20 (20% relative)
+        Store pair (m_syn, c_syn)
+
+6. **Train Encoder (Photometry → PCA Coefficients)**
+   a. Assemble training set {(m_syn, c_syn)}.
+   b. Use an automated ML framework (e.g., AutoGluon) to fit a regressor
+      that maps m (length M) → c (length K).
+   c. Validate convergence and store the trained model R_enc.
+
+7. **Train Taxonomy Classifier (Optional)**
+   a. Label each reference spectrum with its taxonomy label L_i.
+   b. Train a classifier on the PCA coefficients {c_i} → label L_i.
+   c. Store the trained classifier C_cls.
+
+--------------------------------------------------------------------
+Step 1 – Inference for a New Object
+--------------------------------------------------------------------
+
+8. **Prepare Observed Photometry**
+   a. Ensure m_obs contains measurements in the same filter set as the training.
+   b. If any filter is missing, flag or fill with NaN (handled by regressor).
+
+9. **Predict PCA Coefficients**
+   a. Input m_obs into encoder: c_hat = R_enc(m_obs)
+   b. Optionally, obtain prediction variance or distribution if encoder supports it.
+
+10. **Sample Posterior of Coefficients (Optional)**
+    a. Construct Gaussian Copula with marginal posteriors from step 9.
+    b. Draw N_samp samples {c_sample}.
+    c. For each sample, reconstruct spectrum (step 11).
+
+11. **Decode to Full Spectrum**
+    For each coefficient vector c (either c_hat or c_sample):
+        r[λ] = μ[λ] + V_K * c            // inverse PCA
+        s[λ] = r[λ] * solar[λ]           // optional re‑multiplication
+
+12. **Assemble Reconstruction and Uncertainty**
+    a. If multiple samples were drawn, compute mean spectrum s_mean[λ]
+       and percentile bounds (e.g., 16th & 84th) to form an uncertainty band.
+    b. Otherwise, use single reconstruction s_rec[λ] = s[λ] from step 11.
+
+13. **Taxonomic Classification**
+    a. Pass c_hat (or its distribution) to classifier C_cls → probabilities p_tax.
+
+14. **Return Results**
+    Output:
+        • s_rec[λ] (or s_mean[λ] with uncertainty)
+        • Taxonomy probability vector p_tax
+        • (Optional) Sampled spectra for diagnostics
+
+--------------------------------------------------------------------
+End of Algorithm
+--------------------------------------------------------------------

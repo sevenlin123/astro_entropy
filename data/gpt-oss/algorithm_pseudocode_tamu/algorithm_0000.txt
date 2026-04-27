@@ -1,0 +1,106 @@
+Inputs
+-------
+- RefSpectra      : N_ref × N_wave array of observed TNO reflectance spectra
+- FilterCurves    : M_filt × N_wave array of JWST NIRCam filter throughputs
+- PhotometryData  : K_obj × M_filt array of observed reflectance or magnitude
+                    values for new TNOs (sparse photometry)
+- NoiseStd        : scalar (default = 0.20)  // relative photometric noise level
+
+Parameters
+----------
+- K_latent        : integer (number of PCA components, e.g. 8–10)
+- KDE_bandwidth   : scalar (e.g. 0.5)
+- N_aug           : integer (number of synthetic latent samples per real spectrum,
+                           e.g. 500)
+- N_copula_samples: integer (posterior sampling size, e.g. 1000)
+
+Outputs
+-------
+- ReconSpectra     : K_obj × N_wave array of reconstructed high‑resolution
+                      reflectance spectra (posterior mean)
+- ReconUncert      : K_obj × N_wave × 2 array of lower / upper credible bounds
+- TaxonomyProb     : K_obj × N_class array of posterior taxonomic probabilities
+
+--------------------------------------------------------------------
+Step 1 – Principal Component Analysis (Prior Definition)
+--------------------------------------------------------------------
+1.1  Compute mean spectrum μ_ref = mean(RefSpectra, axis=0).
+1.2  Center spectra: X_centered = RefSpectra – μ_ref.
+1.3  Perform SVD or eigendecomposition on covariance of X_centered.
+1.4  Select first K_latent eigenvectors → PrincipalComponentMatrix P
+     (size N_wave × K_latent).
+1.5  Project centered spectra into latent space:
+        LatentReal = X_centered @ P          // shape N_ref × K_latent
+
+--------------------------------------------------------------------
+Step 2 – Manifold Augmentation (KDE)
+--------------------------------------------------------------------
+2.1  Fit multivariate Gaussian KDE to LatentReal with bandwidth KDE_bandwidth.
+2.2  For each real spectrum i = 1 … N_ref:
+        Sample N_aug points from KDE → LatentAug_i (shape N_aug × K_latent)
+        Store all samples in LatentSynthetic (shape N_ref*N_aug × K_latent).
+
+--------------------------------------------------------------------
+Step 3 – Synthetic Photometry Generation (Implicit Likelihood)
+--------------------------------------------------------------------
+3.1  For every latent vector ℓ in LatentSynthetic:
+        • Reconstruct spectrum: s_syn = μ_ref + ℓ @ P.T          // N_wave
+        • Convolve with each filter f_j:
+              m_ij = Σ_k s_syn(k) * FilterCurves(j,k) / Σ_k FilterCurves(j,k)
+              (i.e., integrate reflectance over filter throughput)
+        • Assemble photometry vector m_syn (size M_filt).
+        • Perturb by Gaussian noise:
+              m_syn_noisy = m_syn * (1 + N(0, NoiseStd))
+3.2  Store pairs (m_syn_noisy , ℓ) in TrainingSet.
+
+--------------------------------------------------------------------
+Step 4 – Train AutoML Regressor (Encoder)
+--------------------------------------------------------------------
+4.1  Using TrainingSet, fit an ensemble regressor R that maps
+      photometry m → latent coefficients ℓ.
+      (e.g., AutoGluon TabularAutoML with default hyper‑parameters,
+       which internally ensembles GBDT + NN models).
+4.2  Validate R on a hold‑out subset of TrainingSet; ensure RMSE < tolerance.
+
+--------------------------------------------------------------------
+Step 5 – Train AutoML Classifier (Taxonomy)
+--------------------------------------------------------------------
+5.1  Assign taxonomic label to each RealRefSpectrum (e.g., H₂O, CO₂, Organic,
+      Methanol).
+5.2  Train a classifier C that takes latent vector ℓ as input and outputs
+      class probabilities.
+5.3  Evaluate classification accuracy on withheld test spectra.
+
+--------------------------------------------------------------------
+Step 6 – Inference on New Observations
+--------------------------------------------------------------------
+For each new object k = 1 … K_obj:
+
+  6.1  Obtain observed photometry m_k (size M_filt).
+  6.2  Use regressor R to predict posterior distribution of latent
+        coefficients: 
+            - Predict mean vector μ_k and covariance Σ_k
+              (R may provide uncertainty estimates; if not,
+               approximate with ensemble variance).
+  6.3  Build a Gaussian Copula:
+            - Extract marginal posteriors p_i for each component i
+              (e.g., via kernel density on ensemble predictions).
+            - Use copula correlation matrix (from Σ_k) to couple marginals.
+  6.4  Sample N_copula_samples latent vectors {ℓ_s} from the copula.
+  6.5  For each sampled ℓ_s:
+            • Reconstruct spectrum s_s = μ_ref + ℓ_s @ P.T
+  6.6  Compute posterior statistics:
+            • Mean spectrum μ_spectrum = mean(s_s over samples)
+            • Credible interval [lower, upper] = 2.5% and 97.5%
+              percentiles of s_s at each wavelength.
+  6.7  Pass μ_k (regression mean) to classifier C to obtain
+            taxonomy probability vector P_k.
+  6.8  Store results:
+            ReconSpectra[k,:]   = μ_spectrum
+            ReconUncert[k,:,:]  = [lower, upper]
+            TaxonomyProb[k,:]   = P_k
+
+--------------------------------------------------------------------
+Return
+------
+ReconSpectra, ReconUncert, TaxonomyProb

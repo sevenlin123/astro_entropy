@@ -1,0 +1,55 @@
+1.1 Load all available high‑resolution TNO spectra {S_i, i = 1…N}.
+1.2 Define number of principal components K (default 8–10).
+1.3 Compute PCA on {S_i} → get mean spectrum μ_S, eigenvectors {E_k}.
+1.4 Project each spectrum onto PCA basis:
+        z_i = E^T · (S_i – μ_S)          // z_i ∈ ℝ^K
+1.5 Fit a non‑parametric Kernel Density Estimate (KDE) on {z_i}:
+        p(z) ← KDE({z_i}, bandwidth = h ≈ 0.5)
+1.6 Generate M synthetic latent vectors {z_j^syn} by sampling p(z).
+1.7 For each synthetic latent vector:
+        a) Reconstruct synthetic spectrum:  S_j^syn = μ_S + E·z_j^syn
+        b) Forward‑model photometry:
+               For each filter f:
+                   m_f^syn = ∫ S_j^syn(λ)·T_f(λ) dλ / ∫ S_⊙(λ)·T_f(λ) dλ
+               (where T_f is the filter throughput and S_⊙ is solar spectrum)
+        c) Add Gaussian noise to photometry:
+               m_f^syn ← m_f^syn + N(0, σ_rel·m_f^syn)
+           (σ_rel ≈ 0.20, i.e., 20 % relative uncertainty)
+1.8 Assemble training data:
+        X_train = {m_j^syn}   // photometry vectors
+        Y_train = {z_j^syn}   // latent vectors
+1.9 Train encoder (regressor) R:  R(X) → 𝑌̂
+        - Use AutoML (ensemble of GBDT & NN) to predict mean and variance
+          of each latent coefficient given photometry.
+1.10 Train latent‑space classifier C:  C(ȳ) → P(class | ȳ)
+        - Labels are the taxonomic classes assigned to the seed spectra.
+
+2.1 Receive observed photometry vector m_obs (length L ≥ 2).
+2.2 Feed m_obs to trained encoder R to obtain:
+        • Mean latent vector μ_z = E[ z | m_obs ]
+        • Covariance matrix Σ_z = Var[ z | m_obs ]    // from heteroscedastic output
+2.3 Build Gaussian Copula sampler:
+        a) For each coefficient k, obtain marginal posterior density
+           (e.g., Gaussian with mean μ_zk and std dev σ_zk).
+        b) Construct correlation matrix ρ from Σ_z (standardized).
+        c) Sample N_samples latent vectors {z^(s)} using copula.
+2.4 For each sampled latent vector z^(s):
+        a) Reconstruct spectrum:
+               S^(s) = μ_S + E · z^(s)
+2.5 Aggregate all S^(s) to obtain:
+        • Point estimate: Ŝ = average(S^(s))
+        • Credible interval per wavelength λ: 
+              CI_λ = [quantile_low(S^(s)(λ)), quantile_high(S^(s)(λ))]
+            (e.g., 2.5 % and 97.5 % for 95 % CI)
+2.6 Classify taxonomy:
+        a) Feed μ_z into classifier C → posterior class probabilities
+           P_taxonomy = C(μ_z)
+2.7 Output:
+        • Reconstructed spectrum Ŝ with credible intervals.
+        • Taxonomy probability vector P_taxonomy.
+
+3.1 Compute derived physical quantities (spectral slope, absorption band depth)
+     directly from Ŝ.
+3.2 Flag outliers if:
+        – Any CI band lies outside the 99 % envelope of all training spectra.
+        – Class probabilities are multimodal or low (<0.5).

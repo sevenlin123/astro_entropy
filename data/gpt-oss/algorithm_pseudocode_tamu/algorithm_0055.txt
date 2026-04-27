@@ -1,0 +1,112 @@
+INPUT
+    S_obs  –  list of N_raw spectra (flux vs. wavelength) for training
+    m_phot –  list of M photometric measurements (filter × object) for training
+    filt   –  list of filter transmission curves (effective wavelengths)
+    K      –  dimensionality of PCA latent space (e.g., 8 or 10)
+    h      –  KDE bandwidth (e.g., 0.5)
+    N_aug  –  number of synthetic latent samples to generate (e.g., 10 000)
+    n_cop  –  number of posterior samples per new object (e.g., 500)
+
+OUTPUT
+    For any new photometry vector p_new:
+        - Posterior distribution of spectra  P(S | p_new)
+        - Spectral mean & confidence bands
+        - Taxonomic probability vector  P(class | p_new)
+
+--------------------------------------------------------------------
+STEP 1 – BUILD PRIOR FROM OBSERVED SPECTRA
+--------------------------------------------------------------------
+1.1   Align all S_obs to common wavelength grid λ_grid
+1.2   Compute reflectance R = S_obs / Solar(λ_grid)
+1.3   Standardise R (zero mean, unit variance per wavelength)
+1.4   Perform PCA on the standardized spectra:
+        [U, Σ, V] = PCA(R, K)
+        → eigenvectors V (size K×nλ)
+        → principal component scores C_true (N×K)
+1.5   Store V, mean spectrum μ_R, and PCA scaling factors for decoding.
+
+--------------------------------------------------------------------
+STEP 2 – AUGMENT THE LATENT MANIFOLD (KDE)
+--------------------------------------------------------------------
+2.1   Estimate PDF f(C) over latent space using Gaussian KDE:
+        f(C) = KDE(C_true, bandwidth=h)
+2.2   Sample N_aug latent vectors {c_i} ~ f(C)
+2.3   For each c_i:
+        – Decode to synthetic spectrum:
+            s_i = μ_R + Vᵀ · c_i
+        – Store (c_i , s_i)
+
+--------------------------------------------------------------------
+STEP 3 – SIMULATE PHOTOMETRY WITH NOISE
+--------------------------------------------------------------------
+3.1   For each synthetic spectrum s_i:
+        – Convolve with each filter transmission curve filt_j:
+              F_ij = ∫ s_i(λ) * filt_j(λ) dλ
+        – Convert to relative reflectance or magnitude:
+              m_ij = PhotometricConversion(F_ij)
+3.2   Add Gaussian noise (σ = 0.20 × m_ij) independently to each m_ij
+3.3   Assemble noisy photometry matrix M_sim (N_aug × n_filt)
+3.4   Pair M_sim with corresponding latent codes {c_i}
+
+--------------------------------------------------------------------
+STEP 4 – TRAIN ENCODER (Photometry → Latent)
+--------------------------------------------------------------------
+4.1   Split {M_sim , c_i} into training set (80%) and validation set (20%)
+4.2   Use AutoML (e.g., AutoGluon Tabular) to fit regression model:
+        ENC :  ℝ^{n_filt}  →  ℝ^{K}
+        Input: noisy photometry vector m
+        Target: latent code c
+4.3   Validate model on hold‑out split; if performance acceptable, keep model.
+4.4   Save the trained encoder ENC.
+
+--------------------------------------------------------------------
+STEP 5 – TRAIN TAXONOMY CLASSIFIER (Latent → Class)
+--------------------------------------------------------------------
+5.1   Label each original spectrum S_obs with its taxonomic class
+5.2   Use corresponding latent scores C_true (from Step 1)
+5.3   Train AutoML classifier CLF on (C_true , label)
+5.4   Evaluate accuracy on validation subset; keep model if ≥ desired threshold.
+5.5   Save the trained classifier CLF.
+
+--------------------------------------------------------------------
+STEP 6 – POSTERIOR SAMPLING (Gaussian Copula)
+--------------------------------------------------------------------
+6.1   Fit marginal posterior distributions for each latent dimension:
+        – From ENC predictions on training photometry, build KDEs g_k(c_k)
+6.2   Estimate correlation matrix Σ_latent between dimensions
+6.3   Build Gaussian Copula C(·) from Σ_latent
+6.4   Sampling routine:
+        For i in 1 … n_cop:
+            a) Draw u ~ Uniform(0,1)^K
+            b) Transform via copula: z = Φ^{-1}(C⁻¹(u))  (Φ = standard normal CDF)
+            c) Map to latent sample: c_sample[i] = g_k⁻¹(z_k)  for each k
+        → Obtain n_cop latent draws consistent with correlations.
+
+--------------------------------------------------------------------
+STEP 7 – INFERENCE FOR NEW OBJECT
+--------------------------------------------------------------------
+Input: new photometry vector p_new (size n_filt)
+
+7.1   Predict mean latent code:
+        c_mean = ENC(p_new)
+
+7.2   Generate posterior latent samples:
+        c_samples = SampleFromCopula(n_cop, c_mean)
+
+7.3   Decode each sample to spectrum:
+        For each c in c_samples:
+            s = μ_R + Vᵀ · c
+            Record s
+
+7.4   Compute spectrum statistics:
+        • Mean spectrum  Ŝ = average(s_samples)
+        • Credible intervals (e.g., 68%, 95%) by percentile across samples
+
+7.5   Taxonomy probabilities:
+        • Pass c_mean (or each c_sample) through CLF to obtain class probs
+        • Average class probs over samples to get P(class | p_new)
+
+RETURN:
+    - Posterior spectral distribution P(S | p_new)
+    - Mean spectrum Ŝ ± credible bands
+    - Taxonomic probability vector P(class | p_new)

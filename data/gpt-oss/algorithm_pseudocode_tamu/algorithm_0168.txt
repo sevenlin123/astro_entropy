@@ -1,0 +1,113 @@
+INPUT
+    S_ref      # Reference spectra matrix (n_spec × n_wave)
+    T_filters  # Filter throughput arrays (p_filters × n_wave)
+    K_target   # Desired number of principal components
+    h_kde      # KDE bandwidth
+    M_synth    # Number of synthetic latent samples (e.g., 5000)
+    n_samples  # Number of posterior samples per inference (e.g., 1000)
+
+OUTPUT
+    For each new photometry m_new (vector length p):
+        S_recon_mean     # Mean reconstructed spectrum (n_wave)
+        S_recon_CI       # Confidence interval bounds (e.g., 5th & 95th percentiles)
+        Class_probs      # Probability vector over taxonomy classes
+
+--------------------------------------------------------------------
+STEP 1 – Pre‑process Reference Spectra
+--------------------------------------------------------------------
+function preprocess(S_ref):
+    # Optional: normalize, remove solar spectrum, resample to common grid
+    return S_norm
+
+S_norm = preprocess(S_ref)
+
+--------------------------------------------------------------------
+STEP 2 – Principal Component Analysis (PCA)
+--------------------------------------------------------------------
+function compute_pca(S_norm, K_target):
+    μ_s = mean(S_norm, axis=0)                     # Spectrum mean
+    C   = cov(S_norm - μ_s)                        # Covariance matrix
+    eig_vals, eig_vecs = eig(C)                    # Eigen decomposition
+    sort indices by descending eig_vals
+    V = eig_vecs[:, :K_target]                     # Retain first K_target PCs
+    Z = (S_norm - μ_s) · V                         # Latent coordinates (n_spec × K)
+    return μ_s, V, Z
+
+μ_s, V, Z_train = compute_pca(S_norm, K_target)
+
+--------------------------------------------------------------------
+STEP 3 – KDE Prior on Latent Space
+--------------------------------------------------------------------
+function fit_kde(Z_train, h_kde):
+    # Gaussian kernel density estimator
+    return kde_model   # capable of sampling and evaluating density
+
+kde_prior = fit_kde(Z_train, h_kde)
+
+--------------------------------------------------------------------
+STEP 4 – Generate Synthetic Spectra & Photometry
+--------------------------------------------------------------------
+function synthesize_from_kde(kde_prior, M_synth, μ_s, V):
+    Z_synth = kde_prior.sample(M_synth)                  # (M_synth × K)
+    S_synth = μ_s + Z_synth · V.T                       # (M_synth × n_wave)
+    return Z_synth, S_synth
+
+Z_synth, S_synth = synthesize_from_kde(kde_prior, M_synth, μ_s, V)
+
+function forward_photometry(S_synth, T_filters, σ_rel=0.2):
+    # Convolve each synthetic spectrum with each filter
+    Φ = zeros(M_synth, p_filters)
+    for i in 1..M_synth:
+        for j in 1..p_filters:
+            Φ[i,j] = ∫ S_synth[i,:] * T_filters[j,:] dλ / ∫ T_filters[j,:] dλ
+    # Add Gaussian noise proportional to flux
+    noise = normal(0, σ_rel * Φ)
+    Φ_noisy = Φ + noise
+    return Φ_noisy
+
+Φ_noisy = forward_photometry(S_synth, T_filters)
+
+--------------------------------------------------------------------
+STEP 5 – Train AutoML Regressor (Encoder)
+--------------------------------------------------------------------
+# X = noisy photometry Φ_noisy,  Y = latent coefficients Z_synth
+regressor = AutoML_Regression( X=Φ_noisy , Y=Z_synth )
+# Example: ensemble of Gradient Boosted Trees (GBDT)
+
+--------------------------------------------------------------------
+STEP 6 – Train AutoML Classifier (optional)
+--------------------------------------------------------------------
+# Use training latent coefficients Z_train and known taxonomy labels L_train
+classifier = AutoML_Classification( X=Z_train , y=L_train )
+
+--------------------------------------------------------------------
+STEP 7 – Inference on New Photometry
+--------------------------------------------------------------------
+function infer(m_new):
+    # m_new may contain measurement errors; optional denoise or normalize
+    # Predict posterior over latent space using regressor
+    z_mean, Σ_pred = regressor.predict_with_uncertainty(m_new)   # mean & covariance
+
+    # Gaussian Copula Sampling
+    L_chol = chol(Σ_pred)      # lower triangular
+    samples = zeros(n_samples, K)
+    for s in 1..n_samples:
+        u = normal(0,1, size=K)                # independent standard normals
+        z_sample = z_mean + L_chol @ u          # correlated sample
+        samples[s] = z_sample
+
+    # Reconstruct spectra for each sample
+    S_samples = μ_s + samples · V.T             # (n_samples × n_wave)
+
+    # Compute statistics
+    S_mean   = mean(S_samples, axis=0)
+    S_lower  = percentile(S_samples, 5, axis=0)
+    S_upper  = percentile(S_samples, 95, axis=0)
+
+    # Taxonomy probabilities
+    probs = classifier.predict_proba(z_mean)     # optional
+
+    return S_mean, (S_lower, S_upper), probs
+
+# Example usage:
+S_rec_mean, (S_ci_low, S_ci_high), class_prob = infer(m_new)

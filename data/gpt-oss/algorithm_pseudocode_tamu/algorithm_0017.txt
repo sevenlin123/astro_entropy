@@ -1,0 +1,60 @@
+INPUT:
+    - RealSpectra[1..N_real]   // Reflectance spectra of N_real TNOs (high‑res)
+    - Filters[1..N_filt]       // Effective throughput curves of chosen filters
+    - Photometry[1..M_obs][1..N_filt] // Sparse photometric measurements for M_obs objects
+    - K                       // Number of principal components to keep (e.g., 8–10)
+
+OUTPUT:
+    - ReconSpectra[1..M_obs][1..N_wavelength]   // Reconstructed spectra
+    - CredInt[1..M_obs][1..N_wavelength]        // Empirical 95% credible intervals
+    - TaxonomyProb[1..M_obs][1..N_taxa]          // Taxonomic probability distribution
+
+ALGORITHM:
+
+1. // ---------- 1. Build Latent Prior ----------
+2. Fit PCA to RealSpectra:
+       [U, Λ, V] = PCA(RealSpectra, K)     // U: eigenvectors, Λ: eigenvalues
+3. Project RealSpectra to latent space:
+       LatentReal[i] = (RealSpectra[i] - mean_spectrum) * V^T   // i = 1..N_real
+4. Estimate density in latent space via KDE:
+       KDE_Model = KDE(LatentReal, bandwidth = h)               // h ≈ 0.5
+5. Sample synthetic latent vectors:
+       LatentSynth[j] ~ KDE_Model                               // j = 1..N_synth (e.g., 5000)
+
+6. // ---------- 2. Generate Synthetic Training Set ----------
+7. For each LatentSynth[j]:
+       SynthSpectrum[j] = mean_spectrum + LatentSynth[j] * V
+       For each filter f:
+           SynthFlux[j][f] = Integrate( SynthSpectrum[j] * Filters[f] )
+       Add Gaussian noise:
+           For each f:
+               NoiseLevel = 0.20 * SynthFlux[j][f]      // 20% relative uncertainty
+               PhotSynth[j][f] = SynthFlux[j][f] + Normal(0, NoiseLevel)
+8. Assemble training data:
+       TrainInputs  = PhotSynth[1..N_synth]
+       TrainTargets = LatentSynth[1..N_synth]
+       TrainLabels  = Taxonomic labels mapped to LatentSynth (from RealSpectra)
+
+9. // ---------- 3. Train Encoder (Photometry → Latent) ----------
+10. Use AutoML (e.g., AutoGluon) to train regressor R:
+        R = TrainRegressor(TrainInputs, TrainTargets)
+11. // Optional: Train classifier in latent space
+12. Classifier C = TrainClassifier(TrainTargets, TrainLabels)
+
+13. // ---------- 4. Inference for New Observations ----------
+14. For each observed object m = 1..M_obs:
+        PhotObs = Photometry[m]
+        // Predict latent coefficient distribution
+        LatentPred_mean, LatentPred_cov = R.PredictDistribution(PhotObs)
+        // Sample posterior latent vectors using Gaussian copula
+        SamplesLatent = CopulaSample(LatentPred_mean, LatentPred_cov, N_samples)
+        // Decode each sample to spectrum
+        For each s in 1..N_samples:
+            ReconSpec[s] = mean_spectrum + SamplesLatent[s] * V
+        // Aggregate reconstructions
+        ReconSpectra[m] = Mean(ReconSpec[1..N_samples])
+        CredInt[m]      = Percentile(ReconSpec[1..N_samples], {2.5, 97.5})
+        // Taxonomic probabilities
+        TaxonomyProb[m] = C.PredictProbability(LatentPred_mean)
+
+15. Return ReconSpectra, CredInt, TaxonomyProb

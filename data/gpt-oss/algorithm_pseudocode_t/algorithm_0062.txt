@@ -1,0 +1,53 @@
+INPUT
+    N        # number of photometric measurements
+    y[1..N]  # observed fluxes in each filter
+    σ[1..N]  # measurement uncertainties (assumed Gaussian)
+    S_i(λ)   # transmission curve of filter i   (i = 1…N)
+    λ_grid   # wavelength grid on which spectrum will be reconstructed
+    φ_j(λ)   # set of M basis functions describing the reflectance spectrum
+             # (j = 1…M, e.g. Legendre or B‑splines)
+
+PRE‑COMPUTATIONS
+    1. Build kernel matrix K[N][M]:
+           For each i in 1..N:
+               For each j in 1..M:
+                   K[i][j] = ∫ φ_j(λ) * S_i(λ) dλ          // numerical integration
+
+    2. Assemble observational covariance matrix C_y:
+           C_y = diag(σ[1]^2 , … , σ[N]^2)
+
+    3. Define prior on coefficients a[1..M]:
+           • Prior mean m0[M]   (default zero vector)
+           • Prior covariance C0[M][M]
+                 (e.g., Gaussian process covariance with length‑scale ℓ and
+                  variance σ_gp², evaluated on λ_grid projected onto basis)
+
+POSTERIOR COMPUTATION
+    4. Compute matrices needed for Bayesian linear regression:
+           A  = Kᵀ * C_y⁻¹ * K            // M×M matrix
+           b  = Kᵀ * C_y⁻¹ * y            // M×1 vector
+           B  = C0⁻¹                        // M×M matrix
+
+    5. Posterior covariance of coefficients:
+           C_a = (A + B)⁻¹                  // M×M
+
+    6. Posterior mean of coefficients:
+           a_mean = C_a * (b + B * m0)      // M×1
+
+RECONSTRUCTED SPECTRUM
+    7. For each wavelength λ in λ_grid:
+           Φ(λ) = [φ_1(λ), φ_2(λ), …, φ_M(λ)]   // 1×M vector
+           R_mean(λ)   = Φ(λ) * a_mean         // scalar (mean reflectance)
+           R_variance(λ)= Φ(λ) * C_a * Φ(λ)ᵀ   // scalar (posterior variance)
+
+    8. Compute credible intervals (e.g. ±1σ):
+           R_low(λ)  = R_mean(λ) - sqrt(R_variance(λ))
+           R_high(λ) = R_mean(λ) + sqrt(R_variance(λ))
+
+OUTPUT
+    λ_grid
+    R_mean(λ_grid)       # posterior mean spectrum
+    R_low(λ_grid)        # lower bound of 68% credible interval
+    R_high(λ_grid)       # upper bound of 68% credible interval
+    a_mean               # posterior mean of spectral coefficients
+    C_a                  # posterior covariance of coefficients

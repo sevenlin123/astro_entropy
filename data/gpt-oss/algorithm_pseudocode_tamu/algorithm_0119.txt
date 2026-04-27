@@ -1,0 +1,86 @@
+Input:
+    - Reference spectra S_ref = {s_i}   // 51 high‑res TNO spectra
+    - Filter transmission curves {T_f}   // JWST NIRCam set
+    - Photometric uncertainties σ_f      // assumed 20 % per band
+    - Number of PCA components K          // e.g., 8–10
+    - KDE bandwidth h                     // e.g., 0.5
+    - AutoML training parameters          // default AutoGluon settings
+
+Output:
+    - Reconstructed spectrum Ŝ(λ) for any new photometry m
+    - Posterior samples {Ŝ_k(λ)} for uncertainty estimation
+    - Taxonomic class probabilities p(class | m)
+
+--------------------------------------------------------------------
+Phase 1 – Prepare Prior Manifold
+--------------------------------------------------------------------
+1.  Perform PCA on S_ref:
+        U, Σ, V = PCA(S_ref, n_components = K)
+        // U: eigenvectors (principal components)
+        // V: projection coefficients for each reference spectrum
+
+2.  Store latent vectors L_real = {v_i}  // rows of V
+
+3.  Estimate latent density with KDE:
+        kde_model = KDE(L_real, bandwidth = h)
+
+4.  Sample synthetic latent vectors:
+        L_syn = kde_model.sample(N_samples)   // e.g., 10⁴ samples
+
+5.  Reconstruct synthetic spectra:
+        S_syn = U * L_synᵀ                   // matrix multiplication
+
+--------------------------------------------------------------------
+Phase 2 – Generate Synthetic Photometry (Implicit Likelihood)
+--------------------------------------------------------------------
+6.  For each synthetic spectrum s in S_syn:
+        a.  Compute reflected flux in each filter f:
+                m_f = ∫ s(λ) * T_f(λ) dλ   // numerical integration
+        b.  Add Gaussian noise:
+                m_f_noisy = m_f + N(0, σ_f * m_f)
+        c.  Store pair (m_f_noisy , latent_vector)
+
+7.  Assemble training set:
+        X_train = {m_f_noisy}              // photometry vectors
+        Y_train = {latent_vector}          // target PCA coeffs
+
+--------------------------------------------------------------------
+Phase 3 – Train Encoder (AutoML Regressor)
+--------------------------------------------------------------------
+8.  Run AutoML on (X_train, Y_train):
+        regressor = AutoML_Regressor(X_train, Y_train,
+                                    task='regression',
+                                    output_dim = K)
+
+--------------------------------------------------------------------
+Phase 4 – Train Latent Classifier
+--------------------------------------------------------------------
+9.  Assign taxonomic labels to each reference spectrum in S_ref.
+10.  Train classifier on L_real with these labels:
+        classifier = AutoML_Classifier(L_real, labels,
+                                      task='classification')
+
+--------------------------------------------------------------------
+Phase 5 – Forward Inference (New Observation)
+--------------------------------------------------------------------
+Input: Photometry vector m_new (with observed uncertainties)
+
+11.  Predict posterior over latent space:
+        P_latent = regressor.predict_distribution(m_new)
+        // e.g., draw M samples {ℓ_m} from predicted posterior
+
+12.  For each sampled ℓ_m:
+        a.  Reconstruct spectrum:
+                Ŝ_m = U * ℓ_mᵀ
+        b.  Store Ŝ_m
+
+13.  Aggregate reconstructions:
+        Ŝ_mean(λ) = mean_{m}(Ŝ_m(λ))
+        Ŝ_std(λ)  = std_{m}(Ŝ_m(λ))          // confidence band
+
+14.  Compute taxonomy probabilities:
+        p_class = classifier.predict_proba(ℓ_mean)
+        // ℓ_mean can be the posterior mean or each ℓ_m separately
+        // optionally average probabilities over samples
+
+Return: Ŝ_mean, Ŝ_std, p_class

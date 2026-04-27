@@ -1,0 +1,85 @@
+INPUT:
+    - Observed magnitudes M[1..N] with uncertainties σ[1..N]
+    - Filter transmission curves T[1..N](λ)
+    - Zero‑point constants ZP[1..N]
+    - Spectral basis functions B[1..K](λ)   // e.g., Legendre polynomials
+    - Class prior probabilities Pclass[C]  // C = 1..Cmax
+    - Class‑specific coefficient priors μclass[C][1..K], Σclass[C]  // means & covariances
+    - Number of MCMC iterations Niter
+    - Proposal covariance Σprop
+
+OUTPUT:
+    - Posterior samples of spectral coefficients Θ[1..Niter][1..K]
+    - Posterior mean spectrum Ŝ(λ)
+    - Classification probabilities P(C | data)
+
+---------------------------------------------------------------
+
+1.  CONVERT OBSERVED MAGNITUDES TO PHOTOMETRIC FLUXES
+    For i = 1 to N:
+        Fobs[i]      ← 10^(–0.4 * (M[i] – ZP[i]))          // Flux density
+        δFobs[i]     ← 0.921 * σ[i] * Fobs[i]                // Flux uncertainty
+
+2.  DEFINE SYNTHETIC FLUX MODEL FOR GIVEN COEFFICIENT VECTOR θ
+    Function SyntheticFlux(θ):
+        For i = 1 to N:
+            numerator   ← ∫ (∑_{k=1}^K θ[k] * B[k](λ)) * T[i](λ) dλ
+            denominator ← ∫ T[i](λ) dλ
+            Fsyn[i]     ← numerator / denominator
+        Return Fsyn[1..N]
+
+3.  DEFINE LIKELIHOOD GIVEN θ
+    Function Likelihood(θ):
+        Fsyn ← SyntheticFlux(θ)
+        χ²   ← Σ_{i=1}^N ((Fobs[i] – Fsyn[i]) / δFobs[i])²
+        Return exp(–0.5 * χ²)
+
+4.  DEFINE PRIOR OVER COEFFICIENTS (HIERARCHICAL BY CLASS)
+    Function Prior(θ):
+        total ← 0
+        For each class C:
+            diff  ← θ – μclass[C]
+            pdf_C ← multivariate_normal_pdf(diff, Σclass[C])
+            total ← total + Pclass[C] * pdf_C
+        Return total
+
+5.  DEFINE POSTERIOR (UP TO NORMALISATION)
+    Function Posterior(θ):
+        Return Likelihood(θ) * Prior(θ)
+
+6.  INITIALISE MCMC
+    Choose initial θ₀ (e.g., weighted average of class priors)
+    Set current θ ← θ₀
+    Store Θ[1] ← θ₀
+
+7.  PERFORM METROPOLIS‑HASTINGS SAMPLING
+    For iter = 2 to Niter:
+        7.1   Propose new θ' = θ + Normal(0, Σprop)
+        7.2   Compute acceptance ratio:
+                a = Posterior(θ') / Posterior(θ)
+        7.3   Draw u ~ Uniform(0,1)
+        7.4   If u < min(1, a):  // accept proposal
+                θ ← θ'
+        7.5   Store Θ[iter] ← θ
+
+8.  ESTIMATE POSTERIOR MEAN SPECTRUM
+    For λ in desired wavelength grid:
+        Ŝ(λ) ← (1/Niter) * Σ_{iter=1}^{Niter} ( Σ_{k=1}^K Θ[iter][k] * B[k](λ) )
+
+9.  COMPUTE CLASSIFICATION PROBABILITIES
+    For each class C:
+        sum_C ← 0
+        For iter = 1 to Niter:
+            diff   ← Θ[iter] – μclass[C]
+            pdf_C  ← multivariate_normal_pdf(diff, Σclass[C])
+            sum_C += pdf_C
+        P(C | data) ← (Pclass[C] * sum_C) / (Σ_{C'} Pclass[C'] * sum_{C'})
+    Output normalized P(C | data)
+
+10. OPTIONAL OUTLIER DETECTION (IF REQUIRED)
+    For each observed band i:
+        residual[i] ← Fobs[i] – SyntheticFlux(θ_mean)[i]
+        zscore[i]   ← residual[i] / δFobs[i]
+        If |zscore[i]| > threshold: flag band i as outlier
+
+END

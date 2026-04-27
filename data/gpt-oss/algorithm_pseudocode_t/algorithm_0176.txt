@@ -1,0 +1,106 @@
+Input:
+- F_obs[object][filter]  # observed fluxes
+- sigma[object][filter]  # measurement uncertainties
+- R_filter[filter](lambda) # filter transmission curves
+- S_solar(lambda)          # solar irradiance spectrum
+- Templates[template][lambda]  # spectral basis functions
+- N_iter, burn_in
+
+Algorithm:
+1. Precompute convolution matrix C[i, k] = ∫ Template_k(λ) * R_i(λ) * S_solar(λ) dλ
+   // For each filter i and template k
+
+2. For each object:
+    a. Initialize coeffs[k] = prior_mean
+    b. For iter = 1 to N_iter:
+        i. Propose new_coeffs = coeffs + Normal(0, step_size)
+        ii. Compute predicted_flux[i] = Σ_k new_coeffs[k] * C[i,k]
+        iii. Compute log_likelihood = -0.5 Σ_i [(F_obs[i]-predicted_flux[i])^2 / sigma[i]^2 + log(2πσ[i]^2)]
+        iv. Compute log_prior = -0.5 Σ_k (new_coeffs[k]-prior_mean)^2 / prior_variance
+        v. Compute log_accept_ratio = (log_likelihood + log_prior) - (current_log_likelihood + current_log_prior)
+        vi. If log_uniform < log_accept_ratio: accept new_coeffs, update current_log_likelihood/ prior
+        vii. Store coeffs if iter > burn_in
+
+    c. After sampling, compute posterior mean spectrum:
+        Spectrum[λ] = Σ_k mean(coeffs_samples)[k] * Template_k(λ)
+    d. Compute uncertainties: e.g., 16th, 84th percentiles.
+
+Return: posterior samples, reconstructed spectra, uncertainty intervals.
+
+Input
+------
+- Observed fluxes  F[obj][filt]          (photometry for each object and filter)
+- Measurement errors σ[obj][filt]
+- Filter transmission curves  R_filt(λ)
+- Solar spectrum  S_solar(λ)
+- Spectral basis functions  T_k(λ)      (k = 1 … K)
+- Prior hyper‑parameters:
+    * Prior means μ_k (typically 0)
+    * Prior variances τ_k²
+- MCMC settings:
+    * Number of iterations N_iter
+    * Burn‑in length N_burn
+    * Proposal step sizes ϵ_k
+
+Pre‑processing
+--------------
+1. For every filter `filt` and basis function `k`, compute the convolution integral  
+   C[filt][k] = ∫ T_k(λ) · R_filt(λ) · S_solar(λ) dλ  
+   // Stores how each basis contributes to each filter’s expected flux
+
+MCMC Inference (per object)
+--------------------------
+For each object `obj`:
+
+  1. Initialize coefficient vector
+       a = [a_1, … , a_K] ← μ (vector of prior means)
+  2. Evaluate initial predictive fluxes
+       F̂_filt = Σ_k a_k · C[filt][k]   for all filt
+     Compute initial log‑likelihood
+       LL₀ = –½ Σ_filt [ (F[obj][filt] – F̂_filt)² / σ[obj][filt]² + log(2πσ[obj][filt]²) ]
+     Compute initial log‑prior
+       LP₀ = –½ Σ_k (a_k – μ_k)² / τ_k²
+     Set current state = {a, LL₀, LP₀}
+
+  3. For iteration `t` = 1 … N_iter
+        a_prop = a_current + Normal(0, ϵ)         // element‑wise Gaussian proposal
+        Compute proposed fluxes F̂_filt^prop = Σ_k a_prop_k · C[filt][k]
+        Compute proposed log‑likelihood LL_prop
+            LL_prop = –½ Σ_filt [ (F[obj][filt] – F̂_filt^prop)² / σ[obj][filt]² + log(2πσ[obj][filt]²) ]
+        Compute proposed log‑prior LP_prop
+            LP_prop = –½ Σ_k (a_prop_k – μ_k)² / τ_k²
+        Compute acceptance log‑ratio
+            logα = (LL_prop + LP_prop) – (LL_current + LP_current)
+        Generate u ~ Uniform(0,1)
+        If log(u) < logα
+              Accept proposal:
+                 a_current = a_prop
+                 LL_current = LL_prop
+                 LP_current = LP_prop
+        EndIf
+        If t > N_burn
+              Record a_current as a sample
+        EndIf
+  EndFor
+
+Post‑processing (per object)
+----------------------------
+4. From recorded samples {a^(s)} (s = 1 … N_samp):
+      * Posterior mean coefficients
+            ā_k = (1/N_samp) Σ_s a_k^(s)
+      * Posterior quantiles (e.g., 16th, 84th percentiles) for each a_k
+      * Reconstruct mean spectrum
+            S_mean(λ) = Σ_k ā_k · T_k(λ)
+      * Compute spectrum uncertainty bands by propagating coefficient quantiles:
+            S_lower(λ) = Σ_k a_lower_k · T_k(λ)
+            S_upper(λ) = Σ_k a_upper_k · T_k(λ)
+
+Output
+------
+For each object:
+  • Posterior samples of coefficients {a^(s)}
+  • Mean reconstructed spectrum S_mean(λ)
+  • Uncertainty interval [S_lower(λ), S_upper(λ)]
+  • Summary statistics (posterior means, variances)
+
+End Algorithm

@@ -1,0 +1,75 @@
+text
+Inputs  
+    S_train[1..S]        # Training spectra (wavelength λ_i, flux f_i)
+    Filters[k]           # Filter transmission curves R_k(λ)
+    Obs[1..K]            # Observed magnitudes m_k and errors σ_k for target
+
+Parameters  
+    N_pc                  # Number of principal components to retain (e.g. 4–10)
+    M_samples             # Number of posterior samples (e.g. 10⁴)
+
+Outputs  
+    SpectrumSamples[m][i] # Reconstructed spectra for each posterior sample
+    SpectrumMean[i]       # Posterior‑mean spectrum
+    SpectrumCredInt[i]    # Credible intervals (e.g. 2.5% & 97.5%)  
+
+Algorithm
+──────────────────────────────────────
+1. PREPROCESS TRAINING SPECTRA
+   1.1 Resample all S_train onto common wavelength grid λ[1..L].
+   1.2 Compute mean spectrum μ(λ) = (1/S) Σ_s S_train[s](λ).
+   1.3 Center spectra: D[s](λ) = S_train[s](λ) – μ(λ).
+
+2. PRINCIPAL COMPONENT ANALYSIS
+   2.1 Compute covariance matrix C = (1/(S–1)) * Dᵀ · D .
+   2.2 Eigen‑decompose C → {v_j(λ)} sorted by descending eigenvalue.
+   2.3 Select first N_pc eigenvectors: PC[j] = v_j(λ) , j=1..N_pc.
+   2.4 Project training spectra onto PCs:
+          coeffs[s][j] = ⟨D[s], PC[j]⟩  (dot product over λ).
+
+3. DEFINE PRIOR ON COEFFICIENTS
+   3.1 For each component j, estimate mean μ_c[j] and variance σ²_c[j] from coeffs[*][j].
+   3.2 Assume independent Gaussian prior:
+          p(c) = ∏_j N(c_j | μ_c[j], σ²_c[j]) .
+
+4. MODEL PHOTOMETRY FROM COEFFICIENT VECTOR
+   Function ModelFlux(c):
+        # Construct spectrum from coefficients
+        f(λ) = μ(λ) + Σ_{j=1}^{N_pc} c_j * PC[j](λ)
+        # Convolve with each filter to get synthetic magnitude
+        For k = 1..K:
+            Rk = Filters[k](λ)
+            Fk = ∫ f(λ) * Rk(λ) dλ / ∫ Rk(λ) dλ      # Flux in filter k
+            mk = -2.5 log10(Fk/F0k)                    # Convert to magnitude
+        Return {mk}
+
+5. DEFINE LIKELIHOOD
+   Likelihood(c):
+        mk_pred = ModelFlux(c)
+        χ² = Σ_{k=1}^{K} [ (Obs[k].mag – mk_pred[k]) / Obs[k].err ]²
+        return exp( –0.5 * χ² )
+
+6. POSTERIOR SAMPLING
+   6.1 Initialize c^(0) = μ_c   # Starting point
+   6.2 For m = 1 .. M_samples:
+         Propose new c' = c^(m–1) + ε          # ε ~ Normal(0, proposal_cov)
+         Compute α = min( 1,
+                        (Likelihood(c') * p(c')) /
+                        (Likelihood(c^(m–1)) * p(c^(m–1))) )
+         Draw u ~ Uniform(0,1)
+         If u < α:
+              c^(m) = c'
+         Else:
+              c^(m) = c^(m–1)
+         Store c^(m)
+
+7. RECONSTRUCT SPECTRA FROM POSTERIOR
+   For each stored sample c^(m):
+        SpectrumSamples[m][i] = μ(λ[i]) + Σ_{j=1}^{N_pc} c^(m)_j * PC[j](λ[i])
+
+8. SUMMARY STATISTICS
+   For each wavelength λ[i]:
+        SpectrumMean[i]   = (1/M_samples) Σ_m SpectrumSamples[m][i]
+        SpectrumCredInt[i] = percentile(SpectrumSamples[·][i], [2.5, 97.5])
+
+Return SpectrumSamples, SpectrumMean, SpectrumCredInt

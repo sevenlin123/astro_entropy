@@ -1,0 +1,98 @@
+Input:
+    S_real[1…N]          # High‑resolution reflectance spectra (wavelength grid λ)
+    f_j[1…F]             # Filter transmission curves (effective throughput)
+    K_min, K_max         # Range of candidate PCA dimensions
+    h                    # KDE bandwidth (≈0.5)
+    N_syn                # Number of synthetic latent samples per real spectrum
+
+Procedure BuildLatentSpace():
+    1.1  Normalize each S_real to unit mean (or remove solar spectrum if needed).
+    1.2  Perform Singular Value Decomposition (SVD) on the matrix S_real
+         → U, Σ, V^T.
+    1.3  Compute explained variance for each component.
+    1.4  Choose K (e.g., 8–10) such that cumulative variance ≥ 95 %.
+    1.5  Project each real spectrum onto the first K eigenvectors:
+            z_real[i] = U[:,1:K]^T * S_real[i].
+    1.6  Estimate density in latent space with a Gaussian KDE:
+            p_KDE(z) = Σ_{i=1}^{N} G(z – z_real[i]; bandwidth=h).
+    1.7  Draw N_syn synthetic latent vectors {z_syn} from p_KDE.
+    1.8  Reconstruct synthetic spectra:
+            S_syn[j] = U[:,1:K] * z_syn[j]  +  mean_spectrum.
+    1.9  Return:
+            U_K        # PCA basis (K×λ)
+            z_real     # Real latent coordinates
+            z_syn      # Synthetic latent coordinates
+            S_syn      # Synthetic spectra
+
+Input:
+    S_syn[1…N_syn]          # Synthetic spectra (λ)
+    f_j[1…F]                # Filter responses
+    σ_rel = 0.20            # Relative reflectance noise (20 %)
+
+Procedure GenerateSyntheticPhotometry():
+    2.1  For each synthetic spectrum S_syn[j]:
+            For each filter f_j:
+                m_f[j][k] = ∫ S_syn[j](λ) * f_j(λ) dλ    # Convolution
+            Add Gaussian noise:
+                m_f_noisy[j][k] = m_f[j][k] * (1 + N(0,σ_rel)).
+    2.2  Stack all pairs (m_f_noisy[j], z_syn[j]) into training set T_reg.
+    2.3  Return T_reg.
+
+Input:
+    T_reg = {(photometry, latent)}   # From step 2
+
+Procedure TrainRegressor():
+    3.1  Select AutoML library (e.g., AutoGluon, AutoML‑framework).
+    3.2  Define regression task:
+            X = photometry (vector length F)
+            y = latent coefficients (vector length K)
+    3.3  Configure AutoML to produce an ensemble of gradient‑boosted trees
+            and/or neural networks with cross‑validation on T_reg.
+    3.4  Train model M_enc on T_reg to minimize RMSE between predicted
+            and true latent coefficients.
+    3.5  Save trained encoder M_enc.
+    3.6  Return M_enc.
+
+Input:
+    z_real, labels                     # Spectral class labels for real spectra
+
+Procedure TrainClassifier():
+    4.1  Use AutoML (e.g., AutoGluon) to train a multi‑class classifier
+            on z_real → label.
+    4.2  Save model M_cls.
+    4.3  Return M_cls.
+
+Input:
+    m_new[1…F]        # Observed sparse photometry (with uncertainties)
+    M_enc              # Trained encoder
+    U_K                # PCA basis
+    mean_spectrum
+    M_cls              # Optional: classifier
+
+Procedure InferSpectrum(m_new):
+    5.1  Predict mean latent vector:
+            μ_z = M_enc.predict(m_new)
+    5.2  Obtain predictive covariance Σ_z (if regressor outputs std or
+            use bootstrap / ensemble spread).
+    5.3  Sample N_post latent vectors:
+            for n in 1…N_post:
+                z_n = multivariate_normal(μ_z, Σ_z)
+    5.4  For each z_n, reconstruct full spectrum:
+            S_n = U_K * z_n  +  mean_spectrum
+    5.5  Aggregate {S_n}:
+            S_mean(λ) = mean_n S_n(λ)
+            S_lower(λ), S_upper(λ) = percentile(S_n, [2.5, 97.5])
+    5.6  Optionally, compute taxonomy probabilities:
+            probs = softmax( M_cls.predict(μ_z) )
+    5.7  Return:
+            S_mean,
+            confidence interval [S_lower, S_upper],
+            taxonomy probabilities probs.
+
+Main Pipeline:
+    1. BuildLatentSpace() → U_K, z_real, z_syn, S_syn
+    2. GenerateSyntheticPhotometry() → T_reg
+    3. TrainRegressor() → M_enc
+    4. TrainClassifier() → M_cls          # (Optional)
+    5. For any new photometric observation m_new:
+           InferSpectrum(m_new)

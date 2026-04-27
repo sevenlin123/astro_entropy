@@ -1,0 +1,116 @@
+Input:
+    referenceSpectra   : array of shape (Nspec, Ngw)   # reflectance vs wavelength
+    filterCurves       : array of shape (Nfilt, Ngw)  # transmission profiles
+    K                  : integer                      # number of PCA components
+    hKDE               : float                        # KDE bandwidth
+    Nsynthetic         : integer                      # number of synthetic latent samples
+
+Output:
+    PCA_model          : {meanSpectrum, pcVectors}    # (Ngw,) + (Ngw, K)
+    Regressor          : photometry → latent vector  # AutoML model
+    Classifier         : latent vector → taxonomic class probabilities
+    FilterCurves       : same as input                # stored for later use
+
+1.  //--- 1.1 Standardise the reference spectra --------------------------------
+2.  meanSpectrum  ← mean(referenceSpectra, axis=0)                    # (Ngw,)
+3.  centredSpectra← referenceSpectra – meanSpectrum                  # (Nspec, Ngw)
+
+4.  //--- 1.2 Compute PCA on the centred spectra ------------------------------
+5.  [U, S, Vt] ← SVD(centredSpectra, full_matrices=False)           # Vt shape (Nspec, Nspec)
+6.  pcVectors ← Vt[:, :K]                                           # (K, Ngw)   <-- transpose later
+7.  pcVectors ← pcVectors.T                                         # (Ngw, K)
+8.  latentCoeffs← centredSpectra · pcVectors                        # (Nspec, K)
+
+9.  //--- 1.3 KDE augmentation of the latent space --------------------------
+10. kdeModel ← fit_multivariate_KDE(latentCoeffs, bandwidth=hKDE)
+11. syntheticLatents ← sample_from_KDE(kdeModel, Nsynthetic)        # (Nsynthetic, K)
+
+12. //--- 1.4 Generate synthetic photometry by forward‑modeling ---------
+13. syntheticPairs ← []   # will hold tuples (photometry, latent)
+14. for each latentVector l in syntheticLatents:
+15.     // 1.4.1 Reconstruct high‑resolution spectrum
+16.     spectrumRecon ← meanSpectrum + pcVectors · l                 # (Ngw,)
+17.     // 1.4.2 Compute ideal photometry in each filter
+18.     photometryIdeal ← []
+19.     for each filter T in filterCurves:
+20.         numerator   ← sum(spectrumRecon * T)
+21.         denominator ← sum(T)
+22.         photometryIdeal.append(numerator / denominator)
+23.     photometryIdeal ← array(photometryIdeal)                     # (Nfilt,)
+24.     // 1.4.3 Inject realistic noise (relative 20 %)
+25.     noiseFactor  ← 1.0 + Normal(0.0, 0.20, size=Nfilt)
+26.     photometryNoisy ← photometryIdeal * noiseFactor              # (Nfilt,)
+27.     syntheticPairs.append((photometryNoisy, l))
+
+28. //--- 1.5 Assemble training data -----------------------------------------
+29. X_train ← stack([pair[0] for pair in syntheticPairs])            # (Nsynthetic, Nfilt)
+30. y_train ← stack([pair[1] for pair in syntheticPairs])            # (Nsynthetic, K)
+
+31. //--- 1.6 Train the photometry → latent encoder (regressor) ----------
+32. Regressor ← AutoML_Train(X_train, y_train)                         # returns fitted model
+
+33. //--- 1.7 Train a classifier that operates on latent coordinates ------
+34. //    (use the original reference latentCoeffs and their taxonomic labels)
+35. classLabels ← load_taxonomic_labels(referenceSpectra)             # (Nspec,)
+36. Classifier ← AutoML_Train(latentCoeffs, classLabels)              # returns fitted model
+
+37. //--- 1.8 Return all components ------------------------------------------
+38. return { PCA_model:{meanSpectrum, pcVectors},
+39.          Regressor,
+40.          Classifier,
+41.          FilterCurves }
+
+Input:
+    model               : output of TrainReconstructionModel
+    photometryObs       : array of shape (Nfilt,)   # observed sparse photometry
+    NposteriorSamples   : integer                  # number of posterior draws (optional)
+
+Output:
+    spectrumMean        : array (Ngw,)              # reconstructed spectrum mean
+    spectrumCredIntLow  : array (Ngw,)              # lower bound of 68 % CI (optional)
+    spectrumCredIntHigh : array (Ngw,)              # upper bound of 68 % CI (optional)
+    taxonomyProbs       : dict[class] → float      # posterior class probabilities
+
+1.  //--- 2.1 Extract model components --------------------------------------
+2.  meanSpectrum ← model.PCA_model.meanSpectrum              # (Ngw,)
+3.  pcVectors   ← model.PCA_model.pcVectors                  # (Ngw, K)
+4.  Regressor   ← model.Regressor
+5.  Classifier  ← model.Classifier
+
+6.  //--- 2.2 Predict latent coefficients (point estimate) ----------------
+7.  latentPred  ← Regressor.predict(photometryObs)           # (K,)
+   //  If the regressor can provide a covariance estimate, store it:
+8.  if Regressor.has_covariance:
+9.      latentCov   ← Regressor.predict_covariance(photometryObs)   # (K,K)
+   else:
+10.     latentCov   ← zeros(K, K)
+
+11. //--- 2.3 Reconstruct the mean spectrum ---------------------------------
+12. spectrumMean ← meanSpectrum + pcVectors · latentPred       # (Ngw,)
+
+13. //--- 2.4 Optional posterior sampling -----------------------------------
+14. if NposteriorSamples > 0:
+15.     // 2.4.1 Draw latent vectors from a multivariate normal
+16.     latentSamples ← sample_multivariate_normal(mean=latentPred,
+17.                                                 cov=latentCov,
+18.                                                 size=NposteriorSamples)   # (Nsample, K)
+19.     // 2.4.2 Reconstruct spectra for each draw
+20.     spectraAll ← []
+21.     for each l in latentSamples:
+22.         spectraAll.append(meanSpectrum + pcVectors · l)   # (Ngw,)
+23.     spectraAll ← stack(spectraAll)                         # (Nsample, Ngw)
+24.     // 2.4.3 Compute credibility bounds (e.g. 68 %)
+25.     spectrumCredIntLow  ← percentile(spectraAll, 16, axis=0)
+26.     spectrumCredIntHigh ← percentile(spectraAll, 84, axis=0)
+27. else:
+28.     spectrumCredIntLow  ← None
+29.     spectrumCredIntHigh ← None
+
+30. //--- 2.5 Compute taxonomy probabilities -------------------------------
+31. taxonomyProbs ← Classifier.predict_proba(latentPred)      # dict
+
+32. //--- 2.6 Return results -----------------------------------------------
+33. return { spectrumMean,
+34.          spectrumCredIntLow,
+35.          spectrumCredIntHigh,
+36.          taxonomyProbs }

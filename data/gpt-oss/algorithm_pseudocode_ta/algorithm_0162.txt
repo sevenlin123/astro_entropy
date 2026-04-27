@@ -1,0 +1,130 @@
+# Preprocessing
+For each observed spectrum:
+    resample onto common wavelength grid
+    normalize (e.g., divide by mean flux)
+Compute mean spectrum mu
+Center data X = spectra - mu
+Perform PCA: eigenvalues lambda_j, eigenvectors e_j
+Select K components
+Store PCs E = [e_1...e_K], eigenvalues Lambda = diag(lambda_j)
+
+# Generative model
+S(theta) = mu + sum_{j=1}^K theta_j * e_j
+Assume theta ~ N(0, Lambda)  # prior based on spectrum variance
+Observation model: for each filter f, predicted photometry p_f(theta) = integral(S(theta)*T_f dλ)/integral(T_f dλ)
+Likelihood: p(y | theta) = product_f N(y_f | p_f(theta), sigma_f^2)
+
+# For each target:
+Given observed fluxes y_f and errors sigma_f
+
+# Build design matrix:
+For each filter f:
+    compute basis vector b_f = integral(e_j * T_f dλ)/integral(T_f dλ)  for j=1..K
+    compute constant term c_f = integral(mu * T_f dλ)/integral(T_f dλ)
+Then p_f(theta) = c_f + sum_j b_fj * theta_j
+
+Thus observation model becomes linear in theta: y = C + B * theta + noise
+
+Prior: theta ~ N(0, Lambda_prior) where Lambda_prior = diag(lambda_j)
+
+Posterior:
+    Sigma_post = (B^T N^-1 B + Lambda_prior^-1)^-1
+    mu_post = Sigma_post * B^T N^-1 (y - C)
+where N = diag(sigma_f^2)
+
+Sample n samples from N(mu_post, Sigma_post) -> theta_samples
+
+For each sample:
+    reconstruct spectrum S_sample = mu + E * theta_sample
+Collect samples to compute mean spectrum and credible intervals at each wavelength.
+
+Return mean and credible intervals.
+
+pseudo
+# ------------------------------------------------------------------
+# 1. TRAIN THE LATENT‑SPACE MODEL (once)
+# ------------------------------------------------------------------
+Input: Set of calibrated near‑IR spectra {S_k(λ)} for k = 1 … N_spectra
+       Common wavelength grid λ[1 … L]
+       Desired number of principal components K (e.g., 8–10)
+
+# 1.1 Resample / Normalize
+FOR each spectrum k:
+    Resample S_k onto λ
+    Optionally normalize (e.g., divide by mean flux)
+END FOR
+
+# 1.2 Compute mean spectrum
+μ(λ) ← (1/N_spectra) * Σ_k S_k(λ)
+
+# 1.3 Center data
+X_k ← S_k – μ   (for all k)
+
+# 1.4 Perform PCA
+Compute covariance matrix C = (1/(N_spectra–1)) * Σ_k X_k X_kᵀ
+Eigen-decompose C → eigenvalues λ_j and eigenvectors e_j(λ)
+Order eigenpairs by decreasing λ_j
+Select first K eigenvectors → E = [e_1 … e_K]   // shape L × K
+Store eigenvalue vector Λ = diag(λ_1 … λ_K)
+
+# 1.5 Store the generative model
+# S(θ) = μ + Σ_{j=1}^K θ_j * e_j
+# Prior on coefficients: θ ~ N(0, Λ)   // zero‑mean Gaussian with variance λ_j
+
+# ------------------------------------------------------------------
+# 2. RECONSTRUCT A SINGLE OBJECT FROM PHOTOMETRY
+# ------------------------------------------------------------------
+Input:
+    Observed broadband fluxes y_f with uncertainties σ_f   (f = 1 … N_filter)
+    Filter transmission curves T_f(λ)
+    (Same λ grid used in training)
+
+Output:
+    Reconstructed spectrum samples {S_m(λ)}   (m = 1 … N_samples)
+    Mean spectrum and 95 % credible interval at each λ
+
+Procedure:
+
+# 2.1 Compute photometric design matrix
+FOR each filter f:
+    # Constant term from the mean spectrum
+    c_f ← ∫ μ(λ) * T_f(λ) dλ / ∫ T_f(λ) dλ
+    
+    # Basis coefficients for each PC
+    FOR j = 1 TO K:
+        b_fj ← ∫ e_j(λ) * T_f(λ) dλ / ∫ T_f(λ) dλ
+    END FOR
+END FOR
+
+# Assemble matrices
+C_vec   ← [c_1 … c_Nfilter]ᵀ          // size N_filter × 1
+B_mat   ← [[b_fj]] (N_filter × K)     // each row f contains b_f1…b_fK
+N_mat   ← diag(σ_f²)                  // noise covariance (assumed diagonal)
+
+# 2.2 Linearized observation model
+#   y = C_vec + B_mat * θ + ε ,   ε ~ N(0, N_mat)
+
+# 2.3 Bayesian Linear Regression (analytic posterior)
+Prior precision: Λ_prior_inv ← Λ⁻¹          // K × K diagonal matrix
+
+Posterior precision:
+    Σ_post_inv ← B_matᵀ * N_mat⁻¹ * B_mat + Λ_prior_inv
+Posterior covariance:
+    Σ_post ← inverse(Σ_post_inv)           // K × K
+
+Posterior mean:
+    μ_post ← Σ_post * B_matᵀ * N_mat⁻¹ * (y_vec – C_vec)
+
+# 2.4 Sample from posterior
+FOR m = 1 TO N_samples:
+    Draw θ_m ~ N(μ_post, Σ_post)      // multivariate normal
+    # Reconstruct full spectrum
+    S_m(λ) ← μ(λ) + E(λ, :) * θ_m      // matrix multiplication
+END FOR
+
+# 2.5 Compute statistics
+For each λ:
+    Mean_S(λ) ← (1/N_samples) * Σ_m S_m(λ)
+    CI_low(λ) , CI_high(λ) ← 2.5th and 97.5th percentiles of {S_m(λ)}
+
+Return Mean_S, CI_low, CI_high, and optionally the full set {S_m(λ)}

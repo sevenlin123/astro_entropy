@@ -1,0 +1,80 @@
+pseudocode
+INPUT:
+    SPECTRA_REF   // array of N_ref high‑resolution reflectance spectra
+    FILTER_CURVES // dictionary {filter_name : throughput_curve}
+    PHOTOMETRY_NEW // array of M_new photometric measurements (fluxes or magnitudes)
+    N_SYNTH       // number of synthetic latent samples (e.g., 5000)
+    K_PCA         // desired number of principal components (e.g., 8–10)
+
+OUTPUT:
+    SPEC_RECON     // reconstructed high‑resolution spectrum for new object
+    TAX_PROBS      // probability distribution over taxonomic classes
+
+--------------------------------------------------------------------
+STEP 1: Prepare Reference Spectra
+--------------------------------------------------------------------
+1.1 Compute mean spectrum μ = mean(SPECTRA_REF) across all wavelengths.
+1.2 Center spectra: X_centered = SPECTRA_REF – μ.
+1.3 Perform Singular Value Decomposition (SVD):
+        U, Σ, Vt = svd(X_centered, full_matrices=False).
+1.4 Select first K_PCA columns of U as PCA basis matrix B (size L × K_PCA).
+1.5 For each reference spectrum s_i:
+        coeff_i = transpose(B) · (s_i – μ)      // latent coordinates (length K_PCA)
+   Store all coeff_i as matrix C_ref (size N_ref × K_PCA).
+
+--------------------------------------------------------------------
+STEP 2: Build Continuous Latent Prior via KDE
+--------------------------------------------------------------------
+2.1 Fit a multivariate Kernel Density Estimate (KDE) on rows of C_ref
+        KDE_prior = fit_KDE(C_ref, bandwidth=h_optimal).
+2.2 Draw N_SYNTH synthetic latent vectors:
+        C_synth = sample(KDE_prior, N_SYNTH)     // shape: N_SYNTH × K_PCA
+
+--------------------------------------------------------------------
+STEP 3: Generate Synthetic Spectra and Photometry
+--------------------------------------------------------------------
+3.1 For each synthetic latent vector c_j in C_synth:
+        3.1.1 Reconstruct spectrum:
+                s_j = μ + B · c_j          // inverse PCA (shape: L)
+        3.1.2 For each filter f in FILTER_CURVES:
+                m_j,f = integrate(s_j * throughput_f) / integrate(throughput_f)
+                // m_j,f is theoretical reflectance in filter f
+        3.1.3 Assemble vector m_j = [m_j,f1, m_j,f2, ..., m_j,fF]
+              where F = number of filters.
+        3.1.4 Add Gaussian noise:
+                σ_noise = 0.20 * m_j         // 20% relative uncertainty
+                m_j_noisy = m_j + normal(0, σ_noise)
+   Store pairs (m_j_noisy, c_j) in training dataset D_reg (size N_SYNTH × (F + K_PCA)).
+
+--------------------------------------------------------------------
+STEP 4: Train Encoder (Photometry → Latent) with AutoML
+--------------------------------------------------------------------
+4.1 Split D_reg into training/validation folds if needed.
+4.2 Use AutoML framework to find best ensemble of regressors (e.g., GBDT, NN).
+4.3 Train regressor R_enc on inputs m_j_noisy to predict outputs c_j.
+4.4 Save trained model R_enc.
+
+--------------------------------------------------------------------
+STEP 5: Train Classifier (Latent → Taxonomy)
+--------------------------------------------------------------------
+5.1 For each reference spectrum s_i, assign taxonomic label y_i ∈ {H2O, CO2, Organics_Methanol, Organics_Organic}.
+5.2 Create dataset D_cls = {(coeff_i, y_i)}.
+5.3 Train AutoML classifier C_cls on D_cls (e.g., random forest, XGBoost).
+5.4 Save trained model C_cls.
+
+--------------------------------------------------------------------
+STEP 6: Inference on New Photometry
+--------------------------------------------------------------------
+6.1 Preprocess PHOTOMETRY_NEW:
+        - Ensure same filter ordering as used in training.
+        - Convert magnitudes to reflectances if needed.
+6.2 Predict latent coefficient vector:
+        c_pred = R_enc(PHOTOMETRY_NEW)
+6.3 Reconstruct high‑resolution spectrum:
+        SPEC_RECON = μ + B · c_pred
+6.4 Classify taxonomy:
+        TAX_PROBS = C_cls.predict_proba(c_pred)
+
+--------------------------------------------------------------------
+RETURN:
+    SPEC_RECON, TAX_PROBS

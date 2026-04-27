@@ -1,0 +1,94 @@
+# ------------------------------------------------------------------
+# GLOBAL INPUTS
+# ------------------------------------------------------------------
+PHOTOMETRY      # table:  object_id, band, mag, err, r, Δ
+FILTER_CURVES   # dict:  band → λ–grid & transmission T(λ)
+SPECTRAL_LIB    # list of spectra:  spec_id → {λ‑grid, reflectance R(λ)}
+
+# ------------------------------------------------------------------
+# PRE‑PROCESSING
+# ------------------------------------------------------------------
+FOR each band k IN FILTER_CURVES:
+    FOR each spectrum j IN SPECTRAL_LIB:
+        # Compute the mean reflectance of spectrum j through filter k
+        R_kj[k][j] = ∫ R_j(λ) * T_k(λ) dλ  /  ∫ T_k(λ) dλ
+    END
+END
+
+# ------------------------------------------------------------------
+# RECONSTRUCTION PER OBJECT
+# ------------------------------------------------------------------
+FOR each object O in PHOTOMETRY:
+    # Gather data for this object
+    DATA_O = PHOTOMETRY[object_id == O.id]
+    BANDS   = unique(DATA_O.band)
+
+    # ------------------------------------------------------------------
+    # MODEL DEFINITIONS
+    # ------------------------------------------------------------------
+    # Parameters:
+    #   w_j : weight of each spectral template (non‑negative, Σw = 1)
+    #   H   : absolute magnitude in V band (or chosen reference)
+    # Priors:
+    #   w  ~ Dirichlet(α)          (α all = 1 for non‑informative)
+    #   H  ~ Normal(H0, σ_H)       (H0 = typical TNO value, σ_H large)
+    #
+    # Forward model:
+    #   For band k:
+    #       Flux_k = 10^(−0.4*H) * Σ_j w_j * R_kj[k][j]
+    #       Mag_k  = −2.5*log10(Flux_k) + ZP_k
+    #   (ZP_k is the photometric zero point of band k.)
+
+    DEFINE log_prior(w, H):
+        IF any w_j < 0 OR Σw ≠ 1: RETURN −∞
+        p_w  = DirichletPDF(w | α)
+        p_H  = NormalPDF(H | H0, σ_H)
+        RETURN ln(p_w) + ln(p_H)
+
+    DEFINE log_likelihood(w, H):
+        LL = 0
+        FOR each datum i in DATA_O:
+            k     = i.band
+            r_i   = i.r          # heliocentric distance [AU]
+            Δ_i   = i.Δ          # geocentric distance [AU]
+            obs   = i.mag
+            err   = i.err
+
+            # Apparent magnitude prediction
+            Flux   = 10^(−0.4*H) * Σ_j w_j * R_kj[k][j]
+            pred_m = −2.5*log10(Flux) + ZP_k
+            # Optional: add phase‑angle correction if needed
+
+            LL += −0.5 * ((obs − pred_m)/err)^2 − ln(err) − 0.5*ln(2π)
+        END
+        RETURN LL
+
+    DEFINE log_posterior(w, H):
+        RETURN log_prior(w, H) + log_likelihood(w, H)
+
+    # ------------------------------------------------------------------
+    # SAMPLING
+    # ------------------------------------------------------------------
+    INITIALIZE walker positions:
+        w = random Dirichlet(α)
+        H = random Normal(H0, σ_H)
+    RUN MCMC sampler (e.g., affine‑invariant ensemble) for N_steps
+    DISCARD burn‑in, thin chain
+
+    # ------------------------------------------------------------------
+    # POST‑PROCESSING
+    # ------------------------------------------------------------------
+    EXTRACT posterior samples of w and H
+    PREDICTED_SPECTRUM = Σ_j (mean(w_j) * SPECTRAL_LIB[j].R(λ))
+    TAXONOMY           = argmax(mean(w_j))   # most probable template
+    STORE results:
+        object_id, mean(w_j), std(w_j), mean(H), std(H), TAXONOMY,
+        PREDICTED_SPECTRUM
+
+END
+
+# ------------------------------------------------------------------
+# OUTPUT
+# ------------------------------------------------------------------
+TABLE of reconstructed spectra, absolute magnitudes, taxonomic labels,
+and uncertainties for all objects.

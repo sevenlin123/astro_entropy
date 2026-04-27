@@ -1,0 +1,97 @@
+PROCEDURE ProbabilisticSpectralReconstruction
+    INPUT
+        O          : list of objects
+        Filters[i] : transmission curves for each filter i   (λ → T_fi(λ))
+        Solar(λ)   : solar spectral flux density
+        Templates[j] : reflectance spectra t_j(λ)            (j = 1 … N)
+        Priors[j]   : prior probability π_j of template j   (π_j ≥ 0, Σπ_j = 1)
+        Pthresh     : minimum posterior probability for non‑outlier
+        Chi2thresh  : maximum acceptable χ² for non‑outlier
+    OUTPUT
+        For every object:
+            Posterior[j]   : posterior probability for template j
+            Spectrum(λ)    : reconstructed reflectance
+            BestClass      : index of template with largest posterior
+            OutlierFlag    : true if object is flagged as outlier
+
+    ------------------------------------------------------------------------------
+    PRECOMPUTE
+        // Solar magnitudes in each filter
+        FOR each filter i
+            F_solar_i ← ∫ Solar(λ) · Filters[i](λ) dλ
+            MagSun_i ← -2.5·log10(F_solar_i)    // arbitrary zero point
+        END FOR
+
+        // Predicted fluxes for every template in every filter
+        FOR each template j
+            FOR each filter i
+                F_t_j_i ← ∫ Templates[j](λ) · Filters[i](λ) dλ
+                R_pred[j][i] ← F_t_j_i / F_solar_i
+            END FOR
+        END FOR
+    ------------------------------------------------------------------------------
+
+    FOR each object k in O
+        // --------------------------------------------------------------------------
+        // 1. Convert observed magnitudes (or fluxes) to relative reflectances
+        // --------------------------------------------------------------------------
+        FOR each filter i
+            // If observation gives magnitude m_k_i
+            R_obs[i] ← 10^( -0.4·(m_k_i – MagSun_i) )
+            Err[i]   ← measurement error converted to reflectance units
+        END FOR
+
+        // --------------------------------------------------------------------------
+        // 2. Compute likelihood and posterior for each template
+        // --------------------------------------------------------------------------
+        FOR each template j
+            // χ² between observed and predicted reflectances
+            χ²_j ← 0
+            FOR each filter i
+                Δ ← R_obs[i] – R_pred[j][i]
+                χ²_j ← χ²_j + (Δ^2) / (Err[i]^2)
+            END FOR
+
+            lnL_j ← -0.5 * χ²_j                 // Gaussian likelihood
+            lnP_j ← lnL_j + log(Priors[j])      // unnormalised log‑posterior
+        END FOR
+
+        // Normalise posteriors
+        LogSum ← logsumexp( lnP_j over j )
+        FOR each template j
+            Posterior[j] ← exp( lnP_j – LogSum )
+        END FOR
+
+        // --------------------------------------------------------------------------
+        // 3. Reconstruct the full spectrum as a weighted sum of templates
+        // --------------------------------------------------------------------------
+        Spectrum(λ) ← 0
+        FOR each template j
+            Spectrum(λ) ← Spectrum(λ) + Posterior[j] * Templates[j](λ)
+        END FOR
+
+        // --------------------------------------------------------------------------
+        // 4. Determine best class and perform outlier test
+        // --------------------------------------------------------------------------
+        BestClass ← argmax_j Posterior[j]
+        MaxPosterior ← Posterior[BestClass]
+
+        // χ² of best template (could also use weighted χ² of spectrum)
+        χ²_best ← minimum of χ²_j over j
+
+        IF (MaxPosterior < Pthresh) OR (χ²_best > Chi2thresh)
+            OutlierFlag ← TRUE
+        ELSE
+            OutlierFlag ← FALSE
+        END IF
+
+        // --------------------------------------------------------------------------
+        // 5. Store results for this object
+        // --------------------------------------------------------------------------
+        OUTPUT object k:
+            Posterior   ← array Posterior[1…N]
+            Spectrum(λ) ← array of reflectance values
+            BestClass   ← BestClass
+            OutlierFlag ← OutlierFlag
+    END FOR
+END PROCEDURE

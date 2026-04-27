@@ -1,0 +1,110 @@
+Input:
+  - Training spectra matrix X (N_samples x M_wavelengths)
+  - Filter response functions R[m][λ]
+  - Target photometry vector y (length M_filters)
+  - Photometry uncertainties sigma (length M_filters)
+
+Output:
+  - Reconstructed spectrum S_hat(λ)
+  - Credible interval at each wavelength
+  - Outlier flag (optional)
+
+Procedure:
+1. Preprocess training spectra:
+   a. Compute mean spectrum mu[λ] = mean(X[:, λ])
+   b. Centered data Z = X - mu
+2. Perform PCA on Z:
+   a. Covariance C = (Z^T Z)/(N_samples-1)
+   b. Eigen-decompose C → eigenvalues λ_k, eigenvectors v_k
+   c. Select first K components covering desired variance or fixed K
+   d. Principal components PC[k][λ] = v_k[λ]
+3. Precompute filter projections:
+   For each filter m:
+      c0[m] = ∑_λ mu[λ] * R[m][λ] * Δλ
+      For k=1..K:
+          ck[m][k] = ∑_λ PC[k][λ] * R[m][λ] * Δλ
+4. Build linear forward model:
+   f(m,a) = c0[m] + Σ_{k=1}^{K} a_k * ck[m][k]
+5. Construct likelihood:
+   For each filter m: 
+      p(y_m | a) ~ Normal( f(m,a), sigma[m]^2 )
+   Combined likelihood L(a) = Π_m p(...)
+6. Prior on coefficients:
+   Assume Gaussian prior: a_k ~ Normal(0, τ_k^2)
+   τ_k^2 obtained from training distribution of coefficients:
+      coeffs_train = Z · PC_matrix  (projection)
+      τ_k^2 = var(coeffs_train[:,k])
+7. Posterior (Gaussian):
+   Let C_prior = diag(τ_k^2)
+   Let C_likelihood_inv = diag(1/σ_m^2)
+   Compute design matrix G of size M_filters x K:
+       G[m,k] = ck[m][k]
+   Compute posterior covariance:
+       C_post = inverse( G^T C_likelihood_inv G + C_prior^-1 )
+   Compute posterior mean:
+       a_post = C_post * ( G^T C_likelihood_inv (y - c0) )
+8. Reconstruct spectrum:
+   For each λ:
+       S_hat[λ] = mu[λ] + Σ_k a_post[k] * PC[k][λ]
+   Spectrum uncertainty:
+       Var_S[λ] = Σ_{i,j} PC[i][λ] * PC[j][λ] * C_post[i,j]
+       Std_S[λ] = sqrt(Var_S[λ])
+9. Optional outlier detection:
+   Compute coefficient vector a_post
+   Compute Mahalanobis distance D = sqrt( a_post^T C_prior^-1 a_post )
+   If D > threshold → flag as outlier
+10. Return S_hat, Std_S, outlier flag
+
+INPUT:
+    X[N_s × M_λ]          – Training spectra (normalized flux vs wavelength)
+    R[M_f × M_λ]          – Filter response matrices for M_f filters
+    y[M_f]                – Target photometry (fluxes)
+    σ[M_f]                – Photometric uncertainties
+
+OUTPUT:
+    S_hat[M_λ]            – Reconstructed spectrum (posterior mean)
+    Std_S[M_λ]            – Spectral standard deviation (posterior credible interval)
+    OUTLIER_FLAG          – Boolean flag indicating unusual spectral type
+
+STEP 1 – Training‑set preprocessing
+    1.1 μ[λ]   ← mean(X, axis=0)                      // Mean spectrum
+    1.2 Z      ← X – μ                               // Centered spectra
+    1.3 C_cov   ← (Zᵀ Z) / (N_s – 1)                  // Empirical covariance
+
+STEP 2 – Principal Component Analysis
+    2.1 {λ_k, v_k} ← eig(C_cov)                      // Eigenvalues, eigenvectors
+    2.2 Sort λ_k descending; choose K components  
+    2.3 PC[k][λ] ← v_k[λ]  for k = 1 … K              // Principal components
+    2.4 Coef_train ← Z · PC_matrix                  // Projection onto PCs
+    2.5 τ_k² ← var( Coef_train[:,k] )               // Prior variance per PC
+
+STEP 3 – Forward filter projection
+    For each filter m = 1 … M_f
+        c0[m] ← Σ_λ μ[λ]   * R[m][λ]  * Δλ
+        For each PC k = 1 … K
+            ck[m][k] ← Σ_λ PC[k][λ] * R[m][λ] * Δλ
+
+STEP 4 – Linear measurement model
+    f(m,a) = c0[m] + Σ_k a_k * ck[m][k]              // Flux predicted from coefficients
+
+STEP 5 – Bayesian inference (Gaussian conjugate)
+    5.1 G[m,k] ← ck[m][k]                           // Design matrix (M_f × K)
+    5.2 Λ^{-1} ← diag( 1 / σ² )                     // Likelihood precision
+    5.3 C_prior⁻¹ ← diag( 1 / τ² )                   // Prior precision
+    5.4 C_post  ← inv( Gᵀ Λ^{-1} G + C_prior⁻¹ )     // Posterior covariance
+    5.5 a_post  ← C_post · ( Gᵀ Λ^{-1} (y – c0) )    // Posterior mean coefficients
+
+STEP 6 – Spectrum reconstruction
+    For each wavelength λ
+        S_hat[λ] = μ[λ] + Σ_k a_post[k] * PC[k][λ]
+        Var_S[λ] = Σ_{i,j} PC[i][λ] * PC[j][λ] * C_post[i,j]
+        Std_S[λ] = sqrt(Var_S[λ])
+
+STEP 7 – Outlier detection (optional)
+    D_Mah ← sqrt( a_postᵀ · C_prior⁻¹ · a_post )
+    IF D_Mah > THRESHOLD THEN
+        OUTLIER_FLAG ← TRUE
+    ELSE
+        OUTLIER_FLAG ← FALSE
+
+RETURN S_hat, Std_S, OUTLIER_FLAG

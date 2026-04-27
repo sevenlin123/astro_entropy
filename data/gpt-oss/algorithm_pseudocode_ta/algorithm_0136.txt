@@ -1,0 +1,78 @@
+# ------------------------------------------------------------
+# 1. Training Phase – Construct PCA Basis from Reference Spectra
+# ------------------------------------------------------------
+Input: Reference spectra matrix S_ref   // shape: (N_spec, N_wave)
+       Number of PCs to retain: K
+
+1.1 Compute mean spectrum μ = mean(S_ref, axis=0)                // (N_wave,)
+1.2 Center spectra: S_centered = S_ref – μ
+1.3 Compute covariance matrix C_s = cov(S_centered, rowvar=False) // (N_wave, N_wave)
+1.4 Perform eigen-decomposition: 
+        eigenvalues λ, eigenvectors V = eig(C_s)
+1.5 Sort eigenpairs by decreasing λ
+1.6 Select first K eigenvectors → PC = V[:, 0:K]                 // shape: (N_wave, K)
+1.7 Store PC, μ, and K for later use
+
+# ------------------------------------------------------------
+# 2. Filter Response Preparation
+# ------------------------------------------------------------
+Input: Filter set F = {F_1, …, F_M}
+       For each filter F_m, response curve R_m(λ) sampled at same N_wave grid
+
+2.1 For each filter m:
+        R_m_vec = R_m(λ)                                         // (N_wave,)
+2.2 Assemble filter matrix R = [R_1_vec, …, R_M_vec]ᵀ            // shape: (M, N_wave)
+
+# ------------------------------------------------------------
+# 3. Observation Model Setup
+# ------------------------------------------------------------
+Given: Observed photometry p_obs   // vector of length M
+       Photometric uncertainties σ_p   // vector of length M
+
+3.1 Compute baseline photometry from mean spectrum:
+        b = R · μ                                            // (M,)
+
+3.2 Project PCA basis through filters:
+        A = R · PC                                            // shape: (M, K)
+        # Each column A_k corresponds to filter response to PC_k
+
+# ------------------------------------------------------------
+# 4. Bayesian Inference of PC Coefficients
+# ------------------------------------------------------------
+Assume Gaussian priors on coefficients:
+        a ~ N(0, Σ_prior)                                     // Σ_prior = diag(σ_prior²)
+Typical choice: σ_prior large (non‑informative) or set to unit variance.
+
+Define likelihood:
+        p(p_obs | a) ∝ exp( -½ (p_obs – b – A·a)ᵀ C⁻¹ (p_obs – b – A·a) )
+where C = diag(σ_p²) is measurement noise covariance.
+
+Because both prior and likelihood are Gaussian, posterior is Gaussian:
+        Σ_post = (Aᵀ C⁻¹ A + Σ_prior⁻¹ )⁻¹                     // (K, K)
+        μ_post = Σ_post · (Aᵀ C⁻¹ (p_obs – b))               // (K,)
+
+# ------------------------------------------------------------
+# 5. Posterior Sampling & Spectrum Reconstruction
+# ------------------------------------------------------------
+Set number of posterior samples: N_samp
+
+For i = 1 … N_samp:
+    5.1 Sample coefficient vector a_i ~ N(μ_post, Σ_post)
+    5.2 Reconstruct spectrum:
+            s_i = μ + PC · a_i                                 // (N_wave,)
+    5.3 Store s_i
+
+# ------------------------------------------------------------
+# 6. Posterior Summary
+# ------------------------------------------------------------
+Compute point estimates and credible intervals:
+    6.1 Mean spectrum: s_mean = mean({s_i}, axis=0)              // (N_wave,)
+    6.2 Credible interval at each wavelength:
+            lower, upper = percentile({s_i}, [2.5, 97.5], axis=0)
+
+Output:
+    - Posterior mean spectrum s_mean
+    - Credible intervals (lower, upper)
+    - Posterior samples {s_i} if needed for further analysis
+    - Posterior predictive photometry: p_pred = b + A·μ_post
+    - Posterior covariance of coefficients Σ_post

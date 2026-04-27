@@ -1,0 +1,156 @@
+# -------------------------------------------------------------
+# 1. Data Pre‑processing
+# -------------------------------------------------------------
+INPUT:
+    SPEC_RAW   ← list of N reference spectra (reflectance vs wavelength)
+    FILTERS    ← list of M filter throughput curves
+    PHOTOMASK  ← optional mask to exclude missing spectra
+
+# Optional: normalize spectra to mean 1 or any chosen scale
+NORMALIZE_SPEC(SPEC_RAW):
+    for each spectrum s in SPEC_RAW:
+        s_norm = s / median(s)
+    return SPEC_RAW_norm
+
+# -------------------------------------------------------------
+# 2. Latent Space Construction (PCA + KDE)
+# -------------------------------------------------------------
+PCA_DIM   ← K          # e.g., 5–10 components
+KDE_BAND  ← h          # e.g., 0.5
+
+TRAIN_PCA(SPEC_RAW_norm, K):
+    # Center spectra
+    μ = mean(SPEC_RAW_norm, axis=0)
+    S_centered = SPEC_RAW_norm - μ
+    # Compute covariance matrix
+    C = cov(S_centered)
+    # Eigen-decompose
+    λ, V = eig(C)
+    # Sort eigenvalues/eigenvectors descending
+    idx = argsort(λ)[::-1]
+    λ = λ[idx]; V = V[:, idx]
+    # Select first K components
+    PCs = V[:, :K]
+    return PCs, μ
+
+PROJECT_TO_LATENT(S, PCs, μ):
+    # S is a spectrum (1D array)
+    return dot(S - μ, PCs)
+
+RECONSTRUCT_FROM_LATENT(z, PCs, μ):
+    # z is a vector of latent coeffs length K
+    return dot(z, PCs.T) + μ
+
+BUILD_KDE(latent_vectors, h):
+    # Gaussian kernel density estimator in K‑dim space
+    # store (latent_vectors, h) for later sampling
+    return KDE_model
+
+SAMPL_EFFICIENT(N_samples, KDE_model):
+    # Draw N_samples from KDE
+    return latent_samples
+
+# -------------------------------------------------------------
+# 3. Forward Modelling – Photometry Generation
+# -------------------------------------------------------------
+FORWARD_PHOTOMETRY(S_reflectance, FILTERS):
+    # Convolve spectrum with each filter throughput
+    phot = []
+    for f in FILTERS:
+        # Integrate: R(λ)*T(λ)dλ / ∫T(λ)dλ
+        num = sum(S_reflectance * f.transmission * f.wavelength_step)
+        den = sum(f.transmission * f.wavelength_step)
+        phot.append(num / den)
+    return phot
+
+ADD_NOISE(phot, rel_unc=0.2):
+    # Gaussian noise with std = rel_unc * phot
+    return [p + randn() * rel_unc * p for p in phot]
+
+# -------------------------------------------------------------
+# 4. Encoder Training (AutoML Regression)
+# -------------------------------------------------------------
+TRAIN_ENCODER(train_photometry, train_latent):
+    # X = train_photometry (N_samples × M)
+    # y = train_latent      (N_samples × K)
+    # Use AutoML (e.g., AutoGluon) to fit regression model
+    model = AutoMLRegressor()
+    model.fit(X=train_photometry, y=train_latent)
+    return model
+
+# -------------------------------------------------------------
+# 5. Taxonomy Classifier Training (Optional)
+# -------------------------------------------------------------
+TRAIN_CLASSIFIER(latent_vectors, labels):
+    # Fit a probabilistic classifier in latent space
+    clf = AutoMLClassifier()
+    clf.fit(X=latent_vectors, y=labels)
+    return clf
+
+# -------------------------------------------------------------
+# 6. Posterior Sampling (Gaussian Copula)
+# -------------------------------------------------------------
+POSTERIOR_SAMPLING(predicted_z_mean, pred_cov, n_draws):
+    # Assume multivariate normal in latent space
+    samples = multivariate_normal.rvs(mean=predicted_z_mean,
+                                      cov=pred_cov,
+                                      size=n_draws)
+    return samples   # shape: (n_draws, K)
+
+# -------------------------------------------------------------
+# 7. Inference Pipeline (for a new object)
+# -------------------------------------------------------------
+INFER_SPECTRUM(phot_obs, encoder_model, PCs, μ, n_draws=1000):
+    # 7.1 Predict latent coefficient distribution
+    pred_mean = encoder_model.predict_mean(phot_obs)   # shape: (K,)
+    pred_cov  = encoder_model.predict_covariance(phot_obs)  # shape: (K,K)
+
+    # 7.2 Draw posterior samples in latent space
+    latent_samples = POSTERIOR_SAMPLING(pred_mean, pred_cov, n_draws)
+
+    # 7.3 Reconstruct spectra from latent samples
+    spec_samples = []
+    for z in latent_samples:
+        s = RECONSTRUCT_FROM_LATENT(z, PCs, μ)
+        spec_samples.append(s)
+    return spec_samples   # array of shape (n_draws, N_wavelength_bins)
+
+# -------------------------------------------------------------
+# 8. Taxonomy Prediction (Optional)
+# -------------------------------------------------------------
+PREDICT_TAXON(phot_obs, encoder_model, classifier):
+    pred_mean = encoder_model.predict_mean(phot_obs)
+    probs = classifier.predict_proba(pred_mean)
+    return probs    # dict: {class_name: probability}
+
+# -------------------------------------------------------------
+# 9. End‑to‑End Workflow
+# -------------------------------------------------------------
+# 9.1 Training Phase
+SPEC_NORMALIZED = NORMALIZE_SPEC(SPEC_RAW)
+PCs, μ = TRAIN_PCA(SPEC_NORMALIZED, K)
+latent_real = [PROJECT_TO_LATENT(s, PCs, μ) for s in SPEC_NORMALIZED]
+KDE_model   = BUILD_KDE(latent_real, KDE_BAND)
+latent_augmented = SAMPL_EFFICIENT(N_aug, KDE_model)
+spec_augmented   = [RECONSTRUCT_FROM_LATENT(z, PCs, μ) for z in latent_augmented]
+phot_augmented   = [FORWARD_PHOTOMETRY(s, FILTERS) for s in spec_augmented]
+phot_noisy       = [ADD_NOISE(p, rel_unc=0.2) for p in phot_augmented]
+
+encoder = TRAIN_ENCODER(train_photometry=phot_noisy,
+                        train_latent=latent_augmented)
+
+# Optional classifier
+labels_real = assign_taxonomic_labels(SPEC_RAW)   # from external catalog
+classifier  = TRAIN_CLASSIFIER(latent_real, labels_real)
+
+# 9.2 Inference Phase (new object)
+new_photometry = acquire_photometry()   # array of length M
+posterior_specs = INFER_SPECTRUM(new_photometry, encoder,
+                                 PCs, μ, n_draws=1000)
+
+# Optionally get taxonomy probabilities
+tax_probs = PREDICT_TAXON(new_photometry, encoder, classifier)
+
+# Output:
+#   posterior_specs → ensemble of reconstructed spectra
+#   tax_probs      → probability distribution over classes

@@ -1,0 +1,75 @@
+Input:
+    - Reference high‑resolution spectra {S_i}  (i = 1…N_ref)
+    - Filter transmission curves {T_j}        (j = 1…N_filt)
+    - Desired number of PCA components K
+    - KDE bandwidth h
+    - Number of synthetic latent samples M
+    - Photometric measurement vector m  (size N_filt)
+
+Output:
+    - Reconstructed spectrum Ŝ   (continuous, high‑resolution)
+    - Latent coefficient vector ĉ   (size K)
+    - Taxonomic probability vector p_tax (optional)
+
+--------------------------------------------------------------------
+1.  PREPARATION PHASE
+--------------------------------------------------------------------
+1.1  Center spectra:
+      μ_S ← mean of {S_i}  (vector of length L_spectra)
+      S_centered ← {S_i – μ_S}
+
+1.2  Compute PCA on centered spectra:
+      [U, Σ, V] ← SVD(S_centered)          // S_centered = U Σ V^T
+      PC_basis ← first K columns of V       // eigenvectors (length L_spectra)
+      PCs ← Σ[1:K]                          // singular values
+
+1.3  Project reference spectra onto latent space:
+      For each i:
+          c_i ← PC_basis^T · (S_i – μ_S)    // K‑dimensional coefficient vector
+
+1.4  Fit kernel density estimate (KDE) to {c_i}:
+      kde_model ← KDE({c_i}, bandwidth = h)
+
+1.5  Generate synthetic latent samples:
+      For s = 1…M:
+          c_synth[s] ← Sample(kde_model)   // K‑dimensional vector
+
+1.6  Reconstruct synthetic spectra from latent samples:
+      For s = 1…M:
+          Ŝ_synth[s] ← μ_S + PC_basis · c_synth[s]
+
+1.7  Compute synthetic photometry for each synthetic spectrum:
+      For s = 1…M:
+          For each filter j:
+              f_j ← ∫ Ŝ_synth[s](λ) · T_j(λ) dλ
+          phot_synth[s] ← {f_1,…,f_N_filt}
+          Add Gaussian noise:  phot_synth[s] += 0.20 * phot_synth[s] * ε
+              where ε ~ N(0,1) per band
+      // Result: training set X = {phot_synth[s]}, Y = {c_synth[s]}
+
+1.8  Train AutoML regressor (ensemble of GBRT + NN) to map photometry → latent:
+      regressor ← TrainEnsemble(X, Y)
+      // Ensemble outputs mean and variance per latent dimension
+
+1.9  Train taxonomic classifier on latent space (optional):
+      labels ← taxonomy labels for {c_i}
+      classifier ← TrainEnsemble(X, labels)  // multi‑class probability output
+
+--------------------------------------------------------------------
+2.  INFERENCE PHASE
+--------------------------------------------------------------------
+2.1  Predict latent coefficients from observed photometry m:
+      ĉ_mean, ĉ_std ← regressor.Predict(m)   // mean and std dev per dim
+      // Optionally sample N_samples from N(ĉ_mean, diag(ĉ_std^2))
+      // to propagate uncertainty
+
+2.2  Decode latent coefficients to high‑resolution spectrum:
+      Ŝ ← μ_S + PC_basis · ĉ_mean
+
+2.3  (Optional) Taxonomic classification:
+      p_tax ← classifier.Predict(m)   // probabilities for each class
+
+--------------------------------------------------------------------
+3.  OUTPUT
+--------------------------------------------------------------------
+Return Ŝ, ĉ_mean, p_tax

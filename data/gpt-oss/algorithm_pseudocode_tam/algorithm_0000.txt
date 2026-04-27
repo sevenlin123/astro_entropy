@@ -1,0 +1,104 @@
+Input:
+    - S_raw[1…N]      # high‑resolution reflected spectra of N training TNOs
+    - λ_grid          # wavelength grid of the spectra
+    - Filters[1…F]    # throughput curves of the photometric filter set
+    - σ_rel = 0.20     # relative photometric uncertainty (Gaussian)
+
+Parameters:
+    - K                # number of principal components to keep (e.g. 8–10)
+    - B                # KDE bandwidth (e.g. 0.5)
+    - M_aug            # number of synthetic latent samples to generate (e.g. 5000)
+    - n_boot           # number of bootstrap resamples for AutoML (if desired)
+
+Output:
+    - Reconstructed spectrum Ŝ(λ) for any new photometry m_new[1…F]
+    - Posterior distribution over latent coefficients p(z|m_new)
+    - Probabilistic taxonomy assignment P(class | m_new)
+
+--------------------------------------------------------------------
+Step 1 – PCA prior construction
+--------------------------------------------------------------------
+1.1   Center the training spectra:
+        μ_S ← mean(S_raw)          # element‑wise mean across N spectra
+        S_centered[i] ← S_raw[i] – μ_S    for i=1…N
+1.2   Compute covariance matrix C ← cov(S_centered)
+1.3   Perform eigendecomposition:
+        [V, Λ] ← eig(C)             # V columns = eigenvectors, Λ diagonal = variances
+1.4   Sort eigenvectors by decreasing variance
+1.5   Select first K eigenvectors:
+        V_K ← V[:,1…K]
+1.6   Project centered spectra onto PCs:
+        Z_raw[i] ← V_K^T · S_centered[i]   for i=1…N   # latent coefficient vectors
+
+--------------------------------------------------------------------
+Step 2 – Continuous prior via KDE
+--------------------------------------------------------------------
+2.1   Fit a multivariate KDE to {Z_raw[i]} using bandwidth B
+2.2   Draw M_aug synthetic latent vectors:
+        {Z_syn[j]} ← sample_kde(KDE, M_aug)   # j=1…M_aug
+
+--------------------------------------------------------------------
+Step 3 – Synthetic spectrum generation
+--------------------------------------------------------------------
+For each j = 1 … M_aug
+    3.1   Reconstruct spectrum:
+            S_syn[j] ← μ_S + V_K · Z_syn[j]          # inverse PCA
+    3.2   Store S_syn[j]
+
+--------------------------------------------------------------------
+Step 4 – Forward photometry simulation
+--------------------------------------------------------------------
+For each j = 1 … M_aug
+    4.1   For each filter f = 1 … F
+            m_syn[j,f] ← ∫ S_syn[j](λ) * Filter_f(λ) dλ
+            Normalize by solar spectrum if working in reflectance
+    4.2   Add Gaussian noise:
+            m_noisy[j,f] ← m_syn[j,f] + Normal(0, σ_rel·m_syn[j,f])
+
+--------------------------------------------------------------------
+Step 5 – Prepare training data for regressor
+--------------------------------------------------------------------
+Input vector X[j] ← m_noisy[j, 1…F]          # photometry
+Target vector Y[j] ← Z_syn[j]               # latent coefficients
+
+--------------------------------------------------------------------
+Step 6 – Train latent‑space regressor (AutoML)
+--------------------------------------------------------------------
+6.1   Split {X[j],Y[j]} into training / validation (if desired)
+6.2   Call AutoML framework (e.g., AutoGluon Tabular) with:
+        - predictors = X
+        - labels     = Y
+        - objective = multivariate regression on K outputs
+        - ensembling of GBDT, NN, etc.
+6.3   Fit the model → obtain predictor f_pred(m) → z_hat
+
+--------------------------------------------------------------------
+Step 7 – Optional taxonomy classifier
+--------------------------------------------------------------------
+7.1   Encode known taxonomy labels for the original N spectra:
+        Label[i] ← taxonomy of S_raw[i]
+7.2   Fit a separate AutoML classifier on the pair (Z_raw[i], Label[i])
+        → obtains classifier g_cls(z) returning probability vector over classes
+
+--------------------------------------------------------------------
+Inference – Given new photometry m_new[1…F]
+--------------------------------------------------------------------
+8.1   Predict latent coefficients:
+        z_hat ← f_pred(m_new)
+8.2   Reconstruct spectrum:
+        Ŝ(λ) ← μ_S + V_K · z_hat
+8.3   (Optional) Taxonomy probabilities:
+        P_class ← g_cls(z_hat)
+
+Return Ŝ(λ), z_hat (posterior mean), and P_class
+--------------------------------------------------------------------
+Notes
+--------------------------------------------------------------------
+• The KDE prior guarantees a continuous latent distribution; bandwidth B
+  tunes smoothness versus fidelity.
+• The 20 % Gaussian noise added during training forces the regressor to
+  learn the underlying physical correlations rather than exact photometric
+  values.
+• The inverse PCA (step 8.2) enforces smooth, physically plausible spectra.
+• All steps after training (steps 8–9) are purely inference and require
+  only the trained regressor, classifier, and PCA parameters.

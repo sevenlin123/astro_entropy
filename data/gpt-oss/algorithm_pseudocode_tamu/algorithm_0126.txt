@@ -1,0 +1,89 @@
+INPUT
+    S_ref[1..N_ref]          // Reference spectra (array of fluxes at L wavelengths)
+    λ[1..L]                  // Wavelength grid common to all spectra
+    T_f[1..M]                // Throughput curves of M photometric filters
+    m_obs[1..M]              // Measured photometry of the target TNO
+    K                        // Desired number of PCA components (e.g. 8)
+    h_KDE                     // KDE bandwidth (≈0.5)
+    N_aug                      // Number of synthetic latent samples (e.g. 5000)
+    n_samples                  // Posterior sampling size (e.g. 1000)
+OUTPUT
+    S_mean[1..L]          // Posterior‑mean reconstructed spectrum
+    S_CI_low[1..L]        // Lower credible bound (2.5 %)
+    S_CI_high[1..L]       // Upper credible bound (97.5 %)
+    P_tax[1..C]           // Posterior probability for each taxonomic class
+
+--------------------------------------------------------------------
+STEP 1 – BUILD PRIOR (PCA on reference spectra)
+
+1.1  μ_s  ← mean(S_ref)                                   // (1×L)
+1.2  X     ← [ S_ref[i] − μ_s  for i=1..N_ref ]           // (N_ref × L)
+1.3  [V , C] ← PCA(X, components=K)                       // V: (L×K), C: (N_ref×K)
+      // V columns are the eigen‑spectra, C rows are the latent scores
+--------------------------------------------------------------------
+STEP 2 – AUGMENT LATENT SPACE WITH KDE
+
+2.1  KDE_model ← fit_KDE(C, bandwidth=h_KDE)             // non‑parametric density
+2.2  c_aug[1..N_aug] ← sample(KDE_model, N_aug)          // each c_aug[j] is (1×K)
+2.3  For j = 1 to N_aug:
+        S_syn[j] ← μ_s + V * c_aug[j].T                  // (1×L) synthetic spectrum
+--------------------------------------------------------------------
+STEP 3 – FORWARD MODEL SYNTHETIC PHOTOMETRY
+
+3.1  For j = 1 to N_aug:
+        For f = 1 to M:
+            // Convolution integral (discrete sum over λ)
+            m_syn[j,f]  ← sum( S_syn[j] ⊙ T_f[f] ) / sum( T_f[f] )
+            σ_noise     ← 0.20 * m_syn[j,f]                // 20 % relative uncertainty
+            m_noisy[j,f]← m_syn[j,f] + Normal(0, σ_noise)
+--------------------------------------------------------------------
+STEP 4 – TRAIN ENCODER (PHOTOMETRY → LATENT)
+
+4.1  X_enc  ← m_noisy                // (N_aug × M)
+4.2  Y_enc  ← c_aug                  // (N_aug × K)
+4.3  Encoder  ← AutoML_Regression(X_enc, Y_enc)   // e.g., XGBoost ensemble
+--------------------------------------------------------------------
+STEP 5 – TRAIN CLASSIFIER (LATENT → TAXONOMY)  [optional]
+
+5.1  Y_cls   ← taxonomy_labels_of(S_ref)          // vector length N_ref
+5.2  KDE_class ← fit_KDE(C, bandwidth=h_KDE)      // density on latent space
+5.3  c_class_aug ← sample(KDE_class, N_aug)
+5.4  For each c in c_class_aug:
+        assign label by nearest neighbor in {C, Y_cls}
+5.5  Classifier ← AutoML_Classifier(c_class_aug, labels)
+--------------------------------------------------------------------
+STEP 6 – INFERRING FROM NEW PHOTOMETRY
+
+6.1  μ_pred, Σ_pred ← Encoder.predict(m_obs)       // point‑estimate & covariance
+6.2  // Build marginal posteriors for each PCA component
+      For k = 1..K:
+          μ_k   ← μ_pred[k]
+          σ_k   ← sqrt(Σ_pred[k,k])
+          Marginal_k ← Gaussian(μ_k, σ_k)
+
+6.3  // Correlation matrix among latent components (estimated from training scores)
+      ρ ← corr_matrix(C_aug)                        // (K×K)
+
+6.4  Copula ← GaussianCopula(marginals=[Marginal_k], correlation=ρ)
+
+6.5  // Sample latent vectors from the posterior copula
+      For l = 1 to n_samples:
+          c_l ← Copula.sample()                    // (1×K)
+
+6.6  // Decode spectra
+      For l = 1 to n_samples:
+          S_l ← μ_s + V * c_l.T                    // (1×L)
+
+6.7  // Posterior statistics
+      S_mean   ← mean_over_l(S_l)
+      S_CI_low ← percentile_over_l(S_l, 2.5)
+      S_CI_high← percentile_over_l(S_l, 97.5)
+
+6.8  // Taxonomy probabilities
+      For l = 1 to n_samples:
+          P_l ← Classifier.predict_prob(c_l)
+      P_tax ← mean_over_l(P_l)
+
+--------------------------------------------------------------------
+RETURN
+    S_mean, S_CI_low, S_CI_high, P_tax

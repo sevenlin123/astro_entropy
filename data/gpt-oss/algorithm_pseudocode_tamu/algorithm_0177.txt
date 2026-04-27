@@ -1,0 +1,101 @@
+pseudocode
+INPUT:
+    - S_ref       : Reference spectra of N_s (≈50) TNOs   // flux vs λ
+    - filt_curves : Transmission curves of M photometric filters   // JWST NIRCam, etc.
+    - M_phot      : New sparse photometry for a target TNO   // vector of length M
+    - K           : Number of PCA components to retain (default 8–10)
+    - h_kde       : Bandwidth for KDE (default 0.5)
+    - n_syn       : Number of synthetic latent samples (default 5000)
+    - n_post      : Number of posterior samples (default 200)
+    - noise_frac  : Relative photometric noise level (default 0.20)
+
+OUTPUT:
+    - S_hat(M)    : Reconstructed high‑resolution spectrum (length L)
+    - S_unc(M)    : Uncertainty envelope (e.g., 16th & 84th percentiles)
+    - P_tax       : Probability vector over taxonomic classes
+
+--------------------------------------------------------------------
+STEP 0 – Pre‑processing
+--------------------------------------------------------------------
+1. Convert all reference spectra to reflectance R(λ) = F_obj(λ)/F_sun(λ).
+2. Resample all spectra onto a common wavelength grid of length L.
+3. Store the L‑dimensional spectrum vectors in matrix R_ref[N_s × L].
+
+--------------------------------------------------------------------
+STEP 1 – Dimensionality reduction (Prior definition)
+--------------------------------------------------------------------
+4. Compute mean spectrum μ_R = mean(R_ref, axis=0).
+5. Center spectra: R_centered = R_ref – μ_R.
+6. Perform Singular Value Decomposition: 
+       R_centered = U Σ Vᵀ
+   where columns of V (length L) are eigenvectors (principal components).
+7. Select first K eigenvectors → PC_basis[K × L].
+8. Project reference spectra into latent space:
+       Z_ref[N_s × K] = R_centered · PC_basisᵀ
+   Each row z_i is a K‑dimensional coefficient vector.
+
+--------------------------------------------------------------------
+STEP 2 – Kernel Density Estimation (continuous prior)
+--------------------------------------------------------------------
+9. Estimate density p(z) over K‑dim latent space using Gaussian kernel:
+       p(z) ≈ (1/(N_s h_kde^K)) Σ_j exp(-||z - z_j||²/(2 h_kde²))
+10. Sample n_syn latent vectors from this KDE → Z_syn[n_syn × K].
+
+--------------------------------------------------------------------
+STEP 3 – Forward modeling of photometry (Implicit likelihood)
+--------------------------------------------------------------------
+11. For each synthetic latent vector z in Z_syn:
+        a. Reconstruct spectrum: R_syn = μ_R + z · PC_basis
+        b. For each filter m in 1…M:
+              i. Convolve R_syn with filt_curves[m] to obtain theoretical
+                 reflectance m_th[m] = ∫ R_syn(λ) * T_m(λ) dλ / ∫ T_m(λ) dλ
+        c. Assemble synthetic photometry vector m_syn[M] = [m_th[1], …, m_th[M]].
+        d. Perturb photometry with Gaussian noise:
+              m_noisy[m] = m_syn[m] * (1 + Normal(0, noise_frac))
+12. Store pairs (m_noisy, z) as training data for the regressor.
+
+--------------------------------------------------------------------
+STEP 4 – Train photometry‑to‑latent regressor (Encoder)
+--------------------------------------------------------------------
+13. Use an AutoML framework (e.g., AutoGluon) to fit a regression model:
+        regressor: m_noisy[M] → z[K]
+    – Ensemble of gradient‑boosted trees + neural nets.
+14. Evaluate regressor on a held‑out portion of training data (internal CV).
+15. Save trained regressor for inference.
+
+--------------------------------------------------------------------
+STEP 5 – Train latent‑space classifier (taxonomy)
+--------------------------------------------------------------------
+16. Label each reference spectrum with its known class label y_i ∈ {H₂O, CO₂, OrgMeth, Org}.
+17. Train a multi‑class classifier (AutoML) on pairs (Z_ref, y):
+        classifier: z[K] → P(y | z)
+18. Save trained classifier.
+
+--------------------------------------------------------------------
+STEP 6 – Inference for a new target
+--------------------------------------------------------------------
+19. INPUT: M_phot[M]   // observed photometry with measurement errors σ_phot
+20. Standardize M_phot to match training scale (if necessary).
+
+21. Predict posterior over latent coefficients:
+        a. Apply regressor to M_phot → z_mean[K]  (point estimate).
+        b. Obtain regression uncertainty (e.g., variance from ensemble preds).
+        c. Construct joint Gaussian copula:
+              - Marginal posteriors: normal distributions N(z_mean[k], σ_k²)
+              - Correlation matrix ρ derived from regressor’s covariance or
+                from KDE of Z_syn.
+        d. Sample n_post latent vectors {z^(s)} from this copula.
+
+22. Decode each sampled latent vector to a spectrum:
+        S^(s) = μ_R + z^(s) · PC_basis          // length L
+23. Aggregate spectra:
+        - Mean spectrum: S_hat = mean(S^(s))
+        - Uncertainty envelope: S_unc_lower = percentile(S^(s), 16),
+                                 S_unc_upper = percentile(S^(s), 84)
+
+24. Classify taxonomy:
+        a. Feed z_mean into classifier → P_tax
+        b. (Optional) For each sample z^(s), compute class probs and
+           average to get posterior class distribution.
+
+25. RETURN: S_hat, S_unc, P_tax

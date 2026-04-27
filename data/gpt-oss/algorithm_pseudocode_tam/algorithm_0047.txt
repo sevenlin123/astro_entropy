@@ -1,0 +1,33 @@
+pseudo
+INPUT:
+    - Seed spectra S_i(λ)  i = 1 … Nseed   (reflectance vs wavelength)
+    - Corresponding taxonomic labels L_i  (H₂O, CO₂, Org, Methanol)
+    - Filter throughput curves {T_f(λ)}  f = 1 … NF
+    - Noise level σ_noise = 0.20            (relative reflectance)
+
+OUTPUT:
+    - PCA mean spectrum μ(λ)
+    - PCA eigenvectors V_k(λ)  k = 1 … K
+    - Trained regressor R  (photometry → latent coefficients)
+    - Trained classifier C  (latent coefficients → taxonomic probs)
+
+pseudo
+INPUT:
+    - Observed photometry **m_obs** = (m_1, …, m_NF)
+    - Measurement uncertainties σ_obs (optional)
+
+OUTPUT:
+    - Posterior predictive distribution of latent coefficients a
+    - Reconstructed spectrum S_rec(λ)
+    - Taxonomic probability vector P_tax
+
+pseudo
+FOR n = 1 TO Nposterior:
+    a_n ← Sample from p(a | **m_obs**)   // e.g., via Monte Carlo
+    S_n(λ) ← μ(λ) + V a_n
+END FOR
+
+Compute:
+    S_mean(λ) = mean_n(S_n)
+    S_std(λ)  = std_n(S_n)
+    P_tax     = mean_n(C(a_n))

@@ -1,0 +1,82 @@
+INPUT
+    N            – number of training spectra
+    S[1…N][λ]    – calibrated spectra sampled on common wavelength grid λ
+    F[1…M][λ]    – filter transmission curves for M photometric bands
+    m_obs[1…M]   – measured photometry (e.g., magnitudes or fluxes)
+    σ_obs[1…M]   – measurement uncertainties for each band
+    K            – desired number of principal components (default 8)
+
+OUTPUT
+    S_rec[λ]     – reconstructed mean spectrum
+    S_lower[λ], S_upper[λ] – lower/upper bounds of chosen credible interval
+    c_samples[]  – posterior samples of principal‑component coefficients
+    χ²_min       – minimum chi‑square value of the fit
+
+--------------------------------------------------------------------
+STEP 0 – PRE‑PROCESSING OF TRAINING SPECTRA
+--------------------------------------------------------------------
+1. Normalize each spectrum S[i] to unity at a reference wavelength λ_ref
+      S_norm[i] = S[i] / S[i](λ_ref)
+2. Compute mean spectrum μ[λ] = (1/N) Σ_i S_norm[i]
+3. Center spectra:  X[i] = S_norm[i] – μ          // X is N × L matrix
+
+--------------------------------------------------------------------
+STEP 1 – PRINCIPAL COMPONENT ANALYSIS
+--------------------------------------------------------------------
+4. Compute covariance matrix C = (1/(N‑1)) * Xᵀ X        // L × L
+5. Eigen‑decompose C → eigenvalues λ_k, eigenvectors e_k[λ]
+6. Sort eigenvectors by descending eigenvalues
+7. Select first K eigenvectors:  {e_1,…,e_K}
+8. Form matrix E[λ, k] = e_k[λ]   // L × K
+
+--------------------------------------------------------------------
+STEP 2 – PHOTOMETRIC FORWARD MODEL
+--------------------------------------------------------------------
+9. Define function PredictPhotometry(c[1…K]):
+       # c is a vector of PC coefficients
+       S_c[λ] = μ[λ] + Σ_{k=1}^{K} c_k * e_k[λ]            // reconstructed spectrum
+       For each band f=1…M:
+           Numerator   = ∫ S_c[λ] * F[f][λ] dλ
+           Denominator = ∫ F[f][λ] dλ
+           m_pred[f] = Numerator / Denominator
+       Return m_pred[1…M]
+
+--------------------------------------------------------------------
+STEP 3 – LIKELIHOOD AND PRIOR
+--------------------------------------------------------------------
+10. Gaussian likelihood:
+        L(c) = exp( -½ Σ_{f=1}^{M} [(m_obs[f] – PredictPhotometry(c)[f]) / σ_obs[f]]² )
+11. Prior over coefficients:
+        p_prior(c) = N(0, Σ_pc)   where Σ_pc = diag(λ_1,…,λ_K)
+12. Posterior density:
+        p(c | data) ∝ L(c) * p_prior(c)
+
+--------------------------------------------------------------------
+STEP 4 – POSTERIOR SAMPLING
+--------------------------------------------------------------------
+13. Initialize c_0 (e.g., zeros or MAP estimate)
+14. Run Markov Chain Monte Carlo (e.g., Metropolis‑Hastings or HMC):
+       For iter = 1 … N_iter:
+           Propose c_prop = c_prev + ε  // ε ~ N(0, proposal_cov)
+           Compute log_posterior_prop = log(L(c_prop)) + log(p_prior(c_prop))
+           Compute log_posterior_prev = log(L(c_prev)) + log(p_prior(c_prev))
+           Accept with probability min(1, exp(log_posterior_prop – log_posterior_prev))
+           If accepted: c_next = c_prop else c_next = c_prev
+           Store c_next in c_samples[]
+           Set c_prev = c_next
+15. Discard burn‑in samples; thin chain if needed.
+16. Compute χ²_min = Σ_f [(m_obs[f] – PredictPhotometry(c_MAP)[f]) / σ_obs[f]]²
+
+--------------------------------------------------------------------
+STEP 5 – RECONSTRUCTED SPECTRUM AND UNCERTAINTIES
+--------------------------------------------------------------------
+17. For each stored sample s in c_samples:
+        S_s[λ] = μ[λ] + Σ_{k=1}^{K} s_k * e_k[λ]
+18. At every wavelength λ:
+        Compute sample mean:  S_mean[λ] = mean_s S_s[λ]
+        Compute percentiles (e.g., 2.5th & 97.5th) across samples → S_lower[λ], S_upper[λ]
+19. Set S_rec[λ] = S_mean[λ]
+
+--------------------------------------------------------------------
+RETURN
+    S_rec[λ], S_lower[λ], S_upper[λ], c_samples[], χ²_min

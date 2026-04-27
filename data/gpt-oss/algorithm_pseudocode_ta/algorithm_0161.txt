@@ -1,0 +1,91 @@
+text
+INPUT
+  – Training spectra matrix X_train[N_spec × N_wave]
+  – Filter response functions {R_i(λ)} for i = 1 … N_band
+  – Observed photometry vector y_obs[N_band]
+  – Photometric uncertainties σ_obs[N_band]
+  – Desired number of principal components K  (typically 4–10)
+
+OUTPUT
+  – Reconstructed spectrum S_rec[N_wave]
+  – Spectral uncertainty array σ_rec[N_wave]
+  – Posterior coefficient vector a_post[K]
+  – Posterior covariance matrix Σ_post[K × K]
+
+--------------------------------------------------------------------
+STEP 0 – Pre‑processing
+--------------------------------------------------------------------
+ 1.  Compute mean spectrum μ_s = mean(X_train, axis=0)          // length N_wave
+ 2.  Center training spectra: X_c = X_train – μ_s              // zero‑mean
+
+--------------------------------------------------------------------
+STEP 1 – Principal Component Analysis (PCA)
+--------------------------------------------------------------------
+ 3.  Compute covariance matrix C = (X_cᵀ · X_c) / (N_spec – 1)   // N_wave × N_wave
+ 4.  Eigen‑decompose C → eigenvalues λ[1…N_wave], eigenvectors
+       V = [v_1 … v_N_wave]  // each v_k is length N_wave
+ 5.  Sort eigenpairs descending by λ
+ 6.  Select first K eigenvectors → PC = V[:,1:K]                // N_wave × K
+ 7.  Project centered spectra onto PCs:
+       coeff_mat = X_c · PC    // N_spec × K
+
+--------------------------------------------------------------------
+STEP 2 – Build the photometric forward model
+--------------------------------------------------------------------
+ 8.  For each band i:
+        • Compute mean band flux μ_band[i] =
+            ∫ μ_s(λ) · R_i(λ) dλ   // analytic or numerical integration
+        • For each PC k:
+            b[i,k] = ∫ PC(:,k) · R_i(λ) dλ
+ 9.  Assemble design matrix B = [b]  // N_band × K
+10.  Assemble mean flux vector μ_band[1…N_band]
+
+--------------------------------------------------------------------
+STEP 3 – Prior on coefficients
+--------------------------------------------------------------------
+11.  From coeff_mat compute prior mean a_prior = mean(coeff_mat, axis=0)   // usually ~0
+12.  Compute prior covariance Σ_prior =
+        cov(coeff_mat, rowvar=False)   // K × K matrix
+    (if Σ_prior is singular, add small εI)
+
+--------------------------------------------------------------------
+STEP 4 – Bayesian update (analytic Gaussian posterior)
+--------------------------------------------------------------------
+13.  Weight matrix W = diag( 1 / σ_obs² )           // N_band × N_band
+14.  Compute posterior covariance:
+        Σ_post = inverse( Bᵀ · W · B + inverse(Σ_prior) )
+15.  Compute posterior mean:
+        a_post = Σ_post · ( Bᵀ · W · (y_obs – μ_band) ) + a_prior
+    (If a_prior = 0, omit the last term)
+
+--------------------------------------------------------------------
+STEP 5 – Spectrum reconstruction
+--------------------------------------------------------------------
+16.  Reconstruct mean spectrum:
+        S_rec = μ_s + PC · a_post                // element‑wise addition
+17.  Propagate coefficient uncertainty to spectral space:
+        For each wavelength λ_j:
+            variance_j = 0
+            For k = 1 to K:
+                For l = 1 to K:
+                    variance_j += PC(j,k) * PC(j,l) * Σ_post(k,l)
+            σ_rec[j] = sqrt( variance_j )
+18.  Optionally add residual variance from training:
+        res_var = mean( (X_train – (μ_s + PC·coeff_mat))², axis=0 )
+        σ_rec += sqrt(res_var)
+
+--------------------------------------------------------------------
+STEP 6 – Outlier detection (optional)
+--------------------------------------------------------------------
+19.  Compute log‑likelihood of y_obs under posterior:
+        LL = –0.5 * (y_obs – μ_band – B·a_post)ᵀ · W ·
+             (y_obs – μ_band – B·a_post) –
+             0.5 * log(det(2π · (B·Σ_post·Bᵀ + diag(σ_obs²))))
+20.  If LL below threshold → flag object as possible outlier
+
+--------------------------------------------------------------------
+RETURN
+  – S_rec   : reconstructed spectrum (length N_wave)
+  – σ_rec   : per‑pixel standard deviation
+  – a_post  : posterior coefficient vector
+  – Σ_post  : posterior covariance of coefficients

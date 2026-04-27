@@ -1,0 +1,15 @@
+c_i = E^T · (s_i – μ_S)          // K‑dimensional coefficient vector
+
+s_aug_j = μ_S + E · c_j
+
+m_j[f] = ∫ s_aug_j(λ) · T_f(λ) dλ / ∫ T_f(λ) dλ
+
+m_j_noisy[b] = m_j[b] * (1 + ε),   ε ~ Normal(0, σ_rel)
+
+s_k = μ_S + E · c_k
+
+median_s(λ) = median{ s_k(λ) }  
+     ci_low(λ)   = percentile{ s_k(λ), 2.5 }  
+     ci_high(λ)  = percentile{ s_k(λ), 97.5 }
+
+P(t | μ_c) = C(μ_c)

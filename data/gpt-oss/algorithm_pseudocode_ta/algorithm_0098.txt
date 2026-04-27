@@ -1,0 +1,94 @@
+Input
+  S   – matrix of training spectra (n_spectra × n_wavelengths)
+  W   – corresponding wavelength grid
+  C   – number of principal components to retain (C ≈ 4–10)
+  P   – list of observed objects
+  For each object p ∈ P:
+      Fp   – vector of measured photometric fluxes
+      σp   – vector of measurement uncertainties
+      Tp   – list of filter transmission curves (same length as Fp)
+
+Output
+  For each object p:
+      Ŝp    – posterior‑predictive mean spectrum (n_wavelengths)
+      Σp    – posterior‑predictive covariance of spectrum
+      αp    – posterior distribution of latent coefficients (size C)
+      ProbOutlier(p) – posterior probability of being an outlier
+
+--------------------------------------------------------------------
+Step 0: Pre‑processing
+  1. Normalize all training spectra to unit mean reflectance (optional).
+  2. Interpolate spectra onto common wavelength grid W if needed.
+
+--------------------------------------------------------------------
+Step 1: Principal‑Component Analysis (PCA) on Training Set
+  3. Compute mean spectrum μ = mean(S, axis=0).                // 1×n_wavelengths
+  4. Center spectra:  S̄ = S - μ.
+  5. Compute covariance matrix COV = (S̄ᵀ · S̄) / (n_spectra-1).  // n_wavelengths×n_wavelengths
+  6. Perform eigendecomposition:  COV = U Λ Uᵀ.
+  7. Select first C eigenvectors:  U_C = U[:, 0:C].            // n_wavelengths×C
+  8. Project training spectra into latent space:           // n_spectra×C
+        Z = S̄ · U_C .
+  9. Estimate prior covariance of coefficients:
+        Σ_prior = diag(λ_0 … λ_{C-1})   // first C eigenvalues
+ 10. (Optional) Standardize latent coefficients:  Z_std = Z / sqrt(diag(Σ_prior)).
+
+--------------------------------------------------------------------
+Step 2: Forward Model – Photometric Flux from Latent Coefficients
+ 11. For each filter k in any Tp, precompute convolution kernel:
+        K_k(λ) = Transmission_k(λ) / ∫Transmission_k dλ .
+ 12. For a given coefficient vector α (size C):
+        Spectrum(α) = μ + U_C · α.                       // 1×n_wavelengths
+ 13. Predicted flux in filter k:
+        f_k(α) = Σ_over_λ (Spectrum(α)(λ) · K_k(λ)) · Δλ.
+ 14. Stack predicted fluxes into vector f(α).
+
+--------------------------------------------------------------------
+Step 3: Bayesian Inference for Each Object
+  For each object p:
+  15. Define likelihood:
+        L(α | Fp, σp) = Normal(Fp | f(α), diag(σp²)).
+  16. Define prior on α:
+        π(α) = Normal(α | 0, Σ_prior).
+  17. Posterior:
+        p(α | Fp) ∝ L(α | Fp, σp) · π(α).
+  18. Sample α from the posterior using e.g. Hamiltonian Monte Carlo or
+        Metropolis–Hastings:
+        Initialize α₀ = 0.
+        For i = 1 … N_samples:
+            propose α' = α_{i-1} + ε,  ε ~ Normal(0, step_size² I).
+            Compute acceptance ratio:
+              r = [L(α'|Fp)π(α')] / [L(α_{i-1}|Fp)π(α_{i-1})].
+            Accept with prob min(1,r); else keep α_{i-1}.
+        Store accepted samples {α_i}.
+
+  19. Posterior predictive spectrum:
+        For each sampled α_i:
+            Ŝ_i = Spectrum(α_i) = μ + U_C · α_i.
+        Compute mean spectrum:
+            Ŝp = (1/N_samples) Σ_i Ŝ_i.
+        Compute covariance:
+            Σp = (1/(N_samples-1)) Σ_i (Ŝ_i - Ŝp)(Ŝ_i - Ŝp)ᵀ.
+
+--------------------------------------------------------------------
+Step 4: Outlier Probability
+ 20. Compute marginal likelihood evidence Z_p = ∫ L(α)π(α)dα  (approximate by
+     importance weighting over samples).
+ 21. Compare to null hypothesis (e.g. broad prior without constraints).
+ 22. Define outlier probability:
+        ProbOutlier(p) = 1 - [Z_p / max_q Z_q]   // relative to most probable object.
+
+--------------------------------------------------------------------
+Step 5: Optional Filter‑Set Evaluation (Survey Optimization)
+ 23. For each candidate filter set T_candidate:
+        Simulate synthetic photometry for all training spectra:
+            For each spectrum s_j:
+                For each filter k ∈ T_candidate:
+                    f_{j,k} = f_k(α_j)   // where α_j are latent coords of s_j
+        Compute mutual information I(α ; f_T_candidate) using:
+            I = H(α) - H(α | f_T_candidate)
+              ≈ (1/2) log|Σ_prior| - (1/2) E[log|Cov(α | f)|]
+        Rank filter sets by I; choose set with highest I.
+
+--------------------------------------------------------------------
+End of Algorithm

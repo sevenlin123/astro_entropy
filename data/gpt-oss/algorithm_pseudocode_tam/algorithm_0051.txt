@@ -1,0 +1,106 @@
+pseudocode
+INPUT
+    SPECTRA_SET   : array of N_ref spectra (wavelength × reflectance)
+    FILTER_SET    : array of M_filter transmission curves
+    PHOTOMETRY    : array of K_phot (band, measured flux ± σ)
+
+OUTPUT
+    RECONSTRUCTED_SPECTRUM : wavelength × flux
+    TAXONOMY_PROBS         : dictionary {class → probability}
+
+--------------------------------------------------------------------
+1. TRAINING PHASE
+--------------------------------------------------------------------
+
+1.1. PCA LATENT SPACE
+    # Standardise spectra (zero mean, unit variance per wavelength bin)
+    S_std = standardise(SPECTRA_SET)
+
+    # Compute PCA on standardized spectra
+    PCA = fit_PCA(S_std, n_components = K_pca)   # K_pca ≈ 5–10
+    PC_MEAN = PCA.mean_
+    PC_VECS = PCA.components_                    # shape (K_pca, N_wavelength)
+
+    # Project each reference spectrum into latent space
+    Z_real = PCA.transform(S_std)                 # shape (N_ref, K_pca)
+
+1.2. PRIOR GENERATION – KDE AUGMENTATION
+    # Estimate density over latent space using kernel density estimator
+    KDE = fit_KDE(Z_real, bandwidth = h_kde)     # h_kde ≈ 0.5
+
+    # Sample synthetic latent vectors
+    N_aug = 5000                                 # number of synthetic samples
+    Z_aug = KDE.sample(N_aug)                    # shape (N_aug, K_pca)
+
+    # Combine real and synthetic latent vectors
+    Z_train = concatenate([Z_real, Z_aug])       # shape (N_ref+N_aug, K_pca)
+
+1.3. SYNTHETIC PHOTOMETRY FOR TRAINING
+    # For every latent vector in Z_train, reconstruct a full spectrum
+    S_train = PCA.inverse_transform(Z_train)      # shape (N_total, N_wavelength)
+    S_train += PC_MEAN                            # re‑add mean spectrum
+
+    # Convolve each spectrum with every filter to obtain model photometry
+    for i in 0 .. N_total-1:
+        for j in 0 .. M_filter-1:
+            μ[i, j] = integrate(S_train[i] * FILTER_SET[j])
+        # Add Gaussian noise with relative std = 0.20
+        μ_noisy[i, :] = μ[i, :] + normal(0, 0.20*μ[i, :])
+
+    # Training data pairs: (photometry vector, latent coefficients)
+    X_train = μ_noisy          # shape (N_total, M_filter)
+    Y_train = Z_train          # shape (N_total, K_pca)
+
+1.4. REGRESSOR TRAINING (AUTO‑ML ENSEMBLE)
+    # Instantiate AutoML regressor (e.g., Gradient Boosted Trees + NN)
+    REGR = AutoML_Regressor(
+                task='regression',
+                loss='mean_absolute_error',
+                ensemble=True,
+                n_estimators=200,
+                max_depth=10)
+
+    REGR.fit(X_train, Y_train)   # learns P(latent | photometry)
+
+1.5. CLASSIFIER TRAINING (LATENT‑SPACE)
+    # Label each reference spectrum with its taxonomic class
+    LABELS = [class_of(spectrum) for spectrum in SPECTRA_SET]
+    # Train classifier on the real latent vectors only
+    CLF = AutoML_Classifier(
+              task='classification',
+              metric='accuracy',
+              ensemble=True,
+              n_estimators=200,
+              max_depth=10)
+
+    CLF.fit(Z_real, LABELS)      # learns P(class | latent)
+
+--------------------------------------------------------------------
+2. INFERENCE PHASE (FOR NEW OBJECTS)
+--------------------------------------------------------------------
+
+2.1. PREPROCESS NEW PHOTOMETRY
+    # Convert raw counts/fluxes to reflectance if necessary
+    # Standardise by subtracting mean and dividing by std of training photometry
+    X_new = standardise(PHOTOMETRY)   # shape (1, M_filter)
+
+2.2. PREDICT LATENT COEFFICIENT DISTRIBUTION
+    # Use regressor ensemble to obtain predictive distribution
+    Z_pred_mean, Z_pred_std = REGR.predict_with_uncertainty(X_new)
+    # Optionally draw N_samples samples from multivariate normal
+    Z_samples = multivariate_normal(Z_pred_mean, diag(Z_pred_std^2), N_samples)
+
+2.3. RECONSTRUCT SPECTRA
+    # Apply inverse PCA to each sampled latent vector
+    S_samples = PCA.inverse_transform(Z_samples) + PC_MEAN
+    # Aggregate samples (e.g., mean) to produce single reconstructed spectrum
+    RECONSTRUCTED_SPECTRUM = mean(S_samples, axis=0)
+
+2.4. TAXONOMIC PROBABILITIES
+    # Use classifier to evaluate probability for each class
+    TAXONOMY_PROBS = CLF.predict_proba(Z_pred_mean)
+
+--------------------------------------------------------------------
+3. OUTPUT
+--------------------------------------------------------------------
+Return RECONSTRUCTED_SPECTRUM and TAXONOMY_PROBS

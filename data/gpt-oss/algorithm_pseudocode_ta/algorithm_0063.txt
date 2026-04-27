@@ -1,0 +1,84 @@
+Input
+ ----
+  - Training spectra:   S_train[n][m]      // n = #training spectra, m = #wavelength points
+  - Corresponding wavelengths: λ[m]
+  - Filter response functions: R[p][m]       // p = #photometric filters
+  - New object photometry:  f_obs[p]          // observed fluxes
+  - Photometric uncertainties: σ_obs[p]
+
+Output
+ ------
+  - Reconstructed mean spectrum:  μ_rec[λ]
+  - Credible‑interval envelope:  CI_low[λ], CI_high[λ]
+  - Posterior samples of principal‑component (PC) coefficients: {a_s[1…K]}_s
+
+1.1 Compute mean spectrum:
+     μ[λ] = (1/n) Σ_{i=1}^{n} S_train[i][λ]
+
+1.2 Center training spectra:
+     ΔS[i][λ] = S_train[i][λ] – μ[λ]        for all i
+
+1.3 Compute covariance matrix C of shape (m × m):
+     C = (1/(n-1)) ΔSᵀ ⋅ ΔS
+
+1.4 Eigen‑decompose C:
+     C v_k = λ_k v_k,   k = 1 … m
+
+1.5 Sort eigenpairs by decreasing λ_k.
+     Select first K components (K chosen, e.g. 8–10).
+     Define PC basis functions:
+         PC_k[λ] = v_k[λ]   for k = 1 … K
+
+2.1 For each training spectrum i:
+        a_i[k] = ⟨ΔS[i], PC_k⟩          // dot product over λ
+   Store coefficient vector a_i[1…K].
+
+2.2 Estimate prior statistics of coefficients:
+        μ_a[k]  = (1/n) Σ_i a_i[k]
+        Σ_a[k,k'] = (1/(n-1)) Σ_i (a_i[k]-μ_a[k]) (a_i[k']-μ_a[k'])
+   Optionally assume diagonal Σ_a if correlations are weak.
+
+3.1 For any coefficient vector a[1…K], construct spectral model:
+        S_model(λ | a) = μ[λ] + Σ_{k=1}^{K} a[k] · PC_k[λ]
+
+3.2 Predict flux in filter j:
+        g_j(a) = ( Σ_{m=1}^{m} S_model(λ_m | a) · R[j][m] · Δλ_m )
+                 / ( Σ_{m=1}^{m} R[j][m] · Δλ_m )
+   where Δλ_m = λ[m+1] - λ[m] (wavelength spacing).
+
+4.1 Likelihood:
+        L(a) = Π_{j=1}^{p}
+                exp( - ( f_obs[j] - g_j(a) )² / (2 σ_obs[j]²) )
+
+4.2 Prior:
+        p(a) = Normal( μ_a , Σ_a )    // multivariate Gaussian
+
+4.3 Posterior:
+        p(a | data) ∝ L(a) · p(a)
+
+4.4 Sample posterior:
+        Use a sampling scheme (e.g., Hamiltonian Monte Carlo or
+        Metropolis–Hastings) to generate S samples {a_s} from
+        p(a | data).  Store each sample a_s[1…K].
+
+5.1 For each posterior sample a_s:
+        S_s(λ) = μ[λ] + Σ_{k=1}^{K} a_s[k] · PC_k[λ]
+
+5.2 Compute ensemble statistics:
+        μ_rec[λ]   = (1/S) Σ_{s=1}^{S} S_s[λ]
+        σ_rec[λ]   = sqrt( (1/(S-1)) Σ_s (S_s[λ] - μ_rec[λ])² )
+        CI_low[λ]  = μ_rec[λ] - 1.96·σ_rec[λ]
+        CI_high[λ] = μ_rec[λ] + 1.96·σ_rec[λ]
+   (or use percentiles for non‑Gaussian posteriors)
+
+6.1 Pre‑define spectral templates or decision boundaries
+    in the PC coefficient space.
+
+6.2 For each posterior sample a_s, assign a taxonomic class.
+
+6.3 Compute class posterior probability:
+        P(class | data) = (#samples assigned to class) / S
+
+Return μ_rec[λ], CI_low[λ], CI_high[λ],
+       posterior coefficient samples {a_s},
+       (optional) taxonomic probabilities.

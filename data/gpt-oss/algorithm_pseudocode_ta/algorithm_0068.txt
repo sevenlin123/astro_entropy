@@ -1,0 +1,78 @@
+text
+Input: Training spectra matrix  S  (N_spec × N_wave)
+        Filter transmission curves {F_j(λ)}  (j = 1 … N_fil)
+Output: Principal‑component basis  B  (N_wave × K)
+        Mean spectrum  μ_s  (N_wave)
+        Projection matrix  M  (N_fil × K)
+        Prior mean  μ_c  (K)  and covariance  Σ_c  (K×K)
+
+1.1   // Center spectra
+      μ_s ← mean(S, axis=0)                     // vector of length N_wave
+      S_centered ← S  –  μ_s
+
+1.2   // Perform Singular Value Decomposition
+      [U, Σ, Vt] ← svd(S_centered, full_matrices=False)
+      // U : N_spec × N_spec, Σ : diagonal(N_spec), Vt : N_spec × N_wave
+
+1.3   // Select K leading components (chosen from cross‑validation study)
+      K ← desired number of PCs (e.g., 8–10)
+      U_K ← U[:, :K]                            // N_spec × K
+      Σ_K ← diag(Σ[:K])                         // K × K
+      Vt_K ← Vt[:K, :]                          // K × N_wave
+
+1.4   // Build basis functions
+      B ← Vt_K.T                               // N_wave × K  (columns are eigen‑spectra)
+      // Each column is a principal component scaled by its singular value
+
+1.5   // Pre‑compute filter projection matrix
+      For each filter j:
+          For each component i:
+              M[j,i] ← ∫ F_j(λ) * B[:,i](λ) dλ   // numerical integration
+      // M now maps coefficient vector c (K×1) → expected flux in each filter
+
+1.6   // Estimate prior on coefficients from training set
+      c_train ← U_K * Σ_K                      // N_spec × K
+      μ_c ← mean(c_train, axis=0)              // K‑vector
+      Σ_c ← cov(c_train, rowvar=False)         // K×K matrix
+
+text
+Input: Observed photometry  y  (N_fil × 1)
+       Measurement uncertainties  σ  (N_fil × 1)
+Output: Posterior samples of coefficients {c_samp}
+        Reconstructed spectra {s_samp}
+        Credible intervals per wavelength
+
+2.1   // Weight matrix
+      W ← diag(1.0 / σ²)                       // N_fil × N_fil
+
+2.2   // Posterior mean and covariance (analytic solution for linear Gaussian model)
+      Σ_post_inv ← Mᵀ · W · M  +  Σ_c⁻¹        // K×K
+      Σ_post     ← inverse(Σ_post_inv)        // K×K
+      μ_post     ← Σ_post · (Mᵀ · W · y  +  Σ_c⁻¹ · μ_c)   // K×1
+
+2.3   // Draw samples from posterior
+      For n = 1 … N_samples:
+          c_samp[n] ← draw_multivariate_normal(μ_post, Σ_post)
+
+2.4   // Reconstruct spectra from coefficient samples
+      For each n:
+          s_samp[n] ← μ_s  +  B · c_samp[n]   // N_wave × 1
+
+2.5   // Compute credible intervals
+      For each wavelength λ_k:
+          values_k ← {s_samp[n][k] for n = 1 … N_samples}
+          lower_k  ← percentile(values_k, 2.5)
+          median_k ← percentile(values_k, 50)
+          upper_k  ← percentile(values_k, 97.5)
+      // Assemble into interval arrays per λ
+
+Return c_samp, s_samp, and (lower_k, median_k, upper_k) for all wavelengths.
+
+text
+3.1   // Identify low‑probability / outlier spectra
+      Compute posterior density at each sample point (multivariate normal pdf)
+      Flag samples whose density < threshold (e.g., 1st percentile)
+
+3.2   // Survey optimization (filter selection)
+      Repeat Step 1.5 for any subset of filters.
+      Compare resulting Σ_post (posterior covariance) – smaller determinant ⇒ higher information.

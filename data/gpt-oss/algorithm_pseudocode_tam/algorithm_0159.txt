@@ -1,0 +1,95 @@
+INPUT
+    S_ref      # array (N_ref × M_wl) of reference spectra (wavelength samples)
+    T_filters  # list of J filter transmission curves (λ → T(λ))
+    σ_factor   # fractional photometric noise (e.g. 0.20)
+    K          # number of principal components to retain
+    h          # KDE bandwidth
+    N_aug      # number of synthetic latent samples to draw
+    X_test     # array (N_test × J) of observed photometry (reflectance or magnitude)
+
+OUTPUT
+    S_pred[N_test × M_wl]            # reconstructed spectra
+    Cov_z[N_test × K]                # posterior covariance of latent coefficients
+    Taxonomy_prob[N_test × C]        # class probability vector (C = # taxonomic classes)
+
+--------------------------------------------------------------------
+# 1. TRAINING PHASE ------------------------------------------------
+--------------------------------------------------------------------
+
+# 1.1 Principal‑Component Analysis (Prior construction)
+μ_s        ← mean(S_ref, axis=0)                    # mean spectrum
+S_centered ← S_ref – μ_s                            # centering
+U, Σ, Vt   ← svd(S_centered, full_matrices=False)  # SVD of centered data
+PCs        ← U[:, :K]                               # first K left singular vectors
+Z_true     ← PCsᵀ · (S_centered.T)                 # latent coordinates of training spectra
+# Z_true shape: (K × N_ref)
+
+# 1.2 Kernel Density Estimation (continuous latent manifold)
+def KDE_sample(Z_true, h, N_aug):
+    # Gaussian kernel density: sum exp(-||z - z_i||^2 / (2h^2)) / (N_ref (2πh^2)^(K/2))
+    # Draw N_aug points by rejection/importance sampling
+    Z_syn ← []
+    for n in 1…N_aug:
+        # sample z from mixture of Gaussians centred at each training point
+        idx ← random_choice(N_ref)
+        z_i ← Z_true[:, idx]
+        z   ← z_i + Normal(0, h * I_K)
+        Z_syn.append(z)
+    return stack(Z_syn, axis=0)                     # shape (N_aug × K)
+
+Z_syn ← KDE_sample(Z_true, h, N_aug)
+
+# 1.3 Synthetic spectrum generation
+S_syn ← μ_s + PCs @ Z_syn.T                      # shape (M_wl × N_aug)
+# 1.4 Forward photometry for each synthetic spectrum
+def synth_photometry(S, T_filters):
+    # Convolution: p_j = ∫ S(λ) T_j(λ) dλ / ∫ T_j(λ) dλ
+    P ← zeros((len(T_filters), len(S)))
+    for j, T in enumerate(T_filters):
+        denom ← ∫ T dλ
+        numer ← ∫ S * T dλ
+        P[j] ← numer / denom
+    return P                                         # shape (J)
+
+P_syn ← synth_photometry(S_syn, T_filters)           # shape (J × N_aug)
+
+# 1.5 Add observational noise
+σ_noise ← σ_factor * P_syn                          # element‑wise
+X_train ← P_syn + Normal(0, σ_noise, size=P_syn.shape)
+
+# 1.6 Build regressors (Encoder) – AutoML
+regressor ← AutoML_Regressor()                       # e.g., ensemble of GBDTs, NN, etc.
+regressor.train(X_train, Z_syn)                     # learns mapping X → latent coefficients
+
+# 1.7 Build classifier (latent‑space taxonomy)
+labels_true ← taxonomy_labels_of(S_ref)             # known class labels for each reference spectrum
+classifier ← AutoML_Classifier()
+classifier.train(Z_true.T, labels_true)              # learns mapping latent → class
+
+--------------------------------------------------------------------
+# 2. INFERENCE PHASE -----------------------------------------------
+--------------------------------------------------------------------
+
+for each test object i in 1…N_test:
+    x_i ← X_test[i, :]                              # observed photometry (J)
+
+    # 2.1 Predict posterior over latent coefficients
+    μ_z, Σ_z ← regressor.predict_posterior(x_i)     # mean and covariance (K × K)
+
+    # 2.2 Reconstruct spectrum (Decoder)
+    s_rec ← μ_s + PCs @ μ_z                         # reconstructed reflectance (M_wl)
+
+    # 2.3 Optional: generate posterior samples
+    #    for s in sample_normal(μ_z, Σ_z, N_samples):
+    #        S_sample ← μ_s + PCs @ s
+    #    Compute confidence intervals per wavelength.
+
+    # 2.4 Taxonomy prediction
+    tax_prob ← classifier.predict_proba(μ_z)         # vector of class probabilities
+
+    # 2.5 Store outputs
+    S_pred[i, :] ← s_rec
+    Cov_z[i, :, :] ← Σ_z
+    Taxonomy_prob[i, :] ← tax_prob
+
+RETURN S_pred, Cov_z, Taxonomy_prob

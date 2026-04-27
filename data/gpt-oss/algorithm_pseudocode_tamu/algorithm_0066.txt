@@ -1,0 +1,74 @@
+Input:
+    S_real = {s_i(λ)}   # set of N reference TNO spectra (reflectance vs λ)
+    W = {w_k(λ)}        # throughput curves of K photometric filters
+    m_obs = {m_k}       # observed photometry for a new target (k = 1…K)
+    p = number of PCA components to retain (e.g., 8–10)
+    h = KDE bandwidth (e.g., 0.5)
+    n_aug = number of synthetic latent samples per real spectrum (e.g., 200)
+    n_post = number of posterior samples to draw (e.g., 1000)
+
+Output:
+    S_recon(λ)          # reconstructed high‑resolution spectrum
+    CI_S(λ)             # confidence interval (e.g., 68%, 95%)
+    P_taxa              # probability vector over taxonomic classes
+
+Procedure:
+
+1. Pre‑processing
+   1.1. Normalize each s_i(λ) (e.g., to unit flux at 1 μm).
+   1.2. Interpolate all spectra onto a common wavelength grid {λ_j}.
+
+2. Latent Space Construction
+   2.1. Assemble data matrix X ∈ ℝ^{N × M} where M = len(λ_j).
+   2.2. Compute PCA of X → eigenvectors {e_ℓ(λ)} and scores {z_i,ℓ}.
+   2.3. Retain first p eigenvectors → construct projection matrix E_p.
+   2.4. Define latent coefficient vectors z_i = [z_{i,1} … z_{i,p}]ᵀ.
+
+3. Latent Density Augmentation (KDE)
+   3.1. Fit a multivariate Gaussian KDE to {z_i} with bandwidth h.
+   3.2. Sample n_aug synthetic latent vectors {z'_k} from KDE.
+   3.3. For each sampled z'_k, reconstruct synthetic spectrum:
+           s'_k(λ) = mean_spectrum + Σ_{ℓ=1}^{p} z'_{k,ℓ} * e_ℓ(λ).
+
+4. Forward Modeling of Photometry
+   4.1. For each synthetic spectrum s'_k(λ):
+          For each filter w_m(λ):
+              compute ideal reflectance R_{k,m} = 
+                  ∫ s'_k(λ) * w_m(λ) dλ / ∫ w_m(λ) dλ
+   4.2. Add Gaussian noise to each R_{k,m}:
+          R̃_{k,m} = R_{k,m} + ε,  ε ~ N(0, σ²),
+          where σ = 0.20 * R_{k,m}  (20 % relative uncertainty).
+   4.3. Store training pairs:
+          Input: vector r_k = [R̃_{k,1} … R̃_{k,K}]
+          Target: z'_k.
+
+5. Encoder Training (AutoML)
+   5.1. Train an ensemble regressor (e.g., XGBoost) on {(r_k, z'_k)}.
+   5.2. Cross‑validate to obtain predictions r → μ_z(r) and σ_z(r)
+          for each latent dimension ℓ.
+   5.3. Optionally train a separate classifier on {z_i} → taxonomic labels
+          to obtain conditional probabilities P_taxa | z.
+
+6. Inference on New Observation
+   6.1. Convert m_obs to reflectance vector r_obs (apply solar spectrum division if needed).
+   6.2. Use encoder to predict latent posterior:
+          For each ℓ:
+              μ_ℓ = prediction_mean_ℓ(r_obs)
+              σ_ℓ = prediction_std_ℓ(r_obs)
+   6.3. Construct joint latent distribution via Gaussian Copula:
+          - Sample n_post draws {z_j} from product of marginals N(μ_ℓ, σ_ℓ²).
+          - Apply copula correlation matrix Σ_copula (estimated from training latent set).
+   6.4. Decode each sampled latent vector:
+          For each j:
+              s_j(λ) = mean_spectrum + Σ_{ℓ=1}^{p} z_{j,ℓ} * e_ℓ(λ)
+   6.5. Aggregate decoded spectra:
+          S_recon(λ) = median_j s_j(λ)
+          CI_S(λ) = percentile bounds (e.g., 16th–84th, 2.5th–97.5th).
+
+7. Taxonomic Probability
+   7.1. For each sampled latent z_j, evaluate classifier posterior
+          P_taxa(z_j) using trained classifier.
+   7.2. Average over all samples:
+          P_taxa = (1/n_post) Σ_j P_taxa(z_j).
+
+Return S_recon(λ), CI_S(λ), P_taxa.

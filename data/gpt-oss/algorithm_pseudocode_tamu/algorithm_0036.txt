@@ -1,0 +1,75 @@
+1.1 Load high‑resolution reference spectra S_ref = {S_i}   // i = 1 … N_ref
+1.2 Compute mean spectrum μ_S = mean(S_ref)
+1.3 Center spectra: S_centered[i] = S_ref[i] – μ_S
+1.4 Perform Singular Value Decomposition (SVD) on S_centered
+      → Obtain eigenvectors V = [v_1 … v_K] (K ≪ number of wavelength bins)
+1.5 Define PCA encoder E:   latent_i = Vᵀ · (S_ref[i] – μ_S)
+1.6 Define PCA decoder D:   reconstructed_S = μ_S + V · latent
+
+2.1 Project all reference spectra into latent space:
+      L_real = {l_i = E(S_ref[i])}
+
+2.2 Estimate density of latent points using Kernel Density Estimation (KDE):
+      KDE_model = KDE(L_real, bandwidth = h)          // h ≈ 0.5
+
+2.3 Sample a large synthetic latent set:
+      L_syn = {l_j* ~ KDE_model}      // size M >> N_ref
+
+2.4 For each synthetic latent l_j*:
+      2.4.1 Reconstruct high‑res spectrum: S_syn[j] = D(l_j*)
+
+3.1 Load instrument filter transmission curves {F_k}  // k = 1 … N_filter
+3.2 For each synthetic spectrum S_syn[j]:
+      3.2.1 Convolve with each filter to obtain ideal photometry:
+              p_ideal[j][k] = ∫ S_syn[j](λ) · F_k(λ) dλ
+      3.2.2 Add Gaussian noise with σ_rel = 0.20 (20 %):
+              p_noisy[j][k] = p_ideal[j][k] · (1 + N(0,σ_rel))
+
+4.1 Assemble training dataset:
+      X_reg = {p_noisy[j]}          // input photometry
+      Y_reg = {l_syn[j]}            // target latent coefficients
+
+4.2 Use AutoML framework (e.g., AutoGluon) to build an ensemble regressor:
+      regressor = AutoML(X_reg → Y_reg)
+
+4.3 Store trained regressor for inference.
+
+5.1 Label each reference spectrum with taxonomy class C_i
+5.2 Assemble classification training set:
+      X_cls = {E(S_ref[i])}         // latent coordinates
+      Y_cls = {C_i}
+
+5.3 Train classifier via AutoML:
+      classifier = AutoML(X_cls → Y_cls)
+
+5.4 Store trained classifier for inference.
+
+Input: Measured photometry m_obs = {m_k}  // k = 1 … N_filter
+
+6.1 Predict latent coefficients:
+      l_pred_mean = regressor.predict(m_obs)        // point estimate
+      l_pred_cov  = regressor.predict_covariance(m_obs)   // optional
+
+6.2 Generate posterior samples of latent space:
+      6.2.1 Draw n_samples draws from multivariate normal:
+              l_sample[s] ~ N(l_pred_mean, l_pred_cov)   // s = 1 … n_samples
+      6.2.2 Optionally apply Gaussian Copula to preserve inter‑component correlations
+
+6.3 Decode spectra:
+      For each sample s:
+          S_sample[s] = D(l_sample[s])
+
+6.4 Construct posterior statistics:
+      6.4.1 Median spectrum S_med = median(S_sample[s] over s)
+      6.4.2 Credible intervals (e.g., 68%, 95%) per wavelength bin
+
+7.1 Predict taxonomy from latent mean:
+      class_probs = classifier.predict_proba(l_pred_mean)
+
+7.2 Optionally combine with latent posterior samples:
+      For each sample s:
+          cls[s] = classifier.predict(l_sample[s])
+      Aggregate to obtain class probability distribution.
+
+Output 1: Reconstructed spectrum S_med with credible‑interval envelopes.
+Output 2: (Optional) Taxonomy probability vector class_probs.

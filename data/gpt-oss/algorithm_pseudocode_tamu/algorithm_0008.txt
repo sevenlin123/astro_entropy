@@ -1,0 +1,124 @@
+pseudo
+INPUT:
+    Spectra_set  : { S_i[λ] }   // n_ref ≈ 50 high‑resolution spectra
+    FilterCurves : { T_j(λ) }   // m_filter transmission curves (e.g., JWST NIRCam)
+    Photometry   : y[1…m]       // observed reflectance (or magnitudes) for a new object
+    K            : int          // number of PCA components to retain (≈ 5–10)
+    Bandwidth_h  : float        // KDE smoothing bandwidth (≈ 0.5)
+    Noise_Ratio  : float        // relative noise to inject in synthetic photometry (≈ 0.2)
+
+OUTPUT:
+    Spectrum_recon[λ] : reconstructed high‑resolution reflectance
+    CredibleInterval[λ] : [lower, upper] confidence bounds
+    TaxonomyProb      : posterior probabilities for each class (H₂O, CO₂, Organic, Methanol)
+
+
+------------------------------------------------------------------
+STEP 1 – Build Latent Manifold (Prior)
+------------------------------------------------------------------
+1.1  // Standardize spectra to common wavelength grid
+     for each S_i in Spectra_set:
+         resample S_i to common λ_grid
+
+1.2  // Compute mean spectrum μ_S and centered spectra
+     μ_S = mean(S_i over i)
+     X_centered[j] = S_j - μ_S      // j = 1..n_ref
+
+1.3  // Perform PCA on centered spectra
+     [U, Σ, V] = SVD(X_centered)    // U: eigenvectors (principal components)
+     PC_basis = U[:, 0:K]           // first K columns
+     // Projection of each spectrum into latent space
+     for each S_i:
+         coeff_i = PC_basisᵀ · (S_i - μ_S)
+
+1.4  // Estimate continuous density in latent space using KDE
+     KDE_model = fit_KDE({coeff_i}, bandwidth = Bandwidth_h)
+
+1.5  // Generate synthetic latent vectors for data augmentation
+     N_aug = 5000
+     for k = 1..N_aug:
+         latent_k = sample_from(KDE_model)
+         // Store for later use
+
+------------------------------------------------------------------
+STEP 2 – Forward‑Model Synthetic Photometry
+------------------------------------------------------------------
+2.1  // Map each synthetic latent vector back to a spectrum (Decoder)
+     for each latent_k:
+         S_k = μ_S + PC_basis · latent_k
+
+2.2  // Convolve each synthetic spectrum with filter curves
+     for each S_k:
+         for each filter j:
+             R_j_k = ∫ S_k(λ) * T_j(λ) dλ / ∫ T_j(λ) dλ
+         // R_j_k is the expected reflectance in filter j
+
+2.3  // Add realistic photometric noise
+     for each R_j_k:
+         σ_j_k = Noise_Ratio * R_j_k
+         y_j_k = draw_normal(mean = R_j_k, std = σ_j_k)
+
+2.4  // Assemble training pairs for encoder
+     TrainingData = { (y_k, latent_k) }   // k = 1..N_aug
+
+------------------------------------------------------------------
+STEP 3 – Train Encoder (Photometry → Latent Coefficients)
+------------------------------------------------------------------
+3.1  // Use an AutoML regressor (ensemble of GBDTs, neural nets, etc.)
+     EncoderModel = AutoML_Train(regression=True,
+                                 inputs = {y_j_k},
+                                 targets = {latent_k},
+                                 validation_split = 0.2)
+
+------------------------------------------------------------------
+STEP 4 – Train Classifier (Latent → Taxonomy)
+------------------------------------------------------------------
+4.1  // Label each reference spectrum with its taxonomic class
+     ClassLabels = {class_i}   // e.g., H₂O, CO₂, Organic, Methanol
+
+4.2  // Train separate AutoML classifier on latent coefficients
+     ClassifierModel = AutoML_Train(classification=True,
+                                   inputs = {coeff_i},
+                                   targets = {class_i},
+                                   validation_split = 0.2)
+
+------------------------------------------------------------------
+STEP 5 – Inference on New Observation
+------------------------------------------------------------------
+5.1  // Preprocess observed photometry
+     y_obs = standardize(y)   // match training preprocessing
+
+5.2  // Predict latent coefficient distribution
+     latent_mean, latent_cov = EncoderModel.predict_with_uncertainty(y_obs)
+     // Encoder outputs point estimate + covariance (or posterior samples)
+
+5.3  // Sample posterior in latent space using Gaussian Copula
+     samples_latent = []
+     for s = 1..N_samples:
+         u ~ Uniform(0,1)^K           // independent uniforms
+         z = inverse_CDF_Norm(u)      // map to multivariate normal
+         sample = latent_mean + L * z // L from Cholesky(latent_cov)
+         samples_latent.append(sample)
+
+5.4  // Reconstruct spectra for each sampled latent vector
+     recon_spectra = []
+     for l in samples_latent:
+         S_l = μ_S + PC_basis · l
+         recon_spectra.append(S_l)
+
+5.5  // Compute median spectrum and credible intervals
+     Spectrum_recon = median(recon_spectra over samples)
+     CredibleInterval[λ] = percentile(recon_spectra, 2.5, 97.5)
+
+5.6  // Estimate taxonomy probabilities
+     latent_sample_means = [mean(l) for l in samples_latent]
+     class_counts = {}
+     for l_m in latent_sample_means:
+         class_pred = ClassifierModel.predict(l_m)
+         class_counts[class_pred] += 1
+     for cls in all_classes:
+         TaxonomyProb[cls] = class_counts[cls] / N_samples
+
+------------------------------------------------------------------
+RETURN:
+    Spectrum_recon[λ], CredibleInterval[λ], TaxonomyProb

@@ -1,0 +1,97 @@
+Input:
+    - Training spectra S_train[1..N_train] (wavelength × flux)
+    - Filter transmission curves F_j(λ), j = 1..M
+    - New photometry vector p_obs[1..M] (magnitudes)
+    - Photometric uncertainties σ_p[1..M]
+    - Number of principal components K
+
+Output:
+    - Posterior distribution over spectral coefficients θ = [θ_1 … θ_K]
+    - Reconstructed spectrum S_rec(λ)
+    - Taxonomic class C
+    - Outlier flag O
+
+--------------------------------------------------------------------
+1. TRAINING PHASE
+--------------------------------------------------------------------
+1.1 Mean‑centering
+        μ_S(λ) = (1/N_train) Σ_i S_train[i](λ)
+
+1.2 Construct data matrix D (N_train × L)
+        D[i, l] = S_train[i](λ_l) – μ_S(λ_l)
+
+1.3 Perform Principal Component Analysis (PCA)
+        Compute covariance matrix C = (1/(N_train−1)) D^T D
+        Eigen‑decompose C → eigenvalues λ_k, eigenvectors v_k(λ), k=1..K
+        Store basis B_k(λ) = v_k(λ)
+
+1.4 Project training spectra onto basis
+        For each i:
+            θ_train[i,k] = Σ_l D[i,l] * B_k(l)          // scalar product
+        Collect coefficient matrix Θ_train (N_train × K)
+
+1.5 Estimate prior over coefficients
+        μ_θ = mean over rows of Θ_train
+        Σ_θ = covariance of rows of Θ_train
+
+--------------------------------------------------------------------
+2. FILTER SYNTHESIS
+--------------------------------------------------------------------
+2.1 For each filter j and basis k:
+        E[j,k] = ∫ F_j(λ) * B_k(λ) dλ                // expected flux of component k
+2.2 Expected flux of mean spectrum in filter j:
+        μ_F[j] = ∫ F_j(λ) * μ_S(λ) dλ
+
+--------------------------------------------------------------------
+3. POSTERIOR CALCULATION (NEW OBJECT)
+--------------------------------------------------------------------
+3.1 Convert observed magnitudes to fluxes:
+        f_obs[j] = 10^(−0.4 * p_obs[j])              // arbitrary zero‑point
+        σ_f[j] = (ln 10 / 2.5) * f_obs[j] * σ_p[j]
+
+3.2 Build linear model:
+        f_model[j] = μ_F[j] + Σ_k E[j,k] * θ_k
+        Thus f_obs ≈ μ_F + E * θ
+
+3.3 Likelihood (Gaussian):
+        L(θ) ∝ exp( −½ (f_obs − μ_F − Eθ)^T Σ_f^{-1} (f_obs − μ_F − Eθ) )
+        where Σ_f = diag(σ_f^2)
+
+3.4 Prior on θ (Gaussian):
+        P(θ) ∝ exp( −½ (θ−μ_θ)^T Σ_θ^{-1} (θ−μ_θ) )
+
+3.5 Posterior (Gaussian, analytic solution):
+        Σ_post = (E^T Σ_f^{-1} E + Σ_θ^{-1})^{-1}
+        μ_post = Σ_post (E^T Σ_f^{-1} (f_obs−μ_F) + Σ_θ^{-1} μ_θ)
+
+--------------------------------------------------------------------
+4. SPECTRUM RECONSTRUCTION
+--------------------------------------------------------------------
+4.1 Sample N_samp draws from N(μ_post, Σ_post) → {θ^(s)}
+4.2 For each draw s:
+        S_rec^(s)(λ) = μ_S(λ) + Σ_k θ^(s)_k * B_k(λ)
+4.3 Mean reconstructed spectrum:
+        S_rec(λ) = (1/N_samp) Σ_s S_rec^(s)(λ)
+4.4 Uncertainty band:
+        σ_S(λ) = sqrt( (1/(N_samp−1)) Σ_s (S_rec^(s)(λ)−S_rec(λ))^2 )
+
+--------------------------------------------------------------------
+5. TAXONOMIC CLASSIFICATION
+--------------------------------------------------------------------
+5.1 Compute cluster centroids in coefficient space:
+        For each taxon t: μ_t = mean(θ_train for taxon t)
+6.    Compute Mahalanobis distances:
+        d_t = sqrt( (μ_post−μ_t)^T Σ_t^{-1} (μ_post−μ_t) )
+7.    Assign class C = argmin_t d_t
+--------------------------------------------------------------------
+6. OUTLIER DETECTION
+--------------------------------------------------------------------
+8.1 Compute overall likelihood value at posterior mode:
+        lnL_mode = log L(θ=μ_post)
+9.2 If lnL_mode < threshold_L or min_t d_t > threshold_d:
+        O = TRUE
+   else
+        O = FALSE
+--------------------------------------------------------------------
+Return:
+    μ_post, Σ_post, S_rec(λ), σ_S(λ), class C, outlier flag O

@@ -1,0 +1,83 @@
+Input
+  S_train      : N × L matrix of training near‑IR spectra
+  Filters      : list of M filter transmission curves {T_m(λ)}   (m = 1…M)
+  photometry   : vector y[1…M] of observed fluxes in each filter
+  sigma        : vector σ[1…M] of measurement uncertainties
+
+Parameters
+  K            : number of principal components to retain (e.g. 8–10)
+
+Output
+  s_hat(L)     : reconstructed full‑resolution spectrum
+  Cov_s(L×L)   : covariance matrix of the reconstruction
+
+----------------------------------------------------------------------
+Step 0 – Spectral Pre‑processing
+----------------------------------------------------------------------
+ 0.1  For each spectrum s in S_train:
+          • Normalize (e.g. divide by mean reflectance or scale to unit area).
+          • Subtract the mean spectrum μ(λ) (to be computed below).
+
+----------------------------------------------------------------------
+Step 1 – Principal Component Analysis
+----------------------------------------------------------------------
+ 1.1  Compute mean spectrum:
+          μ(λ) = (1/N) Σ_{i=1}^{N} S_train[i, :]
+ 1.2  Center spectra:
+          X = S_train – μ   (size N × L)
+ 1.3  Compute covariance matrix C_X = (1/(N-1)) Xᵀ X
+ 1.4  Perform eigendecomposition of C_X:
+          C_X = U Λ Uᵀ
+ 1.5  Select first K eigenvectors:
+          B = U[:, 1:K]       // Basis matrix L × K
+ 1.6  Project training spectra onto basis:
+          A_train = X B       // N × K coefficient matrix
+----------------------------------------------------------------------
+Step 2 – Prior on Coefficients
+----------------------------------------------------------------------
+ 2.1  Empirical prior mean and covariance:
+          ā = (1/N) Σ A_train          // vector of length K
+          C_a = cov(A_train)           // K × K matrix
+----------------------------------------------------------------------
+Step 3 – Filter Response Coefficients
+----------------------------------------------------------------------
+ For each filter m = 1…M:
+    3.1  Compute normalised transmission integral:
+          Z_m = ∫ T_m(λ) dλ
+    3.2  Compute response vector for basis:
+          c_m = (∫ B(λ, :) T_m(λ) dλ) / Z_m   // length K
+    3.3  Compute mean response offset:
+          d_m = (∫ μ(λ) T_m(λ) dλ) / Z_m
+Store vectors {c_m} and scalars {d_m}.
+
+----------------------------------------------------------------------
+Step 4 – Linear Forward Model
+----------------------------------------------------------------------
+ 4.1  Assemble design matrix C (M × K):
+          C[m, :] = c_m
+ 4.2  Assemble offset vector d (length M):
+          d[m] = d_m
+ 4.3  Predicted flux vector as function of α:
+          f(α) = C α + d
+----------------------------------------------------------------------
+Step 5 – Posterior Inference (Gaussian case)
+----------------------------------------------------------------------
+ 5.1  Define weighted residual:
+          r = y - d                // length M
+ 5.2  Measurement precision matrix:
+          Λ_y = diag(1/σ²)         // M × M
+ 5.3  Posterior precision:
+          Λ_post = Cᵀ Λ_y C + C_a⁻¹   // K × K
+ 5.4  Posterior covariance:
+          Cov_α = Λ_post⁻¹
+ 5.5  Posterior mean:
+          α̂ = Cov_α (Cᵀ Λ_y r + C_a⁻¹ ā)
+----------------------------------------------------------------------
+Step 6 – Spectrum Reconstruction
+----------------------------------------------------------------------
+ 6.1  Reconstruct mean spectrum:
+          ŝ = μ + B α̂              // length L
+ 6.2  Propagate uncertainty to spectrum:
+          Cov_s = B Cov_α Bᵀ        // L × L
+----------------------------------------------------------------------
+Return ŝ and Cov_s

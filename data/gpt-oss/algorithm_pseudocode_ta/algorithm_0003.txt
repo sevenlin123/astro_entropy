@@ -1,0 +1,62 @@
+Input:
+    S_train   : M × L matrix of high‑resolution near‑IR spectra
+    f_obs     : K‑vector of observed fluxes in K photometric filters
+    σ_obs     : K‑vector of measurement uncertainties
+    R_k(λ)    : Response function of filter k (pre‑integrated)
+    n_pc      : Number of principal components to retain (e.g., 8–10)
+
+Output:
+    μ_spec    : Reconstructed full spectrum (L‑vector)
+    σ_spec    : Uncertainty spectrum (L‑vector)
+
+Procedure:
+
+1. Pre‑processing
+   1.1. Normalize or resample all spectra in S_train to common wavelength grid λ_j, j=1…L.
+   1.2. Compute mean spectrum μ_s = (1/M) Σ_i S_train[i,:].
+
+2. Principal Component Analysis
+   2.1. Center spectra: X = S_train – μ_s (broadcasted over rows).
+   2.2. Perform singular value decomposition: X = U Σ Vᵀ.
+   2.3. Select first n_pc right‑singular vectors: PCs = Vᵀ[0:n_pc, :].
+   2.4. Compute training coefficients: C_train = X · PCsᵀ   (size M × n_pc).
+   2.5. Estimate prior over coefficients:
+        μ_c = (1/M) Σ_i C_train[i,:]          // prior mean
+        Σ_c = covariance(C_train)            // prior covariance (n_pc × n_pc)
+
+3. Forward Flux Model
+   For each filter k = 1…K:
+       3.1. Compute integrated response of mean spectrum:
+            b_k = ∫ μ_s(λ) R_k(λ) dλ .
+       3.2. Compute integrated response of each PC:
+            a_k,i = ∫ PCs[i,:](λ) R_k(λ) dλ ,   i = 1…n_pc .
+       3.3. Assemble coefficient vector a_k = [a_k,1 … a_k,n_pc]ᵀ.
+
+4. Likelihood Construction
+   4.1. Predicted flux in filter k for coefficient vector c:
+            m_k(c) = b_k + a_kᵀ · c .
+   4.2. Gaussian likelihood:
+            L(c) ∝ exp{ –½ Σ_k [ (f_obs_k – m_k(c))² / σ_obs_k² ] } .
+
+5. Posterior Inference (Linear Gaussian)
+   5.1. Compute precision matrices:
+            P_data = Σ_k ( a_k a_kᵀ / σ_obs_k² )   // (n_pc × n_pc)
+            P_prior = Σ_c⁻¹                         // (n_pc × n_pc)
+   5.2. Posterior precision:
+            P_post = P_data + P_prior               // (n_pc × n_pc)
+   5.3. Posterior mean numerator:
+            q = Σ_k ( a_k (f_obs_k – b_k) / σ_obs_k² ) + P_prior μ_c .
+   5.4. Posterior mean:
+            μ_post = P_post⁻¹ · q                    // (n_pc × 1)
+   5.5. Posterior covariance:
+            Σ_post = P_post⁻¹                        // (n_pc × n_pc)
+
+6. Spectrum Reconstruction
+   6.1. Mean reconstructed spectrum:
+            μ_spec = μ_s + PCsᵀ · μ_post              // (L × 1)
+   6.2. Spectral variance from coefficient uncertainty:
+            For each wavelength λ_j:
+                σ_spec_j² = Σ_{i,l} ( Σ_post_{i,l} · PCs[i,j] · PCs[l,j] ) .
+   6.3. Set σ_spec_j = sqrt(σ_spec_j²)   // (L × 1)
+
+Return μ_spec, σ_spec.

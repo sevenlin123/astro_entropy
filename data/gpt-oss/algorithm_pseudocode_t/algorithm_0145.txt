@@ -1,0 +1,71 @@
+PROCEDURE RECONSTRUCT_SPECTRA(Dataset D, Library L, Filters F, Priors W):
+    # ------------------------------------------------------------------
+    # Pre‑processing: convert template spectra → predicted magnitudes
+    # ------------------------------------------------------------------
+    FOR each template k in L:
+        FOR each filter f in F:
+            # Integrate template flux through filter throughput
+            Flux_kf ← ∫[λ]  L_k(λ) * R_f(λ) dλ
+            # Convert to magnitude (zero‑point ZP_f supplied)
+            Mag_kf ← -2.5 * log10(Flux_kf) + ZP_f
+        END FOR
+        Store vector M_k = [Mag_kf for all f]
+    END FOR
+
+    # ------------------------------------------------------------------
+    # Loop over objects in the dataset
+    # ------------------------------------------------------------------
+    FOR each object O in D:
+        # Observation vector and noise covariance
+        y ← [O.magnitude_j for j in observed_filters]
+        Σ_y ← diag([O.error_j² for j in observed_filters])
+
+        # ------------------------------------------------------------------
+        # Template likelihoods and posterior probabilities
+        # ------------------------------------------------------------------
+        FOR each template k:
+            Δ_k ← y – M_k[indices_of_observed_filters]
+            χ²_k ← Δ_kᵀ · Σ_y⁻¹ · Δ_k
+            Lik_k ← exp( -0.5 * χ²_k )
+            Post_k ← Lik_k * W_k          # prior weight for template k
+        END FOR
+        Normalization ← Σ_k Post_k
+        FOR each template k:
+            P_k ← Post_k / Normalization   # posterior probability for k
+        END FOR
+        BestClass ← argmax_k(P_k)
+
+        # ------------------------------------------------------------------
+        # Continuous spectrum reconstruction (optional)
+        # ------------------------------------------------------------------
+        # Build design matrix A (filters × basis spectra)
+        FOR each filter f in observed_filters:
+            FOR each basis spectrum b in BasisSet:
+                A_f,b ← ∫[λ]  Basis_b(λ) * R_f(λ) dλ
+            END FOR
+        END FOR
+
+        # Prior covariance for coefficients (assume diagonal Λ)
+        Λ ← diag([prior_variance_b for b in BasisSet])
+
+        # Bayesian linear‑Gaussian update
+        PosteriorCov ← ( Aᵀ · Σ_y⁻¹ · A + Λ⁻¹ )⁻¹
+        PosteriorMean ← PosteriorCov · Aᵀ · Σ_y⁻¹ · y
+
+        # Reconstruct reflectance spectrum
+        S_hat(λ) ← Σ_b (PosteriorMean_b * Basis_b(λ))
+        SpectrumCovariance(λ,λ') ← Σ_b,b' (PosteriorCov_b,b' * Basis_b(λ) * Basis_b'(λ'))
+
+        # ------------------------------------------------------------------
+        # Store results for this object
+        # ------------------------------------------------------------------
+        Store:
+            ObjectID = O.id
+            ClassProbabilities = {k: P_k for all k}
+            BestClass = BestClass
+            ReconstructedSpectrum = S_hat(λ)
+            SpectrumUncertainty = SpectrumCovariance
+    END FOR
+
+    RETURN all stored results
+END PROCEDURE

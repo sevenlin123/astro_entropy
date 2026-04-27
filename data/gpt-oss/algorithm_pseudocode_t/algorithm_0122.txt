@@ -1,0 +1,71 @@
+INPUT
+    photometry: { (filter_i , mag_i , err_mag_i) | i = 1 … N }
+    filters:    transmission curves T_i(λ) for each filter_i
+    basis spectra: { B_k(λ) | k = 1 … K }   // e.g. principal‑components or template colors
+    prior parameters: α (smoothness weight), β (sparsity weight)
+
+OUTPUT
+    posterior mean spectrum R̄(λ)
+    posterior std‑dev σ_R(λ)
+
+ALGORITHM
+
+1.  // ---- 1. Flux conversion ------------------------------------
+2.  FOR each observation i DO
+3.      F_i  ← 10^(-0.4 * (mag_i – ZP))                      // ZP = zero‑point (e.g. Vega)
+4.      σ_Fi ← (ln 10 / 2.5) * F_i * err_mag_i               // error propagation
+5.  END FOR
+
+6.  // ---- 2. Pre‑compute synthetic fluxes of basis spectra ------
+7.  FOR each basis k = 1 … K DO
+8.      FOR each filter i = 1 … N DO
+9.          S_ik ← [ ∫_λ B_k(λ) · T_i(λ) dλ ] / [ ∫_λ T_i(λ) dλ ]
+10.     END FOR
+11. END FOR
+
+12. // ---- 3. Linear mixture model -------------------------------
+13. // Model: F ≈ S · w + ε,  where w is a K‑dimensional weight vector
+14. //         S is N×K matrix of S_ik values.
+
+15. // ---- 4. Likelihood -------------------------------------------------
+16. DEFINE log_likelihood(w):
+17.     χ² ← Σ_i [ (F_i – Σ_k w_k * S_ik)^2 / σ_Fi^2 ]
+18.     RETURN –0.5 * χ²
+
+19. // ---- 5. Prior -------------------------------------------------------
+20. DEFINE log_prior(w):
+21.     smooth ← (α/2) * ||A · w||^2                  // A can be identity or derivative operator
+22.     sparse ← β * Σ_k |w_k|
+23.     RETURN –smooth – sparse
+
+24. // ---- 6. Posterior (unnormalised) -----------------------------------
+25. DEFINE log_posterior(w) = log_likelihood(w) + log_prior(w)
+
+26. // ---- 7. MAP estimation (optional fast point estimate) -------------
+27. INITIALISE w^(0) ← 0
+28. REPEAT
+29.     w^(t+1) ← argmax_w log_posterior(w)          // e.g. via L-BFGS or conjugate‑gradient
+30. UNTIL convergence criteria satisfied
+31. STORE w_MAP ← w^(t+1)
+
+32. // ---- 8. Posterior sampling ----------------------------------------
+33. SET n_samples ← 5000
+34. INITIALISE chain w_curr ← w_MAP
+35. FOR s = 1 … n_samples DO
+36.     PROPOSE w_prop ← w_curr + Normal(0, Σ_prop)   // proposal covariance Σ_prop
+37.     Δ ← log_posterior(w_prop) – log_posterior(w_curr)
+38.     ACCEPT with probability min(1, exp(Δ))
+39.     IF accepted THEN w_curr ← w_prop
+40.     STORE w_sample[s] ← w_curr
+41. END FOR
+
+42. // ---- 9. Spectrum reconstruction -----------------------------------
+43. SELECT dense wavelength grid {λ_j | j = 1 … J}
+44. FOR each λ_j DO
+45.     R_mean(λ_j) ← (1/n_samples) * Σ_s Σ_k w_sample[s]_k * B_k(λ_j)
+46.     R_std(λ_j)  ← sqrt( (1/(n_samples-1)) *
+47.                        Σ_s ( Σ_k w_sample[s]_k * B_k(λ_j) – R_mean(λ_j) )^2 )
+48. END FOR
+
+49. // ---- 10. Output ----------------------------------------------------
+50. RETURN R̄(λ) = R_mean(λ), σ_R(λ) = R_std(λ)

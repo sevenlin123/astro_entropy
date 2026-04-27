@@ -1,0 +1,101 @@
+pseudo
+INPUT:
+    S_obs = {S_1, S_2, …, S_N}          # High‑resolution reference spectra
+    F_filters = {f_1, f_2, …, f_M}      # Instrument filter response curves
+    K                                # Number of PCA components (≤10)
+    h                                # KDE bandwidth (≈0.5)
+    L                                # Number of latent samples for training (e.g. 10⁴)
+    R                                # Number of posterior samples during inference (e.g. 500)
+
+OUTPUT:
+    For each new photometric vector m_new:
+        - Posterior distribution p(S | m_new)
+        - Mean spectrum μ_S
+        - Credible interval CI_S(λ) for every wavelength λ
+        - Taxonomy probabilities P_taxon
+
+--------------------------------------------------------------------
+1. PRE‑PROCESS TRAINING SPECTRA
+--------------------------------------------------------------------
+1.1 Normalize each S_i to reflectance (divide by solar spectrum).
+1.2 Interpolate all S_i onto common wavelength grid λ_grid (length P).
+
+--------------------------------------------------------------------
+2. PCA BASIS ESTABLISHMENT
+--------------------------------------------------------------------
+2.1 Compute mean spectrum μ_ref = (1/N) Σ S_i.
+2.2 Subtract mean: X = {S_i - μ_ref}.
+2.3 Perform Singular Value Decomposition on X → U, Σ, Vᵀ.
+2.4 Select first K columns of U as eigenvectors E = [e₁ … e_K].
+2.5 For each S_i, compute latent coefficients:
+        c_i = Eᵀ · (S_i – μ_ref)          # c_i is K‑dimensional
+
+--------------------------------------------------------------------
+3. KERNEL DENSITY ESTIMATION IN LATENT SPACE
+--------------------------------------------------------------------
+3.1 Fit multivariate Gaussian KDE to {c_i} with bandwidth h.
+3.2 Sample L latent vectors {zₗ} ~ KDE  →  zₗ ∈ ℝᴷ.
+
+--------------------------------------------------------------------
+4. SYNTHESIS OF AUGMENTED SPECTRA
+--------------------------------------------------------------------
+For each sampled zₗ:
+    4.1 Reconstruct spectrum:
+            S_synₗ = μ_ref + E · zₗ           # size P
+    4.2 Store pair (S_synₗ, zₗ).
+
+--------------------------------------------------------------------
+5. FORWARD‑MODEL PHOTOMETRY
+--------------------------------------------------------------------
+For each stored (S_synₗ, zₗ):
+    5.1 For each filter f_j:
+            m_{ℓ,j} = ∫ S_synₗ(λ) · f_j(λ) dλ / ∫ f_j(λ) dλ
+    5.2 Add Gaussian noise:
+            m_{ℓ,j} ← m_{ℓ,j} + ε,   ε ~ N(0, (0.20·m_{ℓ,j})²)
+    5.3 Assemble noisy photometry vector m_ℓ = [m_{ℓ,1} … m_{ℓ,M}].
+    5.4 Store training example: (m_ℓ , zₗ).
+
+Resulting training dataset D_train = {(m_ℓ, zₗ)} of size L.
+
+--------------------------------------------------------------------
+6. TRAIN AUTO‑ML REGRESSOR (Encoder)
+--------------------------------------------------------------------
+6.1 Input features: m_ℓ (dimension M).
+6.2 Target variables: zₗ (dimension K).
+6.3 Train ensemble model (e.g., XGBoost, Random Forest) with cross‑validation.
+6.4 Save trained regressor R_enc.
+
+--------------------------------------------------------------------
+7. OPTIONAL: TAXONOMY CLASSIFIER
+--------------------------------------------------------------------
+7.1 Label each original spectrum S_i with taxon label τ_i.
+7.2 Project τ_i into latent space: c_i.
+7.3 Train classifier C_cls on {(c_i, τ_i)} using same Auto‑ML tools.
+7.4 Save classifier C_cls.
+
+--------------------------------------------------------------------
+8. INFERENCE ON NEW PHOTOMETRY
+--------------------------------------------------------------------
+Given new photometric vector m_new:
+    8.1 Predict latent coefficient distribution:
+            z_mean, z_cov = R_enc.predict_with_uncertainty(m_new)
+            # Optionally obtain predictive mean & covariance.
+    8.2 Sample R latent vectors {z*_r} from a Gaussian Copula:
+            For r = 1 … R:
+                u_r ~ Uniform(0,1)^K
+                Φ⁻¹(u_r) → z*_r using z_mean, z_cov and copula corr_matrix
+    8.3 Decode each sample to spectrum:
+            S*_r = μ_ref + E · z*_r
+    8.4 Aggregate reconstructions:
+            μ_S = (1/R) Σ S*_r
+            CI_S(λ) = percentiles of {S*_r(λ)} (e.g., 2.5th–97.5th)
+    8.5 Taxonomy probabilities:
+            τ_pred = C_cls.predict_proba(z_mean)
+
+--------------------------------------------------------------------
+9. OUTPUT
+--------------------------------------------------------------------
+Return to user:
+    - Mean reconstructed spectrum μ_S(λ_grid)
+    - Credible intervals CI_S(λ_grid)
+    - Taxonomy probability vector τ_pred

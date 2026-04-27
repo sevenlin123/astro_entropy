@@ -1,0 +1,69 @@
+Input:
+    - Reference spectra set S_ref = { s_i(λ) }  (i = 1 … N_ref)
+    - Filter response curves R_f(λ) for f = 1 … F
+    - New photometry vector m_new = { m_f }  (observed reflectances or magnitudes)
+    - Desired number of latent components K  (default 8–10)
+    - KDE bandwidth h (default 0.5)
+    - Noise level σ_noise (default 20 %)
+    - Number of synthetic samples M_syn (default 5000)
+    - Number of Monte‑Carlo posterior draws N_draw (default 1000)
+
+Output:
+    - Posterior samples of reconstructed spectra { S_j(λ) }  (j = 1 … N_draw)
+    - Posterior mean spectrum  \bar{S}(λ)
+    - Posterior standard deviation σ_S(λ)
+    - Taxonomic class probabilities P_class
+--------------------------------------------------------------------
+1. **Latent Space Construction (Prior)**  
+   1.1 Center the reference spectra:  s_i ← s_i – μ_s , where μ_s is the mean spectrum.  
+   1.2 Perform PCA on { s_i } → eigenvectors { e_k(λ) }_{k=1..K} and eigenvalues { λ_k }.  
+   1.3 Project each centered spectrum onto PCs:  a_i = [a_i^1 … a_i^K] = {⟨s_i, e_k⟩}.  
+   1.4 Fit a non‑parametric KDE to the multivariate set { a_i } using bandwidth h.  
+   1.5 Draw M_syn latent vectors { a_j } from the KDE (sampling with replacement).  
+   1.6 For each a_j, reconstruct a synthetic spectrum:  
+          s_j(λ) = μ_s + Σ_{k=1..K} a_j^k * e_k(λ).  
+
+2. **Forward Photometry Generation (Likelihood)**  
+   2.1 For each synthetic spectrum s_j(λ):  
+          For each filter f:  
+              Compute ideal band flux  
+                  f_j^f = ∫ s_j(λ) * R_f(λ) dλ / ∫ R_f(λ) dλ.  
+   2.2 Add Gaussian noise:  
+          m_j^f = f_j^f * (1 + N(0, σ_noise)).  
+   2.3 Assemble training set:  
+          X_train = { m_j }  (size M_syn × F)  
+          Y_train = { a_j }  (size M_syn × K)  
+
+3. **Model Training**  
+   3.1 **Encoder (Photometry → Latent)**  
+          Train an AutoML ensemble regressor `Regress` on (X_train, Y_train).  
+          Store predictive mean μ_a(m) and predictive variance σ_a^2(m).  
+   3.2 **Classifier (Latent → Taxonomy)**  
+          Assign each reference spectrum a discrete class label C_i ∈ {H2O, CO2, Organic, Methanol}.  
+          Project class means in latent space: μ_C = { mean(a_i | C_i) }.  
+          Train an AutoML classifier `Classify` on (Y_train, C_i).  
+
+4. **Inference (Posterior Sampling)**  
+   4.1 Given new photometry m_new:  
+          4.1.1 Use `Regress` to obtain predictive distribution of latent vector:  
+                   a_mean = μ_a(m_new)  
+                   a_cov  = diag(σ_a^2(m_new))      (assume diagonal covariance)  
+          4.1.2 Sample N_draw latent vectors:  
+                   for j in 1…N_draw:  
+                        a_j ~ Normal(a_mean, a_cov)  
+          4.1.3 Decode each sampled latent vector to a spectrum:  
+                   S_j(λ) = μ_s + Σ_{k=1..K} a_j^k * e_k(λ)  
+          4.1.4 Store { S_j(λ) }.  
+
+   4.2 Compute posterior summaries:  
+          \bar{S}(λ) = (1/N_draw) Σ_{j} S_j(λ)  
+          σ_S(λ)   = sqrt[(1/(N_draw–1)) Σ_{j} (S_j(λ) – \bar{S}(λ))²]  
+
+   4.3 Taxonomic probabilities:  
+          4.3.1 Evaluate `Classify` on each sampled latent a_j → class posterior p(C | a_j).  
+          4.3.2 Average over samples:  
+                   P_class(C) = (1/N_draw) Σ_{j} p(C | a_j).  
+
+5. **Return Results**  
+   Return { S_j(λ) }, \bar{S}(λ), σ_S(λ), and P_class.
+--------------------------------------------------------------------

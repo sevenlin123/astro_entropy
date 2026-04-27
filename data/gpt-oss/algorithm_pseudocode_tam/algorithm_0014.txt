@@ -1,0 +1,102 @@
+Inputs
+-------
+S_ref          : Matrix (N_spec × L_wave) of reference spectra
+T_filters      : List of filter throughput curves {T_k(λ)} , k = 1 … K
+K              : Number of principal components to retain (≈5–10)
+h_KDE          : Bandwidth for kernel density estimation (≈0.5)
+M_aug          : Number of synthetic latent samples to generate (≈10⁴)
+σ_noise        : Relative photometric noise level (e.g., 0.20)
+
+Outputs
+-------
+For any new sparse photometric vector m_new (size K):
+    - S_rec   : Reconstructed high‑resolution spectrum (vector size L_wave)
+    - P_type  : Posterior probabilities over taxonomic classes
+    - Cov_S   : Uncertainty matrix for S_rec (optional)
+
+--------------------------------------------------------------------
+Step 1 – PCA (latent‑space definition)
+--------------------------------------------------------------------
+1.1   Compute mean spectrum μ_S = mean(S_ref, axis=0).
+1.2   Center spectra: S_centered = S_ref – μ_S.
+1.3   Perform PCA on S_centered → eigenvectors V (L_wave × K),
+      eigenvalues λ, and latent scores Z_ref = S_centered · V
+      (size N_spec × K).
+
+--------------------------------------------------------------------
+Step 2 – Build prior density in latent space
+--------------------------------------------------------------------
+2.1   Fit a kernel density estimator KDE on Z_ref with bandwidth h_KDE.
+      (Non‑parametric Gaussian kernels are sufficient.)
+2.2   Draw M_aug independent latent vectors:
+          For i = 1 … M_aug
+              Z_aug[i] ~ KDE
+          (store in array Z_aug of size M_aug × K).
+
+--------------------------------------------------------------------
+Step 3 – Generate synthetic spectra
+--------------------------------------------------------------------
+3.1   For each synthetic latent vector z in Z_aug:
+          S_aug = μ_S + V · zᵀ          // Reconstruct spectrum
+          Store S_aug in array S_aug (M_aug × L_wave).
+
+--------------------------------------------------------------------
+Step 4 – Forward‑model synthetic photometry
+--------------------------------------------------------------------
+4.1   For each spectrum S_aug[j]:
+          For each filter k:
+              m_aug[j,k] = ∫ S_aug[j](λ) · T_k(λ) dλ      // Filter integral
+          End
+          Add Gaussian noise:
+              m_aug[j] ← m_aug[j] + Normal(0, σ_noise·m_aug[j])
+       Resulting photometric matrix M_aug (M_aug × K).
+
+--------------------------------------------------------------------
+Step 5 – Assemble training data
+--------------------------------------------------------------------
+5.1   Training input X_train = M_aug               // Size M_aug × K
+5.2   Training target Y_train = Z_aug             // Size M_aug × K
+5.3   (Optional) Include quantile targets if uncertainty
+       modeling is desired.
+
+--------------------------------------------------------------------
+Step 6 – Train photometry→latent regressor
+--------------------------------------------------------------------
+6.1   Use an AutoML engine (e.g., AutoGluon) to train an ensemble
+      regressor R that maps X_train → Y_train.
+      Configure to output point estimates and, if possible,
+      predictive intervals (quantile regression).
+
+--------------------------------------------------------------------
+Step 7 – Train latent→taxonomy classifier
+--------------------------------------------------------------------
+7.1   Obtain taxonomic labels L_ref for the N_spec reference spectra.
+7.2   Train a second AutoML classifier C on (Z_ref, L_ref).
+7.3   C outputs posterior class probabilities.
+
+--------------------------------------------------------------------
+Inference for a new object
+--------------------------------------------------------------------
+Input: Observed photometric vector m_new (size K)
+
+8.1   Predict latent coefficients:
+          z_pred = R.predict(m_new)                 // Point estimate
+          (Optionally) draw multiple draws from
+          R’s predictive distribution → ensemble of ẑ_i.
+
+8.2   Classify taxonomy:
+          P_type = C.predict_proba(z_pred)           // Vector over classes
+
+8.3   Reconstruct high‑resolution spectrum:
+          S_rec = μ_S + V · z_predᵀ
+
+8.4   Uncertainty propagation (optional):
+          For each draw ẑ_i in {ẑ_1,…,ẑ_N}:
+              S_i = μ_S + V · ẑ_iᵀ
+          Compute sample mean S_rec and covariance Cov_S
+          from {S_i}.  Return Cov_S as spectral uncertainty.
+
+--------------------------------------------------------------------
+Return
+--------------------------------------------------------------------
+Output S_rec, P_type, (Cov_S if computed).

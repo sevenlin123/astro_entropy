@@ -1,0 +1,104 @@
+For each object:
+  Initialize vector y = observed fluxes in N_filters
+  Build design matrix A where A[i,k] = integral of basis_k * filter_i / integral of filter_i
+  Define prior mean mu0 and covariance Sigma0 for coefficient vector c
+  Define noise variance sigma^2 (photometric error)
+  Compute posterior: c ~ Normal(mu_post, Sigma_post)
+    mu_post = Sigma_post * (A.T @ y / sigma^2 + Sigma0^{-1} @ mu0)
+    Sigma_post = inv( A.T @ A / sigma^2 + Sigma0^{-1} )
+  Sample K draws from posterior of c
+  For each draw:
+     Reconstruct spectrum s = sum_k c_k * basis_k
+  Compute mean spectrum and uncertainty
+  If needed classify: project reconstructed spectrum onto taxonomic eigenvectors etc.
+
+pseudocode
+INPUT
+    P           // number of photometric bands (filters)
+    M           // number of objects to analyze
+    F[p]        // transmission curve of band p   (p = 1 … P)
+    B[k]        // k‑th basis spectrum (k = 1 … K)  – obtained from PCA of a spectral library
+    y[m][p]     // observed apparent magnitude of object m in band p
+    σ[m][p]     // measurement error (σ) for object m in band p
+    μ_prior[k]  // prior mean of coefficient c_k
+    Σ_prior[k,k'] // prior covariance of coefficients
+
+OUTPUT
+    μ_post[m][k]      // posterior mean of coefficients for object m
+    Σ_post[m][k,k']   // posterior covariance of coefficients for object m
+    S_mean[m](λ)      // mean reconstructed spectrum for object m
+    S_std[m](λ)       // standard deviation of reconstructed spectrum for object m
+    TAXO[m]           // optional taxonomy label for object m
+
+--------------------------------------------------------------------
+INITIALISE
+--------------------------------------------------------------------
+FOR each basis spectrum B[k] DO
+    NORMALISE B[k] so that ∫ B[k](λ) dλ = 1
+END FOR
+
+FOR each object m = 1 … M DO
+    ---------------------------------------------------------------
+    1. CONSTRUCT DESIGN MATRIX A[m][p][k]
+       ---------------------------------------------------------------
+       FOR p = 1 … P DO
+           FOR k = 1 … K DO
+               // Forward model: expected flux in band p from basis k
+               numerator   = ∫ B[k](λ) * F[p](λ) dλ
+               denominator = ∫ F[p](λ) dλ
+               A[m][p][k] = numerator / denominator
+           END FOR
+       END FOR
+
+    ---------------------------------------------------------------
+    2. TRANSFORM OBSERVATIONS TO FLUX SPACE
+       ---------------------------------------------------------------
+    FOR p = 1 … P DO
+        // Convert magnitude to relative flux (zero‑point cancels out)
+        flux[m][p] = 10^( -0.4 * y[m][p] )
+        // Propagate error: σ_flux ≈ ln(10)/2.5 * flux * σ_mag
+        σ_flux[m][p] = (ln(10)/2.5) * flux[m][p] * σ[m][p]
+    END FOR
+
+    ---------------------------------------------------------------
+    3. COMPUTE POSTERIOR OVER COEFFICIENTS (Gaussian conjugate case)
+       ---------------------------------------------------------------
+    // Stack design matrix and observations into vectors/matrices
+    A_vec   = A[m]                 // size P × K
+    f_vec   = flux[m]              // size P
+    S_f     = diag(σ_flux[m]^2)    // size P × P
+
+    // Posterior covariance
+    Σ_post[m] = inverse( A_vecᵀ * S_f⁻¹ * A_vec + Σ_prior⁻¹ )
+
+    // Posterior mean
+    μ_post[m] = Σ_post[m] * ( A_vecᵀ * S_f⁻¹ * f_vec + Σ_prior⁻¹ * μ_prior )
+
+    ---------------------------------------------------------------
+    4. SAMPLE FROM POSTERIOR (optional; for non‑Gaussian priors use MCMC)
+       ---------------------------------------------------------------
+    DRAW N_samples samples {c_s | s = 1 … N_samples} from 
+          Normal( μ_post[m], Σ_post[m] )
+
+    ---------------------------------------------------------------
+    5. RECONSTRUCT SPECTRUMS
+       ---------------------------------------------------------------
+    INITIALISE arrays S_mean[m](λ) = 0 , S_var[m](λ) = 0
+    FOR each sample s = 1 … N_samples DO
+        // Linear combination of basis spectra
+        S_sample(λ) = Σ_{k=1}^{K} c_s[k] * B[k](λ)
+        S_mean[m](λ) += S_sample(λ) / N_samples
+        S_var[m](λ)  += (S_sample(λ) - S_mean[m](λ))^2 / N_samples
+    END FOR
+    S_std[m](λ) = sqrt( S_var[m](λ) )
+
+    ---------------------------------------------------------------
+    6. OPTIONAL TAXONOMY CLASSIFICATION
+       ---------------------------------------------------------------
+    // Project mean spectrum onto pre‑computed taxonomy eigenvectors T[t]
+    FOR t = 1 … T_dim DO
+        projection[t] = ∑_λ S_mean[m](λ) * T[t](λ)
+    END FOR
+    TAXO[m] = argmax_t( projection[t] )   // choose class with largest projection
+
+END FOR

@@ -1,0 +1,113 @@
+pseudocode
+# ------------------------------------------------------------------
+# STEP 0 – GLOBAL CONSTANTS
+# ------------------------------------------------------------------
+NUM_PCA = 8                     # number of principal components retained
+KDE_BANDWIDTH = 0.5             # bandwidth for Gaussian‑kernel KDE
+NUM_SYNTH_LATENT = 10000        # number of synthetic latent samples
+NOISE_STD_FRACTION = 0.20       # 20 % reflectance uncertainty
+FILTER_SET = [F090W, F115W, F410M, F460M]   # instrument filters
+NUM_INFERENCE_SAMPLES = 200     # samples drawn from posterior for uncertainty
+
+# ------------------------------------------------------------------
+# STEP 1 – TRAINING PHASE
+# ------------------------------------------------------------------
+
+# 1.1 Load reference high‑resolution spectra (reflectance vs wavelength)
+spectra_ref ← loadSpectra()          # shape: (N_spectra, N_wavelength)
+
+# 1.2 Compute PCA on reference spectra
+pca_mean, pca_components ← PCA(spectra_ref, n_components=NUM_PCA)
+#    pca_mean: vector (N_wavelength)
+#    pca_components: matrix (NUM_PCA, N_wavelength)
+
+# 1.3 Project reference spectra to latent space
+latent_ref ← (spectra_ref - pca_mean) · pca_componentsᵀ   # shape: (N_spectra, NUM_PCA)
+
+# 1.4 Estimate density of latent vectors using Gaussian‑kernel KDE
+kde_model ← KDE(latent_ref, bandwidth=KDE_BANDWIDTH)
+
+# 1.5 Draw synthetic latent samples from the KDE
+latent_synth ← kde_model.sample(NUM_SYNTH_LATENT)         # shape: (NUM_SYNTH_LATENT, NUM_PCA)
+
+# 1.6 Decode synthetic latent vectors back to spectra
+spectra_synth ← latent_synth · pca_components + pca_mean   # shape: (NUM_SYNTH_LATENT, N_wavelength)
+
+# 1.7 Forward‑model each synthetic spectrum to obtain photometry
+phot_synth ← []
+for i in 1 … NUM_SYNTH_LATENT:
+    phot_i ← []
+    for filter in FILTER_SET:
+        flux ← integrateFilter(spectra_synth[i], filter)   # convolution with filter curve
+        phot_i.append(flux)
+    # Add Gaussian noise at 20 % relative level
+    phot_i_noisy ← phot_i * (1 + Normal(0, NOISE_STD_FRACTION))
+    phot_synth.append(phot_i_noisy)
+phot_synth ← array(phot_synth)    # shape: (NUM_SYNTH_LATENT, len(FILTER_SET))
+
+# 1.8 Assemble training dataset for the encoder (regressor)
+train_encoder_X ← phot_synth                      # inputs: noisy photometry
+train_encoder_y ← latent_synth                    # outputs: true latent coefficients
+
+# 1.9 Train an AutoML regressor (ensemble of GBDTs + NN) on the encoder data
+encoder_model ← AutoMLRegressor()
+encoder_model.fit(train_encoder_X, train_encoder_y)
+
+# 1.10 Assemble training dataset for the classifier
+# (use the mean latent coordinates of the reference spectra)
+class_labels ← loadTaxonomyLabels()              # length = N_spectra
+classifier_X ← latent_ref
+classifier_y ← class_labels
+
+# 1.11 Train an AutoML classifier in latent space
+classifier_model ← AutoMLClassifier()
+classifier_model.fit(classifier_X, classifier_y)
+
+# ------------------------------------------------------------------
+# STEP 2 – INFERENCE PHASE (for a new sparse photometric object)
+# ------------------------------------------------------------------
+
+function reconstructSpectrum(photometry_obs):
+    # --------------------------------------------------------------
+    # 2.1 Encode observed photometry → latent posterior
+    # --------------------------------------------------------------
+    # Predict mean and covariance (or multiple samples) of latent vector
+    latent_mean, latent_cov ← encoder_model.predict_with_uncertainty(photometry_obs)
+    # latent_mean: vector (NUM_PCA)
+    # latent_cov: covariance matrix (NUM_PCA x NUM_PCA)
+
+    # --------------------------------------------------------------
+    # 2.2 Draw samples from the latent posterior using Gaussian copula
+    # --------------------------------------------------------------
+    latent_samples ← []
+    for s in 1 … NUM_INFERENCE_SAMPLES:
+        # Sample multivariate normal with given mean & cov
+        sample ← MultivariateNormal(latent_mean, latent_cov).sample()
+        latent_samples.append(sample)
+    latent_samples ← array(latent_samples)    # shape: (NUM_INFERENCE_SAMPLES, NUM_PCA)
+
+    # --------------------------------------------------------------
+    # 2.3 Decode each latent sample to a full‑resolution spectrum
+    # --------------------------------------------------------------
+    spectra_samples ← latent_samples · pca_components + pca_mean
+    # spectra_samples shape: (NUM_INFERENCE_SAMPLES, N_wavelength)
+
+    # --------------------------------------------------------------
+    # 2.4 Compute posterior statistics of the reconstructed spectrum
+    # --------------------------------------------------------------
+    spectrum_mean ← mean(spectra_samples, axis=0)
+    spectrum_std  ← std(spectra_samples, axis=0)
+
+    # --------------------------------------------------------------
+    # 2.5 Classify taxonomy from latent mean
+    # --------------------------------------------------------------
+    taxonomy_probs ← classifier_model.predict_proba(latent_mean)
+
+    # --------------------------------------------------------------
+    # 2.6 Return results
+    # --------------------------------------------------------------
+    return {
+        "spectrum_mean": spectrum_mean,
+        "spectrum_std" : spectrum_std,
+        "taxonomy_probs": taxonomy_probs
+    }

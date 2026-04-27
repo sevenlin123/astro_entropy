@@ -1,0 +1,91 @@
+INPUT:
+    O = { (m_j, σ_j) }          // Observed magnitudes and their 1‑σ uncertainties
+    T_j(λ)  for j = 1…N          // Transmission curves of all photometric filters
+    S_k(λ)  for k = 1…K          // Library of reference spectra (e.g., solar‑normalized TNO spectra)
+    λ_grid                     // Common wavelength grid covering all filters
+
+OUTPUT:
+    Posterior distribution over spectral coefficients {c_l}
+    Reconstructed spectrum Ŝ(λ) with uncertainty bands
+    (Optional) Class assignment probability vector
+
+--------------------------------------------------------------------
+STEP 0 – Pre‑processing
+--------------------------------------------------------------------
+1. Convert observed magnitudes to relative fluxes:
+       F_j   ← 10^(−0.4 * (m_j − ZP))          // ZP = zero‑point for each filter
+       σ_Fj  ← (ln(10)/2.5) * F_j * σ_j        // Propagate magnitude error to flux
+
+2. Assemble measurement vector:
+       F   ← [F_1, F_2, …, F_N]^T
+       Σ_F ← diag(σ_F1², σ_F2², …, σ_FN²)
+
+--------------------------------------------------------------------
+STEP 1 – Basis construction
+--------------------------------------------------------------------
+3. Project reference spectra onto a reduced basis:
+       a. Compute mean spectrum μ_S(λ) = (1/K) Σ_k S_k(λ)
+       b. Center spectra: D_k(λ) = S_k(λ) – μ_S(λ)
+       c. Perform PCA on {D_k(λ)} → eigenvectors {E_l(λ)} (l = 1…L, L << K)
+       d. Define basis functions B_l(λ) = E_l(λ)
+
+4. For each filter j, compute the linear operator:
+       A_{j,l} = ∫_λ B_l(λ) * T_j(λ) dλ      // Numerical integration over λ_grid
+   Result: Design matrix A (size N × L)
+
+--------------------------------------------------------------------
+STEP 2 – Statistical model
+--------------------------------------------------------------------
+5. Forward model:
+       F_pred(c) = A * c                            // c = [c_1 … c_L]^T
+
+6. Likelihood:
+       p(F | c) ∝ exp[ –½ (F – A*c)^T Σ_F⁻¹ (F – A*c) ]
+
+7. Prior on coefficients (zero‑mean Gaussian with covariance Σ_c_prior):
+       p(c) ∝ exp[ –½ c^T Σ_c_prior⁻¹ c ]
+   (Σ_c_prior can encode expected variance of each mode, e.g., 1 on first mode, smaller on higher modes.)
+
+--------------------------------------------------------------------
+STEP 3 – Posterior inference (closed‑form Gaussian)
+--------------------------------------------------------------------
+8. Compute precision matrices:
+       Λ_F   = Σ_F⁻¹
+       Λ_c   = Σ_c_prior⁻¹
+       Λ_post = A^T * Λ_F * A + Λ_c
+       μ_post = Λ_post⁻¹ * (A^T * Λ_F * F)
+
+9. Posterior covariance:
+       Σ_post = Λ_post⁻¹
+
+--------------------------------------------------------------------
+STEP 4 – Sampling from the posterior
+--------------------------------------------------------------------
+10. Draw M samples {c^(s)}_{s=1..M} from N(μ_post, Σ_post)
+      (e.g., by Cholesky decomposition or random‑normal generation)
+
+--------------------------------------------------------------------
+STEP 5 – Spectrum reconstruction
+--------------------------------------------------------------------
+11. For each sample s:
+        S_sample^(s)(λ) = μ_S(λ) + Σ_l c_l^(s) * B_l(λ)
+
+12. Compute point estimate and uncertainty bands:
+        Ŝ(λ)          = median over {S_sample^(s)(λ)}   // Median spectrum
+        Lower(λ), Upper(λ) = 16th & 84th percentiles of {S_sample^(s)(λ)}
+
+--------------------------------------------------------------------
+STEP 6 – Optional taxonomy / classification
+--------------------------------------------------------------------
+13. For each class i defined by a prototype coefficient vector c_i^prot:
+        Compute Mahalanobis distance:
+            d_i = (μ_post – c_i^prot)^T * Σ_post⁻¹ * (μ_post – c_i^prot)
+        Convert distances to class probabilities:
+            P_i = exp(–0.5 d_i) / Σ_j exp(–0.5 d_j)
+
+--------------------------------------------------------------------
+RETURN:
+    - Posterior mean μ_post and covariance Σ_post (coefficients)
+    - Median reconstructed spectrum Ŝ(λ) with credible intervals
+    - Class membership probabilities {P_i} (if step 6 executed)
+END

@@ -1,0 +1,89 @@
+Input:
+    SPECTRA[]        # Array of N high‑resolution reflectance spectra (λ_i, R_i)
+    FILTER_CURVES[]  # Instrument throughput curves for M photometric bands
+    PHOTOMETRY[]     # New sparse photometry (R_j ± σ_j) for an object
+    K                # Number of principal components to retain
+    h_kde            # Bandwidth for kernel density estimation
+    N_SAMPLES        # Number of synthetic latent samples to generate
+
+Output:
+    RECONSTRUCTED_SPECTRUM  # Full‑resolution spectrum with uncertainties
+    CLASS_PROBS             # Probability distribution over taxonomy classes
+    COVERAGE_INTERVALS      # Credible interval bounds for each λ_i
+
+--------------------------------------------------------------------
+Phase 1 – Preparation (Training)
+
+1.  // PCA on the original spectra
+    1.1  Construct matrix X of size (N × P) where P = number of wavelength bins.
+    1.2  Center X by subtracting column means.
+    1.3  Compute covariance matrix C = (XᵀX)/(N-1).
+    1.4  Eigen‑decompose C → eigenvalues λ_k and eigenvectors v_k.
+    1.5  Select first K eigenvectors → PCA basis V_K (P × K).
+    1.6  Project spectra onto basis:
+            COEFF[i][k] = (X[i] · v_k)   for i ∈ [1,N], k ∈ [1,K]
+    1.7  Store COEFF matrix (N × K) and mean spectrum μ_X.
+
+2.  // Build continuous prior via KDE in latent space
+    2.1  Fit multivariate Gaussian kernel density to COEFF:
+            KDE_prior(x) = (1/N) Σ_{i=1}^{N} exp(-½ (x - COEFF[i])ᵀ Σ⁻¹ (x - COEFF[i])) / ((2π)^{K/2}|Σ|^{½})
+           where Σ is diagonal bandwidth matrix with entries h_kde².
+    2.2  Sample N_SAMPLES points {z_j} from KDE_prior (e.g., by accept–reject or conditional sampling).
+    2.3  For each z_j, reconstruct synthetic spectrum:
+            S_j = μ_X + V_K · z_j   // inverse PCA
+    2.4  Store synthetic spectra S_j (j ∈ [1,N_SAMPLES]).
+
+3.  // Forward model synthetic photometry and add noise
+    3.1  For each synthetic spectrum S_j:
+            FOR m = 1 TO M:
+                R_j[m] = ∫ S_j(λ) * FILTER_CURVES[m](λ) dλ / ∫ FILTER_CURVES[m](λ) dλ   // band reflectance
+            END
+            Add Gaussian noise:
+                R_j_noisy[m] = R_j[m] + Normal(0, 0.2 * R_j[m])   // 20 % relative uncertainty
+    3.2  Assemble training pairs:
+            INPUTS[j]  = R_j_noisy[1…M]
+            TARGETS[j] = z_j   // latent coefficients
+
+4.  // Train encoder (regressor) mapping photometry → latent coefficients
+    4.1  Choose AutoML framework (e.g., AutoGluon) with ensemble of GBDTs and neural nets.
+    4.2  Fit model ENC on (INPUTS, TARGETS) → ENC( R ) ≈ ẑ .
+
+5.  // Train classifier on latent space
+    5.1  For each original spectrum i, assign taxonomy label L_i.
+    5.2  Train AutoML classifier CLS on (COEFF[i], L_i) to output posterior class probabilities.
+
+--------------------------------------------------------------------
+Phase 2 – Inference (New Observation)
+
+6.  // Encode photometry to latent space
+    6.1  Compute ẑ = ENC( PHOTOMETRY[1…M] ).
+
+7.  // Sample posterior latent distribution via Gaussian copula
+    7.1  Estimate marginal posterior for each component k from ENC prediction
+            (e.g., use predictive variance or bootstrap).
+    7.2  Define correlation matrix Σ_copula from training residuals.
+    7.3  Generate B samples {z_b} by:
+            a) Sample u_b ~ Uniform(0,1)^K
+            b) Transform to normal: y_b = Φ⁻¹(u_b)          // Φ⁻¹ inverse CDF of N(0,1)
+            c) Apply correlation: z_b = μ_z + L Σ_copula^(½) · y_b
+            where L is lower‑triangular Cholesky factor of Σ_copula.
+            d) Map marginals back to original scale (inverse of step 7.2a).
+    7.4  Each z_b corresponds to a latent coefficient vector.
+
+8.  // Decode to spectra
+    8.1  For each z_b, compute synthetic spectrum:
+            S_b = μ_X + V_K · z_b
+    8.2  Aggregate spectra {S_b} to obtain:
+            • Mean spectrum  S_mean = average(S_b)
+            • Credible intervals per λ_i (e.g., 2.5th & 97.5th percentiles).
+
+9.  // Classification
+    9.1  Compute class probabilities:
+            p(L | PHOTOMETRY) = CLS( ẑ )
+    9.2  Return most probable class and full posterior.
+
+--------------------------------------------------------------------
+Output:
+    RECONSTRUCTED_SPECTRUM = S_mean
+    COVERAGE_INTERVALS     = percentile bounds from {S_b}
+    CLASS_PROBS            = p(L | PHOTOMETRY)

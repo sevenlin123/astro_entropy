@@ -1,0 +1,71 @@
+Input: Seed spectra {S_i}   // i = 1 … N_seed (≈50)
+Output: PCA basis {v_k}, mean μ_spectrum, latent vectors {z_i}
+
+1.1  Compute mean spectrum μ_spectrum ← mean({S_i})
+1.2  Center spectra: S'_i ← S_i – μ_spectrum
+1.3  Perform Singular Value Decomposition (SVD) on centered matrix
+      → obtain eigenvectors {v_k} (k = 1 … K), eigenvalues λ_k
+1.4  Select K such that cumulative variance ≥ V_threshold
+      (typical K ≈ 5–10)
+1.5  Project each centered spectrum onto basis:
+      z_i[k] = v_k^T · S'_i   for k = 1 … K
+
+Input: Latent vectors {z_i}
+Output: Synthetic latent samples {z̃_j}, j = 1 … N_aug
+
+2.1  Fit multivariate Kernel Density Estimate (KDE) to {z_i}
+      – bandwidth h ≈ 0.5 (empirically chosen)
+2.2  Sample N_aug points from KDE to obtain {z̃_j}
+
+Input: Basis {v_k}, mean μ_spectrum, synthetic latents {z̃_j}
+Output: Synthetic spectra {S̃_j}, synthetic photometry {m̃_j}
+
+3.1  For each synthetic latent z̃_j:
+        3.1.1  Reconstruct spectrum:
+              S̃_j = μ_spectrum + Σ_{k=1..K} z̃_j[k] · v_k
+        3.1.2  Convolve S̃_j with instrument filter responses
+              → obtain noiseless photometry vector m_noiseless_j
+        3.1.3  Add Gaussian noise:
+              For each band b:
+                  σ_b = 0.20 * m_noiseless_j[b]
+                  m̃_j[b] = m_noiseless_j[b] + Normal(0, σ_b)
+
+Input: Synthetic photometry {m̃_j}, latent vectors {z̃_j}
+Output: Trained regressor R (maps m → z)
+
+4.1  Prepare training data: pairs (m̃_j, z̃_j)
+4.2  Use AutoML framework (e.g., AutoGluon) to search over:
+        - Gradient‑Boosted Decision Trees
+        - Neural Networks
+        - Ensembles of both
+   Optimize predictive accuracy on latent space
+4.3  Store best‑performing model as regressor R
+
+Input: Latent vectors {z_i} with known taxonomic labels L_i
+Output: Trained classifier C (maps z → P(label))
+
+5.1  Prepare training data: pairs (z_i, L_i)
+5.2  Use AutoML to train multi‑class classifier
+5.3  Store classifier C
+
+Input: Observed photometry m_obs
+Output: Posterior spectrum samples {S_post}, taxonomic probabilities P(L)
+
+6.1  Predict latent vector using regressor:
+        z_pred = R(m_obs)      // point estimate
+   Optionally obtain predictive uncertainty (e.g., via ensemble spread)
+
+6.2  Sample from regressor predictive distribution:
+        For s = 1 … N_samples:
+            z_s ~ PredictiveDistribution(R, m_obs)
+            S_s = μ_spectrum + Σ_{k=1..K} z_s[k] · v_k
+            Store S_s
+
+6.3  Compute taxonomic probabilities:
+        For each label l:
+            P(l) = mean_{s}( C(z_s)[l] )
+   (Alternatively, evaluate C on z_pred)
+
+6.4  Return:
+        • Spectrum posterior {S_s} (mean and credible intervals)
+        • Taxonomic probability vector P

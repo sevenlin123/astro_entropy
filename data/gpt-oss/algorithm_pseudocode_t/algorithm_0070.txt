@@ -1,0 +1,94 @@
+text
+FUNCTION reconstructSpectrum(
+        wavelengths[1..N],          // central wavelengths of filters (nm)
+        mags[1..N],                // observed apparent magnitudes
+        errs[1..N],                // 1‑σ uncertainties of magnitudes
+        λ_ref,                     // reference wavelength (nm) for zero slope
+        nSamples,                  // total MCMC draws
+        burnIn,                    // number of initial draws to discard
+        stepSize_M0, stepSize_G    // proposal widths for M0 and G
+    ) :
+
+    // ------------------------------------------------------------------
+    // 1.  INITIALIZATION
+    // ------------------------------------------------------------------
+    SET current_M0 = mean(mags)                 // starting value for absolute magnitude
+    SET current_G  = 0.0                         // starting value for spectral slope
+
+    INITIALIZE empty arrays:
+        chain_M0[1..nSamples]
+        chain_G [1..nSamples]
+
+    // ------------------------------------------------------------------
+    // 2.  DEFINE MODEL AND LIKELIHOOD
+    // ------------------------------------------------------------------
+    FUNCTION modelMagnitude(M0, G, λ):
+        RETURN M0 + G * (λ - λ_ref)              // linear spectral model
+
+    FUNCTION logLikelihood(M0, G):
+        SUM = 0
+        FOR i FROM 1 TO N:
+            μ_i = modelMagnitude(M0, G, wavelengths[i])
+            SUM += -0.5 * ((mags[i] - μ_i)^2 / (errs[i]^2))
+        END FOR
+        RETURN SUM
+
+    // ------------------------------------------------------------------
+    // 3.  METROPOLIS‑HASTINGS SAMPLING
+    // ------------------------------------------------------------------
+    FOR t FROM 1 TO nSamples :
+
+        // --- propose new parameters ------------------------------------
+        PROPOSED_M0 = current_M0 + Normal(0, stepSize_M0)
+        PROPOSED_G  = current_G  + Normal(0, stepSize_G)
+
+        // --- compute log likelihoods ----------------------------------
+        lnL_current = logLikelihood(current_M0, current_G)
+        lnL_proposed = logLikelihood(PROPOSED_M0, PROPOSED_G)
+
+        // --- acceptance probability -----------------------------------
+        acceptProb = exp( lnL_proposed - lnL_current )
+        IF randomUniform(0,1) < acceptProb :
+            current_M0 = PROPOSED_M0
+            current_G  = PROPOSED_G
+        END IF
+
+        // --- store current state ---------------------------------------
+        chain_M0[t] = current_M0
+        chain_G [t] = current_G
+    END FOR
+
+    // ------------------------------------------------------------------
+    // 4.  POSTERIOR ESTIMATION
+    // ------------------------------------------------------------------
+    DISCARD first burnIn entries from chains
+    posterior_M0 = chain_M0[burnIn+1 : end]
+    posterior_G  = chain_G [burnIn+1 : end]
+
+    // ------------------------------------------------------------------
+    // 5.  RECONSTRUCT SPECTRUM ON A DENSE WAVELENGTH GRID
+    // ------------------------------------------------------------------
+    SET λ_grid = linspace(min(wavelengths), max(wavelengths), 1000)
+
+    INITIALIZE array predMag[1..len(λ_grid)] = 0
+    FOR each (M0, G) pair in (posterior_M0, posterior_G) :
+        FOR j FROM 1 TO len(λ_grid) :
+            predMag[j] += modelMagnitude(M0, G, λ_grid[j])
+        END FOR
+    END FOR
+
+    // Divide by number of posterior samples to obtain mean prediction
+    FOR j FROM 1 TO len(λ_grid) :
+        predMag[j] = predMag[j] / length(posterior_M0)
+    END FOR
+
+    // Optionally compute median and credible intervals from the ensemble
+
+    RETURN {
+        posterior_M0: posterior_M0,
+        posterior_G:  posterior_G,
+        λ_grid:       λ_grid,
+        predicted_mag: predMag
+    }
+
+END FUNCTION

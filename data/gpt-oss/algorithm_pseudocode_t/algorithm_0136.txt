@@ -1,0 +1,59 @@
+Inputs
+-------
+    T[1..M]                # M template spectra (flux vs wavelength)
+    R[j][1..M]             # Response matrix: R[j][i] = integral of T[i] * filter_j
+    N                      # Number of observed bands
+    y[1..N]                # Observed apparent magnitudes (or fluxes)
+    σ[1..N]                # Observation uncertainties
+    prior_mean[1..M]       # Prior mean of coefficient vector
+    prior_cov[1..M,1..M]   # Prior covariance matrix
+
+Outputs
+-------
+    posterior_mean[1..M]   # Posterior mean of linear coefficients
+    posterior_cov[1..M,1..M]  # Posterior covariance
+    f_pred[1..N]           # Predictive fluxes (or magnitudes) for each band
+    residuals[1..N]        # y - f_pred
+    outlier_flag[1..N]     # Boolean flag if |residual| > k*σ
+
+Procedure
+---------
+
+1.  Build forward‑model matrix A[1..N, 1..M]  
+    For each band j = 1..N:
+        For each template i = 1..M:
+            A[j,i] = R[j,i]          # Already integrated response
+
+2.  Convert magnitudes to linear fluxes if necessary:
+        x[j] = 10^(-0.4 * y[j])       # Flux ∝ 10^(-0.4*m)
+
+3.  Assemble likelihood:
+        Likelihood:  p(x | θ) = N( A·θ , Σ )  
+        where θ is the vector of coefficients (size M),
+              Σ = diag(σ^2)   (measurement covariance)
+
+4.  Set up prior:
+        Prior:  p(θ) = N( prior_mean , prior_cov )
+
+5.  Compute posterior (analytic Gaussian because likelihood and prior are Gaussian):
+        Σ_post = inverse( Aᵀ Σ⁻¹ A + prior_cov⁻¹ )
+        μ_post = Σ_post * ( Aᵀ Σ⁻¹ x + prior_cov⁻¹ * prior_mean )
+
+6.  Generate posterior predictive fluxes:
+        f_pred = A · μ_post
+
+7.  Compute residuals:
+        residuals[j] = x[j] - f_pred[j]
+
+8.  Outlier detection:
+        For each band j:
+            if |residuals[j]| > k * σ[j]:
+                outlier_flag[j] = True
+            else:
+                outlier_flag[j] = False
+
+9.  Return posterior_mean = μ_post,
+          posterior_cov = Σ_post,
+          f_pred,
+          residuals,
+          outlier_flag.

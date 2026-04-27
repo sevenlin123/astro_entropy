@@ -1,0 +1,67 @@
+1.1  Center spectra:
+     μ_S = mean(S_train, axis=0)                # 1 × n_wave
+     S_centered = S_train - μ_S                 # n_spec × n_wave
+
+1.2  Compute covariance:
+     C_cov = (S_centered.T @ S_centered) / (n_spec-1)   # n_wave × n_wave
+
+1.3  Eigen‑decompose:
+     (eig_vals, eig_vecs) = eig(C_cov)
+     Sort eig_vecs by descending eig_vals
+
+1.4  Select first K eigenvectors:
+     U_K = eig_vecs[:, 0:K]                     # n_wave × K
+     Σ_c_prior = diag(eig_vals[0:K])            # K × K   (prior covariance)
+
+1.5  Project training spectra onto PCs:
+     C_train = S_centered @ U_K                  # n_spec × K
+
+2.1  For each filter f in F:
+        Compute response matrix R_f (1 × n_wave):
+            R_f[λ] = ∫ T_f(λ) * λ dλ  / ∫ T_f(λ) dλ
+    Stack all R_f to form R (n_filt × n_wave)
+
+2.2  Compute synthetic photometry of the mean spectrum:
+      r0 = R @ μ_S                               # 1 × n_filt
+
+2.3  Compute response of PCs:
+      M = R @ U_K                                # n_filt × K
+
+3.1  Define likelihood (Gaussian):
+      L(y | c) ∝ exp(-½ * (y - (r0 + M @ c))^T @ W @ (y - (r0 + M @ c)))
+      where W = diag(1/σ_y^2)                    # n_filt × n_filt
+
+3.2  Define prior on c:
+      p(c) ∝ exp(-½ * (c - μ_c_prior)^T @ Σ_c_prior^-1 @ (c - μ_c_prior))
+      (here μ_c_prior = 0 by construction)
+
+3.3  Closed‑form posterior (Gaussian):
+      A = M.T @ W @ M + Σ_c_prior^-1              # K × K
+      b = M.T @ W @ (y - r0)                      # K × 1
+      c_post_mean = inv(A) @ b                    # K × 1
+      c_post_cov  = inv(A)                        # K × K
+
+4.1  Draw N samples from posterior of c (optional):
+      For i = 1 … N:
+          c_sample[i] ~ MultivariateNormal(c_post_mean, c_post_cov)
+
+4.2  Reconstruct spectra:
+      For each sample:
+          S_sample[i] = μ_S + U_K @ c_sample[i]    # 1 × n_wave
+
+4.3  Estimate credible intervals:
+      For each wavelength λ_j:
+          Collect values {S_sample[i][j]} over i
+          CI_low[j]  = percentile( {S_sample[i][j]}, 2.5 )
+          CI_high[j] = percentile( {S_sample[i][j]}, 97.5 )
+
+4.4  Optionally compute posterior mean spectrum:
+      μ_S_post[j] = mean( {S_sample[i][j]} over i )
+
+Return {
+    μ_S_post,
+    CI_low,
+    CI_high,
+    c_post_mean,
+    c_post_cov
+}

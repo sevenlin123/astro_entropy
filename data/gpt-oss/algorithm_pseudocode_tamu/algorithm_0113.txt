@@ -1,0 +1,75 @@
+INPUT:
+    S_real[1…N]            // Real near‑IR spectra (high‑res vectors)
+    λ_res[1…M]             // Wavelength grid of spectra
+    F_filters[1…B]         // Effective throughput curves for B filters
+    Phot_obs[1…B]          // Observed photometry for target object
+    σ_rel = 0.20           // Relative reflectance uncertainty (20%)
+
+PARAMETERS:
+    K                     // Number of retained PCA components (4–10)
+    h_kde = 0.5           // KDE bandwidth
+    N_aug = 5000          // Number of synthetic latent samples
+    n_samp = 1000         // Posterior samples per inference
+
+---------------------------------------------------------------
+STEP 1 – Build Prior (Latent Space)
+---------------------------------------------------------------
+1.1  PCA_training ← PCA(S_real, n_components = K)
+1.2  PC_mean, PC_basis ← PCA_training.mean_, PCA_training.components_
+1.3  Z_real[1…N] ← (S_real - PC_mean) @ PC_basis.T   // Project onto PCs
+
+---------------------------------------------------------------
+STEP 2 – Augment Latent Distribution
+---------------------------------------------------------------
+2.1  KDE_model ← fit_KDE(Z_real, bandwidth = h_kde)
+2.2  Z_aug[1…N_aug] ← sample_from(KDE_model, size = N_aug)
+
+---------------------------------------------------------------
+STEP 3 – Generate Synthetic Spectra & Photometry
+---------------------------------------------------------------
+3.1  For i = 1 … N_aug
+        S_aug[i]      ← PC_mean + Z_aug[i] @ PC_basis
+        P_aug[i][1…B] ← convolve_with_filters(S_aug[i], λ_res, F_filters)
+        Add Gaussian noise: 
+            P_aug_noisy[i][j] = P_aug[i][j] * (1 + ε_j)
+            where ε_j ∼ Normal(0, σ_rel) for j = 1…B
+3.2  X_train ← P_aug_noisy                // Input photometry (noisy)
+3.3  Y_train ← Z_aug                       // Target latent coefficients
+
+---------------------------------------------------------------
+STEP 4 – Train Encoder (AutoML Regressor)
+---------------------------------------------------------------
+4.1  regressor ← AutoML_Regressor()
+4.2  regressor.train(X_train, Y_train)
+
+---------------------------------------------------------------
+STEP 5 – Train Classifier (Optional)
+---------------------------------------------------------------
+5.1  Y_label ← TaxonomicLabels(S_real)    // Known labels for training spectra
+5.2  clf ← AutoML_Classifier()
+5.3  clf.train(Z_real, Y_label)
+
+---------------------------------------------------------------
+STEP 6 – Forward Inference for New Object
+---------------------------------------------------------------
+6.1  // Encode observed photometry
+6.2  Z_pred_mean, Z_pred_cov ← regressor.predict_with_uncertainty(Phot_obs)
+6.3  // Posterior Sampling via Gaussian Copula
+6.4  Draw n_samp samples from multivariate normal with mean Z_pred_mean,
+     covariance Z_pred_cov → Z_post[1…n_samp]
+6.5  // Decode to spectra
+6.6  For k = 1 … n_samp
+        S_post[k] ← PC_mean + Z_post[k] @ PC_basis
+6.7  // Construct summary statistics
+6.8  S_recon_mean ← mean(S_post over k)
+6.9  S_recon_CI   ← percentile(S_post, [2.5%, 97.5%])
+
+---------------------------------------------------------------
+STEP 7 – Classification (Optional)
+---------------------------------------------------------------
+7.1  tax_prob ← clf.predict_proba(Z_pred_mean)
+
+OUTPUT:
+    S_recon_mean            // Mean reconstructed spectrum
+    S_recon_CI              // 95% credible interval per wavelength
+    tax_prob                // Posterior taxonomic probabilities

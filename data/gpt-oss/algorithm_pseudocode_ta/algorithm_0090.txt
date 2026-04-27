@@ -1,0 +1,64 @@
+text
+INPUT
+    S        : matrix of N_s spectra (rows) × N_λ wavelengths (columns)
+    λ        : vector of N_λ wavelengths
+    m_obs    : vector of observed magnitudes in M filters
+    σ        : vector of measurement uncertainties (same length as m_obs)
+    F[1…M]   : filter transmission curves, each defined on λ
+    k        : number of principal components to retain (≈8–10)
+
+OUTPUT
+    s_hat    : reconstructed full spectrum (vector of N_λ values)
+    Σ_s      : covariance matrix of the reconstructed spectrum (N_λ×N_λ)
+    outlier_score : Mahalanobis distance of the posterior mean in latent space
+--------------------------------------------------------------------
+STEP 0 – PRE‑PROCESSING
+    1. Compute mean spectrum μ_s = mean(S, axis=0)
+    2. Center spectra: S_centered = S – μ_s
+
+STEP 1 – PRINCIPAL COMPONENT ANALYSIS
+    3. Perform singular value decomposition:
+           [U, Σ, Vᵀ] = svd(S_centered, full_matrices=False)
+       Here U (N_s×N_s) contains left singular vectors,
+          Σ (N_s)   contains singular values,
+          Vᵀ (N_s×N_λ) contains right singular vectors.
+    4. Select first k columns of Vᵀ → V_k  (k×N_λ)
+       These are the principal component basis functions.
+    5. Define projection matrix P = V_kᵀ   (k×N_λ)
+
+STEP 2 – BUILD PHOTOMETRIC MODEL MATRIX
+    6. For each filter j = 1…M:
+           a. Compute bandpass integrals of the mean spectrum:
+                b_j = ∫ μ_s(λ) · F[j](λ) dλ
+           b. For each component i = 1…k:
+                A_j[i] = ∫ V_k[i,:](λ) · F[j](λ) dλ
+       This yields:
+           - vector b   (length M)
+           - matrix A   (M×k), where A[j,i] = A_j[i]
+    7. Construct measurement matrix H = A          (M×k)
+       The photometric forward model is:
+           m_pred = H · c + b
+       where c is the vector of latent coefficients.
+
+STEP 3 – BAYESIAN INFERENCE (GAUSSIAN CASE)
+    8. Define weight matrix W = diag(1/σ²)   (M×M)
+    9. Prior on latent coefficients:  p(c) ~ N(0, I_k)
+    10. Compute posterior covariance:
+            Σ_c = (Hᵀ·W·H + I_k)⁻¹              (k×k)
+    11. Compute posterior mean:
+            μ_c = Σ_c · Hᵀ · W · (m_obs – b)    (k×1)
+
+STEP 4 – RECONSTRUCT FULL SPECTRUM
+    12. Reconstructed spectrum:
+            s_hat = μ_s + V_kᵀ · μ_c             (N_λ×1)
+    13. Propagate uncertainty to spectrum:
+            Σ_s = V_kᵀ · Σ_c · V_k               (N_λ×N_λ)
+
+STEP 5 – OUTLIER DETECTION (OPTIONAL)
+    14. Compute Mahalanobis distance of posterior mean in latent space:
+            d² = μ_cᵀ · Σ_c⁻¹ · μ_c
+        Larger d² indicates a spectrum that lies far from the manifold
+        defined by the training set (potential rare or anomalous type).
+
+RETURN
+    s_hat , Σ_s , outlier_score

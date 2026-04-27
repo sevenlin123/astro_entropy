@@ -1,0 +1,95 @@
+Input:
+    S = {s₁,…,s_N}   # N reference near‑IR spectra (wavelength grid λ)
+    F = {f₁,…,f_M}   # M broadband filter transmission curves
+    P = {p₁,…,p_K}   # K target objects with photometric measurements
+             #   p_k = {(F_i, μ_ki, σ_ki)}  for i=1…M
+
+Output:
+    Reconstructed spectra Ŝ_k(λ) for each target k
+    Posterior coefficient samples θ_k = {θ_kj} for j=1…L (L principal components)
+
+--------------------------------------------------------------------
+1. TRAIN PRINCIPAL COMPONENT MODEL
+--------------------------------------------------------------------
+1.1 Center spectra:
+        μ_s = mean(S)   # element‑wise average spectrum
+        S_centered = S - μ_s
+
+1.2 Compute covariance matrix C = (S_centeredᵀ · S_centered) / (N-1)
+
+1.3 Eigen‑decompose C → eigenvalues λ_j, eigenvectors v_j (j=1…N)
+
+1.4 Select top L eigenvectors that cumulatively explain >90% variance
+        PCs = {v_1,…,v_L}
+
+1.5 Store:
+        – Mean spectrum μ_s
+        – Principal components PCs
+        – Transformation matrix T = [v_1 … v_L]   # shape (n_wave, L)
+
+--------------------------------------------------------------------
+2. DEFINE PROBABILISTIC MODEL FOR EACH TARGET OBJECT
+--------------------------------------------------------------------
+For each target k:
+
+2.1 Prior on coefficients θ_k ~ N(0, I_L)    # independent standard normals
+       (optionally use empirical prior if known)
+
+2.2 For any coefficient vector θ_k,
+       generate model spectrum:
+           s_mod(λ) = μ_s(λ) + Σ_{j=1}^L θ_kj * PCs_j(λ)
+
+2.3 Predict synthetic photometry in filter i:
+       F_pred(θ_k, i) = ∫ s_mod(λ) * F_i(λ) dλ / ∫ F_i(λ) dλ
+       (numerical quadrature on wavelength grid)
+
+2.4 Likelihood:
+       For each measurement (F_i, μ_ki, σ_ki):
+           L_i(θ_k) = Normal( F_pred(θ_k,i) | μ_ki , σ_ki )
+       Total likelihood L(θ_k) = Π_i L_i(θ_k)
+
+2.5 Posterior:
+       p(θ_k | data) ∝ L(θ_k) * Prior(θ_k)
+
+--------------------------------------------------------------------
+3. BAYESIAN INFERENCE OF COEFFICIENTS
+--------------------------------------------------------------------
+3.1 Choose inference scheme:
+        – Markov Chain Monte Carlo (e.g., Hamiltonian MC)
+        – Or Variational Bayes if faster
+
+3.2 Initialize θ_k^(0) = 0
+
+3.3 Run sampler for B iterations, discard burn‑in, keep N_s samples:
+        {θ_k^(b)}_{b=1}^{N_s}
+
+--------------------------------------------------------------------
+4. RECONSTRUCT FULL SPECTRA AND UNCERTAINTIES
+--------------------------------------------------------------------
+4.1 For each posterior sample θ_k^(b),
+        compute s_mod^(b)(λ) = μ_s(λ) + Σ_j θ_kj^(b) * PCs_j(λ)
+
+4.2 Aggregate samples:
+        – Point estimate: mean spectrum
+              Ŝ_k(λ) = (1/N_s) Σ_b s_mod^(b)(λ)
+
+        – Credible interval at each λ:
+              lower(λ) = percentile(s_mod^(b)(λ), 2.5%)
+              upper(λ) = percentile(s_mod^(b)(λ), 97.5%)
+
+--------------------------------------------------------------------
+5. OPTIONAL: SELECT INFORMATIVE FILTER SET (SURVEY OPTIMIZATION)
+--------------------------------------------------------------------
+5.1 For candidate filter sets C ⊂ {F_1,…,F_M}:
+        – Repeat steps 2–4 for synthetic targets (draw from prior)
+        – Estimate expected posterior variance of spectra or
+          classification accuracy
+        – Rank filter sets by lowest expected reconstruction error
+
+--------------------------------------------------------------------
+6. OUTPUT
+--------------------------------------------------------------------
+Return for each target k:
+    – Reconstructed spectrum Ŝ_k(λ) with credible intervals
+    – Posterior coefficient samples {θ_k^(b)}
+    – Diagnostics (posterior predictive checks if desired)

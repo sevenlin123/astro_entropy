@@ -1,0 +1,103 @@
+pseudo
+INPUT: 
+    S_ref[1…N]          // Reference reflectance spectra (high‑resolution)
+    λ_ref[1…L]          // Wavelength grid of reference spectra
+    filt[1…F]           // Filter transmission curves (effective throughputs)
+    K_dim                // Desired number of principal components (e.g., 8–10)
+
+PROCESS:
+1.1   // Standardize reference spectra
+      μ_S ← mean(S_ref, axis=spec_index)
+      σ_S ← std(S_ref, axis=spec_index)
+      S_std ← (S_ref – μ_S) / σ_S
+
+1.2   // Perform PCA
+      U, Σ, Vh ← SVD(S_std)          // U: eigenvectors, Σ: singular values
+      PCs ← first K_dim columns of U
+      PCs_mean ← 0                   // Zero‑mean in latent space
+
+1.3   // Project reference spectra onto PCs
+      coeff_real[1…N, 1…K_dim] ← S_std · PCs
+
+1.4   // Kernel Density Estimate in latent space
+      KDE_model ← fit_gaussian_kde(coeff_real, bandwidth = h≈0.5)
+
+1.5   // Sample synthetic latent vectors
+      M ← number_of_synthetic_samples  // e.g., 5000
+      coeff_syn[1…M, 1…K_dim] ← KDE_model.sample(M)
+
+1.6   // Reconstruct synthetic spectra
+      S_syn[1…M, 1…L] ← (coeff_syn · PCsᵀ) * σ_S + μ_S
+
+pseudo
+FUNCTION forward_photometry(S, filt, λ):
+    FOR each filter f in 1…F:
+        R_f ← ∫ S(λ) · filt[f](λ) dλ / ∫ filt[f](λ) dλ
+    RETURN R[1…F]
+END FUNCTION
+
+PROCESS:
+2.1   // Generate noiseless photometry for synthetic spectra
+      phot_syn_noiseless[1…M, 1…F] ← forward_photometry(S_syn, filt, λ_ref)
+
+2.2   // Add Gaussian noise (relative 20% per band)
+      σ_noise ← 0.20 * phot_syn_noiseless
+      phot_syn[1…M, 1…F] ← phot_syn_noiseless + Normal(0, σ_noise)
+
+2.3   // Assemble training set
+      X_train ← phot_syn
+      Y_train ← coeff_syn          // Latent targets
+
+pseudo
+PROCESS:
+3.1   // Use AutoML (e.g., AutoGluon) to train regression ensemble
+      encoder ← AutoML_Regressor()
+      encoder.train(X_train, Y_train)
+
+3.2   // Optionally store probability outputs (e.g., quantile predictions)
+
+pseudo
+INPUT:
+    labels[1…N]   // Taxonomic labels for reference spectra
+
+PROCESS:
+4.1   // Use the same PCA projection to obtain latent targets
+      coeff_real_lbl ← coeff_real
+
+4.2   // Train AutoML classifier on latent space
+      classifier ← AutoML_Classifier()
+      classifier.train(coeff_real_lbl, labels)
+
+pseudo
+FUNCTION reconstruct_spectrum(phot_obs[1…F]):
+    // 5.1 Predict latent coefficient distribution
+    coeff_pred_mean, coeff_pred_cov ← encoder.predict_distribution(phot_obs)
+
+    // 5.2 Posterior Sampling via Gaussian Copula
+    coeff_samples[1…S, 1…K_dim] ← gaussian_copula_sample(
+                                     coeff_pred_mean,
+                                     coeff_pred_cov,
+                                     S = number_of_samples)
+
+    // 5.3 Decode samples to spectra
+    spectra_samples[1…S, 1…L] ← (coeff_samples · PCsᵀ) * σ_S + μ_S
+
+    // 5.4 Compute summary statistics
+    spectrum_mean ← mean(spectra_samples, axis=sample_index)
+    spectrum_ci_lower, spectrum_ci_upper ← percentile(
+                                             spectra_samples, [2.5, 97.5], 
+                                             axis=sample_index)
+
+    // 5.5 Taxonomy probability
+    taxonomy_prob ← classifier.predict_proba(coeff_pred_mean)
+
+    RETURN {
+        "spectrum_mean": spectrum_mean,
+        "spectrum_ci": (spectrum_ci_lower, spectrum_ci_upper),
+        "taxonomy_prob": taxonomy_prob
+    }
+END FUNCTION
+
+pseudo
+// 6.1 Compute spectral slopes, band depths, etc. from spectrum_mean
+// 6.2 Flag outliers if taxonomy_prob below threshold or CI unusually broad

@@ -1,0 +1,97 @@
+Inputs:
+    - S_ref[1…N]          // Reference spectra (high‑resolution reflectance vs λ)
+    - F[1…M]              // Throughput curves of M photometric filters
+    - Photometry_obs[1…P] // Observed photometry for an object (P ≤ M)
+    - K                    // Number of principal components to retain (≈ 8–10)
+    - h_KDE                // KDE bandwidth (≈ 0.5)
+    - n_aug                // Number of synthetic latent samples to generate (≈ 5×10³)
+    - σ_noise              // Relative photometric uncertainty (≈ 0.20)
+
+Outputs:
+    - S_post              // Posterior samples of reconstructed spectrum
+    - Cov_S               // Spectral covariance matrix
+    - TaxoProb            // Probabilities of each taxonomic class
+
+--------------------------------------------------------------------
+1. Pre‑processing (once for the reference set)
+--------------------------------------------------------------------
+1.1. Compute mean spectrum μ_S = mean(S_ref)
+1.2. Center spectra: S_centered[i] = S_ref[i] – μ_S
+1.3. Perform Singular Value Decomposition (SVD):
+        [U, Σ, Vᵀ] = svd(S_centered)
+1.4. Select first K eigenvectors: PC = V[:,1:K]          // columns are PCs
+1.5. Project spectra into latent space:
+        Z_real[j] = PCᵀ · (S_ref[j] – μ_S)   // j = 1…N, shape K×N
+
+--------------------------------------------------------------------
+2. Build prior over latent space
+--------------------------------------------------------------------
+2.1. Estimate density with KDE:
+        p_Z(z) = (1/N) Σ_{j=1}^{N}  K_h(z – Z_real[j])   // Gaussian kernel, bandwidth h_KDE
+2.2. Sample synthetic latent vectors:
+        For i = 1 … n_aug:
+            Z_syn[i] ← sample from p_Z(z)
+
+--------------------------------------------------------------------
+3. Forward modelling (generate synthetic photometry)
+--------------------------------------------------------------------
+For each synthetic latent vector Z_syn[i]:
+    3.1. Reconstruct spectrum:
+            S_syn[i] = μ_S + PC · Z_syn[i]
+    3.2. Convolve with filter responses:
+            For m = 1 … M:
+                f_syn[i][m] = ∫ S_syn[i](λ) · F[m](λ) dλ
+    3.3. Add Gaussian noise:
+            f_noisy[i][m] = f_syn[i][m] * (1 + Normal(0, σ_noise))
+
+--------------------------------------------------------------------
+4. Train encoder (photometry → latent)
+--------------------------------------------------------------------
+4.1. Prepare training data:
+        X_train = {f_noisy[i]}          // shape (n_aug × M)
+        Y_train = {Z_syn[i]}            // shape (n_aug × K)
+4.2. Use AutoML (e.g., AutoGluon) to fit an ensemble regressor R:
+        R = AutoML_regress(X_train → Y_train)
+
+--------------------------------------------------------------------
+5. Train taxonomic classifier (latent → class)
+--------------------------------------------------------------------
+5.1. Assign class labels C[j] to each real spectrum S_ref[j] (e.g., H₂O, CO₂, Organic, Methanol)
+5.2. Train AutoML classifier T on pairs (Z_real[j], C[j]):
+        T = AutoML_classify(Z_real → C)
+
+--------------------------------------------------------------------
+6. Inference for a new observation
+--------------------------------------------------------------------
+Input: Photometry_obs[1…P]  // may be subset of M filters
+
+6.1. Standardise input if needed (e.g., subtract mean, divide by std from training)
+6.2. Predict latent distribution:
+        Z_pred_mean, Z_pred_cov = R.predict_with_uncertainty(Photometry_obs)
+        // Returns mean vector (K) and covariance matrix (K×K)
+
+6.3. Construct Gaussian copula:
+        - Obtain marginal posteriors for each PC (e.g., from R)
+        - Fit correlation matrix from Z_pred_cov
+        - Sample N_samples draws Z_post from joint posterior via copula
+
+6.4. Decode spectra:
+        For each sample k = 1 … N_samples:
+            S_post[k] = μ_S + PC · Z_post[k]
+    Compute spectral covariance Cov_S from S_post
+
+6.5. Taxonomy probabilities:
+        For each sample k:
+            C_k = T.predict_proba(Z_post[k])      // vector of class probabilities
+        Average over samples:
+            TaxoProb = (1/N_samples) Σ_k C_k
+
+--------------------------------------------------------------------
+7. Post‑processing
+--------------------------------------------------------------------
+7.1. Report median spectrum: S_med = median(S_post, axis=0)
+7.2. Report 16th and 84th percentiles for credible interval
+7.3. Provide taxonomic probability vector TaxoProb
+
+--------------------------------------------------------------------
+End Algorithm

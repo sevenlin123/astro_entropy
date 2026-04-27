@@ -1,0 +1,53 @@
+Input:
+    - Reference spectra S_ref[1 … N]   // N ≈ 50 high‑resolution TNO spectra
+    - JWST NIRCam filter curves {F_j}   // j = 1 … M
+    - New object photometry p_new[1 … M]
+    - Number of principal components K   // e.g., 8–10
+    - KDE bandwidth h                      // e.g., 0.5
+
+Output:
+    - Reconstructed spectrum S_rec      // high‑resolution
+    - Taxonomy probabilities P_tax     // [P(H2O), P(CO₂), P(Organics), P(Methanol)]
+
+for i in 1…N:
+    s_norm[i] ← normalize(S_ref[i])          // e.g., unit area or mean‑zero
+
+[U, Λ, V] ← PCA(s_norm, keep = K)            // U: eigenvectors, Λ: eigenvalues
+
+for i in 1…N:
+    z_ref[i] ← (s_norm[i] – μ) · U              // μ is mean of s_norm
+
+KDE_model ← fit_KDE({z_ref[1], …, z_ref[N]}, bandwidth = h)
+
+num_aug ← 5000                                 // number of synthetic points
+for k in 1…num_aug:
+    z_syn[k] ← sample(KDE_model)                // draw from KDE
+
+for k in 1…num_aug:
+    s_syn[k] ← μ + z_syn[k] · U^T               // inverse PCA transform
+
+for k in 1…num_aug:
+    for j in 1…M:
+        p_syn[k][j] ← integrate( s_syn[k] * F_j ) / integrate( F_j )
+
+for k in 1…num_aug:
+    for j in 1…M:
+        σ ← 0.20 * p_syn[k][j]
+        p_noisy[k][j] ← p_syn[k][j] + Normal(0, σ)
+
+Train_X ← {p_noisy[1], …, p_noisy[num_aug]}       // M‑dimensional vectors
+Train_Y ← {z_syn[1], …, z_syn[num_aug]}           // K‑dimensional latent vectors
+
+Regressor ← AutoML_Train(Train_X, Train_Y)
+
+labels[i] ← taxonomy_label(S_ref[i])              // H₂O, CO₂, Organics, Methanol
+
+Classifier ← AutoML_Train(z_ref[1…N], labels[1…N])
+
+z_pred ← Regressor.predict(p_new)                 // returns mean vector
+
+S_rec ← μ + z_pred · U^T                           // high‑resolution spectrum
+
+P_tax ← Classifier.predict_proba(z_pred)
+
+return S_rec, P_tax

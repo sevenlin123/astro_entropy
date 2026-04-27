@@ -1,0 +1,89 @@
+INPUT:
+    - P = {p_k}   # set of objects (k = 1 … K)
+      Each object p_k contains:
+          • m_k[i]     : apparent magnitude measured in filter i (i = 1 … N_k)
+          • σ_k[i]     : measurement uncertainty (magnitude error)
+          • T_i(λ)     : transmission curve of filter i
+          • ZP         : photometric zero‑point (assumed same for all filters)
+
+    - λ_grid[ℓ]    : dense wavelength grid (ℓ = 1 … L) over which spectrum is desired
+
+    - Basis functions B_ℓ(λ)   # e.g., cubic B‑splines or orthogonal polynomials evaluated on λ_grid
+      (creates M basis components)
+
+OUTPUT:
+    - For every object p_k:
+          • μ_Rk[ℓ]  : posterior mean reflectance at λ_grid[ℓ]
+          • CI_Rk[ℓ] : 68 % credible interval (or any chosen percentile) at λ_grid[ℓ]
+          • (optional) full posterior samples of R_k(λ)
+
+----------------------------------------------------------------------
+PROCEDURE
+----------------------------------------------------------------------
+FOR each object k = 1 … K DO
+    ------------------------------------------------------------------
+    1. PREPROCESS MEASUREMENTS
+        --------------------------------------------
+        a. Convert magnitudes to linear fluxes:
+            f_k[i] = 10^( -0.4 * ( m_k[i] - ZP ) )
+        b. Store uncertainties in flux units:
+            σ_fk[i] = 0.4 * ln(10) * f_k[i] * σ_k[i]
+        c. Build diagonal covariance matrix:
+            Σ_k = diag( σ_fk[1]^2 , … , σ_fk[N_k]^2 )
+
+    ------------------------------------------------------------------
+    2. BUILD OBSERVATION MATRIX
+        --------------------------------------------
+        For each filter i:
+            Compute elementwise product of basis functions with the filter transmission:
+                w_i[ℓ] = B_ℓ( λ_grid[ℓ] ) * T_i( λ_grid[ℓ] )
+            Integrate over wavelength (numerical quadrature):
+                A_k[i, ℓ] = ∫ w_i[ℓ] dλ     (result: column vector over ℓ)
+
+    ------------------------------------------------------------------
+    3. DEFINE PRIOR ON SPECTRAL COEFFICIENTS
+        --------------------------------------------
+        • Choose a Gaussian process kernel k(λ, λ′) on λ_grid
+          (e.g., squared‑exponential with hyperparameters l, σ²)
+        • Evaluate kernel matrix K[ℓ, ℓ′] = k( λ_grid[ℓ], λ_grid[ℓ′] )
+        • Impose zero‑mean prior on coefficient vector θ_k ∈ ℝ^M:
+              θ_k ~ N( 0 , K )
+
+    ------------------------------------------------------------------
+    4. POSTERIOR INFERENCE (MAP or full Bayesian)
+        --------------------------------------------
+        a. Observation model in flux space:
+              f_k = A_k * θ_k   + ε_k      ,   ε_k ~ N(0, Σ_k)
+        b. Compute posterior precision:
+              Λ_k = A_kᵀ * Σ_k⁻¹ * A_k + K⁻¹
+        c. Compute posterior covariance:
+              Σ_post_k = inverse(Λ_k)
+        d. Compute posterior mean of coefficients:
+              μ_θk = Σ_post_k * A_kᵀ * Σ_k⁻¹ * f_k
+        (If full sampling is required, draw N_samp values from N( μ_θk , Σ_post_k ))
+
+    ------------------------------------------------------------------
+    5. RECONSTRUCT REFLECTANCE SPECTRUM
+        --------------------------------------------
+        a. Compute mean spectrum:
+              μ_Rk[ℓ] = Σ_{m=1}^{M} B_m( λ_grid[ℓ] ) * μ_θk[m]
+        b. If sampling was performed:
+              For each sample s:
+                  R_k^{(s)}[ℓ] = Σ_{m=1}^{M} B_m( λ_grid[ℓ] ) * θ_k^{(s)}[m]
+              Determine credible intervals (e.g., 16th & 84th percentiles) across samples
+              to obtain CI_Rk[ℓ]
+           Else (MAP only):
+              Approximate interval from diagonal of Σ_post_k mapped through basis:
+                  Var_Rk[ℓ] = Σ_{m,n} B_m(λ[ℓ]) * B_n(λ[ℓ]) * [Σ_post_k]_{mn}
+              Set CI_Rk[ℓ] = μ_Rk[ℓ] ± 1.96 * sqrt(Var_Rk[ℓ])
+
+    ------------------------------------------------------------------
+    6. STORE OUTPUT
+        --------------------------------------------
+        Save μ_Rk[ℓ] and CI_Rk[ℓ] (and optional samples) for object k.
+
+END FOR
+
+----------------------------------------------------------------------
+END OF ALGORITHM
+----------------------------------------------------------------------

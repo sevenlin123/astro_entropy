@@ -1,0 +1,72 @@
+INPUT: 
+    {S_j(λ)}  – set of calibrated spectra (j = 1…J)
+    {T_k(λ)}  – filter transmission curves (k = 1…K)
+
+STEP 1 – COMMON WAVELENGTH GRID
+    1.1 Determine λ_common ← union of all wavelengths in {S_j}
+    1.2 Resample every S_j to λ_common (interpolation or rebinning)
+
+STEP 2 – MEAN & DEVIATIONS
+    2.1 μ(λ) ← (1/J) * Σ_j S_j(λ)          // mean spectrum
+    2.2 Δ_j(λ) ← S_j(λ) – μ(λ)              // centered spectra
+
+STEP 3 – PRINCIPAL COMPONENT ANALYSIS
+    3.1 C ← (1/(J-1)) * Σ_j Δ_j(λ)ᵀ Δ_j(λ)   // covariance matrix
+    3.2 Eigen‑decompose: C = U Λ Uᵀ
+    3.3 PCs ← first N columns of U           // N ≈ 8–10
+    3.4 Var_i ← diagonal elements of Λ       // variances of each PC
+
+STEP 4 – COEFFICIENTS FOR TRAINING SPECTRA
+    4.1 For each j:
+          a_j[i] ← ⟨Δ_j , PC_i⟩   for i = 1…N
+    4.2 Store matrix A_train = [a_1 … a_J]ᵀ
+
+STEP 5 – PRIOR STATISTICS
+    5.1 Prior_mean_i ← 0                     // zero‑centered
+    5.2 Prior_cov_i ← Var_i                  // σ_i² from step 3.3
+
+OUTPUT: 
+    μ(λ), PCs[1…N](λ), Prior_mean[1…N], Prior_cov[1…N]
+
+INPUT:
+    f_obs[k]      – observed fluxes for filters k in K_obs
+    σ_f[k]        – measurement uncertainties
+    T_k(λ)        – transmission curves for k ∈ K_obs
+    μ(λ), PCs, Prior_mean, Prior_cov  (from training)
+
+STEP A – SYNTHETIC FLUX FUNCTIONS
+    For each filter k:
+        c_k0 ← ∫ μ(λ) * T_k(λ) dλ / ∫ T_k(λ) dλ
+        For i = 1…N:
+            c_ki ← ∫ PC_i(λ) * T_k(λ) dλ / ∫ T_k(λ) dλ
+    // Now synthetic flux for any coefficient vector a:
+    // g_k(a) = c_k0 + Σ_i a_i * c_ki
+
+STEP B – POSTERIOR CALCULATION (Gaussian case)
+    // Construct matrices
+    C_prior_inv ← diag( 1 / Prior_cov[i] )      // N×N
+    H ← [c_ki]ᵀ                                 // K_obs × N matrix
+    R ← diag( σ_f[k]² )                         // K_obs × K_obs
+
+    // Kalman‑style update
+    S ← Hᵀ * R⁻¹ * H + C_prior_inv              // N×N
+    μ_post ← S⁻¹ * ( Hᵀ * R⁻¹ * (f_obs - c_k0_vector) + C_prior_inv * Prior_mean )
+    Σ_post ← S⁻¹
+
+STEP C – SAMPLING FROM POSTERIOR
+    Repeat m = 1…M (e.g., M=1000):
+        a_m ← Draw from N( μ_post , Σ_post )
+        Store a_m
+
+STEP D – RECONSTRUCTED SPECTRA
+    For each sample m:
+        S_m(λ) ← μ(λ) + Σ_i a_m[i] * PC_i(λ)
+    Compute:
+        S_mean(λ)  ← (1/M) * Σ_m S_m(λ)
+        S_lower(λ) ← 2.5th percentile of {S_m(λ)} across m
+        S_upper(λ) ← 97.5th percentile of {S_m(λ)} across m
+
+OUTPUT:
+    Reconstructed spectrum S_mean(λ)
+    95 % credible band [S_lower(λ), S_upper(λ)]
+    Posterior samples {a_m}

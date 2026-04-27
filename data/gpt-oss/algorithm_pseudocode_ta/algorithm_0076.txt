@@ -1,0 +1,63 @@
+text
+INPUT
+    S      : matrix of N_training spectra (N_spectra × N_wave)
+    T_j(λ) : transmission curves for J photometric bands (j = 1…J)
+    y_obs  : observed photometry for a target TNO (vector of length J)
+    σ_y    : photometric uncertainties (vector of length J)
+    K      : number of principal components to keep  (K ≤ N_wave)
+
+OUTPUT
+    s_rec   : reconstructed full‑spectrum (vector of length N_wave)
+    s_var   : per‑wavelength variance of the reconstruction
+    c_post  : posterior mean of component coefficients (length K)
+    Σ_post  : posterior covariance of component coefficients (K×K)
+
+--------------------------------------------------------------------
+STEP 1 – Build Principal‑Component Basis
+--------------------------------------------------------------------
+1.1   mean_s   ← mean(S, axis=0)                      // average spectrum
+1.2   X        ← S  –  mean_s                           // centered data
+1.3   COV      ← (Xᵀ · X) / (N_spectra – 1)           // covariance matrix
+1.4   [U, D]   ← eig(COV)                              // eigen‑decomposition
+1.5   sort U,D descending by eigenvalue
+1.6   PC       ← U[:, 1:K]                             // first K eigenvectors
+1.7   λ        ← diag(D)[1:K]                          // corresponding variances
+
+--------------------------------------------------------------------
+STEP 2 – Pre‑compute Filter Response to Components
+--------------------------------------------------------------------
+For each band j = 1 … J:
+2.1   μ_j      ← ∑_λ mean_s(λ)  · T_j(λ) Δλ              // mean flux through band
+2.2   For i = 1 … K:
+        R_{j,i} ← ∑_λ PC_i(λ) · T_j(λ) Δλ            // component response
+
+Collect:
+    μ_vec   ← (μ_1,…,μ_J)ᵀ
+    R_mat   ← (R_{j,i})  (J × K matrix)
+
+--------------------------------------------------------------------
+STEP 3 – Bayesian Inference on Component Coefficients
+--------------------------------------------------------------------
+3.1   Prior on c:   c ∼ N(0, Λ)      where Λ = diag(λ)
+3.2   Likelihood:   y_obs ∼ N( μ_vec + R_mat·c , diag(σ_y²) )
+3.3   Define weight matrix:  W = diag(1/σ_y²)
+
+Posterior (Gaussian because model is linear):
+    Σ_post = ( Λ⁻¹  +  R_matᵀ · W · R_mat )⁻¹
+    c_post = Σ_post · ( R_matᵀ · W · (y_obs – μ_vec) )
+
+--------------------------------------------------------------------
+STEP 4 – Reconstruct Full Spectrum & Uncertainty
+--------------------------------------------------------------------
+4.1   s_rec  ← mean_s  +  PC · c_post                // mean reconstruction
+4.2   // Per‑wavelength variance from posterior:
+        // Var[s(λ)] = PC(λ) · Σ_post · PC(λ)ᵀ
+    For each wavelength λ:
+        s_var(λ) = PC(λ,:) · Σ_post · PC(λ,: )ᵀ
+
+--------------------------------------------------------------------
+RETURN
+    s_rec   – reconstructed spectrum
+    s_var   – reconstruction variance (uncertainty envelope)
+    c_post  – posterior mean coefficients
+    Σ_post  – posterior covariance of coefficients

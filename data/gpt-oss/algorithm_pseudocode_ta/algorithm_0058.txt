@@ -1,0 +1,84 @@
+INPUT
+    S_train[1…N][1…M]          # training spectra, M wavelengths
+    R_filter[1…K][1…M]         # filter transmission curves (K filters)
+    m_obs[1…K], sigma_m[1…K]   # observed magnitudes and their 1‑σ errors for target
+    L                           # number of principal components to retain
+
+OUTPUT
+    s_rec[1…M]                 # reconstructed spectrum
+    cred_low[1…M], cred_high[1…M]   # 95 % credible bounds per wavelength
+
+-------------------------------------------------------------
+1.  Pre‑processing of training spectra
+    ---------------------------------------------------------
+    1.1 Resample all spectra onto the same wavelength grid λ[1…M]
+    1.2 Compute mean spectrum
+           μ[1…M] = (1/N) * Σ_i S_train[i][:]
+    1.3 Center spectra
+           X[i][j] = S_train[i][j] – μ[j]   for i=1…N, j=1…M
+
+2.  Principal Component Analysis (PCA)
+    ---------------------------------------------------------
+    2.1 Compute covariance matrix
+           C = (1/(N–1)) * X^T * X         # M×M
+    2.2 Eigen‑decomposition
+           λ_eig[1…M], e_vec[1…M][1…M] = eig(C)
+    2.3 Sort eigenvalues descending, keep first L
+           λ_pc[1…L] = λ_eig[1…L]
+           E_pc[1…L][1…M] = e_vec[:, 1…L]   # PCs as rows
+    2.4 Store PCs so that a linear combination
+           coeff[l] * E_pc[l][:] adds to μ to form any spectrum.
+
+3.  Forward model: filter → PC coefficients
+    ---------------------------------------------------------
+    For each filter k = 1 … K
+        For each PC l = 1 … L
+            # Effective contribution of PC l in filter k
+            A[k][l] = ( Σ_j R_filter[k][j] * E_pc[l][j] ) /
+                       ( Σ_j R_filter[k][j] )
+        # Mean flux in filter k
+        μ_flux[k] = ( Σ_j R_filter[k][j] * μ[j] ) /
+                    ( Σ_j R_filter[k][j] )
+
+    # Convert observed magnitudes to fluxes (linearised)
+    For each k:
+        f_obs[k]      = flux_from_mag(m_obs[k])            # e.g. 10^(–0.4*m)
+        sigma_f[k]    = (ln 10 / 2.5) * f_obs[k] * sigma_m[k]
+        # Subtract mean flux
+        y[k]          = f_obs[k] – μ_flux[k]
+
+4.  Bayesian inference of PC coefficients
+    ---------------------------------------------------------
+    # Design matrix
+    A_mat = A          # K × L
+    # Weight matrix
+    W = diag( 1 / sigma_f^2 )          # K × K
+    # Prior covariance (diagonal, based on eigenvalues)
+    Lambda_inv = diag( 1 / λ_pc )      # L × L
+
+    # Posterior covariance
+    Sigma_c = inverse( A_mat^T * W * A_mat + Lambda_inv )     # L × L
+
+    # Posterior mean
+    c_mean = Sigma_c * ( A_mat^T * W * y )                     # L × 1
+
+5.  Spectral reconstruction
+    ---------------------------------------------------------
+    For each wavelength j = 1 … M
+        # Reconstruct deterministic part
+        s_rec[j] = μ[j] + Σ_l c_mean[l] * E_pc[l][j]
+
+        # Variance propagated from PC uncertainties
+        var_j = Σ_l Σ_m Sigma_c[l][m] * E_pc[l][j] * E_pc[m][j]
+        std_j = sqrt( var_j )
+        cred_low[j]  = s_rec[j] – 1.96 * std_j
+        cred_high[j] = s_rec[j] + 1.96 * std_j
+
+6.  Optional: Monte‑Carlo sampling of posterior
+    ---------------------------------------------------------
+    Draw N_samp samples of coefficient vector c_samp ~ N(c_mean, Sigma_c)
+    For each sample, reconstruct full spectrum s_samp[j] = μ[j] + Σ_l c_samp[l]*E_pc[l][j]
+    Use the ensemble to estimate full posterior distribution if desired.
+
+RETURN
+    s_rec[1…M], cred_low[1…M], cred_high[1…M]

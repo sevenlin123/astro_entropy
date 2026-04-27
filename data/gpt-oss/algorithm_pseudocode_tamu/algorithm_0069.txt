@@ -1,0 +1,115 @@
+// -------------------------------------------------------------
+// 1. TRAINING PHASE
+// -------------------------------------------------------------
+
+// 1.1 Load Reference Spectra
+S_ref = load_high_res_spectra()              // N_ref × N_lambda array
+labels = load_taxonomic_labels()             // N_ref array
+
+// 1.2 Build Latent Manifold (Prior)
+//    a) Perform PCA
+[U, Σ, V] = PCA(S_ref, n_components = K)     // K ≤ 10
+S_mean   = mean(S_ref, axis=0)                // 1 × N_lambda
+S_std    = std(S_ref, axis=0)                 // 1 × N_lambda
+S_norm   = (S_ref - S_mean) / S_std           // N_ref × N_lambda
+
+//    b) Project onto PCs to get latent vectors
+Z_real = S_norm @ U[:, :K]                    // N_ref × K
+
+//    c) Kernel Density Estimate (KDE) on latent space
+kde = KDE(Z_real, bandwidth = h)              // h ≈ 0.5
+
+//    d) Sample synthetic latent vectors
+Z_synth = kde.sample(N_synth)                // N_synth × K
+
+//    e) Reconstruct synthetic spectra
+S_synth_norm = Z_synth @ U[:, :K].T           // N_synth × N_lambda
+S_synth      = S_synth_norm * S_std + S_mean // scale back
+
+// 1.3 Forward‑model photometry
+filters = load_filter_curves()                // list of (wavelength, throughput)
+def synth_photometry(S):
+    // Convolve S with each filter throughput
+    m = []
+    for filt in filters:
+        m.append( integrate( S * filt.thru, filt.wavelength ) )
+    return np.array(m)
+
+M_synth = synth_photometry(S_synth)          // N_synth × N_filters
+
+// 1.4 Add realistic photometric noise
+noise_level = 0.20                            // 20% relative uncertainty
+M_noisy   = M_synth + np.random.normal(0, noise_level * M_synth)
+
+// 1.5 Prepare training data for encoder
+X_train = M_noisy                             // N_synth × N_filters  (input)
+Y_train = Z_synth                              // N_synth × K          (target)
+
+// 1.6 Train Encoder (AutoML regressor)
+//    AutoML selects best ensemble (e.g., XGBoost, RandomForest, NN)
+encoder = AutoML_Regression(X_train, Y_train)
+
+// 1.7 Train Classifier in latent space
+classifier = AutoML_Classification(Z_real, labels)
+
+// -------------------------------------------------------------
+// 2. INFERENCE PHASE
+// -------------------------------------------------------------
+
+function reconstruct_spectrum(M_obs):
+    // ---------------------------------------------------------
+    // 2.1 Encode observed photometry to latent mean
+    // ---------------------------------------------------------
+    z_mean = encoder.predict(M_obs)             // 1 × K vector
+
+    // 2.2 Estimate latent covariance (optional – use ensemble spread)
+    z_cov  = encoder.predict_covariance(M_obs)  // K × K matrix
+    // if not available, approximate from global latent variance
+
+    // ---------------------------------------------------------
+    // 2.3 Sample from latent posterior using Gaussian copula
+    // ---------------------------------------------------------
+    n_samples = 1000
+    samples_Z = sample_gaussian_copula(z_mean, z_cov, n_samples)
+
+    // ---------------------------------------------------------
+    // 2.4 Decode each latent sample to full spectrum
+    // ---------------------------------------------------------
+    spectra = []
+    for z in samples_Z:
+        s_norm = z @ U[:, :K].T                  // 1 × N_lambda
+        s_full = s_norm * S_std + S_mean         // 1 × N_lambda
+        spectra.append(s_full)
+    spectra = np.array(spectra)                   // n_samples × N_lambda
+
+    // ---------------------------------------------------------
+    // 2.5 Compute summary statistics
+    // ---------------------------------------------------------
+    spec_mean   = np.mean(spectra, axis=0)
+    spec_std    = np.std(spectra, axis=0)
+    spec_ci_68  = np.percentile(spectra, [16, 84], axis=0)
+    spec_ci_95  = np.percentile(spectra, [2.5, 97.5], axis=0)
+
+    // ---------------------------------------------------------
+    // 2.6 Predict taxonomy probabilities
+    // ---------------------------------------------------------
+    tax_probs = classifier.predict_proba(z_mean) // array of probabilities
+
+    return {
+        "mean_spectrum": spec_mean,
+        "uncertainty_std": spec_std,
+        "ci_68": spec_ci_68,
+        "ci_95": spec_ci_95,
+        "taxonomy_probabilities": tax_probs
+    }
+
+// -------------------------------------------------------------
+// 3. UTILITIES
+// -------------------------------------------------------------
+
+function sample_gaussian_copula(mean_vec, cov_mat, N):
+    // Draw N multivariate normal samples
+    samples = np.random.multivariate_normal(mean_vec, cov_mat, size=N)
+    // Transform to uniform via CDF (if needed) and back via inverse marginal
+    // For simplicity, assume marginal distributions are normal → return samples
+    return samples

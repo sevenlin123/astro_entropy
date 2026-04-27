@@ -1,0 +1,78 @@
+INPUT:
+    S_all      – matrix of N_s spectral samples (rows = spectra, columns = wavelength points)
+    Φ          – list of filter transmission curves (each Φ_f(λ))
+    y_obs      – observed photometric fluxes for a target TNO (vector length N_f)
+    σ_obs      – observational uncertainties for y_obs (vector length N_f)
+    K          – number of principal components to retain (default 8–10)
+
+OUTPUT:
+    μ_spec     – reconstructed mean spectrum (vector length N_λ)
+    Σ_spec     – covariance matrix of spectral reconstruction (N_λ × N_λ)
+    Posterior  – posterior distribution over PC coefficients (mean μ_pc, covariance Σ_pc)
+
+--------------------------------------------------------------------
+1.  Principal‑Component Model Training
+--------------------------------------------------------------------
+   1.1  Compute mean spectrum:
+           μ_bar = (1/N_s) * Σ_{i=1}^{N_s} S_all[i,:]
+
+   1.2  Center spectra:
+           X_centered = S_all - μ_bar   (broadcast subtraction)
+
+   1.3  Perform Singular Value Decomposition (SVD):
+           [U, Σ, V^T] = svd(X_centered / sqrt(N_s-1))   // rows → PCs
+
+   1.4  Select first K PCs:
+           PC_matrix = V^T[0:K, :]        // shape K × N_λ
+
+   1.5  Compute training PC coefficients:
+           C_train = X_centered @ PC_matrix^T   // shape N_s × K
+
+   1.6  Estimate prior for PC coefficients:
+           μ_prior = zeros(K)
+           Σ_prior = diag(var(C_train, axis=0))   // variances of each PC
+
+--------------------------------------------------------------------
+2.  Forward Photometric Model
+--------------------------------------------------------------------
+   2.1  For each filter f in {1,…,N_f}, pre‑compute basis vectors:
+           B_f = Σ_{λ} Φ_f(λ) * PC_matrix[:, λ]      // vector length K
+           M_f = Σ_{λ} Φ_f(λ) * μ_bar[λ]             // scalar (mean flux in filter)
+
+   2.2  Assemble design matrix B (N_f × K) where row f = B_f
+   2.3  Assemble mean vector m (length N_f) where m[f] = M_f
+
+--------------------------------------------------------------------
+3.  Bayesian Linear Regression (Gaussian Likelihood & Prior)
+--------------------------------------------------------------------
+   3.1  Define observation noise covariance:
+           Σ_noise = diag(σ_obs^2)   // N_f × N_f
+
+   3.2  Compute posterior covariance of PC coefficients:
+           Σ_post = inv( inv(Σ_prior) + B^T @ inv(Σ_noise) @ B )   // K × K
+
+   3.3  Compute posterior mean of PC coefficients:
+           μ_post = Σ_post @ ( inv(Σ_prior) @ μ_prior + 
+                               B^T @ inv(Σ_noise) @ (y_obs - m) )   // K
+
+--------------------------------------------------------------------
+4.  Spectrum Reconstruction
+--------------------------------------------------------------------
+   4.1  Expected spectrum (posterior predictive mean):
+           μ_spec = μ_bar + μ_post^T @ PC_matrix      // shape N_λ
+
+   4.2  Spectral covariance (propagate PC uncertainty):
+           Σ_spec = PC_matrix^T @ Σ_post @ PC_matrix   // N_λ × N_λ
+
+--------------------------------------------------------------------
+5.  Optional Sampling (for credible intervals)
+--------------------------------------------------------------------
+   5.1  Draw L samples of PC coefficients from N(μ_post, Σ_post)
+   5.2  For each sample k:
+           s_k = μ_bar + c_k^T @ PC_matrix
+   5.3  Use ensemble {s_k} to estimate percentiles at each wavelength.
+
+--------------------------------------------------------------------
+6.  Return Results
+--------------------------------------------------------------------
+   Output μ_spec, Σ_spec, μ_post, Σ_post (Posterior).

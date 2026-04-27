@@ -1,0 +1,51 @@
+Input:
+    - Photometric measurements {F_i, σ_i},  i = 1 … N_filters
+    - Filter transmission curves {T_i(λ)},           i = 1 … N_filters
+    - Spectral template library {S_j(λ)},           j = 1 … N_templates
+    - Prior covariance matrix for template weights C_prior  (N_templates × N_templates)
+
+Output:
+    - Reconstructed reflectance spectrum R(λ)  (vector over λ grid)
+    - Uncertainty spectrum Var_R(λ)           (same grid)
+    - Posterior mean of template weights w̄     (length N_templates)
+    - Posterior covariance of weights Σ_w     (N_templates × N_templates)
+
+Procedure:
+
+1. // Build the forward model matrix A
+   For each filter i = 1 to N_filters:
+       For each template j = 1 to N_templates:
+           A[i, j] = ∫ S_j(λ) * T_i(λ) dλ   /   ∫ T_i(λ) dλ
+   // A is N_filters × N_templates
+
+2. // Assemble measurement vector and noise covariance
+   y      ← [F_1, F_2, …, F_N_filters]^T
+   Σ_y    ← diag(σ_1², σ_2², …, σ_N_filters²)    // measurement noise covariance
+
+3. // Bayesian linear‑regression update
+   // Compute precision matrices
+   Λ_y   ← Σ_y⁻¹                       // inverse of measurement noise
+   Λ_p   ← C_prior⁻¹                  // inverse of prior covariance
+
+   // Posterior covariance of weights
+   Σ_w ← ( Aᵀ Λ_y A + Λ_p )⁻¹
+
+   // Posterior mean of weights
+   w̄ ← Σ_w  * ( Aᵀ Λ_y y )
+
+4. // Construct the reconstructed spectrum
+   // Choose a dense wavelength grid {λ_k}, k = 1 … N_λ
+   For each wavelength λ_k:
+       R(λ_k) ← Σ_{j=1}^{N_templates}  w̄_j  * S_j(λ_k)
+
+5. // Propagate weight uncertainty to spectrum uncertainty
+   For each wavelength λ_k:
+       Var_R(λ_k) ← Σ_{j=1}^{N_templates}
+                      Σ_{k=1}^{N_templates}
+                         Σ_w[j, k] * S_j(λ_k) * S_k(λ_k)
+
+6. // (Optional) Predictive photometry for consistency check
+   For each filter i:
+       F_pred_i ← Σ_{j=1}^{N_templates}  w̄_j  * A[i, j]
+
+Return R(λ), Var_R(λ), w̄, Σ_w

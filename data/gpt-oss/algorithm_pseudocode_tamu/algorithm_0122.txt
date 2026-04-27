@@ -1,0 +1,104 @@
+INPUT
+    S_real   – set of N_true high‑resolution TNO spectra (λ × 1)
+    filt_curves – transmission curves for M photometric filters
+    K         – number of retained PCA components (e.g. 8–10)
+    h         – KDE bandwidth (≈0.5)
+
+OUTPUT
+    For any new photometric vector m_obs (M×1):
+        - Posterior samples {S_i} (full spectra)
+        - Posterior mean spectrum μ_S
+        - Credible interval per wavelength
+        - Taxonomic class probabilities p(Class)
+
+--------------------------------------------------------------------
+# 1. Prepare Reference Spectra
+--------------------------------------------------------------------
+# 1.1 Normalize each spectrum (reflectance division by solar spectrum)
+for each spectrum s in S_real:
+    s_norm = normalize_by_solar(s)
+
+# 1.2 Interpolate all spectra onto common λ grid
+λ_grid = common_wavelength_grid()
+S_interp = interpolate_to_grid(S_real_norm, λ_grid)
+
+# 1.3 Compute PCA basis
+U, Σ, Vt = PCA(S_interp, n_components=K)            # U: λ×K, Vt: K×N
+#   - Each column of U is a principal component (PC)
+#   - Each spectrum is represented by latent vector z = Uᵀ · s
+
+# 1.4 Project training spectra to latent space
+Z_real = [Uᵀ · s for s in S_interp]                  # shape: K × N
+
+--------------------------------------------------------------------
+# 2. Augment Latent Distribution (KDE)
+--------------------------------------------------------------------
+# 2.1 Fit Gaussian KDE to Z_real
+kde = KDE(Z_real, bandwidth=h)
+
+# 2.2 Sample synthetic latent vectors
+N_aug = 5000                    # number of synthetic points
+Z_aug = kde.sample(N_aug)       # shape: K × N_aug
+
+# 2.3 Build full latent set (real + synthetic)
+Z_all = concatenate([Z_real, Z_aug])      # K × (N+N_aug)
+
+--------------------------------------------------------------------
+# 3. Generate Synthetic Photometry
+--------------------------------------------------------------------
+# 3.1 Decode latent vectors back to spectra
+S_all = [U · z for z in Z_all]          # λ × (N+N_aug)
+
+# 3.2 Forward‑model photometry for each spectrum
+def forward_photometry(spectrum, filt_curves):
+    # Convolve spectrum with each filter transmission
+    return [integrate(spectrum * filt) / integrate(filt) for filt in filt_curves]
+
+M_all = [forward_photometry(s, filt_curves) for s in S_all]   # M × (N+N_aug)
+
+# 3.3 Inject Gaussian noise (relative 20%)
+for i in range(M_all.shape[1]):
+    M_all[:,i] += normal(mean=0, std=0.20 * M_all[:,i])
+
+--------------------------------------------------------------------
+# 4. Train Encoder (Regressor)
+--------------------------------------------------------------------
+# 4.1 Prepare training data
+X_train = M_all.T                      # (N+N_aug) × M   (photometry)
+Y_train = Z_all.T                      # (N+N_aug) × K   (latent targets)
+
+# 4.2 AutoML regressor (e.g., XGBoost + neural nets ensemble)
+regressor = AutoML_Regressor()
+regressor.train(X_train, Y_train)
+
+--------------------------------------------------------------------
+# 5. Train Classifier (Optional)
+--------------------------------------------------------------------
+# 5.1 Labels for real spectra only
+labels = [class_of(s) for s in S_real]   # length N
+
+# 5.2 Train classifier on latent coordinates of real spectra
+classifier = AutoML_Classifier()
+classifier.train(Z_real.T, labels)
+
+--------------------------------------------------------------------
+# 6. Forward Inference Function
+--------------------------------------------------------------------
+function infer(m_obs):
+    # 6.1 Predict latent coefficient distribution
+    z_mean, z_cov = regressor.predict_with_uncertainty(m_obs)   # mean & covariance
+
+    # 6.2 Sample latent vectors via Gaussian Copula
+    samples_z = gaussian_copula_sample(z_mean, z_cov, n_samples=1000)
+
+    # 6.3 Decode each sample to full spectrum
+    samples_S = [U · z for z in samples_z]      # list of λ arrays
+
+    # 6.4 Compute posterior statistics
+    μ_S = mean(samples_S, axis=0)               # mean spectrum
+    ci_low, ci_high = percentile(samples_S, [2.5, 97.5], axis=0)
+
+    # 6.5 Taxonomic probabilities
+    prob_cls = classifier.predict_proba(z_mean)
+
+    return μ_S, (ci_low, ci_high), prob_cls

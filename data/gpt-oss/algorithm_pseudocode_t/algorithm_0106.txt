@@ -1,0 +1,56 @@
+Input:
+    P = { (f_j , m_j , σ_j) }          // j = 1 … J: filter name, observed magnitude, error
+    T = { T_i(λ) }                    // i = 1 … K: spectral templates (e.g., taxonomic classes)
+    R = { R_fj(λ) }                   // f = 1 … J: filter transmission curves
+    zp_fj                            // zero‑points for each filter
+    N_iter                           // number of MCMC iterations
+    N_burn                            // burn‑in length
+
+Pre‑computation:
+    For each template i:
+        For each filter j:
+            // Synthetic magnitude of template i through filter j
+            S_ij = ∫ T_i(λ) * R_fj(λ) * λ dλ
+            B_j  = ∫ R_fj(λ) * λ dλ
+            mag_ij = –2.5 * log10( S_ij / B_j ) + zp_fj
+
+Model definition:
+    Spectrum S(λ) = Σ_{i=1}^K w_i * T_i(λ)           // w_i ≥ 0, Σ w_i = 1
+    Prior on weights:   w ~ Dirichlet(α)              // α can be all ones (uninformative)
+
+Likelihood for a single filter j:
+    Model magnitude m_mod_j = –2.5 * log10( Σ_i w_i * S_ij / B_j ) + zp_fj
+    Likelihood factor L_j = Normal( m_j | m_mod_j , σ_j )
+
+Full posterior:
+    Posterior(w) ∝ Dirichlet_prior(w) × ∏_{j=1}^J L_j
+
+MCMC Sampling (Metropolis–Hastings):
+    1. Initialise w^(0) ← Dirichlet(α)
+    2. For t = 1 … N_iter:
+         a. Propose w* from Dirichlet(α*) centred on w^(t‑1)
+             (e.g., draw Δw from symmetric proposal, enforce Σ=1 and w≥0)
+         b. Compute log‑posterior for current and proposed weights:
+                logp_cur = log Dirichlet_prior(w^(t‑1)) + Σ_j log L_j(w^(t‑1))
+                logp_prop= log Dirichlet_prior(w*)      + Σ_j log L_j(w*)
+         c. Acceptance probability:
+                a = min(1 , exp(logp_prop – logp_cur))
+         d. Draw u ~ Uniform(0,1)
+                if u < a then w^(t) ← w*
+                else          w^(t) ← w^(t‑1)
+    3. Discard first N_burn samples; keep remaining as posterior draws.
+
+Post‑processing:
+    a. Estimate posterior mean weights:  w̄_i = average of retained w_i samples
+    b. Compute posterior standard deviations: σ_wi = std dev of w_i samples
+    c. Reconstructed spectrum:
+           S_rec(λ) = Σ_i w̄_i * T_i(λ)
+    d. Taxonomic assignment:
+           i_max = argmax_i w̄_i
+           if w̄_{i_max} > τ  (τ e.g., 0.7) then class = Class_{i_max}
+           else class = “Mixed/Uncertain”
+
+Output:
+    - Posterior mean weights {w̄_i} and uncertainties {σ_wi}
+    - Reconstructed spectral energy distribution S_rec(λ)
+    - Taxonomic classification (class, probability)

@@ -1,0 +1,74 @@
+FOR each observation i=1..N DO
+    Convert magnitude to relative flux:
+        F_i = 10^(-0.4*m_i)          # arbitrary normalization
+    Record measurement error on flux:
+        ε_i = ln(10)/2.5 * σ_i * F_i
+END FOR
+
+# Predicted flux for observation i
+f_pred(i) = EXP(m0) * Σ_{k=1..K} a_k * R_{ik}
+
+# Where R_{ik} is the integral of basis k through filter f_i:
+R_{ik} = ∫ S_k(λ) * T_{f_i}(λ) dλ   # pre‑compute for all i,k
+
+logL(a, m0) = Σ_{i=1..N} [ -0.5*(F_i - f_pred(i))^2 / ε_i^2
+                          - log(ε_i√(2π)) ]
+
+# Zero‑mean Gaussian priors on coefficients
+logP_a = Σ_{k=1..K} [ -0.5*a_k^2 / σ_a^2 - 0.5*log(2πσ_a^2) ]
+
+# Broad uniform prior on intercept m0 (or Gaussian if desired)
+logP_m0 = constant
+
+logPosterior(a, m0) = logL(a, m0) + logP_a + logP_m0
+
+Initialize a^(0), m0^(0) randomly
+Set step size ε, number of leapfrog steps L, mass matrix M
+
+FOR iteration = 1 .. N_iter DO
+    # 6.1 Sample momentum variables
+    p ~ Normal(0, M)
+
+    # 6.2 Simulate Hamiltonian dynamics
+    (a', m0', p') = Leapfrog(a^(iter-1), m0^(iter-1), p, ε, L)
+
+    # 6.3 Metropolis accept/reject
+    ΔH = [H(a', m0', p') - H(a^(iter-1), m0^(iter-1), p)]
+    IF log(U(0,1)) < -ΔH THEN
+        a^(iter) = a'
+        m0^(iter) = m0'
+    ELSE
+        a^(iter) = a^(iter-1)
+        m0^(iter) = m0^(iter-1)
+    END IF
+END FOR
+
+FUNCTION Leapfrog(a, m0, p, ε, L):
+    # Half step for momentum
+    p = p - 0.5*ε*∇_{a,m0} logPosterior(a, m0)
+
+    FOR l = 1 .. L DO
+        # Full step for position
+        a = a + ε * M^{-1} * p_a
+        m0 = m0 + ε * M^{-1} * p_m0
+
+        # Full step for momentum except last iteration
+        IF l ≠ L THEN
+            p = p - ε*∇_{a,m0} logPosterior(a, m0)
+        END IF
+    END FOR
+
+    # Final half step for momentum
+    p = p - 0.5*ε*∇_{a,m0} logPosterior(a, m0)
+
+    RETURN (a, m0, p)
+END FUNCTION
+
+Discard burn‑in iterations, keep remaining samples {a^(s)}_{s=1}^{N_samp}
+
+# Posterior mean spectrum
+FOR each wavelength λ DO
+    S_hat(λ) = (1/N_samp) * Σ_{s=1}^{N_samp} Σ_{k=1..K} a_k^(s) * S_k(λ)
+END FOR
+
+RETURN {a^(s)}, S_hat(λ)

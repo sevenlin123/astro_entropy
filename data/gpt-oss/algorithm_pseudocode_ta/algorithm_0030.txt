@@ -1,0 +1,46 @@
+Compute mean spectrum μ_S = mean(S, axis=0)          # shape: (N_wave,)
+Center spectra:   S_centered = S - μ_S
+
+Compute covariance matrix: C = (S_centered.T @ S_centered) / (N_spec - 1)
+Eigen-decompose:  [eigvals, eigvecs] = eig(C)        # eigvecs columns are PCs
+Sort eigenvalues descending; keep first K PCs:
+    PCs = eigvecs[:, 0:K]                            # shape: (N_wave, K)
+    pc_variances = eigvals[0:K]
+
+# Assume coefficients are independent Gaussians with zero mean
+prior_mean_c = zeros(K)
+prior_cov_c   = diag(pc_variances)                    # shape: (K, K)
+
+# Integrate model spectrum over filter transmission
+model_flux_f(c) = ∫ [ μ_S(λ) + PCs(λ,:) · c ] * F_f(λ) dλ
+
+A_f = ∫ [ PCs(λ,:) ] * F_f(λ) dλ      # shape: (K,)   (vector per filter)
+b_f = ∫ μ_S(λ) * F_f(λ) dλ            # scalar per filter
+
+A = stack(A_f for f in 1..N_filter)   # shape: (N_filter, K)
+b = [b_f for f in 1..N_filter]       # shape: (N_filter,)
+
+L(p_spec | c) ∝ exp(-0.5 * (p_spec - m(c))^T @ Σ_err^-1 @ (p_spec - m(c)))
+where Σ_err = diag(σ_spec^2)
+
+Posterior covariance:
+   Σ_c_post = inverse( A.T @ Σ_err^-1 @ A + inverse(prior_cov_c) )
+
+Posterior mean:
+   μ_c_post = Σ_c_post @ ( A.T @ Σ_err^-1 @ (p_spec - b) + inverse(prior_cov_c) @ prior_mean_c )
+
+Reconstructed spectrum:
+   ŝ(λ) = μ_S(λ) + PCs(λ,:) @ μ_c_post          # shape: (N_wave,)
+
+Spectral uncertainty (per wavelength):
+   σ_s(λ)^2 =  PCs(λ,:) @ Σ_c_post @ PCs(λ,:).T   # shape: (N_wave,)
+   σ_s(λ) = sqrt(σ_s(λ)^2)
+
+1. Center training spectra and perform PCA → PCs, variances.
+2. Set Gaussian prior on PC coefficients from variances.
+3. Project filter transmissions onto PCs → matrices A, b.
+4. For each new object:
+     a. Evaluate likelihood of photometry given coeffs.
+     b. Compute Gaussian posterior (mean, covariance).
+     c. Reconstruct spectrum and its uncertainty.
+5. Output posterior stats and reconstructed spectrum.

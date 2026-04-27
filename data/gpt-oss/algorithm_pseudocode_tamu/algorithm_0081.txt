@@ -1,0 +1,89 @@
+INPUT:
+    S_ref   ← matrix of N_ref reference spectra  
+              (rows = spectra, columns = λ_i wavelengths)
+    F_resp  ← set of filter response functions {R_f(λ)} for all photometric bands
+    C_true  ← known taxonomy labels for the N_ref spectra
+    h_KDE   ← bandwidth for KDE (≈0.5 recommended)
+    K_pc    ← number of principal components to retain (4–10)
+    M_aug   ← number of KDE‑sampled latent vectors to generate (≈10 000)
+    N_samp  ← number of posterior samples per inference (≈500)
+
+2.1  Center spectra:
+      μ_S  ← mean(S_ref, axis=0)                // mean spectrum
+      S_c  ← S_ref – μ_S
+
+2.2  Principal Component Analysis:
+      [U, Λ] ← eigendecompose( Cov(S_c) )
+      V_pc   ← first K_pc columns of U          // principal eigenvectors
+      Z_true ← S_c × V_pc                       // latent coordinates for real spectra
+
+2.3  Kernel Density Estimation in latent space:
+      KDE_prior ← fit_gaussian_kde(Z_true, bandwidth=h_KDE)
+
+2.4  Sample synthetic latent vectors:
+      Z_synth ← KDE_prior.sample(M_aug)        // shape (M_aug, K_pc)
+
+2.5  Reconstruct synthetic spectra:
+      S_synth ← Z_synth × V_pcᵀ  + μ_S          // shape (M_aug, n_λ)
+
+FOR each synthetic spectrum s in S_synth:
+      3.1  FOR each filter f in F_resp:
+              m_f   ← ∫ s(λ) · R_f(λ) dλ       // convolution → modelled reflectance
+          END
+      3.2  m_syn   ← vector of m_f over all filters
+      3.3  Add Gaussian noise:
+              σ_noise = 0.20 · m_syn           // 20 % relative uncertainty
+              m_noisy = m_syn + Normal(0, σ_noise)
+      3.4  Store training example (m_noisy, Z_synth)  
+END
+
+4.1  X_train ← matrix of all noisy photometry examples
+      Y_train ← corresponding latent coefficient vectors
+
+4.2  Encoder ← AutoML_Regressor()            // e.g. AutoGluon ensemble of GBDTs
+4.3  Encoder.fit(X_train, Y_train)           // learns P(latent | photometry)
+
+5.1  X_cls   ← Z_true                        // latent coordinates of real spectra
+     y_cls   ← C_true                         // taxonomy labels
+
+5.2  Classifier ← AutoML_Classifier()
+5.3  Classifier.fit(X_cls, y_cls)            // learns P(class | latent)
+
+6.1  // Encode photometry → posterior over latent space
+      μ_hat, Σ_hat ← Encoder.predict_distribution(m_obs)
+      // Encoder may return predictive mean and covariance
+      // If only mean is returned, assume diagonal covariance from model output.
+
+6.2  // Draw posterior samples in latent space (Gaussian copula if desired)
+      FOR i = 1 … N_samp:
+            z_i ← multivariate_normal_sample(μ_hat, Σ_hat)
+      END
+      Z_post ← {z_1, …, z_N_samp}
+
+6.3  // Decode samples → reconstructed spectra
+      FOR each z in Z_post:
+            s_i ← z × V_pcᵀ  + μ_S
+      END
+      S_recon_set ← {s_1, …, s_N_samp}
+
+6.4  // Summarise reconstructed spectrum
+      S_median ← median(S_recon_set, axis=0)
+      S_CI_low ← percentile(S_recon_set, 2.5, axis=0)
+      S_CI_high← percentile(S_recon_set, 97.5, axis=0)
+
+6.5  // Taxonomy prediction (if classifier trained)
+      // Option A: use mean latent vector
+      class_probs_mean ← Classifier.predict_proba(μ_hat)
+
+      // Option B: average over posterior samples
+      class_probs_samples ← []
+      FOR z in Z_post:
+            p_z ← Classifier.predict_proba(z)
+            class_probs_samples.append(p_z)
+      END
+      class_probs_mean ← mean(class_probs_samples, axis=0)
+
+OUTPUT:
+      • S_median      : median reconstructed reflectance spectrum
+      • S_CI_low, S_CI_high : 95 % credible interval per wavelength
+      • class_probs_mean  : probability vector over taxonomy classes

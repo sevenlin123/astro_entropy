@@ -1,0 +1,62 @@
+pseudocode
+/* ---------- 1. Prepare Training Dataset ---------- */
+Load observed spectra S_real[1…N]   // each spectrum: reflectance vs. wavelength
+For each spectrum s in S_real:
+    Normalize and resample to common wavelength grid λ_grid
+EndFor
+
+/* ---------- 2. Build Latent Manifold ---------- */
+# 2.1 Principal Component Analysis
+Compute mean spectrum μ_S = mean(S_real)
+Center spectra: X = [s – μ_S for s in S_real]
+Apply PCA to X → eigenvectors V[1…K], eigenvalues Λ[1…K]
+Project each spectrum onto PCs: z_real[i] = Vᵀ · (S_real[i] – μ_S)
+
+/* 2.2 Kernel Density Augmentation */
+Choose KDE bandwidth h (e.g., 0.5)
+Create KDE density p(z) over latent space from {z_real}
+Sample M synthetic latent vectors {z_syn[j]} from p(z)   // M ≫ N
+
+/* 2.3 Generate Synthetic Spectra */
+For each z in {z_real} ∪ {z_syn}:
+    Reconstruct spectrum: S_hat = μ_S + V · z
+    Store (z, S_hat)
+EndFor
+
+/* ---------- 3. Forward‑Model Photometry ---------- */
+For each synthetic spectrum S_hat:
+    For each photometric filter f in FilterSet:
+        Compute ideal photometric measurement m_f = ∫ S_hat(λ) * T_f(λ) dλ
+    EndFor
+    Add Gaussian noise to each m_f with σ_rel = 0.20  // 20 % relative uncertainty
+    Store (z, m_vector)
+EndFor
+
+/* ---------- 4. Train Machine‑Learning Models ---------- */
+/* 4.1 Encoder: Photometry → Latent Coefficients */
+Train AutoML regressor R_encoder on pairs (m_vector, z)
+
+/* 4.2 Classifier: Latent Coefficients → Taxonomy */
+Train AutoML classifier C_tax on pairs (z, label)
+
+/* ---------- 5. Inference Pipeline (per new object) ---------- */
+Input: observed photometry m_obs[1…F] with uncertainties σ_obs[1…F]
+
+5.1 Predict latent coefficient distribution:
+    Use R_encoder to predict mean μ_z and covariance Σ_z of latent vector
+    // Optional: use prediction intervals to form marginal posteriors
+
+5.2 Sample posterior of latent vector:
+    Draw L samples {z_l} from multivariate normal N(μ_z, Σ_z)
+    Optionally apply Gaussian copula to preserve inter‑component correlations
+
+5.3 Reconstruct spectra:
+    For each sampled z_l:
+        S_l = μ_S + V · z_l
+    EndFor
+    Aggregate samples {S_l} to obtain mean spectrum Ŝ and confidence bands
+
+5.4 Taxonomic probabilities:
+    Pass μ_z (or each z_l) to C_tax to obtain class probabilities P_class
+
+Return: reconstructed spectrum Ŝ ± confidence, class probabilities P_class

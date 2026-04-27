@@ -1,0 +1,64 @@
+INPUT:
+    - P = { (λ_i, m_i, σ_mi) | i = 1 … N }   // Photometry: filter λ, magnitude m, mag error σ_m
+    - S_⊙(λ)                                 // Solar reference spectrum
+    - R(λ)                                    // System throughput (filter response)
+    - B = { b_k(λ) | k = 1 … K }              // Basis spectra (e.g., PCA components)
+
+OUTPUT:
+    - Ŝ(λ): Posterior‑mean reconstructed reflectance spectrum
+    - Σ̂(λ, λ'): Uncertainty covariance of Ŝ
+    - C = { c_k }                            // Posterior mean of basis coefficients
+
+ALGORITHM:
+
+1. **Convert magnitudes to relative fluxes**
+   For each measurement i:
+        f_i  ← 10^( –0.4 * (m_i – ZP) )          // Zero‑point ZP from calibration
+        σ_fi ← f_i * ln(10)/2.5 * σ_mi           // Error propagation
+
+2. **Normalize by solar spectrum to obtain reflectances**
+   For each i:
+        R_i ← f_i / S_⊙(λ_i)                     // Reflectance at filter λ_i
+        σ_Ri ← σ_fi / S_⊙(λ_i)
+
+3. **Forward model in filter space**
+   Define model flux vector μ(c):
+       For each filter i:
+           μ_i(c) = ∫ [ Σ_k c_k * b_k(λ) ] * R(λ, λ_i) dλ
+   // Approximate integral by pre‑computed matrix A where
+   // A_{ik} = ∫ b_k(λ) R(λ, λ_i) dλ
+   Then μ_i(c) ≈ Σ_k A_{ik} * c_k
+
+4. **Likelihood function**
+   L(c) = Π_i  N( R_i | μ_i(c), σ_Ri^2 )
+   logL(c) = Σ_i [ –½ (R_i – μ_i(c))^2 / σ_Ri^2  – ½ ln(2πσ_Ri^2) ]
+
+5. **Prior on coefficients**
+   Choose zero‑mean Gaussian prior:
+       p(c) = N( 0 , Λ )   where Λ is diagonal with variance τ_k^2
+   logp(c) = –½ Σ_k (c_k^2 / τ_k^2)  – ½ Σ_k ln(2πτ_k^2)
+
+6. **Posterior objective**
+   logPosterior(c) = logL(c) + logp(c)
+
+7. **Optimize posterior (MAP estimate)**
+   Initialize c ← 0
+   Repeat until convergence:
+        Compute gradient g = ∇_c logPosterior(c)
+        Compute Hessian H = ∇^2_c logPosterior(c)
+        Update c ← c – H^{-1} * g
+   Store MAP estimate c_MAP
+
+8. **Uncertainty estimation (Laplace approximation)**
+   Evaluate Hessian H_MAP at c_MAP
+   Covariance of c: Σ_c = –H_MAP^{-1}
+   Propagate to spectrum:
+        Ŝ(λ)  = Σ_k c_MAP,k * b_k(λ)
+        Σ̂(λ, λ') = Σ_k Σ_j Σ_c[k,j] * b_k(λ) * b_j(λ')
+
+9. **Taxonomic classification (optional)**
+   Compute distance D_k = ||c_MAP – μ_k||_Σc^{-1} for each class k
+   Assign taxonomy with minimum D_k
+
+10. **Return results**
+   Output Ŝ(λ), Σ̂(λ, λ'), C = c_MAP and taxonomy label if computed.

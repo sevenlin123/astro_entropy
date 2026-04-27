@@ -1,0 +1,119 @@
+# --------------------------------------------------------------------
+# 0. GLOBAL PARAMETERS
+# --------------------------------------------------------------------
+N_LATENT      = 8           # number of retained principal components
+KDE_BANDWIDTH = 0.5         # bandwidth for kernel density estimation
+PHOTON_NOISE   = 0.20       # 20 % relative reflectance noise
+FILTER_CURVES  = loadFilterCurves()   # dictionary {filter_name: transmission_curve}
+SOLAR_SPECTRUM = loadSolarSpectrum() # solar flux as function of wavelength
+
+# 1.1 Load reference spectra (high‑resolution reflectance)
+raw_spectra = loadSpectra(file_list)          # shape: (N_spec, N_wave)
+
+# 1.2 Standardize spectra (zero mean, unit variance per wavelength)
+standardized = (raw_spectra - mean(raw_spectra)) / std(raw_spectra)
+
+# 1.3 Principal Component Analysis
+pca_model   = PCA(n_components=N_LATENT)
+latent_codes = pca_model.fit_transform(standardized)    # shape: (N_spec, N_latent)
+
+# 1.4 Kernel Density Estimate in latent space
+kde = KDE(kernel='gaussian', bandwidth=KDE_BANDWIDTH)
+kde.fit(latent_codes)                                  # density over latent space
+
+# 1.5 Draw synthetic latent samples from KDE
+N_SYNTHETIC = 5000
+synthetic_latents = kde.sample(N_SYNTHETIC)            # shape: (N_SYNTHETIC, N_latent)
+
+# 1.6 Decode synthetic latents back to spectra
+synthetic_spectra = pca_model.inverse_transform(synthetic_latents)
+# rescale back to original units (undo standardization)
+synthetic_spectra = synthetic_spectra * std(raw_spectra) + mean(raw_spectra)
+
+# 1.7 Forward model: compute synthetic photometry
+def compute_photometry(spec):
+    """Convolve a reflectance spectrum with all filter curves."""
+    photometry = {}
+    for name, curve in FILTER_CURVES.items():
+        # effective reflectance in band = ∫ R(λ)*T(λ)*S(λ) dλ / ∫ T(λ)*S(λ) dλ
+        num = np.trapz(spec * curve * SOLAR_SPECTRUM, wavelengths)
+        den = np.trapz(curve * SOLAR_SPECTRUM, wavelengths)
+        photometry[name] = num / den
+    return np.array(list(photometry.values()))     # shape: (N_filters,)
+
+# Compute noiseless photometry
+synthetic_phot = np.vstack([compute_photometry(s) for s in synthetic_spectra])
+
+# 1.8 Add Gaussian noise to photometry
+noise_std = PHOTON_NOISE * synthetic_phot
+synthetic_phot_noisy = synthetic_phot + np.random.normal(0, noise_std)
+
+# 1.9 Prepare training data for regressor
+X_train = synthetic_phot_noisy                # shape: (N_SYNTHETIC, N_filters)
+Y_train = synthetic_latents                   # shape: (N_SYNTHETIC, N_latent)
+
+# 1.10 Train AutoML regressor (e.g., XGBoost) to map photometry → latent codes
+regressor = AutoMLRegressor(
+               tasks=['regression'],
+               eval_metric='mae',
+               random_state=42)
+regressor.fit(X_train, Y_train)                 # returns probabilistic predictions
+
+# 1.11 Train AutoML classifier for taxonomy on latent codes
+#    Labels are assigned to the original seed spectra
+labels = assignTaxonomyLabels(seed_spectra)      # e.g., ['Water','CO2','Organic','Methanol']
+classifier = AutoMLClassifier(
+                tasks=['classification'],
+                eval_metric='accuracy',
+                random_state=42)
+classifier.fit(latent_codes, labels)
+
+def reconstructFromPhotometry(observed_phot):
+    """
+    Input:
+        observed_phot : array of shape (N_filters,) – measured reflectance or
+                        magnitude in each filter, with uncertainties.
+    Output:
+        spectra_samples : list of reconstructed spectra (arrays of shape (N_wave,))
+        spectrum_mean   : mean reconstructed spectrum
+        spectrum_std    : standard deviation spectrum
+        taxonomy_probs  : probability distribution over taxonomic classes
+    """
+
+    # 2.1 Predict latent coefficient distribution from regressor
+    #     regressor.predict_proba returns means and std deviations
+    latent_mean, latent_std = regressor.predict_with_uncertainty(observed_phot)
+    # shape: (N_latent,) each
+
+    # 2.2 Construct Gaussian Copula sampler
+    #     Covariance matrix assumed diagonal if regressor outputs independent stds;
+    #     otherwise use covariance returned by regressor.
+    cov_matrix = np.diag(latent_std**2)
+    copula_sampler = GaussianCopula(cov_matrix)
+
+    # 2.3 Draw M posterior samples of latent codes
+    M = 1000
+    latent_samples = copula_sampler.sample(M, mean=latent_mean)   # shape: (M, N_latent)
+
+    # 2.4 Decode samples to spectra via inverse PCA
+    spectra_samples = pca_model.inverse_transform(latent_samples)
+    # rescale back to original units
+    spectra_samples = spectra_samples * std(raw_spectra) + mean(raw_spectra)
+
+    # 2.5 Compute mean & std spectra
+    spectrum_mean = np.mean(spectra_samples, axis=0)
+    spectrum_std  = np.std(spectra_samples,  axis=0)
+
+    # 2.6 Taxonomy prediction from mean latent code
+    taxonomy_probs = classifier.predict_proba(latent_mean.reshape(1,-1))
+
+    return spectra_samples, spectrum_mean, spectrum_std, taxonomy_probs
+
+# Load new photometric observation
+obs_phot = np.array([0.78, 0.82, 0.73, 0.69])   # example reflectances in four filters
+
+# Reconstruct spectrum and taxonomy
+samples, mean_spec, std_spec, probs = reconstructFromPhotometry(obs_phot)
+
+# mean_spec, std_spec can be plotted as a credible interval
+# probs contains probabilities for ['Water','CO2','Organic','Methanol']

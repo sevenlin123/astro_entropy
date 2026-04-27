@@ -1,0 +1,75 @@
+pseudocode
+INPUT
+    - Training spectra   : {S_i(λ)}   , i = 1 … N_obs            (reflectance arrays)
+    - Filter response curves : {F_j(λ)} , j = 1 … N_filt
+    - Number of principal components : K
+    - KDE bandwidth : h
+    - Number of synthetic latent samples : M
+    - Relative photometric noise level : σ_rel          (e.g. 0.20)
+
+OUTPUT
+    - For any new photometric vector m_new : 
+        • Reconstructed high‑resolution spectrum S_rec(λ)
+        • Taxonomic probability vector p_tax
+
+--------------------------------------------------------------------
+1.  TRAINING PHASE
+--------------------------------------------------------------------
+1.1  PREPROCESS OBSERVED SPECTRA
+    For each spectrum S_i:
+        • (Optional) Normalize or mean‑center wavelengths.
+        • Store as array of length L (number of wavelength bins).
+
+1.2  PRINCIPAL COMPONENT ANALYSIS (PCA)
+    • Construct data matrix X ∈ ℝ^{N_obs × L} from all S_i.
+    • Compute mean spectrum μ_S = (1/N_obs) Σ_i S_i.
+    • Center data: X_c = X – μ_S.
+    • Compute covariance C = (1/(N_obs-1)) X_cᵀ X_c.
+    • Eigen‑decompose C → eigenvectors V ∈ ℝ^{L × K}, eigenvalues λ.
+    • Project observed spectra to latent space:
+        z_i = Vᵀ (S_i – μ_S)         // z_i ∈ ℝ^K
+
+1.3  BUILD PRIOR WITH KDE
+    • Fit a multivariate kernel density estimator to {z_i} with bandwidth h.
+    • Sample M latent vectors {z_synth} from the KDE.
+    • For each z_synth:
+        – Reconstruct synthetic spectrum:
+              S_synth = μ_S + V z_synth          // length L
+
+1.4  FORWARD MODEL SYNTHETIC PHOTOMETRY
+    For each synthetic spectrum S_synth:
+        For each filter j:
+            • Compute ideal flux:
+                  f_j = ∫ S_synth(λ) * F_j(λ) dλ / ∫ F_j(λ) dλ
+            • Convert to reflectance or magnitude (keep consistent with training).
+        • Assemble photometry vector m_synth = [f_1, …, f_N_filt].
+        • Add Gaussian noise per band:
+              m_noisy_j = m_j + Normal(0, σ_rel * m_j)
+        • Store pair (m_noisy, z_synth).
+
+1.5  TRAIN AUTO‑ML REGRESSOR
+    • Input: synthetic photometry vectors (m_noisy)
+    • Target: corresponding latent vectors z_synth
+    • Train an ensemble regressor (e.g., GBDT + NN) using AutoML framework.
+    • Result: mapping function g: photometry → latent coefficients.
+
+1.6  TRAIN AUTO‑ML CLASSIFIER
+    • Input: latent vectors {z_i}
+    • Target: known taxonomy labels (H₂O, CO₂, Organics, Methanol)
+    • Train an ensemble classifier using AutoML.
+    • Result: classification function c: latent → taxonomy probability vector.
+
+--------------------------------------------------------------------
+2.  INFERENCE PHASE
+--------------------------------------------------------------------
+Given new photometric observation m_new (length N_filt):
+
+2.1  NORMALIZE / SCALE m_new exactly as in training (same mean/scale).
+2.2  PREDICT LATENT COEFFICIENTS
+        z_pred = g(m_new)        // regression output
+2.3  RECONSTRUCT HIGH‑RESOLUTION SPECTRUM
+        S_rec = μ_S + V z_pred
+2.4  PREDICT TAXONOMY PROBABILITIES
+        p_tax = c(z_pred)
+
+RETURN (S_rec, p_tax)

@@ -1,0 +1,108 @@
+pseudo
+# ------------------------------------------------------------
+# 1. PREPARATION (executed once)
+# ------------------------------------------------------------
+# 1.1 Load reference spectra
+SEED_SPECTRA ← load_ref_spectra()          # 51 TNO spectra, each ≈ 100–200 λ‑bins
+
+# 1.2 Define spectral grid and filter response curves
+WAVELENGTH_GRID ← common_wavelength_grid()
+FILTER_CURVES ← load_filter_response_curves()   # e.g., JWST NIRCam filters
+
+# 1.3 Principal Component Analysis (PCA)
+#    Center spectra by subtracting mean spectrum
+MEAN_SPECTRUM ← mean(SEED_SPECTRA)
+CENTERED ← SEED_SPECTRA – MEAN_SPECTRUM
+#    Compute eigenvectors/eigenvalues of covariance matrix
+EIGENVALUES, EIGENVECTORS ← PCA(CENTERED)      
+#    Choose K (e.g., 5–10) smallest K eigenvectors → basis matrix B (size: λ_bins × K)
+B ← EIGENVECTORS[:, 1:K]
+
+# 1.4 Project seed spectra to latent space
+LATENT_SEED ← transpose(B) · transpose(CENTERED)  # shape: K × N_seed
+#    Each column = latent coefficient vector for one seed spectrum
+
+# 1.5 Kernel Density Estimation (KDE) in latent space
+#    Estimate continuous density p(latent) from LATENT_SEED
+KDE_MODEL ← fit_KDE(LATENT_SEED, bandwidth = h)   # h ≈ 0.5 (tunable)
+
+# ------------------------------------------------------------
+# 2. DATA AUGMENTATION & TRAINING SET CREATION
+# ------------------------------------------------------------
+# 2.1 Sample synthetic latent vectors from KDE
+N_SYNTH ← 5000                               # number of synthetic samples
+LATENT_SYNTH ← sample_from_KDE(KDE_MODEL, N_SYNTH)
+
+# 2.2 Generate synthetic spectra via inverse PCA + mean
+SPECTRA_SYNTH ← transpose(B · LATENT_SYNTH) + MEAN_SPECTRUM
+#    Shape: N_SYNTH × λ_bins
+
+# 2.3 Compute synthetic photometry by convolution
+PHOTOMETRY_SYNTH ← convolve_with_filters(SPECTRA_SYNTH, FILTER_CURVES)
+#    Shape: N_SYNTH × N_filters
+
+# 2.4 Inject Gaussian noise (σ = 20 % of reflectance) into photometry
+NOISE ← random_normal(mean=0, std=0.2 * PHOTOMETRY_SYNTH)
+PHOTOMETRY_NOISY ← PHOTOMETRY_SYNTH + NOISE
+
+# 2.5 Prepare training dataset
+#    Input: PHOTOMETRY_NOISY   (features)
+#    Target: LATENT_SYNTH      (labels)
+TRAIN_DATA ← (PHOTOMETRY_NOISY , LATENT_SYNTH)
+
+# 2.6 Train AutoML regressor (encodes photometry → latent)
+ENCODER_MODEL ← AutoML_Train(
+                    X = TRAIN_DATA.features,
+                    y = TRAIN_DATA.labels,
+                    task = 'regression',
+                    metric = 'RMSE',
+                    ensemble = True
+                )
+
+# 2.7 Train AutoML classifier on latent space (classifies taxonomy)
+#    Labels: taxonomy tags assigned to each SEED_SPECTRA (from literature)
+LATENT_CLASS_LABELS ← taxonomy_labels_of_seed_spectra()
+CLASSIFIER_MODEL ← AutoML_Train(
+                        X = LATENT_SEED.T,
+                        y = LATENT_CLASS_LABELS,
+                        task = 'classification',
+                        metric = 'accuracy',
+                        ensemble = True
+                    )
+# ------------------------------------------------------------
+# 3. INFERENCE (per new target object)
+# ------------------------------------------------------------
+function RECONSTRUCT_AND_CLASSIFY(PHOTOMETRY_TARGET):
+    # 3.1 Predict posterior distribution of latent coefficients
+    #     (use regression model; if desired, sample multiple predictions for uncertainty)
+    LATENT_MEAN ← ENCODER_MODEL.predict(PHOTOMETRY_TARGET)   # shape: K
+    #    Optional: compute prediction variance if model supports it
+    
+    # 3.2 Classify taxonomy using latent mean
+    TAXONOMY_PROBS ← CLASSIFIER_MODEL.predict_proba(LATENT_MEAN)   # probability vector
+    
+    # 3.3 Decode spectrum via inverse PCA
+    SPECTRUM_RECON ← transpose(B · LATENT_MEAN) + MEAN_SPECTRUM
+    
+    # 3.4 Return results
+    return {
+        "reconstructed_spectrum": SPECTRUM_RECON,
+        "taxonomy_probabilities": TAXONOMY_PROBS,
+        "latent_coefficients": LATENT_MEAN
+    }
+
+# ------------------------------------------------------------
+# 4. OPTIONAL: MULTIPLE SAMPLE RECONSTRUCTION FOR UNCERTAINTY
+# ------------------------------------------------------------
+function RECONSTRUCT_MULTIPLE(PHOTOMETRY_TARGET, N_SAMPLES = 100):
+    LATENTS ← ENCODER_MODEL.sample_predict(PHOTOMETRY_TARGET, N_SAMPLES)
+    SPECTRA ← []
+    TAX_PROBS ← []
+    for LATENT in LATENTS:
+        SPECTRA.append( transpose(B · LATENT) + MEAN_SPECTRUM )
+        TAX_PROBS.append( CLASSIFIER_MODEL.predict_proba(LATENT) )
+    # Aggregate spectra (mean, median, credible intervals) and taxonomy probabilities
+    return {
+        "spectra_samples": SPECTRA,
+        "taxonomy_probability_samples": TAX_PROBS
+    }

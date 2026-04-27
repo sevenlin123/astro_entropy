@@ -1,0 +1,100 @@
+INPUT:
+    - Seed spectra S_seed   //  N_seed × N_wavelength array
+    - Desired dimensionality K   // 4–10 principal components
+    - KDE bandwidth h  // e.g., 0.5
+    - Number of synthetic latent samples N_synth  // e.g., 10⁴
+    - Filter set F = {f₁,…,f_M}   // effective throughput curves
+    - Noise level σ_noise  // relative reflectance noise (e.g., 20%)
+
+OUTPUT:
+    - PCA basis U (N_wavelength × K)  // principal eigenvectors
+    - PCA mean μ_spec   // mean spectrum
+    - Synthetic latent set Z_synth  // N_synth × K
+    - Synthetic photometry P_synth  // N_synth × M
+
+1.  Perform PCA on S_seed:
+        [U, μ_spec] ← PCA(S_seed, K)
+
+2.  Project seed spectra onto PCA space:
+        L_seed ← (S_seed – μ_spec) · U          // N_seed × K
+
+3.  Fit a non‑parametric KDE to L_seed:
+        KDE_L ← KDE(L_seed, bandwidth=h)
+
+4.  Draw N_synth latent vectors:
+        Z_synth ← KDE_L.sample(N_synth)        // N_synth × K
+
+5.  Decode latent vectors to spectra:
+        S_synth ← Z_synth · Uᵀ + μ_spec         // N_synth × N_wavelength
+
+6.  Forward‑model spectra to photometry:
+        For each i in 1…N_synth:
+            For each filter f_j in F:
+                p_ij ← ∫ S_synth[i, λ] · R_fj(λ) dλ      // reflectance in f_j
+            Add Gaussian noise:
+                p_ij ← p_ij · (1 + Normal(0, σ_noise))
+        P_synth ← matrix of all p_ij                    // N_synth × M
+
+INPUT:
+    - Synthetic photometry P_synth   // N_synth × M
+    - Corresponding latent vectors Z_synth   // N_synth × K
+    - Taxonomic labels Y_seed for seed spectra  // N_seed × 1
+
+OUTPUT:
+    - Trained encoder E   // maps photometry → latent coefficient distribution
+    - Trained classifier C   // maps latent → taxonomy probabilities
+
+7.  Train the encoder:
+        E ← AutoML_Regressor.fit(P_synth, Z_synth)
+        // The regressor is configured to output a point estimate
+        // and an associated covariance (e.g., via quantile regression
+        // or by training a separate variance model).
+
+8.  Train the classifier:
+        // Project seed spectra to latent space again (step 2)
+        L_seed ← (S_seed – μ_spec) · U
+        C ← AutoML_Classifier.fit(L_seed, Y_seed)
+
+INPUT:
+    - New sparse photometry p_new   // 1 × M
+    - Encoder E, Classifier C, PCA basis U, PCA mean μ_spec
+    - Gaussian copula correlation matrix Σ_copula  // derived from latent
+    - Number of posterior draws N_draw  // e.g., 1000
+
+OUTPUT:
+    - Reconstructed spectrum Ŝ   // 1 × N_wavelength
+    - Uncertainty band [Ŝ_low, Ŝ_high]   // per wavelength
+    - Taxonomy probability vector q_tax   // e.g., [H₂O, CO₂, Organics, Methanol]
+
+9.  Encode photometry to latent:
+        ẑ_mean, ẑ_cov ← E.predict(p_new)   // mean and covariance of latent
+
+10.  Map covariance through copula:
+        // Transform ẑ_mean to uniform marginals u = Φ(ẑ_mean / sqrt(diag(ẑ_cov)))
+        // Sample from multivariate normal with correlation Σ_copula
+        For t in 1…N_draw:
+            u_t ← sample_multivariate_normal(μ=u, Σ=Σ_copula)
+            z_t ← Φ⁻¹(u_t) * sqrt(diag(ẑ_cov)) + ẑ_mean
+            Store z_t
+
+11.  Decode latent samples to spectra:
+        For each sampled z_t:
+            Ŝ_t ← z_t · Uᵀ + μ_spec
+        Compute pointwise statistics:
+            Ŝ_mean(λ) ← mean_t Ŝ_t(λ)
+            Ŝ_low(λ)  ← percentile_t(5, Ŝ_t(λ))
+            Ŝ_high(λ) ← percentile_t(95, Ŝ_t(λ))
+
+12.  Classify:
+        q_tax ← C.predict_proba(ẑ_mean)   // taxonomy probabilities
+
+13.  Return:
+        Ŝ ← Ŝ_mean
+        [Ŝ_low, Ŝ_high]   // 90 % credible interval
+        q_tax
+
+// For each candidate filter set F_candidate:
+     Simulate photometry for all synthetic spectra (step 6 adapted to F_candidate)
+     Train encoder on simulated photometry
+     Evaluate reconstruction error on seed spectra
+// Select filter set with lowest average reconstruction error

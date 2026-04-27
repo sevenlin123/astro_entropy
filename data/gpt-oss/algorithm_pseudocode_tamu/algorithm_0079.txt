@@ -1,0 +1,81 @@
+Input:
+    - Reference spectra S_ref[1…N_ref]   // high‑resolution reflectance vectors
+    - Filter throughput curves T_f[1…F]   // effective response of photometric bands
+    - Photometry of target object m       // vector of fluxes or reflectances in F bands
+    - Photometric uncertainties σ_m      // (optional; used in likelihood simulation)
+
+Output:
+    - Reconstructed spectrum Ŝ(λ)         // continuous reflectance vs wavelength
+    - Credible interval [Ŝ_low, Ŝ_high]   // per‑wavelength 68% CI
+    - Taxonomic probability vector p_tax   // e.g., H₂O, CO₂, Organic, Methanol
+
+--------------------------------------------------------------------
+1.  Prepare latent space (Prior)
+--------------------------------------------------------------------
+1.1 Perform Principal Component Analysis (PCA) on S_ref
+        - Compute mean spectrum μ_S
+        - Compute covariance matrix C_S
+        - Extract first K eigenvectors V_K = {v₁,…,v_K} (K ≤ 10)
+        - Project each reference spectrum onto PCs:
+              z_i = V_Kᵀ · (S_ref[i] – μ_S)    // i = 1…N_ref
+
+1.2 Estimate density of latent coefficients using Kernel Density Estimation (KDE)
+        - Choose Gaussian kernel with bandwidth h ≈ 0.5
+        - Define continuous prior p(z) = KDE(z | {z_i})
+
+1.3 Generate synthetic latent samples
+        - Draw M_synth ≫ N_ref samples {z_j} from p(z)
+        - Reconstruct synthetic spectra:
+              S_syn[j] = μ_S + V_K · z_j
+
+--------------------------------------------------------------------
+2.  Forward model (Implicit Likelihood)
+--------------------------------------------------------------------
+2.1 For each synthetic spectrum S_syn[j]:
+        - Convolve with each filter throughput T_f[f]
+          → compute model photometry m_syn[j][f] = ∫ S_syn[j](λ) · T_f[f](λ) dλ
+        - Perturb photometry with Gaussian noise:
+              m_syn_noisy[j][f] = m_syn[j][f] + ε,
+              where ε ~ N(0, (σ_rel·m_syn[j][f])²), σ_rel = 0.20
+
+--------------------------------------------------------------------
+3.  Train regressors (Encoder) and classifier
+--------------------------------------------------------------------
+3.1 Regression training data:
+        - Inputs X = {m_syn_noisy[j]}  // F‑dimensional vectors
+        - Targets Y = {z_j}            // K‑dimensional latent vectors
+3.2 Train AutoML regressor R (e.g., gradient‑boosted trees ensemble)
+        - Input: X
+        - Output: Predicted latent mean μ̂_z and covariance Σ̂_z
+3.3 Classification training data:
+        - Use latent vectors of reference spectra {z_i} with known taxonomic labels
+        - Train AutoML classifier C on {z_i} → label
+        - Store decision tree / probability model
+
+--------------------------------------------------------------------
+4.  Inference on new photometry m
+--------------------------------------------------------------------
+4.1 Encode photometry:
+        - Pass m through regressor R → obtain posterior p(z | m)
+          * Represent posterior as multivariate Gaussian N(μ̂_z, Σ̂_z)
+4.2 Sample latent vectors:
+        - For s = 1…N_sample:
+              draw z_s ~ N(μ̂_z, Σ̂_z)
+              // Optionally enforce correlations via Gaussian Copula
+4.3 Decode to spectra:
+        - For each z_s:
+              Ŝ_s = μ_S + V_K · z_s
+4.4 Aggregate reconstructions:
+        - Median spectrum Ŝ_med = median{Ŝ_s} (per wavelength)
+        - Credible interval bounds:
+              Ŝ_low = quantile{Ŝ_s, 0.16}
+              Ŝ_high = quantile{Ŝ_s, 0.84}
+4.5 Taxonomic probabilities:
+        - For each z_s, evaluate classifier C → probability vector p_tax_s
+        - Average over samples:
+              p_tax = mean{p_tax_s}
+
+--------------------------------------------------------------------
+5.  Return results
+--------------------------------------------------------------------
+Return Ŝ_med, [Ŝ_low, Ŝ_high], p_tax

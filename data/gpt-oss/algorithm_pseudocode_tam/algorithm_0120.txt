@@ -1,0 +1,12 @@
+Input:  {S_i(λ)}  i = 1…N   –  high‑resolution reflectance spectra (seed set)
+        F_k(λ)      –  transmission curves of the chosen photometric filters  
+Output: PCA basis V = [v_1 … v_K],   mean spectrum μ_S
+
+Inputs: Training set D = { (m'_s , a^*_s) }, 
+        Optional taxonomic labels L_i for seed spectra
+Outputs: Photometry‑to‑latent regressor R,
+         Latent‑space classifier C
+
+Input:   Observed photometry m_obs = [m_1 … m_{K_f}]  (with measurement errors)
+Output:  Posterior predictive spectrum S_post(λ), 
+         Class probabilities P_cls

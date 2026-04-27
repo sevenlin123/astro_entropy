@@ -1,0 +1,105 @@
+pseudocode
+Input:
+    S_ref[1…N]            // Reference high‑resolution spectra (reflectance)
+    λ[1…L]                // Wavelength grid of reference spectra
+    Filters[1…F]          // Transmission curves of desired photometric filters
+    K                     // Number of principal components to retain (e.g. 8–10)
+    h                     // KDE bandwidth (≈0.5)
+    M                     // Number of synthetic latent samples (e.g. 5000)
+    N_noise               // Number of noisy photometric realizations per synthetic spectrum (e.g. 10)
+    σ_rel = 0.20          // Relative photometric noise level
+
+Output:
+    Spectrum_mean[1…L]    // Mean reconstructed spectrum
+    Spectrum_CI[1…L,2]   // 95 % credible interval bounds
+    Taxonomy_probs       // Posterior probability for each taxonomic class
+
+--------------------------------------------------------------------
+1. PREPROCESSING
+--------------------------------------------------------------------
+1.1 Normalize each S_ref[n] to unity at reference wavelength λ_ref
+1.2 Subtract common mean spectrum μ_ref = mean_n(S_ref[n])
+
+--------------------------------------------------------------------
+2. PRINCIPAL COMPONENT ANALYSIS (Latent Space Construction)
+--------------------------------------------------------------------
+2.1 Perform SVD on centered spectra matrix X (N × L):
+        X = U * Σ * Vᵀ
+2.2 Select first K right singular vectors V_K (principal components)
+2.3 Project reference spectra onto PCs:
+        Z_ref[n] = (S_ref[n] – μ_ref) ⋅ V_K      // n = 1…N
+        // Z_ref is N × K matrix of latent coefficients
+
+--------------------------------------------------------------------
+3. KDE AUGMENTATION OF LATENT MANIFOLD
+--------------------------------------------------------------------
+3.1 Fit multivariate Gaussian kernel density estimator (KDE) to Z_ref with bandwidth h
+3.2 Sample M latent vectors:
+        Z_synth[m] ~ KDE(Z_ref)          // m = 1…M
+
+--------------------------------------------------------------------
+4. SYNTHETIC SPECTRA FROM LATENT VECTORS
+--------------------------------------------------------------------
+4.1 For each m:
+        S_synth[m] = μ_ref + Z_synth[m] ⋅ V_Kᵀ     // Reconstruct high‑res spectrum
+
+--------------------------------------------------------------------
+5. FORWARD MODEL TO PHOTOMETRY
+--------------------------------------------------------------------
+5.1 For each synthetic spectrum m:
+        For each filter f:
+            R_f[m] = ∫ S_synth[m](λ) * Filters[f](λ) dλ / ∫ Filters[f](λ) dλ
+        // R_f[m] is the noiseless reflectance in filter f
+5.2 Generate N_noise noisy realizations per spectrum:
+        For each realization r:
+            For each filter f:
+                R_f_noisy[m,r,f] = R_f[m,f] * (1 + Normal(0, σ_rel))
+    Collect all pairs (R_noisy, Z_synth) into training set:
+        Inputs   = {R_f_noisy[m,r,:]}      // dimension F
+        Targets  = {Z_synth[m,:]}          // dimension K
+
+--------------------------------------------------------------------
+6. TRAIN AUTO‑ML ENCODER (PHOTOMETRY → LATENT)
+--------------------------------------------------------------------
+6.1 Define AutoML regressor (e.g. ensemble of gradient‑boosted trees + neural nets)
+6.2 Fit regressor to training set:
+        Latent_pred = Regressor.fit(Inputs, Targets)
+
+--------------------------------------------------------------------
+7. TRAIN TAXONOMY CLASSIFIER (OPTIONAL)
+--------------------------------------------------------------------
+7.1 Label each reference spectrum with taxonomic class (Water, CO₂, Organics, etc.)
+7.2 Train AutoML classifier on Z_ref with labels
+
+--------------------------------------------------------------------
+8. INFERENCE ON NEW OBSERVATIONS
+--------------------------------------------------------------------
+Input new photometric measurement:
+    m_obs[1…F]          // Measured reflectance (or magnitude)
+    σ_obs[1…F]          // Measurement uncertainties
+
+8.1 Predict latent mean and covariance:
+        μ_latent_pred = Regressor.predict_mean(m_obs)
+        Σ_latent_pred = Regressor.predict_covariance(m_obs)   // if available
+    // If regressor does not provide covariance, approximate by:
+        Σ_latent_pred = KDE_covariance_of_Z_ref   // precomputed
+
+8.2 Generate posterior samples via Gaussian copula:
+        Draw N_sample (e.g. 1000) samples z_samp[k] from multivariate normal
+                with mean μ_latent_pred and covariance Σ_latent_pred
+        Enforce physical bounds by truncation or rejection if needed
+
+8.3 Decode each sample to high‑resolution spectrum:
+        For each k:
+            S_k = μ_ref + z_samp[k] ⋅ V_Kᵀ
+
+8.4 Aggregate samples:
+        Spectrum_mean = mean_k(S_k)
+        Spectrum_CI_low  = percentile_k(S_k, 2.5%)
+        Spectrum_CI_high = percentile_k(S_k, 97.5%)
+
+8.5 Taxonomic probabilities:
+        For each class c:
+            Taxonomy_probs[c] = mean_k(Classifier.predict_proba(z_samp[k])_c)
+
+Return Spectrum_mean, Spectrum_CI, Taxonomy_probs

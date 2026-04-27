@@ -1,0 +1,114 @@
+# Preprocess training spectra
+Input: Spectra_matrix S (N_spectra x N_wavelength)
+Compute mean μ_spectrum
+Center spectra: S_centered = S - μ_spectrum
+Compute covariance C = (S_centered^T * S_centered) / (N_spectra-1)
+Perform eigen-decomposition: eigvals λ_j, eigvecs v_j
+Select k components: keep first k eigenvectors (columns of V_k)
+Project training spectra: coeffs = S_centered * V_k   # N_spectra x k
+
+# Build filter response matrix
+Input: Filter_transmissions F_m(λ) for m=1..M (photometric filters)
+For each component j and each filter m:
+    response[j][m] = ∫ v_j(λ) * F_m(λ) dλ  # numerical integration
+# Also compute mean response for mean spectrum:
+mean_response[m] = ∫ μ_spectrum(λ) * F_m(λ) dλ
+
+# Prior on coefficients
+Prior_mean = 0
+Prior_covariance = diag(λ_1..λ_k)   # variances from training set
+
+# Bayesian inference for new object
+Input: Observed photometry y_obs[M] with uncertainties σ_y[M]
+
+Compute design matrix A[M x k]:
+    For each m in 1..M:
+        A[m, :] = response[:, m]          # k-length vector
+Predictive mean of photometry for coefficients c:
+    μ_phot(m) = mean_response[m] + A[m,:]·c
+
+Likelihood: y ~ N(μ_phot, diag(σ_y^2))
+
+Posterior over c is Gaussian:
+    Posterior_cov = inv( A^T Σ_y^{-1} A + Prior_cov^{-1} )
+    Posterior_mean = Posterior_cov * ( A^T Σ_y^{-1} (y_obs - mean_response) + Prior_cov^{-1} * Prior_mean )
+
+# Spectrum reconstruction
+Reconstructed_spectrum = μ_spectrum + V_k * Posterior_mean  # vector length N_wavelength
+
+# Uncertainty propagation
+Sample n draws from N(Posterior_mean, Posterior_cov) to get multiple coefficient sets c_samp
+For each draw, compute spectrum = μ_spectrum + V_k * c_samp
+Aggregate to get credible intervals at each wavelength.
+
+# Optional: if posterior probability of extreme spectra is low, flag outlier.
+
+Return reconstructed_spectrum, uncertainty intervals.
+
+text
+--------------------------------------------------------------------
+INPUT
+--------------------------------------------------------------------
+TRAINING_SPECTRA   : matrix S  (N_spec × N_wave)          # observed flux vs wavelength
+FILTER_CURVES      : list of M filter responses F_m(λ)   # m = 1 … M
+PHOTOMETRY         : vector y_obs (M)                    # measured fluxes in filters
+UNCERTAINTIES      : vector σ_y  (M)                    # 1‑σ errors for y_obs
+K_COMPONENTS       : integer k (e.g., 4–10)              # number of principal components
+N_SAMPLES          : integer n_samples (for uncertainty)
+
+--------------------------------------------------------------------
+STEP 1 – TRAIN PCA ON SPECTRA
+--------------------------------------------------------------------
+1.1  μ_spectrum ← mean(S, axis=0)                         # mean spectrum (1 × N_wave)
+1.2  S_centered ← S – μ_spectrum                         # center spectra
+1.3  C ← (S_centeredᵀ · S_centered) / (N_spec – 1)      # covariance (N_wave × N_wave)
+1.4  [eigval, eigvec] ← eigen_decompose(C)                # eigval: (N_wave,), eigvec: (N_wave × N_wave)
+1.5  V_k ← eigvec[:, 1…k]                                 # first k eigenvectors (N_wave × k)
+1.6  COEFFS ← S_centered · V_k                            # projections (N_spec × k)
+
+--------------------------------------------------------------------
+STEP 2 – BUILD FILTER RESPONSE MATRIX
+--------------------------------------------------------------------
+2.1  For each filter m = 1 … M:
+2.2     For each component j = 1 … k:
+2.3        response[j, m] ← ∫ v_j(λ) · F_m(λ) dλ           # numerical integration
+2.4  For each filter m:
+2.5     mean_resp[m] ← ∫ μ_spectrum(λ) · F_m(λ) dλ       # mean spectrum response
+
+--------------------------------------------------------------------
+STEP 3 – SETUP BAYESIAN PRIORS
+--------------------------------------------------------------------
+3.1  Prior_mean   ← 0_(k)                                   # zero vector
+3.2  Prior_cov    ← diag(eigval[1…k])                       # diagonal covariance from training
+
+--------------------------------------------------------------------
+STEP 4 – COMPUTE POSTERIOR OVER COEFFICIENTS
+--------------------------------------------------------------------
+4.1  A ← transpose(response)                               # A is (M × k)
+4.2  Σ_y ← diag(σ_y²)                                       # measurement noise covariance
+4.3  Posterior_cov ← inverse( Aᵀ · Σ_y⁻¹ · A + inverse(Prior_cov) )
+4.4  Posterior_mean ← Posterior_cov ·
+        ( Aᵀ · Σ_y⁻¹ · (y_obs – mean_resp) + inverse(Prior_cov) · Prior_mean )
+
+--------------------------------------------------------------------
+STEP 5 – RECONSTRUCT FULL SPECTRUM
+--------------------------------------------------------------------
+5.1  spectrum_recon ← μ_spectrum + V_k · Posterior_mean    # (1 × N_wave)
+
+--------------------------------------------------------------------
+STEP 6 – PROPAGATE UNCERTAINTY (Optional Sampling)
+--------------------------------------------------------------------
+6.1  For s = 1 … n_samples:
+6.2      coeff_samp[s] ← multivariate_normal(mean=Posterior_mean,
+6.3                                            cov=Posterior_cov)
+6.4      spectrum_samp[s] ← μ_spectrum + V_k · coeff_samp[s]
+6.5  For each wavelength λ_i:
+6.6      Compute median and 2.5/97.5 percentiles over {spectrum_samp[:, i]}
+6.7  Store 95 % credible interval at each λ_i
+
+--------------------------------------------------------------------
+OUTPUT
+--------------------------------------------------------------------
+- spectrum_recon                 # best‑estimate full spectrum
+- credible_interval[λ]           # 95 % interval per wavelength
+- posterior_mean & posterior_cov  # for diagnostics or further use

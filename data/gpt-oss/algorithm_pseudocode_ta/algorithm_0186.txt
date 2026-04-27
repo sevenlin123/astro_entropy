@@ -1,0 +1,65 @@
+pseudocode
+INPUT
+    S      : Matrix of N_training spectra (rows) × M_wavelengths (columns)
+    F_λ    : Set of M_wavelengths wavelength values
+    T_filt : List of J photometric filter transmission curves T_j(λ)
+    y_obs  : Measured fluxes for a target object in J filters
+    σ_obs  : Measurement uncertainties for y_obs
+
+PARAMETERS
+    K      : Number of retained principal components (e.g., 8–10)
+    prior_cov  : Prior covariance for latent coefficients (default = diagonal of eigenvalues)
+
+OUTPUT
+    s_hat   : Reconstructed spectrum (length M_wavelengths)
+    s_cov   : Covariance matrix of reconstructed spectrum (M_wavelengths × M_wavelengths)
+    z_mean  : Posterior mean of latent coefficients (length K)
+    z_cov   : Posterior covariance of latent coefficients (K × K)
+
+--------------------------------------------------------------------
+STEP 1 – PCA on the training spectra
+--------------------------------------------------------------------
+1.1 Compute mean spectrum μ = mean(S, axis=0)          // length M_wavelengths
+1.2 Center spectra:  S_centered = S – μ
+1.3 Compute covariance:  C = (S_centered^T * S_centered) / (N_training – 1)
+1.4 Eigen‑decompose C → eigenvalues λ_k and orthonormal eigenvectors v_k (k = 1 … M_wavelengths)
+1.5 Sort eigenpairs by decreasing λ_k
+1.6 Select first K eigenvectors: V_K = [v_1, …, v_K]   // shape M_wavelengths × K
+1.7 Form loadings matrix L = V_K * diag(sqrt(λ_1 … λ_K))   // shape M_wavelengths × K
+1.8 Compute projected mean in latent space: z_mean_prior = 0     // zero‑mean prior
+1.9 Prior covariance: C_prior = diag(λ_1 … λ_K)   // can be modified if desired
+
+--------------------------------------------------------------------
+STEP 2 – Build forward model for photometric filters
+--------------------------------------------------------------------
+2.1 For each filter j = 1 … J:
+        a. Normalize filter response:  T_norm_j(λ) = T_j(λ) / ∫ T_j(λ) dλ
+        b. For each component k = 1 … K:
+                A[j, k] = ∫ L[:,k] * T_norm_j(λ) dλ
+           // A is J × K design matrix mapping latent coeffs to observed flux
+2.2 Compute mean photometry of training set:
+        y_mean = ∫ μ * T_norm_j(λ) dλ for each j
+        // y_mean is J‑vector
+
+--------------------------------------------------------------------
+STEP 3 – Bayesian inference of latent coefficients
+--------------------------------------------------------------------
+3.1 Weight matrix:  W = diag(1/σ_obs^2)          // J × J
+3.2 Compute posterior covariance:
+        Σ_z = inverse( A^T * W * A + inverse(C_prior) )
+3.3 Compute posterior mean:
+        μ_z = Σ_z * ( A^T * W * (y_obs – y_mean) + inverse(C_prior) * z_mean_prior )
+    // μ_z is the estimated latent vector (length K)
+
+--------------------------------------------------------------------
+STEP 4 – Spectrum reconstruction
+--------------------------------------------------------------------
+4.1 Reconstructed spectrum:
+        s_hat = μ + L * μ_z
+4.2 Propagate uncertainty:
+        s_cov = L * Σ_z * L^T
+    // s_cov gives variance for each wavelength point
+
+--------------------------------------------------------------------
+RETURN
+    s_hat, s_cov, μ_z, Σ_z

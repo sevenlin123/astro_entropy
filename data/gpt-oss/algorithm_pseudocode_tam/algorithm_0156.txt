@@ -1,0 +1,67 @@
+plaintext
+Input
+------
+- Reference spectra dataset R = {S_i | i = 1..N_ref}  (reflectance vs λ)
+- Filter transmission curves F = {f_k | k = 1..K_filt}
+- Observation photometry m_obs (vector of fluxes/reflectances in K_filt bands)
+- Desired number of principal components K_pc   (e.g. 8–10)
+
+Output
+-------
+- Posterior distribution over spectra p(S | m_obs)
+- Reconstructed spectrum S_hat (mean of posterior)
+- Taxonomic probability vector P_tax (over H2O, CO2, Organic, Methanol)
+
+For each S_i in R:
+    Center = mean(S_i over λ)
+    Scale  = std(S_i over λ)
+    S_i_std = (S_i - Center) / Scale
+Store all S_i_std in matrix X (shape N_ref × N_λ)
+
+Compute covariance matrix C = (X^T * X) / (N_ref – 1)
+Eigen-decompose C → eigenvalues λ_j and eigenvectors v_j
+Sort eigenvectors by descending λ_j
+Select first K_pc eigenvectors → V_pc  (matrix N_λ × K_pc)
+Project spectra to latent space:
+    Z_i = V_pc^T * X_i   (vector length K_pc)
+Store latent coefficients Z = {Z_i}
+
+Choose bandwidth h (≈0.5)
+Define KDE density p_Z(z) ∝ Σ_i exp(-‖z – Z_i‖² / (2h²))
+Sample M_aug synthetic latent vectors {z'_j} from p_Z
+For each z'_j:
+    Reconstruct spectrum s'_j = V_pc * z'_j  + original centering/scaling
+    Store s'_j as synthetic spectrum
+
+For each filter f_k:
+    Compute flux_k = ∫ s'_j(λ) * f_k(λ) dλ / ∫ f_k(λ) dλ
+Add Gaussian noise σ_noise = 0.2 * flux_k   (20 % relative uncertainty)
+    flux_k_noisy = flux_k + Normal(0, σ_noise)
+Record noisy photometry vector m'_j = [flux_1_noisy,…,flux_K_filt_noisy]
+Associate target latent vector z'_j
+
+E = AutoML.train(regression=True,
+                 features=m'_j,
+                 target=z'_j,
+                 validation_split=0.2,
+                 random_seed=seed)
+
+C = AutoML.train(classification=True,
+                 features=Z_i,
+                 target=L_i,
+                 validation_split=0.2,
+                 random_seed=seed)
+
+Given m_obs:
+    Predict mean latent μ_z = E(m_obs)
+    Optionally, obtain predictive covariance Σ_z if E supports uncertainty
+    Approximate posterior over z as normal N(μ_z, Σ_z)
+
+S_hat = V_pc * μ_z  + original centering/scaling
+
+P_tax = C.predict_proba(μ_z)   # probability vector over classes
+
+Draw N_samples from N(μ_z, Σ_z) → {z_samp_n}
+For each z_samp_n:
+    S_samp_n = V_pc * z_samp_n + centering/scaling
+Collect ensemble of spectra → estimate credible intervals per wavelength

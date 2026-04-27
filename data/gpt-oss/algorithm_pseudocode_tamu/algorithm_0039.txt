@@ -1,0 +1,115 @@
+Inputs:
+    S_obs   – Reference set of full‑resolution spectra (N_spec ≈ 50)
+              Each spectrum s_i is a vector of reflectances at M_wave wavelengths.
+    λ_ref   – Wavelength grid of the reference spectra.
+    F_band  – Set of photometric filter transmission curves {T_j(λ)} , j = 1 … N_filt
+    Phot   – New sparse photometry vector for target object,
+             m = {m_k} (k = 1 … N_filt) with uncertainties σ_k.
+
+Outputs:
+    S_rec   – Reconstructed full spectrum (length M_wave).
+    Cov_S   – Uncertainty covariance matrix for S_rec.
+    P_type  – Posterior probability vector over taxonomic classes (optional).
+
+--------------------------------------------------------------------
+1.  PRINCIPAL COMPONENT ANALYSIS (Training Phase)
+--------------------------------------------------------------------
+1.1  Pre‑process reference spectra:
+        * Normalize each spectrum (e.g., divide by median reflectance).
+        * Optional: interpolate to common wavelength grid λ_ref if needed.
+
+1.2  Build data matrix X (N_spec × M_wave):
+        X[i, :] = normalized spectrum s_i
+
+1.3  Compute PCA:
+        • Center X:   X_c = X – mean(X, axis=0)
+        • Covariance: C = (X_cᵀ · X_c) / (N_spec – 1)
+        • Eigendecompose: C = V · diag(λ_pca) · Vᵀ
+        • Sort eigenvalues descending → choose first K PCs (K ≈ 8–10)
+        • Store:
+            • PCA mean μ_X = mean(X, axis=0)            (vector length M_wave)
+            • PCA basis V_K (M_wave × K)
+            • PCA scores Z_real = X_c · V_K              (N_spec × K)
+
+--------------------------------------------------------------------
+2.  PRIOR ESTIMATION (Latent‑space Augmentation)
+--------------------------------------------------------------------
+2.1  Estimate density of latent scores using Kernel Density Estimation:
+        • Kernel: Gaussian with bandwidth h (≈0.5)
+        • For each score z_i (i=1…N_spec):
+                p(z | z_i) ∝ exp(-||z - z_i||² / (2h²))
+
+2.2  Draw N_aug synthetic latent vectors {z'_j} from the KDE:
+        * For j = 1 … N_aug:
+              Sample z'_j by selecting a real score z_i uniformly,
+              then perturb by Gaussian noise N(0, h²·I_K)
+
+2.3  Generate synthetic full spectra for augmented latent vectors:
+        * For each z'_j:
+              x'_j = μ_X + V_K · z'_j                    (length M_wave)
+              Store synthetic spectrum s'_j = x'_j
+
+--------------------------------------------------------------------
+3.  FORWARD MODELING (Simulate Photometry)
+--------------------------------------------------------------------
+3.1  For every spectrum in {s'_j} (synthetic and real):
+        * For each filter T_j(λ):
+              Compute ideal band reflectance:
+                  r_j = (∫ s'_j(λ) · T_j(λ) dλ) / (∫ T_j(λ) dλ)
+              Add observational noise:
+                  r_j_noisy = r_j + N(0, σ_noise²)
+              (σ_noise ≈ 0.20 · r_j to mimic 20 % relative uncertainty)
+
+3.2  Assemble training dataset:
+        * Inputs:      M_jk = {r_k_noisy}   (matrix N_total × N_filt)
+        * Targets:     Z_target = {z'_j}     (matrix N_total × K)
+
+--------------------------------------------------------------------
+4.  TRAIN AUTO‑ML REGRESSOR (Encoder)
+--------------------------------------------------------------------
+4.1  Choose regressor family (e.g., Gradient Boosted Decision Trees, XGBoost).
+4.2  Train model f_enc : ℝ^{N_filt} → ℝ^K
+      minimize mean squared error between f_enc(M) and Z_target.
+
+--------------------------------------------------------------------
+5.  TAXONOMY CLASSIFIER (Optional)
+--------------------------------------------------------------------
+5.1  Map each synthetic spectrum s'_j to its known class label (from seed set).
+5.2  Train a separate Auto‑ML classifier g_cls : ℝ^K → Class probabilities
+      using Z_target as features and labels.
+
+--------------------------------------------------------------------
+6.  INFERRING Latent Coefficients for New Observation
+--------------------------------------------------------------------
+6.1  Input photometry vector m = {m_k} with uncertainties σ_k.
+6.2  Pre‑process m identically to training photometry:
+        • Normalize if training spectra were normalized.
+        • Optionally add Gaussian noise according to σ_k (for posterior sampling).
+
+6.3  Predict mean latent vector:
+        ẑ = f_enc(m)            # Point estimate
+
+6.4  (Optional) Sample posterior of latent vector:
+        • Assume Gaussian predictive distribution N(ẑ, Σ_pred)
+          where Σ_pred is estimated from regressor uncertainty.
+        • Draw N_sample samples {z_samp} from this distribution.
+
+--------------------------------------------------------------------
+7.  RECONSTRUCT FULL SPECTRUM (Decoder)
+--------------------------------------------------------------------
+7.1  For each sampled latent vector z_samp:
+        x_samp = μ_X + V_K · z_samp       # Reconstruct reflectance
+7.2  Compute mean spectrum:
+        S_rec = mean(x_samp across samples)
+7.3  Compute covariance matrix:
+        Cov_S = covariance(x_samp across samples)
+
+--------------------------------------------------------------------
+8.  OUTPUT
+--------------------------------------------------------------------
+8.1  Return S_rec, Cov_S.
+8.2  (Optional) Class probabilities:
+        P_type = g_cls(ẑ)               # Use mean latent vector
+
+--------------------------------------------------------------------
+End Algorithm

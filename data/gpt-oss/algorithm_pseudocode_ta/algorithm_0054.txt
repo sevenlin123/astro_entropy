@@ -1,0 +1,52 @@
+Input:
+    S_train[1..N]      // N training near‑IR spectra (wavelength grid λ)
+    P_obs[1..K]        // K photometric fluxes for target TNO
+    W_obs[1..K]        // Corresponding measurement uncertainties
+    B_filters[1..K]    // Transmission curves for each filter (same λ grid)
+
+Output:
+    S_rec(λ)           // Reconstructed spectrum
+    Cov_rec(λ,λ')     // Uncertainty covariance of reconstruction
+
+Algorithm:
+
+1. Pre‑process training spectra
+   1.1 Normalize each spectrum S_train[n] to unit integral (or median = 1).
+   1.2 Compute mean spectrum μ(λ) = (1/N) Σ_n S_train[n](λ).
+
+2. Principal Component Analysis (PCA)
+   2.1 Center data: X[n,λ] = S_train[n](λ) – μ(λ).
+   2.2 Compute covariance matrix C = (1/(N-1)) Xᵀ X.
+   2.3 Eigen‑decompose C → eigenvectors V[1..L], eigenvalues Λ[1..L].
+   2.4 Select first L_pc components (L_pc ≈ 4–5 for taxonomy, 8–10 for reconstruction).
+   2.5 Store basis functions PC[l](λ) = V[:,l]  for l=1..L_pc.
+
+3. Forward photometric model
+   3.1 For each filter k:
+          M_k(α) = ∫ [ μ(λ) + Σ_{l=1}^{L_pc} α_l * PC[l](λ) ] * B_filters[k](λ) dλ
+      where α = (α_1,…,α_Lpc) are latent coefficients.
+   3.2 Evaluate M_k(α) efficiently using pre‑computed integrals over λ.
+
+4. Bayesian inference of latent coefficients
+   4.1 Define likelihood:
+          L(α | P_obs, W_obs) = Π_{k=1}^{K} Normal(
+                                   P_obs[k] | M_k(α), W_obs[k]^2 )
+   4.2 Define prior on α:
+          p(α) = Normal(0, I)   // zero‑mean unit‑variance prior
+   4.3 Posterior:
+          p(α | P_obs) ∝ L(α | P_obs, W_obs) * p(α)
+   4.4 Obtain posterior samples {α^(s)}_{s=1}^{S} by Markov Chain Monte Carlo (e.g., HMC) or variational inference.
+
+5. Spectrum reconstruction
+   5.1 For each posterior sample s:
+          S_s(λ) = μ(λ) + Σ_{l=1}^{L_pc} α_l^(s) * PC[l](λ)
+   5.2 Estimate reconstructed spectrum as mean over samples:
+          S_rec(λ) = (1/S) Σ_{s} S_s(λ)
+   5.3 Estimate covariance:
+          Cov_rec(λ,λ') = (1/(S-1)) Σ_{s} [S_s(λ)-S_rec(λ)] * [S_s(λ')-S_rec(λ')]
+
+6. (Optional) Credible interval estimation
+   6.1 For each λ, sort {S_s(λ)} values.
+   6.2 Extract percentiles (e.g., 2.5%, 97.5%) to form 95% CI.
+
+Return S_rec and Cov_rec (or CI).

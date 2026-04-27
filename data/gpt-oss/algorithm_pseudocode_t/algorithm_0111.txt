@@ -1,0 +1,79 @@
+INPUT
+    D      : List of objects.  For each object k:
+                BANDS_k = {(λ_i, m_i, σ_mi)}   // i = 1 … N_k
+    BASIS  : Set of M reference spectra {s_j(λ)}, j = 1 … M
+    ZP     : Zero‑point magnitude for each filter (used to convert magnitudes → flux)
+    REG    : Regularisation parameter α  (α ≥ 0)
+    OUTLIER_THRESHOLD = 3   // σ–level for flagging outliers
+
+OUTPUT
+    RECON[k] : For every object k
+                • Coefficients c_k  (length M)
+                • Reconstructed spectrum S_k(λ) on a dense wavelength grid
+                • Uncertainty σ_S_k(λ)
+                • List of outlier bands
+
+--------------------------------------------------------------------
+FOR each object k in D DO
+
+    /* 1. Pre‑processing – convert magnitudes to fluxes */
+    FOR each band i in BANDS_k DO
+        f_i      ← 10^( –0.4 * ( m_i – ZP_i ) )
+        σ_fi     ← (ln 10 / 2.5) * f_i * σ_mi          // error propagation
+    END FOR
+
+    /* 2. Assemble design matrix (basis evaluated at observed wavelengths) */
+    A     ← array of size (N_k × M)
+    FOR i = 1 … N_k
+        FOR j = 1 … M
+            A[i,j] ← s_j( λ_i )
+        END FOR
+    END FOR
+
+    /* 3. Weight matrix for heteroscedastic errors */
+    W     ← diagonal matrix with entries 1/σ_fi
+
+    /* 4. Weighted design & target vector */
+    A_w   ← W · A
+    b_w   ← W · f         // f = column vector of f_i
+
+    /* 5. Constrained weighted least‑squares (non‑negative, L₂‑regularised) */
+    Solve:
+        minimise   || A_w · c – b_w ||²  +  α · ||c||²
+        subject to c_j ≥ 0   for all j
+    USE a quadratic‑programming / NNLS routine → obtain c_k
+
+    /* 6. Covariance of the coefficient estimates */
+    Cov_c ← inverse( A_wᵀ · A_w + α·I_M )     // I_M: identity of size M
+
+    /* 7. Reconstruct spectrum on a fine wavelength grid λ_grid */
+    FOR each λ in λ_grid DO
+        s_vec(λ) ← [ s_1(λ), s_2(λ), …, s_M(λ) ]ᵀ
+        S_k(λ)   ← s_vec(λ)ᵀ · c_k
+        σ_S_k(λ) ← sqrt( s_vec(λ)ᵀ · Cov_c · s_vec(λ) )
+    END FOR
+
+    /* 8. Outlier detection (optional iterative refinement) */
+    outliers ← ∅
+    FOR each band i in BANDS_k DO
+        pred_flux_i ← Σ_j c_k[j] * s_j( λ_i )
+        r_i          ← f_i – pred_flux_i
+        IF |r_i| > OUTLIER_THRESHOLD * σ_fi THEN
+            outliers ← outliers ∪ { i }
+        END IF
+    END FOR
+
+    /* 9. Store results for this object */
+    RECON[k] ← { c_k, S_k(λ_grid), σ_S_k(λ_grid), outliers }
+
+END FOR
+
+/* ------------------------------------------------------------------ */
+/* Optional post‑processing: taxonomy / clustering                     */
+COEFF_MATRIX ← matrix whose rows are the c_k vectors for all k
+CLUSTERS     ← K‑means(COEF_MATRIX, n_clusters)
+FOR each k DO
+    TAXONOMY[k] ← CLUSTERS.row_of(k)
+END FOR
+
+RETURN RECON, TAXONOMY

@@ -1,0 +1,89 @@
+Input: 
+    S = { S_j(λ) }   // N training spectra sampled on common wavelength grid λ = [λ₁ … λ_L]
+    K                 // Desired number of principal components (e.g., 8–10)
+
+Output: 
+    μ_s(λ)            // Mean spectrum
+    PCs[1…K]          // Principal‑component vectors (length L)
+    λ_vals[1…K]       // Variance of each component (prior variances)
+    H_matrix[1…m][1…K]   // Photometry‑to‑PC forward matrix (computed later)
+
+1.   Normalize all spectra to a common reference (e.g., unit area or median reflectance).
+
+2.   Compute mean spectrum:
+        μ_s(λ) = (1/N) Σ_{j=1}^{N} S_j(λ)
+
+3.   Center spectra:
+        X_j(λ) = S_j(λ) – μ_s(λ)      for all j
+
+4.   Form data matrix X (size L × N) whose columns are X_j.
+
+5.   Compute covariance matrix:
+        C = (1/(N-1)) · X · Xᵀ     // size L × L
+
+6.   Perform eigen‑decomposition of C:
+        [E, D] = eig(C)           // E: eigenvectors (PCs), D: diagonal eigenvalues
+
+7.   Sort PCs by descending eigenvalues.
+
+8.   Select first K PCs:
+        PCs[i] = E[:, i],  i = 1…K
+        λ_vals[i] = D[i,i],  i = 1…K
+
+9.   (Optional) Project training spectra onto PCs for diagnostic checks:
+        a_{j,i} = PCs[i]ᵀ · X_j
+
+Input: 
+    Photometry { (f_k, σ_k, R_k(λ)) }  // k = 1…m filters; f_k observed flux, σ_k error, R_k response curve
+    μ_s(λ), PCs[1…K], λ_vals[1…K]      // from Phase 1
+
+Output:
+    s_rec(λ)          // Reconstructed spectrum (mean)
+    Δs(λ)             // Credible‑interval envelope (e.g., ±1σ)
+
+1.   Compute base photometry (expected flux from mean spectrum):
+        base_k = ∫ μ_s(λ) · R_k(λ) dλ          // scalar for each filter
+
+2.   Compute PC photometric responses:
+        PC_k,i = ∫ PCs[i](λ) · R_k(λ) dλ      // size m × K matrix
+
+3.   Assemble forward matrix:
+        H = [ PC_1,1 … PC_1,K ;
+              …………………….
+              PC_m,1 … PC_m,K ]              // m × K
+
+4.   Form observation vector and weight matrix:
+        p = [ f_1 … f_m ]ᵀ
+        W = diag( 1/σ_1² , … , 1/σ_m² )      // m × m
+
+5.   Prior precision (inverse covariance) on coefficients:
+        Λ⁻¹ = diag( 1/λ_vals[1] , … , 1/λ_vals[K] )   // K × K
+
+6.   Compute posterior precision:
+        P_post = Hᵀ·W·H + Λ⁻¹                       // K × K
+
+7.   Compute posterior mean of coefficients:
+        μ_post = P_post⁻¹ · Hᵀ · W · (p – base)      // K × 1
+
+8.   Compute posterior covariance:
+        Σ_post = P_post⁻¹                              // K × K
+
+9.   Reconstruct mean spectrum:
+        s_rec(λ) = μ_s(λ) + Σ_{i=1}^{K} μ_post[i] · PCs[i](λ)
+
+10.  Quantify uncertainties:
+        a) Draw N_draws samples from N(μ_post, Σ_post)
+           For each draw a':
+               s_sample(λ) = μ_s(λ) + Σ_i a'[i] · PCs[i](λ)
+        b) At each λ compute sample statistics:
+                mean_s(λ) = average of s_sample(λ)
+                lower(λ), upper(λ) = 2.5th and 97.5th percentiles
+        c) Set Δs(λ) = (lower(λ), upper(λ)) as 95 % credible interval
+
+11.  Return s_rec(λ) and Δs(λ).
+
+1.   Compute log‑posterior probability of the MAP coefficients:
+        logp = –0.5 * [ (p–base – H μ_post)ᵀ·W·(p–base – H μ_post) + μ_postᵀ·Λ⁻¹·μ_post ]
+
+2.   If logp < threshold (e.g., 1–2 σ below typical training values),
+        flag the object as a potential spectral outlier.

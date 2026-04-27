@@ -1,0 +1,131 @@
+Input:
+  S_train: matrix of training spectra (N_spec x N_lambda)
+  P_train: corresponding photometric bandpasses for training? maybe none.
+  Filters: list of filter response curves R_k(lambda) for k=1..K
+  Photometry: observed fluxes F_obs[1..K] with uncertainties sigma[1..K]
+Output:
+  Reconstructed spectrum s_recon(lambda) with uncertainty intervals
+  Latent variable posterior samples {z_i}
+
+Algorithm:
+ 1. Preprocess spectra:
+    - Normalize each spectrum (e.g., divide by mean flux).
+    - Compute mean spectrum mu(lambda).
+    - Center spectra: S_centered = S_train - mu.
+
+ 2. Perform PCA:
+    - Compute covariance C = (S_centered^T * S_centered) / (N_spec-1).
+    - Eigen-decompose C: eigenvalues λ_j, eigenvectors v_j (j=1..N_lambda).
+    - Sort eigenvectors by descending eigenvalues.
+    - Select first D PCs (e.g., D=8 or 10) to form matrix U_D (N_lambda x D).
+
+ 3. Build forward photometry model:
+    For each filter k:
+        R_k(lambda) known.
+        Define linear operator L_k acting on spectrum s(lambda):
+            L_k(s) = integral [s(lambda) * R_k(lambda)] dλ   (or discrete sum)
+    Precompute projected filter vectors onto PCA basis:
+        For each k:
+            a_k = L_k( U_D )  // vector length D
+            b_k = L_k( mu )   // scalar
+
+ 4. Bayesian inference for latent z:
+    Prior: z ~ N(0, I_D)   // zero mean unit covariance
+    Likelihood: For each filter k:
+        Predicted flux f_k(z) = a_k^T * z + b_k
+        Observed flux: F_obs_k +/- sigma_k
+        Likelihood term: exp( - (F_obs_k - f_k(z))^2 / (2 sigma_k^2) )
+    Posterior proportional to prior * product likelihoods.
+
+    Use sampling algorithm (e.g., Hamiltonian Monte Carlo, NUTS) to draw N_samples from posterior p(z | data).
+
+ 5. Reconstruct spectra:
+    For each posterior sample z_s:
+        s_s(lambda) = mu(lambda) + U_D * z_s
+    Aggregate samples to estimate:
+        - Mean reconstructed spectrum: mean_s(lambda) = average over samples.
+        - Credible intervals: e.g., percentiles of {s_s(lambda)} at each wavelength.
+
+ 6. (Optional) Outlier detection:
+    Compute log-likelihood of data under posterior predictive distribution.
+    If value below threshold, flag as outlier.
+
+Return mean_s, credible intervals, posterior samples.
+
+INPUT
+    S_train       : matrix (N_spec × N_λ) of calibrated near‑IR spectra
+    Filters       : list of K filter response functions R_k(λ), k = 1 … K
+    Photometry    : observed fluxes F_k and measurement uncertainties σ_k,
+                    k = 1 … K, for the target object
+
+OUTPUT
+    s_mean(λ)      : mean reconstructed spectrum
+    CI_low(λ),CI_hi(λ) : lower/upper bounds of desired credible interval
+    Z_samples      : set of posterior samples of latent coefficients z
+
+--------------------------------------------------------------------
+STEP 0:  PRE‑PROCESSING OF TRAINING SPECTRA
+--------------------------------------------------------------------
+    1.1  Normalize each spectrum (e.g., divide by its median flux)
+    1.2  Compute the mean spectrum μ(λ) = (1/N_spec) Σ_i S_train[i,:]
+    1.3  Center spectra:  S_c = S_train – μ  (broadcast μ across rows)
+
+--------------------------------------------------------------------
+STEP 1:  PRINCIPAL COMPONENT ANALYSIS (PCA) ON THE SPECTRAL MANIFOLD
+--------------------------------------------------------------------
+    1.4  Covariance matrix C = (S_cᵀ · S_c) / (N_spec – 1)
+    1.5  Eigen‑decompose C → eigenvalues λ_j, eigenvectors v_j  (j = 1 … N_λ)
+    1.6  Sort eigenpairs by decreasing λ_j
+    1.7  Choose dimensionality D (e.g., D = 8–10 for high‑fidelity reconstruction)
+    1.8  Form the projection matrix U_D = [v_1 … v_D]  (size N_λ × D)
+
+--------------------------------------------------------------------
+STEP 2:  BUILD LINEAR PHOTOMETRY MODEL IN LATENT SPACE
+--------------------------------------------------------------------
+    For each filter k = 1 … K
+        2.1  Discretize filter response R_k(λ) on the same wavelength grid as S_c
+        2.2  Compute filter projection onto PCA basis:
+                a_k = R_k(λ) · U_D          // vector of length D
+            Compute filter projection of the mean:
+                b_k = R_k(λ) · μ(λ)         // scalar
+        2.3  Store (a_k, b_k) for later use
+
+--------------------------------------------------------------------
+STEP 3:  BAYESIAN INFERENCE OF LATENT COEFFICIENTS z
+--------------------------------------------------------------------
+    3.1  Prior:      z ∼ 𝒩(0, I_D)           // zero‑mean unit‑covariance Gaussian
+    3.2  For each filter k:
+            Predicted flux  f_k(z) = a_kᵀ · z + b_k
+            Likelihood term:
+                 L_k(z) ∝ exp( – (F_k – f_k(z))² / (2 σ_k²) )
+    3.3  Posterior density:
+            p(z | data) ∝  p(z) · ∏_{k=1}^{K} L_k(z)
+    3.4  Sample from p(z | data) using an efficient MCMC scheme
+            (e.g., Hamiltonian Monte Carlo / No‑U‑Turn Sampler)
+        Obtain N_samples ≫ 1000 draws:  { z^(s) }_{s=1}^{N_samples}
+
+--------------------------------------------------------------------
+STEP 4:  RECONSTRUCT FULL SPECTRUM FROM LATENT SAMPLES
+--------------------------------------------------------------------
+    For each posterior sample s = 1 … N_samples
+        4.1  Reconstructed spectrum:
+                s^(s)(λ) = μ(λ) + U_D · z^(s)
+        4.2  Store s^(s)(λ)  // array shape (N_samples × N_λ)
+
+    4.3  Compute pointwise statistics across samples:
+            s_mean(λ)  = mean_{s} [ s^(s)(λ) ]
+            CI_low(λ)  = percentile_{s} (s^(s)(λ), α/2 )   // e.g., α = 0.05
+            CI_hi(λ)   = percentile_{s} (s^(s)(λ), 1–α/2 )
+
+--------------------------------------------------------------------
+STEP 5:  OUTLIER DETECTION (OPTIONAL)
+--------------------------------------------------------------------
+    5.1  Compute predictive likelihood:
+            ℓ = ∏_{k=1}^{K}  Normal( F_k | a_kᵀ·E[z] + b_k , σ_k² )
+    5.2  Flag the object if ℓ falls below a chosen threshold
+            (e.g., far into the tail of the predictive distribution)
+
+--------------------------------------------------------------------
+RETURN
+    - s_mean(λ), CI_low(λ), CI_hi(λ): reconstructed spectrum with uncertainty bands
+    - Z_samples: posterior samples of latent coefficients (useful for downstream tasks)

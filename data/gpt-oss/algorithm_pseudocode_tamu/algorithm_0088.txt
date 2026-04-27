@@ -1,0 +1,11 @@
+z_real_i = Eᵀ · S_centered_i      # K‑dimensional coefficient vector
+
+S_syn_j = μ_S + E · z_syn_j
+
+m_syn_j[f] = ∫ S_syn_j(λ) * R_f(λ) dλ / ∫ R_f(λ) dλ
+
+m_noisy_j[f] ~ Normal(m_syn_j[f], σ_f)
+
+ẑ = Enc(m_obs)
+
+S_samp = μ_S + E · z_samp

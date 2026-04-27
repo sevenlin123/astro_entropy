@@ -1,0 +1,109 @@
+Input:
+    - Reference spectra {S_i(λ)}   i = 1 … N  (high‑resolution reflectance)
+    - Filter throughput curves {T_k(λ)}   k = 1 … M
+    - Desired number of principal components K (e.g., 8–10)
+    - KDE bandwidth h (≈0.5)
+    - Gaussian noise level σ_rel (≈0.20)
+
+Output for a new object with photometric measurements m = [m_1,…,m_M]:
+    - Posterior samples of latent coefficients {c_j}^J_{j=1}
+    - Posterior samples of reconstructed spectra {Ŝ_j(λ)}^J_{j=1}
+    - Classification probabilities p(class | m)
+
+--------------------------------------------------------------------
+STEP 0 – Pre‑processing (performed once)
+--------------------------------------------------------------------
+0.1  Standardise each spectrum S_i(λ) to unit mean over λ.
+0.2  Build a common wavelength grid λ_grid (e.g., 0.8–4.5 μm, 1 Å spacing).
+0.3  Interpolate all spectra onto λ_grid.
+
+--------------------------------------------------------------------
+STEP 1 – Latent space definition (Prior)
+--------------------------------------------------------------------
+1.1  Perform PCA on the matrix of all spectra:
+        X = [S_1(λ_grid); … ; S_N(λ_grid)]  // N × L matrix
+      → PCA gives eigenvectors U (L × K) and scores C (N × K):
+        S_i ≈ μ + U * c_i,   where μ = mean spectrum.
+1.2  Store PCA components U, mean μ, and K.
+
+--------------------------------------------------------------------
+STEP 2 – Manifold augmentation
+--------------------------------------------------------------------
+2.1  Estimate probability density of latent scores {c_i} using KDE:
+        p(c) ≈ KDE_h({c_i})  // Gaussian kernel, bandwidth h.
+2.2  Sample S_aug = {c_j}^J'_{j=1}  from p(c)  (e.g., J' = 5 000).
+2.3  Generate synthetic spectra from sampled scores:
+        S̃_j(λ_grid) = μ + U * c_j      for j = 1 … J'.
+
+--------------------------------------------------------------------
+STEP 3 – Forward photometry simulation (Implicit likelihood)
+--------------------------------------------------------------------
+For each synthetic spectrum S̃_j:
+    3.1  Compute synthetic photometry:
+          m_jk = ∫ S̃_j(λ) * T_k(λ) dλ / ∫ T_k(λ) dλ
+          for all filters k = 1…M
+    3.2  Add Gaussian noise:
+          m_jk ← m_jk + ε_jk ,  ε_jk ~ N(0, σ_rel * m_jk)^2
+    3.3  Store pair (m_j , c_j).
+
+Result: Training dataset D = { (m_j , c_j) }.
+
+--------------------------------------------------------------------
+STEP 4 – Train AutoML encoder
+--------------------------------------------------------------------
+4.1  Use an AutoML framework (e.g., AutoGluon) to build an ensemble
+     regressor R that maps m ∈ ℝ^M  →  c_pred ∈ ℝ^K.
+4.2  Train R on D (cross‑validation inside AutoML to avoid overfit).
+4.3  Save the trained regressor R and its prediction‑uncertainty model
+     (e.g., per‑coordinate standard deviation).
+
+--------------------------------------------------------------------
+STEP 5 – Train AutoML classifier (latent‑space taxonomy)
+--------------------------------------------------------------------
+5.1  Label each training spectrum with taxonomy class.
+5.2  Train an ensemble classifier C that maps c ∈ ℝ^K  →  class probabilities.
+5.3  Save C.
+
+--------------------------------------------------------------------
+INFERENCE (apply to new observation m_obs)
+--------------------------------------------------------------------
+Given m_obs ∈ ℝ^M:
+
+A. Encode photometry to latent distribution
+-------------------------------------------------
+A.1  Compute point estimate: ĉ = R(m_obs).
+A.2  Retrieve uncertainty estimates σ_c from R (or bootstrap ensemble).
+A.3  Construct multivariate normal proposal:
+          p(c | m_obs) ≈ N(ĉ , diag(σ_c^2)).
+    // Optional: enforce correlations via Gaussian copula if needed.
+
+B. Sample latent posterior
+----------------------------------
+B.1  Draw J samples {c_s}^J_{s=1} from p(c | m_obs).
+B.2  For each sample, optionally apply copula transformation to preserve
+     empirical covariance estimated from training scores.
+
+C. Decode to spectra
+-----------------------------------
+C.1  For each c_s:
+          Ŝ_s(λ_grid) = μ + U * c_s
+      Store {Ŝ_s}.
+
+D. Taxonomy prediction
+-----------------------------------
+D.1  Compute class probabilities:
+          p(class | m_obs) = C(ĉ)   // use point estimate or average over samples.
+
+Return:
+    - Posterior samples {Ŝ_s(λ_grid)}.
+    - Mean and credible intervals per wavelength.
+    - Class probabilities.
+
+--------------------------------------------------------------------
+Optional Post‑processing
+--------------------------------------------------------------------
+- Compute diagnostic metrics from posterior samples:
+    * Spectral slope (linear fit over λ).
+    * Absorption depths at predefined band centers.
+    * Feature confidence intervals.
+- Identify outliers by comparing distance of ĉ to training score distribution.

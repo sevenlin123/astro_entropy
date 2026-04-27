@@ -1,0 +1,74 @@
+pseudo
+INPUT: 
+    SPECTRA[1..N]           // Near‑IR spectra of reference TNOs
+    FILTERS[1..F]           // Filter transmission curves (e.g., F090W,…)
+    N_COMPONENTS            // Desired number of PCs (e.g., 5 for taxonomy, 8–10 for full spectra)
+
+1.1   Normalize each spectrum to a common scale (e.g., integrate to unity).
+1.2   Build matrix X ∈ ℝ^(N × λ) where λ = number of wavelength points.
+1.3   Compute mean spectrum μ(λ) = mean(X, axis=0).
+1.4   Center data: Xc = X – μ(λ).
+1.5   Perform Singular Value Decomposition (SVD): Xc = U Σ Vᵀ.
+1.6   Extract first N_COMPONENTS right‑singular vectors → PCs[1..N_COMPONENTS](λ).
+1.7   Store eigenvalues Λ[i] = Σ[i,i]^2 / (N−1).
+
+OUTPUT:
+    μ(λ), PCs[1..K](λ), Λ[1..K]
+
+pseudo
+FOR each filter f in FILTERS:
+    2.1   Compute convolution kernel K_f(λ) = FILTER_RESPONSE[f](λ) / ∫ FILTER_RESPONSE[f](λ) dλ
+
+pseudo
+3.1   Define latent coefficient vector c = [c1 … cK]ᵀ.
+
+3.2   Spectral forward model:
+        Spectrum(c, λ) = μ(λ) + Σ_{i=1}^K ci * PCs[i](λ)
+
+3.3   Predicted photometric flux in filter f:
+        y_pred[f](c) = ∫ Spectrum(c, λ) * K_f(λ) dλ
+
+3.4   Gaussian likelihood:
+        L(c) = Π_{f=1}^F exp( - (y_obs[f] - y_pred[f](c))^2 / (2 σ[f]^2) )
+
+3.5   Prior on c:
+        p(c) = N(0, diag(Λ))          // Independent normal with variance from PCA eigenvalues
+
+3.6   Posterior:
+        p(c | y_obs) ∝ L(c) * p(c)
+
+3.7   Sample posterior using e.g., Hamiltonian Monte Carlo or affine‑invariant ensemble sampler:
+        Initialize ensemble of walkers at c=0.
+        Run n_iter burn‑in, then n_samples production.
+        Store samples {c^{(s)}}_{s=1}^{n_samples}.
+
+pseudo
+4.1   For each posterior sample s:
+        S_s(λ) = Spectrum(c^{(s)}, λ)
+
+4.2   Compute posterior mean spectrum:
+        S_mean(λ) = (1/n_samples) Σ_{s=1}^{n_samples} S_s(λ)
+
+4.3   Compute posterior standard deviation per wavelength:
+        S_std(λ) = sqrt( (1/(n_samples-1)) Σ_{s} (S_s(λ) - S_mean(λ))^2 )
+
+4.4   Return:
+        - Posterior distribution of latent coefficients {c^{(s)}}
+        - Reconstructed spectrum S_mean(λ) with 68%/95% credible intervals from S_std(λ)
+
+pseudo
+5.1   For each posterior sample s:
+        Compute log‑likelihood ℓ_s = log L(c^{(s)}).
+
+5.2   Determine percentile threshold τ (e.g., 5th percentile).
+
+5.3   Flag samples with ℓ_s < τ as “low‑probability intermediates”.
+
+5.4   Optionally aggregate flagged samples to assess rare spectral features.
+
+pseudo
+FOR each target T in TARGET_LIST:
+    6.1   Load y_obs[T], σ[T].
+    6.2   Run Steps 3–4 to obtain S_mean[T](λ), S_std[T](λ).
+    6.3   Store results.
+END FOR

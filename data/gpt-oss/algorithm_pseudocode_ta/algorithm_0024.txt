@@ -1,0 +1,65 @@
+INPUT:
+    S_train[n_spec][n_wave]          # Training spectra (intensity vs wavelength)
+    Filters[m][n_wave]              # Transmission vectors of m photometric filters
+    Photometry_T[object][m]         # Measured fluxes for each target object
+    Error_T[object][m]              # Corresponding 1‑σ uncertainties
+    K                                 # Number of principal components to retain
+OUTPUT:
+    Spec_recon[object][n_wave]       # Reconstructed spectrum (mean)
+    Cov_recon[object][n_wave][n_wave]# Spectrum covariance (uncertainty)
+
+---------------------------------------------------------------
+1. TRAINING PHASE: BUILD LATENT SPACE
+---------------------------------------------------------------
+1.1 Compute mean spectrum
+        μ_s = mean_over_rows(S_train)          # vector length n_wave
+
+1.2 Center training spectra
+        S_c = S_train  -  μ_s                    # broadcasting subtraction
+
+1.3 Covariance matrix of centered spectra
+        C = (S_cᵀ · S_c) / (n_spec - 1)          # n_wave × n_wave
+
+1.4 Eigen‑decompose C
+        [λ, V] = eig(C)                          # λ sorted descending
+        U = V[:, 0:K]                            # K leading eigenvectors (principal components)
+
+1.5 Project each training spectrum onto PCs
+        A = Uᵀ · S_c                              # K × n_spec matrix of coefficients
+        a_mean = mean_over_columns(A)             # vector length K
+        Σ_prior = cov_over_columns(A)            # K × K covariance (use diagonal if desired)
+
+---------------------------------------------------------------
+2. RECONSTRUCTION PHASE FOR EACH OBJECT
+---------------------------------------------------------------
+For each target object t:
+
+    2.1 Build filter‑projected basis
+            M = Filters · U                         # m × K design matrix
+            r_mu = Filters · μ_s                   # m‑vector of mean‑spectra fluxes
+
+    2.2 Vector of centred observations
+            y = Photometry_T[t]  -  r_mu            # m‑vector
+
+    2.3 Weight matrix from photometric uncertainties
+            W = diag( 1 / Error_T[t]² )            # m × m
+
+    2.4 Posterior covariance of latent coefficients
+            Σ_post = inverse( Mᵀ · W · M  +  Σ_prior⁻¹ )   # K × K
+
+    2.5 Posterior mean of latent coefficients
+            μ_post = Σ_post · ( Mᵀ · W · y  +  Σ_prior⁻¹ · a_mean )   # K‑vector
+
+    2.6 Optionally draw samples from N(μ_post, Σ_post)
+            # For point estimate use μ_post
+            a_t = μ_post
+
+    2.7 Reconstruct full spectrum (mean estimate)
+            Spec_recon[t] = μ_s  +  U · a_t          # n_wave vector
+
+    2.8 Propagate uncertainty to full spectrum
+            Cov_recon[t] = U · Σ_post · Uᵀ           # n_wave × n_wave matrix
+
+---------------------------------------------------------------
+END
+---------------------------------------------------------------

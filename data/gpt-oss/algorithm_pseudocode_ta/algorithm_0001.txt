@@ -1,0 +1,66 @@
+plaintext
+Input:
+    S_train[1..N]   // N training spectra sampled at wavelengths λ[1..L]
+    R_filters[1..K][1..L]   // Transmission curves of K filters
+    y_obj[1..K]      // Photometric fluxes (or magnitudes) of target object
+    σ_obj[1..K]      // Measurement uncertainties for y_obj
+    M                // Desired number of principal components (≤ L)
+
+Output:
+    {s_posterior[i]}  // Set of posterior spectra samples (i = 1..N_samples)
+    μ_spectral        // Posterior mean spectrum
+    Σ_spectral        // Posterior covariance of spectrum
+
+--------------------------------------------------------------------
+1.  Train Principal Component Basis
+--------------------------------------------------------------------
+   1.1 Compute mean spectrum μ_S[1..L] = (1/N) Σ_i S_train[i]
+   1.2 Center spectra: X[i] = S_train[i] – μ_S
+   1.3 Form data matrix X_mat[L x N] = [X[1], X[2], …, X[N]]
+   1.4 Perform Singular Value Decomposition (SVD):
+            X_mat = U * Σ * Vᵀ
+   1.5 Select first M columns of U as PC basis vectors:
+            PC[m] = U[:, m]  for m = 1..M
+   1.6 Pre‑compute projection coefficients of training spectra:
+            C_train[i, m] = PC[m]ᵀ · X[i]    // for all i,m
+   1.7 Estimate prior mean μ_C[1..M] and covariance Σ_C[1..M×M] from {C_train}
+          (e.g., μ_C = mean(C_train, axis=0),
+                 Σ_C = cov(C_train, rowvar=False))
+
+--------------------------------------------------------------------
+2.  Build Forward Model from Latent Space to Filter Fluxes
+--------------------------------------------------------------------
+   2.1 For each filter k and component m:
+          a_mk = Σ_l  PC[m][l] * R_filters[k][l]          // dot product
+   2.2 For each filter k:
+          b_k  = Σ_l  μ_S[l] * R_filters[k][l]            // mean contribution
+   2.3 Assemble matrix A[K x M] where A[k, m] = a_mk
+   2.4 Assemble offset vector b[K] = b_k
+
+--------------------------------------------------------------------
+3.  Bayesian Inference in Latent Space
+--------------------------------------------------------------------
+   3.1 Define weight matrix W = diag( 1 / σ_obj[1]^2 , … , 1 / σ_obj[K]^2 )
+   3.2 Compute posterior precision matrix:
+          Λ_post = Aᵀ · W · A  +  Σ_C⁻¹
+   3.3 Compute posterior covariance:
+          Σ_post = Λ_post⁻¹
+   3.4 Compute posterior mean:
+          μ_post = Σ_post · ( Aᵀ · W · ( y_obj – b )  +  Σ_C⁻¹ · μ_C )
+
+--------------------------------------------------------------------
+4.  Sample Latent Coefficients and Reconstruct Spectra
+--------------------------------------------------------------------
+   4.1 Draw N_samples draws from multivariate normal:
+          C_sample[i] ~ Normal( μ_post , Σ_post )     for i = 1..N_samples
+   4.2 For each draw i:
+          s_i = μ_S + Σ_{m=1..M} C_sample[i,m] * PC[m]   // reconstruct spectrum
+          Store s_i in {s_posterior[i]}
+   4.3 Estimate posterior spectrum statistics:
+          μ_spectral = (1/N_samples) Σ_i s_i
+          Σ_spectral = (1/(N_samples-1)) Σ_i (s_i – μ_spectral)(s_i – μ_spectral)ᵀ
+
+--------------------------------------------------------------------
+5.  Return Results
+--------------------------------------------------------------------
+   Output {s_posterior[i]}, μ_spectral, Σ_spectral

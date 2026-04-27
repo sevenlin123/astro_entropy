@@ -1,0 +1,82 @@
+INPUT:
+    S_train      # Training set of N_spectra × N_wave spectra
+    F_filters    # List of M filter transmission curves R_m(λ)
+    Y_obj        # Observed photometry for a target object: vector of length M
+    σ_Y          # Measurement uncertainties for Y_obj (length M)
+    k            # Number of principal components to retain (e.g., 4–10)
+
+OUTPUT:
+    s_med        # Median reconstructed spectrum (length N_wave)
+    s_ci_low, s_ci_high   # Lower/upper 95 % credible‑interval spectra (length N_wave)
+    outlier_flag # Boolean flag if object is an outlier according to posterior‑predictive test
+
+--------------------------------------------------------------------
+1. TRAINING PHASE  (once for all objects)
+
+   1.1 Compute mean spectrum μ = mean(S_train, axis=0)               # shape (N_wave,)
+   1.2 Center spectra: S_centered = S_train – μ                      # shape (N_spectra,N_wave)
+   1.3 Compute covariance Σ = (S_centered^T · S_centered) / (N_spectra-1)
+   1.4 Eigen‑decompose Σ: Σ = U · diag(λ) · U^T                      # U: eigenvectors, λ: eigenvalues
+   1.5 Sort eigenpairs by descending λ
+   1.6 Select first k eigenvectors: W = U[:,0:k]                     # shape (N_wave,k)
+   1.7 Compute principal‑component scores: C = S_centered · W       # shape (N_spectra,k)
+   1.8 Store prior variances for latent coefficients: Λ_prior = diag(λ[0:k])
+
+--------------------------------------------------------------------
+2. PRECOMPUTE FILTER‑TO‑SPECTRAL MAPPINGS
+
+   For each filter m = 1…M:
+       2.1 Compute p_m = ∑_l R_m(l) · μ(l)                        # scalar
+       2.2 For each component j = 1…k:
+                q_mj = ∑_l R_m(l) · W(l,j)                      # scalar
+   Form matrix P = [p_1,…,p_M]^T (shape M×1)
+   Form matrix Q = [q_mj] (shape M×k)
+
+--------------------------------------------------------------------
+3. BAYESIAN INFERENCE FOR A SINGLE OBJECT
+
+   3.1 Define observation noise covariance: Σ_y = diag(σ_Y^2)   # shape M×M
+   3.2 Compute precision matrices:
+           Λ_prec = Λ_prior^{-1}                               # shape k×k
+           Σ_y_prec = Σ_y^{-1}                                 # shape M×M
+   3.3 Compute posterior covariance of latent vector z:
+           Σ_post = inverse( Λ_prec + Q^T · Σ_y_prec · Q )     # shape k×k
+   3.4 Compute posterior mean of latent vector z:
+           μ_post = Σ_post · ( Q^T · Σ_y_prec · (Y_obj – P) )   # shape k×1
+
+--------------------------------------------------------------------
+4. SAMPLE FROM POSTERIOR OF LATENT COEFFICIENTS
+
+   4.1 Draw N_sample (e.g., 1000) draws from multivariate normal:
+           z^(s) ~ MVN( μ_post , Σ_post )   for s = 1…N_sample
+   4.2 For each draw s:
+           4.2.1 Reconstruct full spectrum:
+                   s^(s) = μ + W · z^(s)                # shape N_wave
+           4.2.2 Compute predicted photometry:
+                   y_pred^(s) = P + Q · z^(s)          # shape M
+           4.2.3 Evaluate Gaussian likelihood:
+                   L^(s) = prod_m N( Y_obj[m] | y_pred^(s)[m], σ_Y[m]^2 )
+   4.3 Compute posterior predictive mean and variance for each wavelength:
+           s_mean(m) = mean_{s}( s^(s)[m] )
+           s_var(m)  = var_{s}( s^(s)[m] )
+
+--------------------------------------------------------------------
+5. ESTIMATE CRI AND MEDIAN SPECTRUM
+
+   5.1 For each wavelength λ_m:
+           5.1.1 Sort { s^(s)[m] } over s
+           5.1.2 Set s_ci_low[m]  = value at 2.5 percentile
+           5.1.3 Set s_ci_high[m] = value at 97.5 percentile
+   5.2 Set s_med = s_mean  (or median of samples if desired)
+
+--------------------------------------------------------------------
+6. OUTLIER DETECTION (OPTIONAL)
+
+   6.1 Compute log‑posterior predictive density:
+           log_ppd = log( mean_{s}( L^(s) ) )
+   6.2 Compare log_ppd to threshold τ (pre‑defined or based on training distribution)
+           outlier_flag = ( log_ppd < τ )
+
+--------------------------------------------------------------------
+7. RETURN RESULTS
+   Return s_med, s_ci_low, s_ci_high, outlier_flag

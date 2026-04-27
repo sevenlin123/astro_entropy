@@ -1,0 +1,116 @@
+--------------------------------------------------------------------
+INPUT
+--------------------------------------------------------------------
+   P_spec : set of N_ref spectroscopic templates  
+              (wavelength array λ_ref, reflectance R_ref[1..N_ref])
+   F_list : list of M photometric filters
+              (effective throughput T_f(λ) for f = 1..M)
+   h_band  : Gaussian kernel bandwidth for KDE (default ≈ 0.5)
+   K_dim   : number of principal components to keep (≈ 5–10)
+   n_syn   : number of synthetic latent samples to generate (≈ 5000)
+
+OUTPUT
+   model_reg  : trained regressor  (photometry → latent coefficients)
+   model_clas : trained classifier  (latent → taxonomy)
+   pca_mean   : mean spectrum vector (length N_ref)
+   pca_basis  : matrix of K_dim eigenvectors (size N_ref × K_dim)
+
+--------------------------------------------------------------------
+TRAINING PHASE
+--------------------------------------------------------------------
+
+1.  Pre‑process spectra
+    --------------------------------------------------------------
+    a.  For each template i:
+            R_i_norm = R_i / mean(R_i)          # remove absolute scale
+    b.  Compute mean spectrum:
+            pca_mean = (1/N_ref) * Σ_i R_i_norm
+    c.  Center spectra:
+            X_centered[i] = R_i_norm – pca_mean   # size N_ref
+
+2.  Principal Component Analysis (PCA)
+    --------------------------------------------------------------
+    a.  Compute covariance matrix C = (1/(N_ref-1)) * X_centeredᵀ X_centered
+    b.  Eigen‑decompose:  [V, Λ] = eig(C)      # V columns = eigenvectors
+    c.  Sort eigenvalues descending → Λ_sorted, reorder V accordingly
+    d.  Keep first K_dim eigenvectors:
+            pca_basis = V[:, 1:K_dim]           # N_ref × K_dim
+    e.  Project centered spectra to latent space:
+            Z_true[i] = X_centered[i] · pca_basis   # length K_dim
+
+3.  Construct continuous prior with KDE
+    --------------------------------------------------------------
+    a.  Fit Gaussian kernel density estimate to {Z_true[i]} with bandwidth h_band
+    b.  Draw n_syn samples from KDE → Z_kde[j], j = 1..n_syn
+
+4.  Generate synthetic spectra and photometry
+    --------------------------------------------------------------
+    For each sampled latent vector Z_kde[j]:
+        i.  Reconstruct spectrum:
+                R_syn_j = pca_mean + Z_kde[j] · pca_basisᵀ
+        ii.  Convolve with each filter to obtain synthetic photometry:
+                m_syn_j[f] = ∫ R_syn_j(λ) · T_f(λ) dλ   for f = 1..M
+        iii. Inject Gaussian noise (σ_rel = 20%) into each band:
+                m_noisy_j[f] = m_syn_j[f] + N(0, (0.2*m_syn_j[f])²)
+
+5.  Assemble training dataset
+    --------------------------------------------------------------
+    a.  Inputs X_train  = {m_noisy_j[1..M]}      # shape (n_syn, M)
+    b.  Targets Y_lat  = {Z_kde[j]}              # shape (n_syn, K_dim)
+    c.  Labels L_train = taxonomy labels of nearest real spectrum
+            (optional; used for classifier training)
+
+6.  Train regressor (photometry → latent)
+    --------------------------------------------------------------
+    a.  Use an AutoML framework (e.g., AutoGluon Tabular) to train
+        a model that maps X_train → Y_lat.
+    b.  Store model as model_reg.
+
+7.  Train classifier (latent → taxonomy)
+    --------------------------------------------------------------
+    a.  Use same AutoML setup to train on Y_lat vs. L_train.
+    b.  Store model as model_clas.
+
+--------------------------------------------------------------------
+INFERENCE PHASE
+--------------------------------------------------------------------
+
+Given new photometric measurement m_obs[1..M] with uncertainties σ_obs[1..M]:
+
+1.  Standardise inputs (if AutoML requires):
+        X_test = [(m_obs[f] - μ_f)/σ_f] for f = 1..M
+        (μ_f, σ_f come from training data statistics)
+
+2.  Predict latent coefficients:
+        Z_pred = model_reg.predict(X_test)          # vector length K_dim
+        Optionally obtain predictive uncertainty (e.g., ensemble std.)
+
+3.  Sample posterior of latent space:
+        a.  Draw N_post samples from Gaussian Copula centred at Z_pred
+            with covariance from regressor uncertainty.
+        b.  For each sample Z_samp:
+                R_samp = pca_mean + Z_samp · pca_basisᵀ
+
+4.  Reconstructed spectrum:
+        a.  Point estimate: R_mean = pca_mean + Z_pred · pca_basisᵀ
+        b.  Uncertainty envelope: compute percentiles (16th, 84th) across {R_samp}
+
+5.  Taxonomy probability:
+        a.  Pass Z_pred to model_clas → class_probs[H₂O, CO₂, Org, Meth]
+        b.  Return most probable class and probability distribution.
+
+--------------------------------------------------------------------
+POST‑PROCESSING
+--------------------------------------------------------------------
+
+-  Optionally compute diagnostic quantities:
+       •  Spectral slope = slope(R_mean over λ_range)
+       •  Absorption depth = min(R_mean) / continuum
+
+-  Export results:
+       •  R_mean, uncertainty bands, class_probs
+       •  Full posterior samples if required.
+
+--------------------------------------------------------------------
+END
+--------------------------------------------------------------------

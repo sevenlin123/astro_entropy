@@ -1,0 +1,108 @@
+Input:
+    S_ref[1..N]      – reference TNO spectra (flux vs λ)
+    M_filters[]      – list of photometric filter transmission curves
+    M_obs            – observed sparse photometry for a target TNO  
+                       (fluxes or magnitudes per filter)
+Parameters:
+    K                – number of retained principal components
+    h_kde            – KDE bandwidth
+    n_aug            – number of synthetic latent samples
+    n_posterior      – number of posterior samples to draw
+    σ_noise          – assumed relative photometric noise (e.g., 0.20)
+
+Output:
+    S_rec            – reconstructed high‑resolution spectrum
+    Cov_rec          – covariance (uncertainty) of S_rec
+    P_taxon          – probability vector over taxonomic classes
+
+--------------------------------------------------------------------
+1.  ──────  TRAINING PHASE  ───────────────────────────────────────
+--------------------------------------------------------------------
+
+1.1  PCA of reference spectra
+      (E, μ) ← PCA(S_ref, num_components=K)
+      // E : K × L eigenvectors (L = spectral resolution)
+      // μ : L‑dimensional mean spectrum
+
+1.2  Project reference spectra to latent space
+      Z_real[i] = E * (S_ref[i] - μ)^T    // i = 1..N
+
+1.3  Fit Kernel Density Estimator (KDE) to latent points
+      kde_model ← KDE(Z_real, bandwidth=h_kde, kernel='gaussian')
+
+1.4  Generate synthetic latent points
+      for j = 1 .. n_aug:
+          z_j ← SampleFrom(kde_model)          // K‑dimensional
+          // Record z_j for use in training
+
+1.5  Construct augmented training set
+      For each z_j:
+          // Decode to full spectrum
+          s_j = μ + E^T * z_j                  // L‑dimensional
+
+          // Forward‑model photometry
+          m_j = ConvolveSpectrumWithFilters(s_j, M_filters)
+          
+          // Inject realistic noise
+          for each filter f:
+              m_j[f] ← m_j[f] * (1 + Normal(0, σ_noise))
+          
+          Store pair (m_j , z_j) in training data
+
+1.6  Train encoder (photometry → latent) with AutoML
+      encoder_model ← AutoMLTrain(training_data)
+
+1.7  Train taxonomy classifier in latent space
+      taxon_labels ← {class_i} for each reference spectrum
+      classifier_model ← AutoMLTrain( (Z_real , taxon_labels) )
+
+--------------------------------------------------------------------
+2.  ──────  INFERENCE / RECONSTRUCTION  ─────────────────────────────
+--------------------------------------------------------------------
+
+2.1  Encode observed photometry to latent coefficients
+      z_hat_mean, z_hat_cov = encoder_model.predict(M_obs)
+      // encoder returns posterior mean & covariance of latent vector
+
+2.2  Sample posterior latent vectors (Gaussian copula if desired)
+      for t = 1 .. n_posterior:
+          z_t ← DrawSample(z_hat_mean, z_hat_cov)    // multivariate normal
+          store z_t
+
+2.3  Decode each latent sample to a spectrum
+      for t = 1 .. n_posterior:
+          s_t = μ + E^T * z_t
+          store s_t
+
+2.4  Aggregate sampled spectra to obtain mean spectrum and covariance
+      S_rec = mean_{t}(s_t)                          // L‑dimensional
+      Cov_rec = covariance_{t}(s_t)                 // L×L matrix
+
+--------------------------------------------------------------------
+3.  ──────  TAXONOMY CLASSIFICATION  ───────────────────────────────
+--------------------------------------------------------------------
+
+3.1  Classify latent mean vector
+      P_taxon = classifier_model.predict_proba(z_hat_mean)
+
+--------------------------------------------------------------------
+4.  ──────  OUTPUT  ───────────────────────────────────────────────
+--------------------------------------------------------------------
+
+Return:
+    S_rec          – reconstructed high‑resolution reflectance spectrum
+    Cov_rec        – uncertainty (confidence intervals) per wavelength
+    P_taxon        – probability distribution over taxonomic classes
+
+PCA(S_ref, num_components):
+    // Standard PCA: compute mean μ, covariance Σ, eigenvectors E
+    // Return first num_components eigenvectors E and mean μ
+
+ConvolveSpectrumWithFilters(spectrum, M_filters):
+    for each filter f:
+        m_f = ∫ spectrum(λ) * T_f(λ) dλ / ∫ T_f(λ) dλ
+    return vector {m_f}
+
+DrawSample(mean, cov):
+    // Optionally use Gaussian copula to preserve dependencies
+    return multivariate_normal(mean, cov)

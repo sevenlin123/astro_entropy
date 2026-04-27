@@ -1,0 +1,85 @@
+pseudo
+TRAIN(referenceSpectra, filterResponses, K, h, Naug, σ_rel)
+
+  # 1.1 Pre‑process spectra
+  for each spectrum S in referenceSpectra:
+      resample S to common wavelength grid λ
+      normalize S (e.g., divide by mean reflectance in 1.5–1.6 µm)
+
+  # 1.2 Compute mean and centre data
+  μ_s ← mean(referenceSpectra over objects)
+  X ← referenceSpectra – μ_s          # shape: (Nobj, Nλ)
+
+  # 1.3 Principal Component Analysis (PCA)
+  [U, Λ] ← PCA(X, keep=K)            # U: (Nλ, K), Λ: eigenvalues
+  z_i ← Uᵀ · Xᵀ                      # latent vectors (K, Nobj)
+
+  # 1.4 Density estimation in latent space (KDE)
+  KDE ← fitGaussianKDE(z_i, bandwidth=h)
+
+  # 1.5 Augment training set
+  for n = 1 … Naug:
+      z* ← sampleFrom(KDE)           # synthetic latent vector
+      S* ← μ_s + U · z*              # reconstruct synthetic spectrum
+      m* ← forwardModel(S*, filterResponses)
+      m* ← m* + Normal(0, σ_rel·m*)   # add 20 % Gaussian noise
+      store (m*, z*)
+
+  # 1.6 Assemble training data
+  X_train ← {m*}                    # photometry (features)
+  Y_train ← {z*}                    # latent coefficients (targets)
+
+  # 1.7 Train AutoML regressor
+  REG ← AutoMLRegressor.fit(X_train, Y_train)
+
+  # 1.8 Train classifier on latent space
+  C ← AutoMLClassifier.fit(z_i, taxonomicLabels)
+
+  # 1.9 Store artefacts for inference
+  SAVE {μ_s, U, REG, C}
+
+pseudo
+RECONSTRUCT(m_obs)
+
+  # 2.1 Predict latent posterior
+  μ_z, Σ_z ← REG.predictWithUncertainty(m_obs)
+  #   (REG may provide mean & covariance or an ensemble of predictions)
+
+  # 2.2 Sample latent space (posterior exploration)
+  for s = 1 … Nsample:
+      if REG gives Gaussian output:
+          z_s ← multivariateNormal(μ_z, Σ_z)
+      else:                                     # e.g. ensemble predictions
+          z_s ← sampleFrom(REG.posteriorEnsemble)
+
+      # Optional: enforce KDE prior via Gaussian Copula
+      z_s ← adjustWithCopula(z_s, KDE)
+
+      # 2.3 Decode to full spectrum
+      S_s ← μ_s + U · z_s
+
+      store S_s
+
+  # 2.4 Return spectrum distribution
+  S_mean ← mean(S_s over s)
+  S_ci_lower, S_ci_upper ← percentile(S_s, 2.5, 97.5)
+
+  # 2.5 Taxonomic probability
+  P_tax ← C.predictProbabilities(μ_z)
+
+  RETURN {S_mean, S_ci_lower, S_ci_upper, P_tax}
+
+pseudo
+forwardModel(S, filterResponses):
+    # Integrate spectrum through each filter
+    for each filter f in filterResponses:
+        m_f ← ∫ S(λ) · R_f(λ) dλ / ∫ R_f(λ) dλ
+    return {m_f}
+
+adjustWithCopula(z, KDE):
+    # Preserve marginal KDE distribution and inter‑component
+    # correlations via a Gaussian Copula
+    U ← standardNormalCDF(z)          # uniform marginals
+    Σ ← KDE.covariance                 # inferred from KDE samples
+    z_adj ← Φ⁻¹( U ) * Σ                # map back through copula
+    return z_adj

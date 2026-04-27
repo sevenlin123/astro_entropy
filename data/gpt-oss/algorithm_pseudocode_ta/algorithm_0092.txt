@@ -1,0 +1,84 @@
+INPUT:
+    S_train[1..N][1..L]        // N training spectra sampled at L wavelengths λ[1..L]
+    Filters[j][1..L]           // j‑th filter transmission function over same grid
+    m_obj[j]                   // observed photometry for target object
+    sigma_obj[j]               // measurement uncertainties
+    K                           // number of principal components to retain
+
+OUTPUT:
+    s_mean[1..L]                // mean reconstructed spectrum
+    s_lower[1..L], s_upper[1..L]// credible‑interval bounds (e.g. 16th & 84th percentiles)
+
+--------------------------------------------------------------------
+STEP 1 – TRAINING PHASE (performed once)
+--------------------------------------------------------------------
+1.1 Compute mean spectrum:
+        μ[ℓ] = (1/N) * Σ_{i=1}^{N} S_train[i][ℓ]      for ℓ = 1..L
+
+1.2 Center spectra:
+        X[i][ℓ] = S_train[i][ℓ] – μ[ℓ]               for all i,ℓ
+
+1.3 Compute covariance matrix C = (1/(N−1)) * X^T * X
+    (size L×L)
+
+1.4 Eigen‑decompose C → eigenvalues λ_k and eigenvectors v_k[ℓ]
+    Sort eigenvectors by decreasing λ_k
+
+1.5 Select first K eigenvectors:
+        PC[k][ℓ] = v_k[ℓ]   for k = 1..K, ℓ = 1..L
+
+1.6 Project training spectra into latent space:
+        for i in 1..N:
+            for k in 1..K:
+                coeff[i][k] = Σ_{ℓ=1}^{L} PC[k][ℓ] * X[i][ℓ]
+
+1.7 Estimate prior covariance of latent vector:
+        Σ_prior = (1/(N−1)) * coeff^T * coeff      // size K×K
+        Set prior mean μ_prior = 0 (zero vector)
+
+--------------------------------------------------------------------
+STEP 2 – FORWARD MODEL (photometry generation)
+--------------------------------------------------------------------
+2.1 Pre‑compute mapping matrix A (size M × K) where M = number of filters:
+        for j in 1..M:                     // filter index
+            for k in 1..K:                 // principal component index
+                A[j][k] = Σ_{ℓ=1}^{L} Filters[j][ℓ] * PC[k][ℓ]
+            // constant term from mean spectrum:
+            b[j] = Σ_{ℓ=1}^{L} Filters[j][ℓ] * μ[ℓ]
+
+--------------------------------------------------------------------
+STEP 3 – BAYESIAN INFERENCE FOR TARGET OBJECT
+--------------------------------------------------------------------
+3.1 Assemble observation vector y = m_obj[1..M]
+3.2 Assemble noise covariance Σ_noise = diag(σ_obj[1]^2, …, σ_obj[M]^2)
+
+3.3 Compute posterior precision:
+        Λ_post = A^T * Σ_noise^{-1} * A + Σ_prior^{-1}
+
+3.4 Compute posterior mean of latent vector:
+        μ_post = Λ_post^{-1} * (A^T * Σ_noise^{-1} * (y − b))
+
+3.5 Compute posterior covariance:
+        Σ_post = Λ_post^{-1}
+
+--------------------------------------------------------------------
+STEP 4 – SAMPLE LATENT VECTORS AND RECONSTRUCT SPECTRA
+--------------------------------------------------------------------
+4.1 Draw N_samples samples {c_s} from multivariate Gaussian N(μ_post, Σ_post)
+
+4.2 For each sample c_s:
+        for ℓ in 1..L:
+            s_s[ℓ] = μ[ℓ] + Σ_{k=1}^{K} PC[k][ℓ] * c_s[k]
+        Store s_s[ℓ] in matrix S_samples[ℓ][sample_index]
+
+--------------------------------------------------------------------
+STEP 5 – COMPUTE SUMMARY STATISTICS
+--------------------------------------------------------------------
+5.1 For each wavelength ℓ:
+        s_mean[ℓ]   = median of S_samples[ℓ][:]
+        s_lower[ℓ]  = percentile(S_samples[ℓ][:], 16)
+        s_upper[ℓ]  = percentile(S_samples[ℓ][:], 84)
+
+--------------------------------------------------------------------
+RETURN:
+    s_mean, s_lower, s_upper

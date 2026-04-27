@@ -1,0 +1,108 @@
+pseudo
+# ------------------------------------
+# 1. TRAINING PHASE
+# ------------------------------------
+
+# Input: Reference spectra S_ref[1..N]  (each a vector of length M wavelengths)
+#        Taxonomic labels L[1..N]
+#        Filter response functions R_f[1..F]  (one vector per filter)
+
+# ------------------------------------------------------------------
+# 1.1   PRE‑PROCESS AND PCA
+# ------------------------------------------------------------------
+for each spectrum s in S_ref:
+    s_norm = normalize_by_solar(s)          # remove solar spectrum, unitless reflectance
+    store s_norm
+
+# Assemble data matrix X (N x M)
+X = stack_rows(s_norm for s in S_ref)
+
+# Perform PCA on X
+μ_X, V, λ = PCA(X, keep_components = K)     # μ_X: mean spectrum (1 x M)
+                                            # V: eigenvector matrix (M x K)
+                                            # λ: eigenvalues (K x 1)
+
+# Project reference spectra into latent space
+C_ref = (X - μ_X) * V                        # (N x K) matrix of latent coefficients
+
+# ------------------------------------------------------------------
+# 1.2   BUILD PRIOR OVER LATENT SPACE (KDE)
+# ------------------------------------------------------------------
+kde_prior = fit_KDE(C_ref, bandwidth = h)    # non‑parametric density estimate
+
+# ------------------------------------------------------------------
+# 1.3   GENERATE SYNTHETIC TRAINING SET (MOCK SPECTRA + NOISY PHOTOMETRY)
+# ------------------------------------------------------------------
+N_syn = 5000                                 # number of synthetic samples
+
+for i in 1 .. N_syn:
+    c_i = sample_from(kde_prior)             # draw latent vector (1 x K)
+    s_i = μ_X + V * c_i                      # reconstruct high‑resolution spectrum
+    m_i = []                                 # photometry vector (length F)
+
+    for f in 1 .. F:                         # forward model photometry
+        flux_f = integral_over_filter(s_i, R_f[f])
+        noise  = normal(mean=0,
+                        stddev = 0.20 * flux_f)   # 20 % Gaussian noise
+        m_i.append(flux_f + noise)
+
+    store (m_i, c_i)
+
+# ------------------------------------------------------------------
+# 1.4   TRAIN ENCODER (PHOTOMETRY → LATENT COEFFICIENTS)
+# ------------------------------------------------------------------
+encoder_model = AutoML_Regression()          # e.g., ensemble of GBDTs + NN
+encoder_model.fit(inputs = {m_i}, targets = {c_i})
+
+# ------------------------------------------------------------------
+# 1.5   TRAIN CLASSIFIER (LATENT COEFFICIENTS → TAXONOMY LABEL)
+# ------------------------------------------------------------------
+classifier_model = AutoML_Classification()
+classifier_model.fit(inputs = {C_ref}, targets = {L})
+
+# ------------------------------------
+# 2. INFERENCE PHASE
+# ------------------------------------
+
+# Input: New sparse photometry m_obs[1..F]  (observed fluxes with uncertainties)
+
+# ------------------------------------------------------------------
+# 2.1   PREDICT LATENT COEFFICIENT DISTRIBUTION
+# ------------------------------------------------------------------
+# (a) Obtain point prediction
+c_pred_mean = encoder_model.predict(m_obs)
+
+# (b) Optionally obtain predictive uncertainty
+#     • If encoder is an ensemble, sample predictions from each member
+#     • If encoder outputs mean & variance, use those directly
+c_samples = []
+for member in encoder_model.members:
+    c_samples.append(member.predict(m_obs))
+# c_samples now contains B samples of latent vectors
+
+# ------------------------------------------------------------------
+# 2.2   RECONSTRUCT SPECTRUM
+# ------------------------------------------------------------------
+# Deterministic reconstruction from mean coefficients
+s_recon = μ_X + V * c_pred_mean            # (1 x M) spectrum
+
+# Uncertainty propagation (optional)
+s_samples = []
+for c in c_samples:
+    s_samples.append( μ_X + V * c )
+# s_samples contains B reconstructed spectra
+
+# ------------------------------------------------------------------
+# 2.3   TAXONOMIC PROBABILITIES
+# ------------------------------------------------------------------
+probabilities = classifier_model.predict_proba(c_pred_mean)
+# returns dictionary {label: probability}
+
+# ------------------------------------
+# 3. OUTPUT
+# ------------------------------------
+return {
+    "reconstructed_spectrum": s_recon,
+    "spectrum_samples": s_samples,          # optional Monte‑Carlo samples
+    "taxon_probabilities": probabilities
+}

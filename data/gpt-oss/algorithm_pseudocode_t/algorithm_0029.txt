@@ -1,0 +1,57 @@
+INPUT:
+    D = { (m_i, σ_i, λ_eff,i, T_i(λ)) | i = 1 … M }   // photometry for one TNO
+    K                                            // number of spectral basis functions
+    B_k(λ),  k = 1 … K                           // basis functions (e.g., PCA components)
+    τ_k                                           // prior std. dev. for coefficient k
+
+OUTPUT:
+    μ_a   – posterior mean of spectral coefficients a = [a_1 … a_K]
+    Σ_a   – posterior covariance of a
+    R(λ)  – reconstructed reflectance spectrum with uncertainty
+
+--------------------------------------------------------------------
+1. Pre‑compute the design matrix X
+   ---------------------------------------------------------------
+   For each filter i = 1 … M:
+       For each basis k = 1 … K:
+           X[i,k] = ∫ B_k(λ) * T_i(λ) dλ              // weighted integral over filter
+   EndFor
+   // X has dimensions M × K
+
+2. Build observation vector y
+   ---------------------------------------------------------------
+   y[i] = m_i   // observed magnitudes in each filter
+
+3. Build weighting matrix W
+   ---------------------------------------------------------------
+   W is a diagonal matrix of size M×M:
+       W[i,i] = 1 / σ_i²
+
+4. Prior precision matrix Λ
+   ---------------------------------------------------------------
+   Λ is diagonal (size K×K):
+       Λ[k,k] = 1 / τ_k²
+
+5. Compute posterior covariance Σ_a
+   ---------------------------------------------------------------
+   A = Xᵀ · W · X + Λ                          // K × K matrix
+   Σ_a = inverse(A)                            // analytic solution because model is linear
+
+6. Compute posterior mean μ_a
+   ---------------------------------------------------------------
+   μ_a = Σ_a · (Xᵀ · W · y)                    // K × 1 vector
+
+7. Reconstruct reflectance spectrum
+   ---------------------------------------------------------------
+   For any wavelength λ in desired range:
+       R(λ) = Σ_{k=1}^{K} μ_a[k] * B_k(λ)       // expected spectrum
+   // Uncertainty at λ:
+       Var(R(λ)) = Σ_{k=1}^{K} Σ_{l=1}^{K} Σ_a[k,l] * B_k(λ) * B_l(λ)
+
+8. Compute predicted magnitudes and residuals (optional)
+   ---------------------------------------------------------------
+   For each filter i:
+       m_pred[i] = ∑_{k=1}^{K} μ_a[k] * X[i,k]
+       residual[i] = m[i] - m_pred[i]
+
+RETURN μ_a, Σ_a, R(λ), Var(R(λ)), residuals

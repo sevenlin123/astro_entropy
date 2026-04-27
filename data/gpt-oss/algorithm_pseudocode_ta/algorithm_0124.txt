@@ -1,0 +1,36 @@
+μ(λ) ← mean over rows of S
+
+S_c ← S – μ
+
+C ← S_c × V[1..k]        // N_spec × k matrix of PC coefficients
+
+B_j ← ∫ R_j(λ) · μ(λ) dλ
+
+G_j,i ← ∫ R_j(λ) · V_i(λ) dλ
+
+p̂_j(a) = B_j + Σ_{i=1}^{k} a_i · G_j,i
+
+D ← diag(σ_p^2)          // noise covariance (N_f × N_f)
+
+Σ_post ← (Λ^{-1} + Gᵀ D^{-1} G)^{-1}
+
+r ← p – B                  // residual vector of length N_f
+   ā  ← Σ_post · (Gᵀ D^{-1} r)
+
+for s = 1 to N_samp:
+    a_s ← draw from N(ā, Σ_post)
+
+s_s(λ) ← μ(λ) + Σ_{i=1}^{k} a_s[i] · V_i(λ)
+
+s_hat(λ) ← mean over samples of s_s(λ)
+
+CI_lower(λ) ← percentile(s_s(λ), 2.5)
+   CI_upper(λ) ← percentile(s_s(λ), 97.5)
+
+train PCA ← Step 1
+build G, B ← Step 2
+compute ā, Σ_post ← Step 3
+sample a_s ← Step 4
+reconstruct s_s(λ) ← Step 5
+aggregate to s_hat & CI ← Step 6
+return s_hat, CI

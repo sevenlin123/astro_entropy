@@ -1,0 +1,58 @@
+Inputs
+-------
+TRAIN_SPEC   :  matrix (Ns × Nλ)   # spectra from training set
+PHOTOMETRY   :  vector y (Nb)      # observed band fluxes for target
+ERR_PHOT     :  vector σ (Nb)      # uncertainties for each band
+FILTERS      :  matrix R (Nb × Nλ) # band‑response functions (normalized)
+K            :  integer           # number of principal components to retain
+
+Output
+------
+SPEC_RECON   :  vector Ŝ (Nλ)      # reconstructed spectrum (mean)
+UNC_RECON    :  matrix U (Nλ × Nsamples) # samples from posterior for uncertainty
+PRED_LIKEL   :  scalar             # posterior predictive likelihood (optional)
+
+Procedure
+---------
+1.  /* ---------- 1. Train PCA on spectra ---------- */
+2.  μ_s  ← mean(TRAIN_SPEC, axis=0)                     # mean spectrum
+3.  S̃    ← TRAIN_SPEC – μ_s                            # centered spectra
+4.  Cov   ← (S̃ᵀ · S̃) / (Ns – 1)                        # covariance matrix
+5.  [E, L] ← eig(Cov)                                   # eigenvectors, eigenvalues
+6.  PCs   ← E[:, 1:K]                                    # first K PCs (columns)
+7.  λ_pc  ← L[1:K]                                       # variances of PCs
+
+8.  /* ---------- 2. Build prior for PC coefficients ---------- */
+9.  c_prior_mean ← zeros(K)
+10. c_prior_cov  ← diag(λ_pc)                            # diagonal prior covariance
+
+11. /* ---------- 3. Map PCs to photometric bands ---------- */
+12.  /* For each band j, compute band-integrated response to each PC */
+13.  A ← zeros(Nb, K)                                     # forward matrix
+14.  for j in 1 … Nb:
+15.       r_j ← FILTERS[j, :]                            # response function for band j
+16.       for k in 1 … K:
+17.           A[j, k] ← dot(r_j, PCs[:, k])              # integral of PC over band
+
+18. /* ---------- 4. Bayesian inference of PC coefficients ---------- */
+19.  S  ← diag(σ²)                                          # measurement covariance
+20.  Σ_post_inv ← Aᵀ · S⁻¹ · A + c_prior_cov⁻¹              # precision matrix
+21.  Σ_post     ← inverse(Σ_post_inv)                       # posterior covariance
+22.  μ_post     ← Σ_post · (Aᵀ · S⁻¹ · y + c_prior_cov⁻¹ · c_prior_mean)  # posterior mean
+
+23. /* ---------- 5. Posterior sampling (optional) ---------- */
+24.  draw M samples {c^(m)} from N(μ_post , Σ_post)
+
+25. /* ---------- 6. Spectrum reconstruction ---------- */
+26.  SPEC_RECON ← μ_s + PCs · μ_post                         # posterior mean spectrum
+27.  for m in 1 … M:
+28.       c_m   ← sample from N(μ_post , Σ_post)
+29.       Ŝ_m   ← μ_s + PCs · c_m
+30.       store Ŝ_m in UNC_RECON
+
+31. /* ---------- 7. Optional predictive likelihood ---------- */
+32.  y_pred    ← A · μ_post
+33.  χ²        ← (y – y_pred)ᵀ · S⁻¹ · (y – y_pred)
+34.  PRED_LIKEL← exp( –0.5 * χ² )  # Gaussian predictive probability
+
+Return SPEC_RECON, UNC_RECON, PRED_LIKEL

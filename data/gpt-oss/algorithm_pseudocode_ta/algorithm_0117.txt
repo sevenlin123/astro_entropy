@@ -1,0 +1,107 @@
+pseudocode
+# ------------------------------------------------------------------
+# INPUTS
+# ------------------------------------------------------------------
+# S          : (N_spec × N_wave) matrix of training spectra  
+#  (spectra are already continuum‑normalised and resampled onto the same wavelength grid)
+
+# Filters    : list of K filter response vectors, each of length N_wave  
+#             Filters[k][i] gives transmission of filter k at wavelength i
+
+# Photometry : for each target object
+#   obs_flux[k]     – measured flux in filter k
+#   err_flux[k]     – 1‑σ measurement error in filter k
+
+# Parameters
+#   M  : number of principal components to retain (default 8–10)
+
+# ------------------------------------------------------------------
+# PRE‑COMPUTATIONS
+# ------------------------------------------------------------------
+
+# 1. Mean spectrum
+μ_s  ← mean(S, axis=0)                # vector of length N_wave
+
+# 2. Zero‑mean spectra
+Z    ← S – μ_s
+
+# 3. PCA on training spectra
+#    Eigen‑decomposition of covariance matrix of Z
+cov_Z   ← (Zᵀ · Z) / (N_spec – 1)     # N_wave × N_wave
+[V, λ]  ← eig(cov_Z)                  # V: eigenvectors, λ: eigenvalues
+sort λ in descending order; reorder V accordingly
+
+# 4. Retain first M components
+U_M   ← V[:, 1:M]                     # N_wave × M loading matrix
+scores← Z · U_M                       # N_spec × M matrix of PC scores
+
+# 5. Prior distribution of PC scores
+prior_mean   ← mean(scores, axis=0)           # length M
+prior_cov    ← cov(scores, rowvar=False)      # M × M
+
+# 6. Filter–component coupling
+#    For each filter k compute:
+#        a0_k  = Σ_i Filters[k][i] * μ_s[i]
+#        a_jk  = Σ_i Filters[k][i] * U_M[i, j]   for j = 1…M
+for k in 1..K:
+    a0[k] ← sum( Filters[k] * μ_s )
+    for j in 1..M:
+        a[j][k] ← sum( Filters[k] * U_M[:, j] )   # scalar
+
+# ------------------------------------------------------------------
+# RECONSTRUCTION FOR EACH OBJECT
+# ------------------------------------------------------------------
+for each object o in Photometry:
+    
+    # 1. Extract observed fluxes and errors
+    f     ← obs_flux[o]      # vector of length K
+    σ     ← err_flux[o]      # vector of length K
+    
+    # 2. Build design matrix A (K × M)
+    for k in 1..K:
+        for j in 1..M:
+            A[k, j] ← a[j][k]                      # coefficient of c_j in filter k
+    
+    # 3. Build constant term b (K × 1)
+    for k in 1..K:
+        b[k] ← a0[k]
+    
+    # 4. Likelihood precision contribution
+    #    H = Aᵀ · diag(1/σ²) · A
+    W       ← diag( 1 / (σ ⊙ σ) )                 # diagonal weight matrix (K×K)
+    H       ← Aᵀ · W · A                           # M×M
+    h_vec   ← Aᵀ · W · (f – b)                    # M×1
+    
+    # 5. Prior precision
+    Λ_prior ← inv(prior_cov)                       # M×M
+    
+    # 6. Posterior precision and mean
+    Λ_post  ← Λ_prior + H                          # M×M
+    Σ_post  ← inv(Λ_post)                          # M×M
+    μ_post  ← Σ_post · (Λ_prior · prior_mean + h_vec)   # M×1
+    
+    # 7. Reconstructed spectrum
+    s_rec   ← μ_s + U_M · μ_post                   # length N_wave
+    
+    # 8. Spectrum uncertainty (covariance)
+    cov_s   ← U_M · Σ_post · U_Mᵀ                  # N_wave × N_wave
+    
+    # 9. Credible intervals (e.g., 95%)
+    lower   ← s_rec – 1.96 * sqrt(diag(cov_s))
+    upper   ← s_rec + 1.96 * sqrt(diag(cov_s))
+    
+    # 10. Store results
+    store(o,
+           spectrum_mean = s_rec,
+           spectrum_lower = lower,
+           spectrum_upper = upper,
+           pc_coeffs_mean = μ_post,
+           pc_coeffs_cov  = Σ_post)
+
+# ------------------------------------------------------------------
+# OPTIONAL OUTLIER DETECTION (simple Mahalanobis test)
+# ------------------------------------------------------------------
+for each object o:
+    diff ← pc_coeffs_mean[o] – prior_mean
+    mahal ← sqrt( diffᵀ · inv(prior_cov) · diff )
+    if mahal > threshold: mark o as potential outlier

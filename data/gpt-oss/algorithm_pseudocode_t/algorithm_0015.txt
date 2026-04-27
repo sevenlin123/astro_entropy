@@ -1,0 +1,77 @@
+INPUT:
+    1. Photometric catalog for each target object:
+          B_obj = { (band_j , mag_j , err_j) | j = 1…N_band }
+    2. Spectral basis set:
+          B = { Φ_k(λ) | k = 1…K }   // e.g., principal‑component or empirical library
+    3. Filter response curves:
+          R_band(λ)   // normalized to unit area for every band
+    4. Wavelength grid λ_l, l = 1…L
+
+OUTPUT:
+    Reconstructed reflectance spectrum S_obj(λ_l) for every object
+    (optionally classification probabilities)
+
+ALGORITHM:
+
+FOR each object in catalog:
+    /* ------------------------------------------------------------------ */
+    /* 1. Pre‑processing                                               */
+    /* ------------------------------------------------------------------ */
+    1.1 Convert observed magnitudes to relative fluxes:
+         F_j = 10^(-0.4 * mag_j)            // arbitrary zero‑point
+         σ_Fj = 0.4 * ln(10) * F_j * err_j  // propagate error
+
+    1.2 Assemble observation vector:
+         y = [F_1, …, F_N]ᵀ
+         C = diag(σ_F1², …, σ_FN²)         // covariance matrix (assumed diagonal)
+
+    /* ------------------------------------------------------------------ */
+    /* 2. Forward model: predict band fluxes from basis coefficients     */
+    /* ------------------------------------------------------------------ */
+    2.1 Build design matrix A (size N × K):
+        FOR each band j:
+            FOR each basis component k:
+                A[j,k] = ∫ Φ_k(λ) * R_band_j(λ) dλ / ∫ R_band_j(λ) dλ
+        END
+    END
+
+    /* ------------------------------------------------------------------ */
+    /* 3. Bayesian inference – MAP estimation of coefficients              */
+    /* ------------------------------------------------------------------ */
+    3.1 Define prior on coefficients:  p(c)  ∝  exp[ -½ (c - μ_prior)ᵀ Σ_prior⁻¹ (c - μ_prior) ]
+          (choose μ_prior = 0, Σ_prior = α I  for regularisation)
+
+    3.2 Likelihood:  p(y | c)  ∝  exp[ -½ (y - A c)ᵀ C⁻¹ (y - A c) ]
+
+    3.3 Posterior (unnormalised):  p(c | y) ∝ p(y | c) * p(c)
+
+    3.4 Compute negative log‑posterior:
+         ℒ(c) = ½ (y - A c)ᵀ C⁻¹ (y - A c) + ½ (c - μ_prior)ᵀ Σ_prior⁻¹ (c - μ_prior)
+
+    3.5 Find MAP coefficients by solving:
+         ∇ℒ(c) = 0  →  (Aᵀ C⁻¹ A + Σ_prior⁻¹) c = Aᵀ C⁻¹ y
+        (linear system – can be solved by Cholesky decomposition)
+
+    3.6 Extract solution:
+         c_MAP = solution of linear system
+
+    /* ------------------------------------------------------------------ */
+    /* 4. Spectrum reconstruction                                        */
+    /* ------------------------------------------------------------------ */
+    4.1 Compute reconstructed spectrum on wavelength grid:
+         S_obj(λ_l) = Σ_{k=1}^{K} c_MAP[k] * Φ_k(λ_l)
+
+    /* ------------------------------------------------------------------ */
+    /* 5. Optional: classification                                       */
+    /* ------------------------------------------------------------------ */
+    5.1 For each taxonomy class t with prototype spectrum P_t(λ):
+           Compute distance d_t = ||S_obj - P_t||₂   // Euclidean norm over λ
+    5.2 Convert distances to class probabilities (softmax or Gaussian kernel)
+           p_t = exp(-d_t² / (2σ_class²)) / Σ_u exp(-d_u² / (2σ_class²))
+
+    /* ------------------------------------------------------------------ */
+    /* 6. Store results                                                 */
+    /* ------------------------------------------------------------------ */
+    6.1 Save S_obj(λ_l), c_MAP, and optional p_t for this object
+
+END FOR

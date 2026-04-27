@@ -1,0 +1,16 @@
+Inputs
+------
+- Spectral library S = {s_n | n = 1 … N}          # each s_n is a vector of L fluxes
+- Filter set F = {f_j | j = 1 … J}                # each f_j is a vector of L weights
+- Observation vector y_obs (length J)            # measured magnitudes or fluxes
+- Observation uncertainties σ (length J)         # 1‑σ errors
+
+Parameters
+----------
+- K   : number of principal components to retain (K < L)
+
+Outputs
+-------
+- Reconstructed spectra {s_k}                     # posterior predictive spectra
+- Credible intervals for each wavelength
+- Latent variable posterior mean and covariance

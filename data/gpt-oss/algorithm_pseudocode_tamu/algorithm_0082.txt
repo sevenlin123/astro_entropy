@@ -1,0 +1,110 @@
+INPUT
+    S_real   – list of N_ref spectroscopic reflectances  
+               (vector of length L_wavelength)
+    F        – list of M_filter throughput curves  
+    labels   – taxonomic label for each S_real (optional)
+    K_pc     – number of principal components to retain
+    h_kde    – bandwidth for KDE
+    n_synth  – number of synthetic latent samples to generate
+    noise_pct– relative noise percentage added to synthetic photometry
+    n_post   – number of posterior samples for uncertainty estimation
+
+OUTPUT
+    Encoder  – regressor mapping photometry → latent coefficients
+    Decoder  – inverse‑PCA transform (reconstruction)
+    Classifier – latent‑space taxonomic classifier
+    Functions  encode(), decode(), sample_posterior(), classify()
+------------------------------------------------------------------
+1.  PREPROCESS SPECTRA
+        # Normalize spectra (e.g., mean zero, unit variance)
+        S_norm = normalize(S_real)
+
+2.  PRINCIPAL COMPONENT ANALYSIS
+        U, Σ, Vt = PCA(S_norm, components=K_pc)        # U: eigenvectors
+        PCs   = project(U, S_norm)                    # (N_ref × K_pc)
+
+3.  KDE OF LATENT COEFFICIENTS
+        kde = KDE(PCs, bandwidth=h_kde, kernel='gaussian')
+        lat_samples = kde.sample(n=n_synth)           # (n_synth × K_pc)
+
+4.  GENERATE SYNTHETIC SPECTRA
+        for i in 1 … n_synth:
+            S_synth[i] = inverse_project(U, lat_samples[i])   # (L_wavelength)
+        # Optional: add small random perturbation if desired
+
+5.  FORWARD‑MODEL TO PHOTOMETRY
+        for i in 1 … n_synth:
+            m_clean[i] = integrate_over_filters(S_synth[i], F)   # (M_filter)
+            # add Gaussian noise
+            noise_factor = exp( normal(0, ln(1+noise_pct)) )
+            m_noisy[i]  = m_clean[i] * noise_factor
+
+6.  TRAIN ENCODER
+        X_train = m_noisy          # (n_synth × M_filter)
+        Y_train = lat_samples      # (n_synth × K_pc)
+        Encoder = AutoML_Regressor(X_train, Y_train)
+        # AutoML selects best ensemble of GBDT / NN, tunes hyper‑params
+
+7.  OPTIONAL: TRAIN TAXONOMY CLASSIFIER
+        X_cls   = PCs                 # (N_ref × K_pc)
+        y_cls   = labels
+        Classifier = AutoML_Classifier(X_cls, y_cls)
+
+8.  POSTERIOR SAMPLING (Gaussian Copula)
+        # Fit marginal posteriors for each latent dim
+        for k in 1 … K_pc:
+            marginals[k] = fit_distribution(Y_train[:,k])
+        # Estimate correlation matrix from Y_train
+        Corr = corr(Y_train)
+        Copula = GaussianCopula(marginals, Corr)
+
+9.  INFERENCE FOR NEW OBJECT
+        function encode(m_obs):
+                # m_obs : observed photometry (M_filter)
+                μ_lat = Encoder.predict_mean(m_obs)      # point estimate
+                σ_lat = Encoder.predict_std(m_obs)       # optional
+                return μ_lat, σ_lat
+
+        function decode(lat_vec):
+                return inverse_project(U, lat_vec)       # reconstructed spectrum
+
+        function sample_posterior(m_obs, n_samples):
+                μ, σ = encode(m_obs)
+                # Draw latent samples from Gaussian copula conditioned on μ
+                lat_samples = Copula.sample_given_mean(μ, n=n_samples)
+                spectra     = [decode(v) for v in lat_samples]
+                return spectra
+
+        function classify(m_obs):
+                μ, _ = encode(m_obs)
+                probs = Classifier.predict_proba(μ)
+                return probs
+
+10.  USAGE
+        # Given new sparse photometry m_new:
+        μ_lat, σ_lat    = encode(m_new)
+        spectrum_hat    = decode(μ_lat)
+        spectra_draws   = sample_posterior(m_new, n_post)
+        taxonomy_probs  = classify(m_new)
+
+        # From spectra_draws derive credible intervals for any spectral
+        # feature (slope, band depth, etc.).
+
+project(U, S):
+        return (S @ U)          # projection onto PC basis
+
+inverse_project(U, coeffs):
+        return coeffs @ U.T      # reconstruct in wavelength space
+
+integrate_over_filters(S, F):
+        for each filter f in F:
+                m_f = ∫ S(λ) * f(λ) dλ / ∫ f(λ) dλ
+        return vector of m_f
+
+fit_distribution(data):
+        return parametric fit (e.g., normal) to data
+
+GaussianCopula(marginals, Corr):
+        construct multivariate normal with Corr
+        transform marginals to uniform via CDF
+        return copula object capable of sampling

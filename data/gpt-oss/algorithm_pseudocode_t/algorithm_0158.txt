@@ -1,0 +1,57 @@
+Algorithm ProbabilisticSpectralReconstruction
+
+Input: 
+   - Photometric measurements Y = { (λ_k, m_k, σ_k) } for k=1..K
+   - Filter transmission curves T_k(λ)
+   - Solar spectrum S(λ)
+   - Spectral basis functions {B_j(λ)} j=1..J or GP kernel k(λ, λ')
+   - Class templates {C_l(λ)} l=1..L
+   - Priors: class priors P(C_l), coefficient priors P(a_j)
+
+Output:
+   - Posterior samples of spectral coefficients a^(s) or GP draws R^(s)(λ)
+   - Class posterior probabilities P(C_l | Y)
+   - Outlier flag
+
+Procedure:
+
+1. Preprocessing:
+   a. For each filter k, compute normalization constant N_k = ∫ S(λ) T_k(λ) dλ
+   b. For each basis function B_j, precompute convolution vector:
+        f_kj = ∫ B_j(λ) S(λ) T_k(λ) dλ / N_k
+      This yields linear mapping from coefficients a to expected flux in filter k:
+        μ_k(a) = Σ_j a_j * f_kj
+
+2. Define Likelihood:
+   For a given coefficient vector a:
+       p(Y | a) = Π_{k=1}^K Normal( m_k | μ_k(a), σ_k^2 )
+
+3. Define Prior:
+   a. Coefficient prior: a ~ N(0, Σ_a)   // Σ_a diagonal with variances σ_a_j^2
+   b. If using GP: sample R(λ) directly; define prior covariance K(λ, λ') and evaluate likelihood via convolution integrals similar to step 1.
+
+4. Posterior Sampling:
+   Use Hamiltonian Monte Carlo (NUTS) to generate S samples {a^(s)} from posterior p(a | Y).
+   For each sample, compute spectral estimate:
+        R^(s)(λ) = Σ_j a_j^(s) * B_j(λ)
+
+5. Taxonomy Inference:
+   For each class l:
+      a. Compute deterministic spectrum C_l(λ).
+      b. Convolve with filters to get expected flux vector μ_k^l = ∫ C_l(λ) S(λ) T_k(λ) dλ / N_k
+      c. Evaluate likelihood under class l:
+            p(Y | C_l) = Π_k Normal( m_k | μ_k^l, σ_k^2 )
+      d. Compute class posterior:
+            P(C_l | Y) ∝ p(Y | C_l) * P(C_l)
+   Normalize P(C_l | Y) over all l.
+
+6. Outlier Detection:
+   a. Compute marginal likelihood estimate p(Y) ≈ exp( average_log_likelihood over posterior samples ).
+   b. If p(Y) < τ_outlier (predefined threshold), set OUTLIER = TRUE else FALSE.
+
+7. Return:
+   - Posterior samples {R^(s)(λ)}
+   - Class posterior probabilities {P(C_l | Y)}
+   - OUTLIER flag
+
+End Algorithm

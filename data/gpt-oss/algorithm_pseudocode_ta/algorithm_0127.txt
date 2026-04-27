@@ -1,0 +1,75 @@
+Inputs
+-------
+- Spectral library  {S_i(λ)}   i = 1 … N_spec          // high‑resolution near‑IR spectra
+- Photometric filter set  {R_j(λ)}   j = 1 … J            // JWST/NIRCam filter responses
+- Target photometry  y_obs = {f_j}   j = 1 … J            // observed broadband fluxes
+- Measurement uncertainties σ_obs = {σ_j}
+- Number of principal components K (≈4–10)
+- Prior hyper‑parameters for coefficients (mean μ_c, covariance Σ_c)
+
+Outputs
+-------
+- Posterior samples of PCA coefficients {c^(s)}   s = 1 … S
+- Reconstructed spectrum S_rec(λ) for each sample
+- Credible intervals (e.g., 68 %, 95 %) for S_rec(λ)
+- Log‑posterior predictive value (for outlier assessment)
+
+Procedure
+---------
+
+1. **PCA training on the spectral library**
+   1.1 Compute mean spectrum μ_S(λ) = (1/N_spec) Σ_i S_i(λ).
+   1.2 Center all spectra: ˜S_i(λ) = S_i(λ) – μ_S(λ).
+   1.3 Form data matrix X where row i is flattened ˜S_i(λ).
+   1.4 Perform eigen‑decomposition of covariance of X.
+   1.5 Select first K eigenvectors → Principal Components PC_k(λ),
+       k = 1 … K.  Store them as columns of matrix P(λ).
+   1.6 Store eigenvalues λ_k to form prior coefficient variances if desired.
+
+2. **Forward model construction (spectra → photometry)**
+   2.1 For each filter j:
+        Compute element a_{jk} = ∫ PC_k(λ) · R_j(λ) dλ      // linear response
+        Compute bias b_j = ∫ μ_S(λ) · R_j(λ) dλ
+   2.2 Assemble design matrix A ∈ ℝ^{J×K} with entries a_{jk}.
+   2.3 Assemble bias vector b ∈ ℝ^J.
+   2.4 Forward model: predicted fluxes f_pred(c) = A·c + b.
+
+3. **Bayesian inference of PCA coefficients**
+   3.1 Define prior on coefficients:
+        p(c) = N( μ_c , Σ_c )    // typically μ_c = 0, Σ_c diagonal(λ_k)
+   3.2 Define likelihood:
+        p(y_obs | c) = N( A·c + b , diag(σ_obs²) )
+   3.3 Posterior is Gaussian because model is linear:
+        Σ_post = (Aᵀ W A + Σ_c⁻¹)⁻¹
+        μ_post = Σ_post (Aᵀ W (y_obs – b) + Σ_c⁻¹ μ_c)
+        where W = diag(σ_obs⁻²) is weight matrix.
+   3.4 Generate S posterior samples:
+        For s = 1 … S:
+           Draw c^(s) ~ N( μ_post , Σ_post ).
+
+4. **Spectral reconstruction for each posterior sample**
+   4.1 For each sample s:
+        S_rec^(s)(λ) = μ_S(λ) + Σ_{k=1}^K c_k^(s) · PC_k(λ)
+   4.2 Store S_rec^(s)(λ) over chosen wavelength grid.
+
+5. **Credible interval construction**
+   5.1 At each wavelength λ:
+        Collect values {S_rec^(s)(λ)} over all samples.
+        Compute percentiles (16th, 50th, 84th, 2.5th, 97.5th).
+   5.2 Output median spectrum and ±1σ, ±2σ bands.
+
+6. **Outlier / rare‑type detection (optional)**
+   6.1 Compute marginal likelihood of observed photometry:
+        p(y_obs) = ∫ p(y_obs | c) p(c) dc
+                  = N( b , A Σ_c Aᵀ + diag(σ_obs²) )
+   6.2 Evaluate log‑likelihood ln p(y_obs).
+   6.3 If ln p(y_obs) < threshold (e.g., lower 5 % of distribution of
+        training spectra), flag object as potential outlier.
+
+7. **Return results**
+   - Posterior coefficient samples {c^(s)}
+   - Reconstructed spectra {S_rec^(s)(λ)}
+   - Credible intervals
+   - Outlier flag / log‑likelihood
+
+End

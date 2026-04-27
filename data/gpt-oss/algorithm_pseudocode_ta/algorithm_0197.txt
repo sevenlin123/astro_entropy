@@ -1,0 +1,12 @@
+S          ← matrix of N_train spectra (each of length L_wav)
+F_j(λ)     ← transmission curve of filter j   (j = 1 … N_filt)
+y_j        ← measured flux in filter j
+σ_j        ← measurement error in filter j
+K          ← number of principal components to retain
+
+denom_j   ← ∫ F_j(λ) dλ
+   a0_j      ← (1/denom_j) ∫ F_j(λ) μ(λ) dλ
+   a_j(k)    ← (1/denom_j) ∫ F_j(λ) P(λ,k) dλ   for k = 1 … K
+
+var_s(λ) ← P(λ,:) · C_c · P(λ,:)^T
+   err(λ)   ← 1.96 * sqrt(var_s(λ))          // 95 % credible interval

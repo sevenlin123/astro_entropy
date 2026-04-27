@@ -1,0 +1,103 @@
+INPUT:
+    – Reference spectra {S_i(λ)} , i = 1 … Nspec   (reflectance arrays, same λ grid)
+    – Corresponding taxonomic labels {ℓ_i}
+    – JWST‑NIRCam filter transmission curves {T_f(λ)} , f = 1 … NF
+    – Optional: photometric uncertainties σ_f for each filter (here 20%)
+
+OUTPUT FOR NEW OBJECT:
+    – Reconstructed high‑resolution spectrum Ŝ(λ)
+    – Posterior probability vector p(ℓ | photometry)
+    – (Optional) Estimated 1σ uncertainty envelope around Ŝ(λ)
+
+--------------------------------------------------------------------
+1.  Principal‑Component Analysis (PCA) on the training spectra
+    -----------------------------------------------------------------
+    1.1  Compute mean spectrum:
+            μ_S(λ) = (1/Nspec) Σ_i S_i(λ)
+
+    1.2  Center spectra:
+            X_i(λ) = S_i(λ) – μ_S(λ)
+
+    1.3  Form data matrix X [Nspec × M]  (M = number of λ‑bins)
+
+    1.4  Compute covariance C = (1/(Nspec–1)) Xᵀ X
+
+    1.5  Eigen‑decompose C → eigenvalues λ_k, eigenvectors v_k
+         Sort by decreasing λ_k.
+
+    1.6  Choose dimensionality K (e.g., K = 8) so that
+           cumulative variance ≥ threshold (≈90 %).
+
+    1.7  Retain first K eigenvectors V = [v_1 … v_K] (M × K).
+
+    1.8  Project each centered spectrum to latent space:
+            c_i = Vᵀ X_i      (K‑dimensional vector)
+
+--------------------------------------------------------------------
+2.  Build a continuous prior over latent space (Kernel Density Estimate)
+    ------------------------------------------------------------------
+    2.1  Fit KDE to {c_i} using bandwidth h ≈ 0.5 (Gaussian kernel).
+
+    2.2  Sample N_aug synthetic latent vectors {c_j^syn} from KDE
+         (e.g., N_aug = 5000).
+
+--------------------------------------------------------------------
+3.  Generate synthetic spectra and mock photometry
+    ------------------------------------------------------------------
+    For each synthetic latent vector c_j^syn:
+        3.1  Reconstruct full spectrum:
+                S_j^syn(λ) = μ_S(λ) + V ⋅ c_j^syn
+
+        3.2  Compute noiseless photometry in each filter:
+                m_j,f^syn = ∫ S_j^syn(λ) · T_f(λ) dλ / ∫ T_f(λ) dλ
+
+        3.3  Add Gaussian noise:
+                m_j,f^obs = m_j,f^syn + N(0, σ_f²)
+                where σ_f = 0.20 · m_j,f^syn   (20 % relative error)
+
+        3.4  Store tuple (m_j^obs, c_j^syn)
+
+--------------------------------------------------------------------
+4.  Train the photometry→latent regressor
+    ------------------------------------------------------------------
+    4.1  Assemble training set:
+            Inputs  = {m_j^obs}          (N_aug × NF)
+            Targets = {c_j^syn}          (N_aug × K)
+
+    4.2  Use an AutoML framework (e.g., AutoGluon) to train an ensemble
+         of regressors (GBDT, RandomForest, NN, etc.) that minimizes
+         mean‑square error between predicted and true c.
+
+    4.3  Store the trained regressor R(m) → ĉ
+
+--------------------------------------------------------------------
+5.  Train the latent‑space taxonomic classifier
+    ------------------------------------------------------------------
+    5.1  Use original latent vectors {c_i} and labels {ℓ_i}.
+
+    5.2  Train a probabilistic classifier C(c) → p(ℓ | c)
+         (e.g., logistic regression or a small neural net).
+
+--------------------------------------------------------------------
+6.  Inference for a new object
+    ------------------------------------------------------------------
+    Given observed photometry m_new = {m_f^new}:
+
+    6.1  Predict latent coefficients:
+            ĉ = R(m_new)
+
+    6.2  Reconstruct spectrum:
+            Ŝ(λ) = μ_S(λ) + V ⋅ ĉ
+
+    6.3  Classify taxonomic type:
+            p(ℓ | m_new) = C(ĉ)
+
+    6.4  (Optional) Uncertainty propagation:
+            • Draw N_sample synthetic latent vectors from the posterior
+              distribution of R (e.g., by sampling the ensemble’s
+              leaf‑node predictions).
+            • For each sample, reconstruct spectrum as above to build
+              an empirical 68 % confidence band.
+
+--------------------------------------------------------------------
+END

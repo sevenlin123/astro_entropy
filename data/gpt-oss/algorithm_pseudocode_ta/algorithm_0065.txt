@@ -1,0 +1,76 @@
+text
+# -------------------------------------------------------------
+# 1. TRAINING PHASE (once, from a set of full spectra)
+# -------------------------------------------------------------
+
+# 1.1 Load all spectra S_n(λ)  (n = 1 … N_spectra)
+#     Each spectrum is sampled on a common wavelength grid λ_j (j = 1 … N_λ).
+
+# 1.2 Build data matrix D of size (N_λ × N_spectra)
+#     D[j,n] = S_n(λ_j)
+
+# 1.3 Compute mean spectrum μ_s(λ):
+#     μ_s(λ_j) = mean over n of D[j,n]
+
+# 1.4 Center spectra:
+#     X[j,n] = D[j,n] – μ_s(λ_j)
+
+# 1.5 Perform Singular Value Decomposition (SVD) on X:
+#     X = U Σ Vᵀ
+#     - Columns of U (size N_λ×N_λ) are eigenvectors (principal components).
+#     - Diagonal of Σ gives singular values σ_k; eigenvalues λ_k = (σ_k²)/(N_spectra–1).
+
+# 1.6 Select the first K principal components (K chosen by user, e.g. K=8).
+#     Basis vectors B_k(λ_j) = U[j,k],  k = 1…K
+#     Eigenvalues λ_k = Σ[k,k]²/(N_spectra–1)
+
+# 1.7 For every photometric filter i (i = 1…N_filters)
+#     – Load transmission curve T_i(λ_j).
+#     – Compute mean predicted flux of the mean spectrum:
+#           μ_fi = Σ_j T_i(λ_j) * μ_s(λ_j)  Δλ
+#     – Compute projection of each component onto the filter:
+#           M[i,k] = Σ_j T_i(λ_j) * B_k(λ_j) Δλ
+#     – Store vector μ_f (length N_filters) and matrix M (N_filters × K).
+
+# -------------------------------------------------------------
+# 2. RECONSTRUCTION PHASE (for each target object)
+# -------------------------------------------------------------
+
+# Input for an object:
+#   - Observed fluxes F_obs[i]  (i = 1…N_filters)
+#   - Flux uncertainties σ_F[i]
+#   - Optional: any upper limits → treat as censored data (ignored here).
+
+# 2.1 Build observation vector y = F_obs
+# 2.2 Build covariance matrix C = diag(σ_F²)
+
+# 2.3 Define prior on PC coefficients:
+#       p(c) = N(0 , Λ)  where Λ = diag(λ_1,…,λ_K)
+
+# 2.4 Observation model:
+#       y = μ_f + M c + ε          (ε ~ N(0 , C))
+
+# 2.5 Compute posterior over c (Gaussian analytical solution):
+#       Λ⁻¹      = diag(1/λ_k)
+#       A        = Mᵀ C⁻¹ M + Λ⁻¹
+#       A_inv    = inverse(A)
+#       b        = Mᵀ C⁻¹ (y – μ_f)
+#       c_post   = A_inv * b                     # posterior mean
+#       Σ_c      = A_inv                           # posterior covariance
+
+# 2.6 Reconstruct mean spectrum:
+#       Ŝ(λ_j) = μ_s(λ_j) + Σ_k c_post[k] * B_k(λ_j)
+
+# 2.7 Propagate uncertainty to the spectrum:
+#       For each wavelength λ_j:
+#           var_S(j) = Σ_k Σ_l Σ_c[k,l] * B_k(λ_j) * B_l(λ_j)
+#       Standard deviation σ_S(j) = sqrt(var_S(j))
+
+# 2.8 (Optional) Generate credible intervals:
+#       Upper bound = Ŝ(λ_j) + 1.96 * σ_S(j)
+#       Lower bound = Ŝ(λ_j) – 1.96 * σ_S(j)
+
+# Output for the target:
+#   - Reconstructed spectrum Ŝ(λ)
+#   - Uncertainty envelope [Ŝ ± 1.96σ_S]
+#   - Posterior coefficient vector c_post and covariance Σ_c

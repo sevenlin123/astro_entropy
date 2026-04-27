@@ -1,0 +1,125 @@
+INPUT
+    ObjList        // list of objects
+    For each object i:
+        FilterSet[i]       // set of filters used
+        MagObs[i][j]       // observed magnitude in filter j
+        ErrMag[i][j]       // magnitude uncertainty in filter j
+        PhaseAngle[i][j]   // solar phase angle for filter j (optional)
+    SpecLib          // library of template spectra T_k(λ)
+    FilterTrans[j](λ) // transmission curve for each filter
+
+OUTPUT
+    PosteriorSamples[i]   // posterior samples of spectral weights {a_ik}
+    ReconSpectra[i](λ)    // reconstructed reflectance spectrum for each object
+    TaxonProb[i][k]       // posterior probability that object i belongs to taxon k
+
+--------------------------------------------------------------------
+STEP 1 – Data preprocessing
+--------------------------------------------------------------------
+FOR each object i IN ObjList DO
+    FOR each filter j IN FilterSet[i] DO
+        // Convert magnitudes to relative fluxes
+        FluxObs[i][j]  = 10^(-0.4 * MagObs[i][j])
+        ErrFlux[i][j]  = 0.921 * ErrMag[i][j] * FluxObs[i][j]
+    END FOR
+END FOR
+
+--------------------------------------------------------------------
+STEP 2 – Build common wavelength grid
+--------------------------------------------------------------------
+λ_grid = linspace(λ_min , λ_max , N_lambda)   // e.g. 300–2500 nm
+FOR each template spectrum k IN SpecLib DO
+    // Interpolate template onto λ_grid
+    T_k_interp[λ_grid] = interpolate(SpecLib[k], λ_grid)
+END FOR
+
+--------------------------------------------------------------------
+STEP 3 – Define forward model
+--------------------------------------------------------------------
+FOR each object i IN ObjList DO
+    // Unknown spectral weight vector a_i = (a_i1 … a_iK)
+    // Constrained: a_ik ≥ 0, Σ_k a_ik = 1
+
+    DEFINE ModelFlux(i,j) as:
+        // Compute reflectance R_i(λ) = Σ_k a_ik * T_k_interp(λ)
+        R_i(λ) = Σ_k a_ik * T_k_interp(λ)
+        // Integrate over filter transmission
+        IFilter_j = ∫ R_i(λ) * FilterTrans[j](λ) dλ
+        Denom_j   = ∫ FilterTrans[j](λ) dλ
+        PredFlux = IFilter_j / Denom_j
+        RETURN PredFlux
+END FOR
+
+--------------------------------------------------------------------
+STEP 4 – Specify priors
+--------------------------------------------------------------------
+FOR each object i IN ObjList DO
+    a_i ~ Dirichlet(α)     // α = (1,…,1) for non‑informative prior
+END FOR
+
+--------------------------------------------------------------------
+STEP 5 – Likelihood function
+--------------------------------------------------------------------
+DEFINE LogLikelihood(i) as:
+    LL = 0
+    FOR each filter j IN FilterSet[i] DO
+        μ = ModelFlux(i,j)                 // predicted flux
+        σ = ErrFlux[i][j]                  // measurement error
+        // Gaussian likelihood
+        LL += -0.5 * ((FluxObs[i][j]-μ)/σ)^2 - log(σ*sqrt(2π))
+    END FOR
+    RETURN LL
+END
+
+--------------------------------------------------------------------
+STEP 6 – Posterior sampling (per object)
+--------------------------------------------------------------------
+FOR each object i IN ObjList DO
+    // Initialize a_i^(0) = uniform
+    a_current = (1/K,…,1/K)
+
+    FOR iter = 1 TO N_iter DO
+        // Propose new weights using e.g. Dirichlet perturbation
+        a_proposal = DirichletPerturb(a_current, ε)
+
+        // Compute log posterior
+        logp_current = LogLikelihood(i) + log(Prior(a_current))
+        logp_proposal = LogLikelihood(i) + log(Prior(a_proposal))
+
+        // Acceptance probability
+        α_accept = min(1, exp(logp_proposal - logp_current))
+
+        IF Uniform(0,1) < α_accept THEN
+            a_current = a_proposal
+        END IF
+
+        STORE a_current in PosteriorSamples[i][iter]
+    END FOR
+
+    // Burn‑in removal and thinning can be applied offline if desired
+END FOR
+
+--------------------------------------------------------------------
+STEP 7 – Reconstruct spectra
+--------------------------------------------------------------------
+FOR each object i IN ObjList DO
+    ReconSpectra[i](λ) = average over PosteriorSamples[i] of
+                        Σ_k a_ik * T_k_interp(λ)
+END FOR
+
+--------------------------------------------------------------------
+STEP 8 – Taxonomy probabilities
+--------------------------------------------------------------------
+FOR each object i IN ObjList DO
+    FOR each taxon k DO
+        TaxonProb[i][k] = proportion of PosteriorSamples[i] where
+                          a_ik > threshold   // e.g., 0.5
+    END FOR
+END FOR
+
+--------------------------------------------------------------------
+RETURN
+    PosteriorSamples
+    ReconSpectra
+    TaxonProb
+END

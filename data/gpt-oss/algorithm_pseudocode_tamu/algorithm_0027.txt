@@ -1,0 +1,97 @@
+text
+--------------------------------------------------------------------
+INPUTS
+--------------------------------------------------------------------
+   S_ref      : N_ref × M_ref array of reference reflectance spectra  
+   λ_ref      : M_ref‑length wavelength grid for reference spectra
+   F_filters  : list of filter transmission curves (F_i(λ))
+   K          : desired number of principal components
+   h_KDE      : bandwidth for KDE density estimation
+   N_aug      : number of synthetic latent samples to generate
+   σ_rel      : relative photometric noise level (e.g. 0.20)
+   n_draw     : number of posterior draws per object (for uncertainty)
+
+--------------------------------------------------------------------
+PREPROCESSING
+--------------------------------------------------------------------
+1.  Align reference spectra to common λ_grid (interpolate if needed).
+2.  Normalize each spectrum (e.g. divide by mean reflectance or fit a slope).
+3.  Store the processed spectra as S_proc  (N_ref × M_ref).
+
+--------------------------------------------------------------------
+STEP 1 – DEFINE LATENT MANIFOLD (PCA)
+--------------------------------------------------------------------
+4.  Compute mean spectrum μ_S = mean(S_proc, axis=0).
+5.  Center data: S_centered = S_proc – μ_S.
+6.  Perform Singular Value Decomposition:
+        [U, Σ, Vᵀ] = svd(S_centered, full_matrices=False)
+7.  Select first K right singular vectors:
+        PCs = Vᵀ[:K]                # shape: K × M_ref
+8.  Project reference spectra onto PCs:
+        Z_ref = S_centered @ PCsᵀ    # shape: N_ref × K
+
+--------------------------------------------------------------------
+STEP 2 – AUGMENT WITH KDE (continuous prior)
+--------------------------------------------------------------------
+9.  Fit a Gaussian‑kernel KDE to Z_ref with bandwidth h_KDE.
+10. Sample N_aug points from the KDE:
+        Z_aug = KDE.sample(N_aug)    # shape: N_aug × K
+
+--------------------------------------------------------------------
+STEP 3 – SYNTHESIZE NOISY PHOTOMETRY FOR TRAINING
+--------------------------------------------------------------------
+11. For each latent vector z in {Z_ref} ∪ {Z_aug}:
+        a. Reconstruct full spectrum:
+               S_hat = μ_S + z · PCs          # (M_ref)
+        b. Convolve with each filter F_i:
+               m_i = ∫ S_hat(λ) * F_i(λ) dλ / ∫ F_i(λ) dλ
+           Store as photometric vector m (length = #filters).
+        c. Add Gaussian noise:
+               m_noisy = m + Normal(0, σ_rel·m)
+        d. Save pair (m_noisy, z) as a training example.
+
+--------------------------------------------------------------------
+STEP 4 – TRAIN AUTO‑ML REGRESSOR (Encoder)
+--------------------------------------------------------------------
+12. Split training pairs into X (photometry) and Y (latent z).
+13. Use AutoML (e.g., AutoGluon Tabular) to fit a regressor:
+        regressor = AutoML.fit(X, Y)
+   The regressor outputs a predictive distribution over latent
+   coefficients (mean and covariance per dimension).
+
+--------------------------------------------------------------------
+STEP 5 – OPTIONAL: TRAIN TAXONOMY CLASSIFIER
+--------------------------------------------------------------------
+14. Label each reference spectrum with its taxonomic class.
+15. Train a second AutoML classifier on Z_ref → class labels.
+16. Store classifier for later probability predictions.
+
+--------------------------------------------------------------------
+FORWARD INFERENCE
+--------------------------------------------------------------------
+Input: New sparse photometric vector m_new (length = #filters)
+
+17. Predict latent posterior from regressor:
+        μ_z, Σ_z = regressor.predict_distribution(m_new)
+   (μ_z: K‑dimensional mean, Σ_z: K×K covariance)
+
+18. Sample n_draw posterior latent vectors:
+        Z_draw = GaussianCopulaSample(μ_z, Σ_z, n_draw)
+   // Optionally impose known correlations via a copula.
+
+19. For each sampled latent vector z in Z_draw:
+        a. Reconstruct high‑resolution spectrum:
+               S_draw = μ_S + z · PCs
+        b. Store S_draw.
+
+20. Aggregate reconstructed spectra:
+        - Mean spectrum: S_mean = average(S_draw)
+        - Credible intervals: compute percentiles (e.g., 2.5%, 97.5%) at each wavelength.
+
+21. Classify taxonomic probabilities (optional):
+        p_class = classifier.predict_proba(μ_z)
+
+Output:
+        - S_mean (reconstructed spectrum)
+        - Uncertainty bands (credible intervals)
+        - Taxonomy probability vector p_class

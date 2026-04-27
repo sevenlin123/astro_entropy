@@ -1,0 +1,64 @@
+Input:
+    - Photometric catalog P = { (obj_i, band_j, mag_ij, σ_ij) }  
+      where σ_ij is the measurement uncertainty in band j for object i.
+    - Endmember library E = { e_k(λ) } for k = 1 … K, each sampled on
+      a common wavelength grid Λ.
+    - Filter response functions F_j(λ) for all bands j.
+    - Prior concentration vector α = (α_1,…,α_K) for Dirichlet prior.
+
+Output (for each object i):
+    - Posterior‑mean coefficient vector ŵ_i = (ŵ_{i1},…,ŵ_{iK})
+    - Reconstructed spectrum Ŝ_i(λ) = Σ_k ŵ_{ik} e_k(λ)
+    - Posterior covariance Σ̂_i
+    - χ²_i of the fit
+
+--------------------------------------------------------------------
+Procedure:
+
+1. **Pre‑compute filter integrals for endmembers**
+   For each endmember e_k and band j:
+        A_{jk} ← ∫_Λ e_k(λ) · F_j(λ) dλ
+   Store matrix A (J × K).
+
+2. **Loop over objects**  
+   For each object i in P:
+
+   2.1 **Build observation vector and weight matrix**
+        Let J_i be the set of bands with valid measurements for object i.
+        Create y_i (|J_i|×1): y_i[j] = mag_ij (or convert to flux if needed).
+        Create σ_i (|J_i|×1): σ_i[j] = σ_ij.
+        Extract corresponding rows of A → A_i (|J_i|×K).
+        Weight matrix W_i = diag(1/σ_i²).
+
+   2.2 **Maximum‑a‑posteriori (MAP) coefficient estimate**
+        Solve constrained optimization:
+            minimize  ½ (y_i – A_i w)ᵀ W_i (y_i – A_i w) – log p(w)
+        subject to w_k ≥ 0  and  Σ_k w_k = 1
+        where log p(w) = (α_k – 1) Σ_k log w_k   (Dirichlet prior).
+        Use quadratic‑programming or projected gradient descent to obtain
+        MAP vector ŵ_i.
+
+   2.3 **Compute fitted photometry and χ²**
+        ŷ_i = A_i ŵ_i
+        χ²_i = (y_i – ŷ_i)ᵀ W_i (y_i – ŷ_i)
+
+   2.4 **Posterior sampling (optional, for uncertainty estimates)**
+        2.4.1 Initialize w^(0) ← ŵ_i
+        2.4.2 For t = 1 … T:
+                Sample w^(t) from Dirichlet(α + n) where
+                n_k = number of times coefficient k would be “selected”
+                       according to a Metropolis–Hastings step that
+                       accepts w' with probability proportional to
+                       exp( –½ χ²(w') ).
+        2.4.3 Compute sample mean and covariance:
+                Σ̂_i = cov{ w^(t) }.
+        2.4.4 Set w̄_i = mean{ w^(t) } (used if more accurate posterior mean needed).
+
+   2.5 **Reconstruct full spectrum**
+        For each wavelength λ ∈ Λ:
+            Ŝ_i(λ) = Σ_k ŵ_i[k] · e_k(λ)
+
+   2.6 **Store results**
+        Record ŵ_i, Σ̂_i, Ŝ_i(λ), χ²_i for object i.
+
+3. **Return compiled results for all objects.**

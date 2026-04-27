@@ -1,0 +1,91 @@
+INPUT:
+    - Catalog of TNO observations:
+        * For each object j ∈ {1 … N}:
+            – Observations k = 1 … K_j:
+                • Filter λ_k
+                • Apparent magnitude m_jk
+                • Measurement error σ_jk
+                • Observation epoch t_jk
+    - Solar spectrum S(λ) (continuous over wavelength range Λ)
+    - Filter transmission curves T_ℓ(λ) for all filters ℓ
+    - Reference spectral library L = {ℓ_1,…,ℓ_M}
+    - Prior distributions for GP hyper‑parameters θ
+    - Desired wavelength grid Γ = {γ_1,…,γ_P}
+
+OUTPUT:
+    - Reconstructed reflectance spectra R_j(γ) for every object j
+    - Posterior probability of each taxonomic class for every object
+    - Identification of outlier objects
+
+--------------------------------------------------------------------
+STEP 0 : PRECOMPUTATION
+--------------------------------------------------------------------
+1. Define continuous wavelength axis Λ covering all filter wavelengths.
+2. For every filter ℓ, compute effective solar flux:
+       F_ℓ^⊙ = ∫_Λ S(λ) * T_ℓ(λ) dλ
+   Store F_ℓ^⊙ for later use.
+3. For every object j and observation k, compute:
+       μ_jk = -2.5 * log10(m_jk)          // magnitude → flux scale
+       ν_jk = μ_jk - log10(F_{ℓ(k)}^⊙)    // reflectance proxy
+   Store ν_jk and σ_jk.
+
+--------------------------------------------------------------------
+STEP 1 : BUILD GAUSSIAN PROCESS MODEL
+--------------------------------------------------------------------
+For each object j:
+    a. Assemble input vector X_j = { λ_{ℓ(k)} } for k = 1…K_j
+    b. Assemble target vector y_j = { ν_jk } for k = 1…K_j
+    c. Define kernel k_θ(λ, λ') as sum of:
+           • Smooth component k_smooth(λ, λ'; ℓ_s, σ_s)
+           • Periodic component k_per(λ, λ'; ℓ_p, σ_p)
+      where ℓ_s, σ_s, ℓ_p, σ_p are hyper‑parameters contained in θ.
+    d. Set prior on θ according to chosen priors (e.g., log‑normal).
+
+--------------------------------------------------------------------
+STEP 2 : FIT THE MODEL
+--------------------------------------------------------------------
+For each object j:
+    a. Maximize marginal likelihood:
+          θ*_j = argmax_θ log p(y_j | X_j, θ)
+       using gradient‑based optimizer (e.g., L-BFGS).
+    b. Store optimized hyper‑parameters θ*_j.
+
+--------------------------------------------------------------------
+STEP 3 : PREDICT HIGH‑RESOLUTION SPECTRUM
+--------------------------------------------------------------------
+For each object j:
+    a. Construct Gram matrix K_j for inputs X_j with kernel k_{θ*_j}.
+    b. Compute predictive mean μ̂_j(γ) and variance σ̂²_j(γ) at every γ ∈ Γ:
+          μ̂_j(γ) = k_{θ*_j}(X_j, γ)^T * K_j^{-1} * y_j
+          σ̂²_j(γ) = k_{θ*_j}(γ, γ) - k_{θ*_j}(X_j, γ)^T * K_j^{-1} * k_{θ*_j}(X_j, γ)
+    c. Convert μ̂_j(γ) from logarithmic reflectance back to linear:
+          R_j(γ) = 10^{μ̂_j(γ)/2.5}
+    d. Store R_j(γ) and associated uncertainty σ̂_j(γ).
+
+--------------------------------------------------------------------
+STEP 4 : TAXONOMIC CLASSIFICATION
+--------------------------------------------------------------------
+For each object j:
+    a. For each library class m ∈ {1…M}:
+          i. Retrieve reference reflectance spectrum L_m(γ).
+         ii. Compute likelihood:
+                ℒ_m = ∏_{γ∈Γ} Normal( R_j(γ) | L_m(γ), σ̂_j(γ) )
+    b. Apply Bayes’ rule with uniform prior over classes to obtain posterior:
+          P(class = m | data_j) ∝ ℒ_m
+    c. Normalize probabilities so they sum to 1.
+    d. Assign most probable class label and record posterior distribution.
+
+--------------------------------------------------------------------
+STEP 5 : OUTLIER DETECTION
+--------------------------------------------------------------------
+For each object j:
+    a. Compute predictive posterior distribution for each observation k:
+          p_k = Normal( ν_jk | μ̂_j(λ_{ℓ(k)}), σ̂_j(λ_{ℓ(k)}) + σ_jk )
+    b. Evaluate standardized residual:
+          z_k = (ν_jk - μ̂_j(λ_{ℓ(k)})) / sqrt(σ̂²_j(λ_{ℓ(k)}) + σ_jk²)
+    c. Flag object j as outlier if any |z_k| > threshold Z (e.g., 3).
+    d. Record list of flagged objects.
+
+--------------------------------------------------------------------
+END
+--------------------------------------------------------------------

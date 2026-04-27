@@ -1,0 +1,66 @@
+------------------------------------------------------------------
+1. IMPORT & INITIALIZE
+------------------------------------------------------------------
+   Load reference high‑resolution TNO spectra (N_ref × L_wavelength).
+   Load filter throughput curves for chosen instruments (M_filters × L_wavelength).
+   Define number of PCA components K (≈5–10) and KDE bandwidth h (≈0.5).
+   Set photometric noise level σ_noise = 0.20  (20 % relative).
+
+------------------------------------------------------------------
+2. PREPROCESSING – DEFINE PRIOR MANIFOLD
+------------------------------------------------------------------
+   2.1   Mean‑center spectra:  S_bar = mean(S_ref, axis=0).
+   2.2   Perform PCA on centered spectra → eigenvectors V (L_wavelength × K),
+          eigenvalues λ, and projection matrix P.
+   2.3   Project each reference spectrum onto PCA basis:
+          C_ref = (S_ref - S_bar) · V            // (N_ref × K)
+
+------------------------------------------------------------------
+3. GENERATE AUGMENTED TRAINING SET
+------------------------------------------------------------------
+   3.1   Fit a non‑parametric KDE to {C_ref} with bandwidth h.
+   3.2   Draw N_aug synthetic latent vectors:
+          C_syn = KDE_sample(N_aug)              // (N_aug × K)
+   3.3   For each synthetic vector c in C_syn:
+          3.3.1  Reconstruct spectrum:
+                 S_syn = S_bar + V · c          // (1 × L_wavelength)
+          3.3.2  FOR each filter m in 1…M_filters:
+                 • Convolve S_syn with filter throughput:
+                       F_m = ∫ S_syn(λ) * T_m(λ) dλ / ∫ T_m(λ) dλ
+                 • Store F_m
+          3.3.3  Assemble synthetic photometry vector:
+                 m_syn = [F_1, …, F_M]
+          3.3.4  Add Gaussian noise to each band:
+                 m_noisy = m_syn + Normal(0, σ_noise * F_m)
+          3.3.5  Store pair (m_noisy , c) in training database
+   3.4   Result: Training data D = {(m_noisy_i , c_i)}   i = 1…N_aug
+
+------------------------------------------------------------------
+4. TRAIN MODELS
+------------------------------------------------------------------
+   4.1   Regressor R ← AutoML_Ensemble(  // e.g., GBDT, NN
+             X = {m_noisy_i} , Y = {c_i} )
+
+   4.2   Taxonomy Classifier C ← AutoML_Classifier(
+             X = {c_i} , y = {taxonomy_labels_of_C_ref} )
+           // Labels come from known classes of the reference spectra
+
+------------------------------------------------------------------
+5. INFERENCE (FOR A NEW OBJECT)
+------------------------------------------------------------------
+   Input: observed sparse photometry vector m_obs (length M_filters)
+   Output: reconstructed spectrum S_hat, taxonomy posterior p_tax
+
+   5.1   Predict latent coefficient distribution:
+         c_pred = R.predict(m_obs)          // mean vector of size K
+         // Optional: generate multiple draws from R’s probabilistic output
+         // to form a posterior over c.
+
+   5.2   Reconstruct high‑resolution spectrum:
+         S_hat = S_bar + V · c_pred          // (1 × L_wavelength)
+
+   5.3   Taxonomic probability:
+         p_tax = C.predict_proba(c_pred)     // vector over classes
+
+   5.4   Return S_hat, p_tax
+------------------------------------------------------------------

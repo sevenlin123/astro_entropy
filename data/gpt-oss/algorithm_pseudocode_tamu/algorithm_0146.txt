@@ -1,0 +1,116 @@
+text
+Input:
+    • Reference spectra set {S_i}  i = 1…N_ref   (high‑resolution reflectances)
+    • Filter throughput curves {T_j}  j = 1…N_filt
+    • New object photometry m_obs  (vector of length N_filt)
+
+Output:
+    • Posterior distribution of reconstructed spectrum S_post(λ)
+    • Taxonomic probability vector p_cls
+
+--------------------------------------------------------------------
+1. PREPARATION PHASE
+--------------------------------------------------------------------
+1.1 Pre‑process reference spectra
+        For each S_i:
+            • Resample to common wavelength grid λ_grid
+            • Normalize (e.g., divide by mean reflectance over λ_grid)
+
+1.2 Principal Component Analysis (PCA)
+        • Assemble data matrix X ∈ ℝ^(N_ref × N_λ) from normalized spectra
+        • Compute mean spectrum μ_X
+        • Center data: X_center = X – μ_X
+        • Perform singular value decomposition: X_center = U Σ Vᵀ
+        • Eigenvectors (principal components) = columns of V
+        • Select K PCs such that cumulative explained variance ≥ 0.95
+        • Project spectra to latent space:
+              C_real = X_center · V_K          // C_real ∈ ℝ^(N_ref × K)
+
+1.3 Latent‑space density estimation (Kernel Density Estimation)
+        • Set KDE bandwidth h = 0.5
+        • Define Gaussian kernel k(x, x′) = exp(-‖x-x′‖² / (2h²))
+        • Estimate density p(C) using C_real
+
+1.4 Sample synthetic latent vectors
+        • Draw M = 5000 latent vectors {C_syn_m} from p(C)
+
+--------------------------------------------------------------------
+2. SYNTHETIC TRAINING DATA GENERATION
+--------------------------------------------------------------------
+For each synthetic latent vector C_syn_m:
+    2.1 Decode to full spectrum
+            S_syn_m = μ_X + V_K · C_syn_mᵀ       // shape: 1 × N_λ
+    2.2 Forward‑model photometry
+            For each filter j:
+                m_syn_m[j] = ∫ S_syn_m(λ) · T_j(λ) dλ /
+                             ∫ T_j(λ) dλ
+    2.3 Inject observational noise
+            σ_noise = 0.20 · m_syn_m[j]          // 20 % relative
+            m_syn_noisy[j] = m_syn_m[j] + Normal(0, σ_noise)
+    2.4 Store training example:
+            (input photometry = m_syn_noisy,
+             target latent = C_syn_m)
+
+Resulting training set:
+        TrainingExamples = {(m_syn_noisy, C_syn_m)}_{m=1…M}
+
+--------------------------------------------------------------------
+3. ENCODER TRAINING (Photometry → Latent Coefficients)
+--------------------------------------------------------------------
+3.1 Choose AutoML regressor (e.g., ensemble of Gradient‑Boosted Trees)
+3.2 Fit model f_enc to map photometry → latent vector:
+        f_enc : ℝ^(N_filt) → ℝ^K
+        Training: minimize prediction error over TrainingExamples
+3.3 Optionally store ensemble predictions to obtain predictive variance
+        (for later construction of posterior distribution)
+
+--------------------------------------------------------------------
+4. CLASSIFIER TRAINING (Latent Coefficients → Taxonomy)
+--------------------------------------------------------------------
+4.1 Assign taxonomic labels {L_i} to each reference spectrum S_i
+4.2 For each real spectrum S_i:
+        • Compute latent vector C_i = (S_i – μ_X) · V_Kᵀ
+4.3 Train AutoML classifier g_cls on pairs (C_i, L_i)
+        • Output probability vector over classes
+
+--------------------------------------------------------------------
+5. INFERENCE FOR NEW OBJECT
+--------------------------------------------------------------------
+Input: m_obs (observed photometry)
+
+5.1 Encode photometry
+        • Predict mean latent vector μ_C = f_enc(m_obs)
+        • If ensemble available, obtain predictive covariance Σ_C
+          or separate marginal distributions {μ_C_k, σ_C_k}
+
+5.2 Construct posterior over latent space
+        • Estimate correlation matrix R from training latent samples
+        • Build Gaussian copula:
+              For each sample s = 1…N_samp:
+                  * Draw u_k ∼ Uniform(0,1) for k = 1…K
+                  * Convert to normal variables z_k = Φ⁻¹(u_k)
+                  * Correlate: z_corr = L_R · z   (L_R lower triangular of R)
+                  * Transform back: c_s[k] = Φ( z_corr[k] )   // marginal quantile
+                  * Scale to match marginal μ_C_k, σ_C_k
+        • Result: set of latent samples {C_s}
+
+5.3 Decode spectra
+        For each latent sample C_s:
+            S_s = μ_X + V_K · C_sᵀ
+        Collect ensemble {S_s}
+
+5.4 Compute spectrum posterior statistics
+        • Posterior mean spectrum μ_S(λ) = mean over {S_s}
+        • Credible interval per λ (e.g., 16th–84th percentiles)
+        • Store as S_post(λ)
+
+5.5 Taxonomic probabilities
+        • Apply classifier g_cls to μ_C (or average over {C_s})
+        • Obtain probability vector p_cls over classes
+
+--------------------------------------------------------------------
+6. RETURN RESULTS
+--------------------------------------------------------------------
+Return:
+    • μ_S(λ), credible intervals of S_post(λ)
+    • Taxonomic probability vector p_cls

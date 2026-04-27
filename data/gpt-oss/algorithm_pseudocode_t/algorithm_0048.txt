@@ -1,0 +1,81 @@
+INPUT:
+    - Object list O = {O1 … ON}
+    - For each object Oi:
+        • Observed magnitudes Mi[1..Mi] in filters Fi[1..Mi]
+        • Photometric uncertainties σi[1..Mi]
+    - Basis spectra set B = {B1 … BJ}   // each Bj is a vector over λ = {λ1…λL}
+    - Filter transmission curves T[1..M] over λ
+
+OUTPUT:
+    - Estimated spectral coefficients ai[1..J] for each object
+    - Reconstructed spectral reflectance Ri[λ] = Σj ai[j] * Bj[λ]
+    - Posterior covariance matrices Pi[1..J][1..J]
+
+--------------------------------------------------------------------
+STEP 0 – Pre‑compute filter‑integrated basis vectors
+--------------------------------------------------------------------
+For each filter f = 1 … M:
+    For each basis spectrum j = 1 … J:
+        // integrate basis spectrum over filter transmission
+        R[f][j] = ∫ B[j](λ) * T[f](λ) dλ          // discrete sum over λ
+    EndFor
+EndFor
+
+--------------------------------------------------------------------
+STEP 1 – Convert magnitudes to relative reflectances
+--------------------------------------------------------------------
+For each object i = 1 … N:
+    For each observation k = 1 … Mi:
+        // zero‑point conversion (assume AB system or given ZP)
+        ri[k]      = 10^(-0.4 * (Mi[k] - ZP))
+        err_ri[k]  = ln(10)/2.5 * ri[k] * σi[k]     // propagate magnitude error
+    EndFor
+EndFor
+
+--------------------------------------------------------------------
+STEP 2 – Build weighted linear system per object
+--------------------------------------------------------------------
+For each object i = 1 … N:
+    // Design matrix A_i: rows = observations, columns = basis coeffs + offset
+    For each observation k = 1 … Mi:
+        // Row k consists of integrated basis values for filter k
+        A_i[k][1..J] = R[k][1..J]
+        // Add constant term for zero‑point offset
+        A_i[k][J+1]  = 1
+    EndFor
+
+    // Observation vector y_i
+    y_i[1..Mi] = ln(ri[1..Mi])                     // use log reflectances
+    // Weight matrix W_i = diag(1/err_ri^2)
+    W_i = diagonal( [1/err_ri[k]^2 for k=1..Mi] )
+
+    // Prior on coefficients (Gaussian, zero mean, covariance C_prior)
+    // C_prior is (J+1)×(J+1); last row/col correspond to offset prior
+    // For simplicity set prior variance σa^2 for each coeff, σoffset^2 for offset
+    C_prior = diag([σa^2]*J + [σoffset^2])
+
+    // Compute posterior mean and covariance (linear Bayesian update)
+    // Posterior covariance:
+    Pi[i] = inverse( A_i^T * W_i * A_i + inverse(C_prior) )
+    // Posterior mean:
+    ai[i] = Pi[i] * ( A_i^T * W_i * y_i + inverse(C_prior) * μ_prior )
+    // μ_prior is zero vector of length J+1
+
+    // Optional: drop offset from ai if not needed
+    ai_coeffs[i] = ai[i][1..J]          // first J elements
+    offset[i]    = ai[i][J+1]
+EndFor
+
+--------------------------------------------------------------------
+STEP 3 – Reconstruct full spectra
+--------------------------------------------------------------------
+For each object i = 1 … N:
+    For each wavelength λ = 1 … L:
+        Ri[λ] = Σ_{j=1}^{J} ai_coeffs[i][j] * B[j][λ]
+    EndFor
+EndFor
+
+--------------------------------------------------------------------
+RETURN
+--------------------------------------------------------------------
+Output ai_coeffs, Ri, Pi  (coefficients, reconstructed spectra, covariances)

@@ -1,0 +1,22 @@
+text
+Input
+    S_ref : list of N_ref ≈ 51 high‑resolution TNO spectra
+           each spectrum = array of reflectances R(λ_i), i=1…L
+    F_obs : observed photometry for a new TNO
+           each filter j = (central λ_j, throughput T_j(λ))
+    N_aug   : number of synthetic latent vectors to draw (e.g. 10⁴)
+    h_kde   : KDE bandwidth (≈0.5)
+    K       : number of principal components (4–10)
+    σ_phot  : assumed photometric noise level (e.g. 20 %)
+    n_samp  : number of posterior samples (e.g. 1000)
+
+Output
+    S_rec      : reconstructed high‑resolution spectrum
+    cov_S      : covariance matrix of S_rec
+    tax_prob   : probability distribution over taxonomic classes
+
+text
+Regressor_R = AutoML_Train(D_reg)
+
+text
+Classifier_C = AutoML_Train_Classify( {α_real[n], label[n]} )

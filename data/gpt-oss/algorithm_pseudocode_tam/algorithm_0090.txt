@@ -1,0 +1,51 @@
+INPUT: 
+    - Spectral library {S_i}  (i = 1…N, each S_i = [R_λ1 … R_λL])
+    - Filter response curves {F_j}  (j = 1…M)
+    - Desired number of PCA components K  (K ≤ 10)
+    - KDE bandwidth h  (≈0.5)
+    - Number of synthetic samples M_syn  (e.g., 5000)
+
+Procedure:
+    1.1 Compute mean spectrum μ_S = mean_i(S_i)
+    1.2 Center spectra: C_i = S_i – μ_S
+    1.3 Perform PCA on {C_i} → eigenvectors {e_k} (k=1…K) and scores z_i = PCA(C_i)
+    1.4 Fit non‑parametric KDE to {z_i} with bandwidth h → density p_KDE(z)
+    1.5 Sample M_syn latent vectors {z*_k} ~ p_KDE(z)
+    1.6 Reconstruct synthetic spectra: S*_k = μ_S + Σ_{k=1}^K z*_k(k)*e_k
+
+For each synthetic spectrum S*_k:
+    2.1 Convolve with filter responses:
+         m*_k(j) = ∫ S*_k(λ) * F_j(λ) dλ   for j = 1…M
+    2.2 Add Gaussian noise:
+         m*_k_noisy(j) = m*_k(j) + Normal(0, σ_j)
+         where σ_j = 0.20 * m*_k(j)   (20 % relative uncertainty)
+
+Combine training data:
+    X_train = {m*_k_noisy} ∪ {m_i}          // photometry from real spectra
+    Y_train = {z*_k} ∪ {z_i}                // latent targets
+
+Input: X_train, Y_train
+Algorithm: AutoML ensemble (e.g., Gradient‑Boosted Trees + NN)
+    3.1 Fit regressor R(·) to map photometry → latent space:
+         Y_train ≈ R(X_train)
+    3.2 Store prediction function R and its uncertainty estimate U_R
+
+Input: {z_i} with known taxonomic labels L_i
+    4.1 Train classifier C(·) to map latent → label probabilities
+
+Input: New photometric measurement m_new = [m_new(1)…m_new(M)]
+    5.1 Predict latent coordinate:
+         z_hat = R(m_new)
+    5.2 Reconstruct spectrum:
+         S_hat = μ_S + Σ_{k=1}^K z_hat(k)*e_k
+    5.3 (Optional) Taxonomy:
+         p_labels = C(z_hat)
+    5.4 (Optional) Uncertainty propagation:
+         For t = 1…N_samples:
+             Draw z_t ~ U_R(m_new)
+             Compute S_t = μ_S + Σ z_t(k)*e_k
+         Estimate confidence intervals from {S_t}
+Output:
+    - Reconstructed spectrum S_hat
+    - Taxonomic probabilities p_labels
+    - (Optional) Credible intervals for S_hat

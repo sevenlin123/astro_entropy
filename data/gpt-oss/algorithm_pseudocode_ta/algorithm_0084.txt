@@ -1,0 +1,121 @@
+INPUT
+    S_train        # 2‑D array of training spectra (N_spec × N_wave)
+    λ_grid         # common wavelength grid (length N_wave)
+    T_filters      # dictionary: filter_name → transmission curve T_i(λ)
+    phot_data      # list of targets; each entry contains
+                    #   f_i  : measured flux in filter i
+                    #   σ_i  : measurement uncertainty in filter i
+                    #   filt_i : filter name corresponding to f_i
+    k              # number of principal components to keep
+    N_samples      # number of posterior samples to generate (e.g., 5000)
+
+OUTPUT
+    For each target:
+        μ_post(λ)        # posterior mean reconstructed spectrum
+        CI_low(λ), CI_up(λ)  # lower/upper 95 % credible bounds
+        outlier_flag    # True if posterior density below threshold
+
+
+--------------------------------------------------------------------
+STEP 0 : PRE‑PROCESS TRAINING SPECTRA
+--------------------------------------------------------------------
+FOR each spectrum s in S_train:
+    1. Interpolate s onto λ_grid if necessary.
+    2. Normalise (e.g., divide by its median flux) to remove absolute scale.
+END FOR
+S_norm ← array of normalised spectra (N_spec × N_wave)
+
+--------------------------------------------------------------------
+STEP 1 : PRINCIPAL COMPONENT ANALYSIS
+--------------------------------------------------------------------
+Compute mean spectrum:
+    μ_bar(λ) ← mean(S_norm over all spectra)
+Center spectra:
+    X ← S_norm – μ_bar   # (N_spec × N_wave)
+Perform singular value decomposition:
+    U, Σ, Vt ← svd(X, full_matrices=False)
+Principal components (eigen‑spectra):
+    PC_j(λ) = Vt[j]  # j = 0 … k-1
+Eigenvalues (variances explained by each component):
+    λ_j = Σ[j]^2 / (N_spec – 1)
+Store {PC_j(λ)}, {λ_j} for j = 0 … k-1
+
+--------------------------------------------------------------------
+STEP 2 : BUILD PHOTOMETRIC FORWARD MODEL
+--------------------------------------------------------------------
+Define function predict_photometry(c_vec):
+    # c_vec = (c_1 … c_k) – PC coefficients for one target
+    S_pred(λ) ← μ_bar(λ) + Σ_{j=1}^{k} c_j * PC_j(λ)
+    FOR each filter i in T_filters:
+        # Compute synthetic flux by integrating over the filter:
+        num ← Σ_{λ} S_pred(λ) * T_filters[i](λ) * Δλ
+        den ← Σ_{λ} T_filters[i](λ) * Δλ
+        f_syn[i] ← num / den
+    END FOR
+    RETURN f_syn
+
+--------------------------------------------------------------------
+STEP 3 : DEFINE LIKELIHOOD AND PRIOR
+--------------------------------------------------------------------
+Likelihood for a target’s data D:
+    L(c_vec | D) = Π_i Gaussian(f_i | predict_photometry(c_vec)[i], σ_i)
+                = exp( -½ Σ_i [(f_i – f_syn[i])^2 / σ_i^2] )
+Prior on coefficients (independent Gaussian per PC):
+    p(c_j) = Gaussian(c_j | 0, λ_j)
+
+Posterior (unnormalised):
+    p(c_vec | D) ∝ L(c_vec | D) * Π_j p(c_j)
+
+--------------------------------------------------------------------
+STEP 4 : POSTERIOR SAMPLING (MCMC)
+--------------------------------------------------------------------
+Initialize chain:
+    c_current ← zeros(k)          # start at mean of prior
+    log_post_current ← log(p(c_current | D))
+
+FOR s = 1 TO N_samples:
+    1. Propose new coefficients:
+        c_proposal ← c_current + ε
+        # ε drawn from zero‑mean multivariate normal with covariance
+        # diag(σ_prop^2) where σ_prop can be set ≈ sqrt(λ_j)
+    2. Compute log posterior:
+        log_post_proposal ← log(p(c_proposal | D))
+    3. Acceptance probability:
+        α ← min(1, exp(log_post_proposal – log_post_current))
+    4. Draw u ~ Uniform(0,1)
+        IF u < α:
+            c_current ← c_proposal
+            log_post_current ← log_post_proposal
+        END IF
+    5. Store c_current as sample s
+END FOR
+
+--------------------------------------------------------------------
+STEP 5 : RECONSTRUCT POSTERIOR SPECTRA
+--------------------------------------------------------------------
+For each stored coefficient vector c_s (s = 1 … N_samples):
+    S_s(λ) ← μ_bar(λ) + Σ_{j=1}^{k} c_s[j] * PC_j(λ)
+Collect all S_s into matrix S_post (N_samples × N_wave)
+
+Compute statistics:
+    μ_post(λ)  ← mean over S_post rows
+    CI_low(λ)  ← percentile 2.5 of S_post columns
+    CI_up(λ)   ← percentile 97.5 of S_post columns
+
+--------------------------------------------------------------------
+STEP 6 : OUTLIER DETECTION (OPTIONAL)
+--------------------------------------------------------------------
+Compute maximum a posteriori (MAP) coefficient vector:
+    c_MAP ← argmax_c p(c | D)   # e.g., using last accepted sample
+Evaluate posterior density at c_MAP:
+    log_p_MAP ← log(p(c_MAP | D))
+If log_p_MAP < threshold_log_p:
+    outlier_flag ← True
+Else
+    outlier_flag ← False
+
+--------------------------------------------------------------------
+STEP 7 : OUTPUT RESULTS
+--------------------------------------------------------------------
+Return, for each target:
+    μ_post(λ), CI_low(λ), CI_up(λ), outlier_flag

@@ -1,0 +1,85 @@
+INPUT:
+    - N_T photometric observations for an object
+        • Filter IDs {F_j}   (j = 1 … N_T)
+        • Apparent magnitudes {m_j}
+        • Measurement uncertainties {σ_mj}
+        • Observation geometry (e.g. solar phase angle α_j)
+    - Instrumental response curves {R_F(λ)} for all filters
+    - Spectral basis set {B_k(λ)}   (k = 1 … K)
+    - Priors for basis coefficients {c_k}
+
+OUTPUT:
+    - Posterior samples of basis coefficients {c_k} for the object
+    - Reconstructed reflectance spectrum S(λ) = Σ_k c_k B_k(λ)
+    - Uncertainty estimates for S(λ)
+
+--------------------------------------------------------------------
+STEP 0: CONSTANTS AND PRE‑COMPUTATIONS
+--------------------------------------------------------------------
+    1. Compute zero‑point fluxes F0_F for each filter from standard star tables.
+    2. For each filter F:
+          a. Normalize its response curve:
+                 N_R_F(λ) = R_F(λ) / ∫ R_F(λ) dλ
+          b. Pre‑integrate basis‑filter products:
+                 Q_{k,F} = ∫ N_R_F(λ) * B_k(λ) dλ
+          (store Q as a K×N_T matrix)
+
+--------------------------------------------------------------------
+STEP 1: CONVERT MAGNITUDES TO FLUXES
+--------------------------------------------------------------------
+    3. For each observation j:
+          a. Flux:       f_j = F0_F_j * 10^(–0.4 * m_j)
+          b. Flux error: σ_fj = f_j * ln(10)/2.5 * σ_mj
+
+--------------------------------------------------------------------
+STEP 2: DEFINE THE BAYESIAN MODEL
+--------------------------------------------------------------------
+    4. Forward model for predicted flux in filter j:
+          f̂_j(c) = Σ_{k=1}^{K} c_k * Q_{k,F_j}
+
+    5. Likelihood (independent Gaussian errors):
+          L(c | data) = Π_{j=1}^{N_T}
+                         exp[ –(f_j – f̂_j(c))² / (2 σ_fj²) ]
+
+    6. Prior on coefficients:
+          p(c) = Π_{k=1}^{K} Normal(c_k | μ_k, τ_k²)
+          (μ_k and τ_k may be set to zero with broad variance or informed
+           by spectral library statistics)
+
+    7. Posterior density:
+          p(c | data) ∝ L(c | data) * p(c)
+
+--------------------------------------------------------------------
+STEP 3: POSTERIOR SAMPLING
+--------------------------------------------------------------------
+    8. Initialize coefficient vector c⁰ (e.g., zeros or MAP estimate).
+
+    9. Run Markov Chain Monte Carlo (e.g., Metropolis–Hastings):
+          repeat for N_iter steps:
+              a. Propose new coefficients: c* = c_current + ε,
+                 where ε ~ Normal(0, Σ_prop)   (Σ_prop a diagonal covariance).
+              b. Compute predicted fluxes f̂_j(c*) using pre‑integrated Q.
+              c. Evaluate log‑likelihood Δℓ = Σ_j [ –(f_j–f̂_j(c*))²/(2σ_fj²)
+                                                   + (f_j–f̂_j(c_current))²/(2σ_fj²) ].
+              d. Evaluate log‑prior Δπ = Σ_k [ –(c*_k–μ_k)²/(2τ_k²)
+                                               + (c_current_k–μ_k)²/(2τ_k²) ].
+              e. Acceptance probability: a = min(1, exp(Δℓ + Δπ)).
+              f. With probability a accept: c_current ← c*.
+              g. Store c_current as a posterior sample.
+
+    10. After burn‑in and thinning, collect M posterior samples {c^(s)}.
+
+--------------------------------------------------------------------
+STEP 4: RECONSTRUCT REFLECTANCE SPECTRUM
+--------------------------------------------------------------------
+    11. For each wavelength λ in desired grid:
+            S(λ) = mean_s [ Σ_k c_k^(s) * B_k(λ) ]          // mean spectrum
+            ΔS(λ) = std_s [ Σ_k c_k^(s) * B_k(λ) ]           // 1‑σ uncertainty
+
+--------------------------------------------------------------------
+STEP 5: OUTPUT
+--------------------------------------------------------------------
+    12. Return:
+          • Posterior samples {c^(s)}
+          • Reconstructed spectrum S(λ) with uncertainty ΔS(λ)
+          • Optional diagnostics (e.g., log‑likelihood trace, acceptance rate)

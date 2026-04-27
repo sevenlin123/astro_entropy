@@ -1,0 +1,112 @@
+# ------------------------------------------------------------------
+# 1. PREPARATION / TRAINING PHASE
+# ------------------------------------------------------------------
+
+procedure TRAIN_RECONSTRUCTOR(spectral_library, filter_set,
+                              K_pca = 10, KDE_h = 0.5, N_aug = 5000):
+
+    # 1.1 Load and normalise high‑resolution spectra
+    S_real ← []                      # list of spectra R_i(λ)
+    for i in 0 .. len(spectral_library)-1:
+        R ← spectral_library[i]      # reflectance array over λ
+        R_norm ← R / mean(R)         # normalise to unit mean
+        S_real.append(R_norm)
+
+    # 1.2 Compute PCA on the real spectra
+    μ_s, U, Σ, V ← PCA(S_real, n_components = K_pca)
+        # μ_s : mean spectrum (length L)
+        # V   : eigenvectors matrix (L × K_pca)
+    # Convert eigenvectors to column‑major format if needed
+
+    # 1.3 Project real spectra onto the PCA basis
+    C_real ← []                     # list of coefficient vectors (length K_pca)
+    for R in S_real:
+        c ← Vᵀ · (R – μ_s)           # c_k = Σ_k v_k · (R – μ_s)
+        C_real.append(c)
+
+    # 1.4 Estimate prior density over latent space (KDE)
+    kde_prior ← FIT_KDE(C_real, bandwidth = KDE_h)
+
+    # 1.5 Sample synthetic latent vectors from the KDE
+    C_aug ← SAMPLE(kde_prior, N_aug)    # shape: (N_aug × K_pca)
+
+    # 1.6 Construct synthetic spectra via inverse PCA
+    S_aug ← []                          # list of synthetic spectra
+    for c in C_aug:
+        R_syn ← μ_s + V · c             # R = μ_s + Σ_k c_k v_k
+        S_aug.append(R_syn)
+
+    # 1.7 Forward‑model synthetic photometry for each filter
+    M_aug ← []                          # list of photometric vectors (length M)
+    for R_syn in S_aug:
+        m ← []
+        for f in filter_set:
+            # Convolution of spectrum with filter throughput
+            F_f ← throughput_curve(f)   # array over λ
+            integrand ← R_syn * F_f
+            m_f ← ∫ integrand dλ / ∫ F_f dλ   # reflectance in band f
+            # Add Gaussian noise (20 % relative uncertainty)
+            sigma ← 0.20 * m_f
+            m_f_noisy ← m_f + NORMAL(0, sigma)
+            m.append(m_f_noisy)
+        M_aug.append(m)
+
+    # 1.8 Assemble training data
+    # Each training example: photometry vector → latent coefficient vector
+    X_train ← M_aug                    # shape: (N_aug × M)
+    y_train ← C_aug                    # shape: (N_aug × K_pca)
+
+    # 1.9 Train the encoder (AutoML regressor)
+    encoder_model ← AUTOML_REGRESSOR(X_train, y_train)
+        # e.g., ensemble of Gradient‑Boosted Trees + Neural Nets
+        # Return the best‑performing model after automated search
+
+    # 1.10 Train the taxonomy classifier on real latent vectors
+    # (class labels supplied externally for the seed spectra)
+    y_labels ← taxonomy_labels_from_library()
+    classifier_model ← AUTOML_CLASSIFIER(C_real, y_labels)
+
+    # 1.11 Save the components needed for inference
+    SAVE μ_s, V, encoder_model, classifier_model
+
+    return μ_s, V, encoder_model, classifier_model
+
+
+# ------------------------------------------------------------------
+# 2. INFERENCE / RECONSTRUCTION PHASE
+# ------------------------------------------------------------------
+
+procedure RECONSTRUCT_SPECTRUM(m_obs, μ_s, V, encoder_model, classifier_model):
+
+    # 2.1 Predict latent coefficients from observed photometry
+    c_pred ← encoder_model.predict(m_obs)          # shape: (K_pca)
+
+    # 2.2 Decode to high‑resolution spectrum
+    S_pred ← μ_s + V · c_pred                      # shape: (L)
+
+    # 2.3 Classify taxonomy from predicted latent coefficients
+    class_probs ← classifier_model.predict_proba(c_pred)
+
+    return S_pred, class_probs
+
+
+# ------------------------------------------------------------------
+# 3. USAGE EXAMPLE
+# ------------------------------------------------------------------
+
+# Step A: Train once with the reference spectral library
+μ_s, V, enc, clf ← TRAIN_RECONSTRUCTOR(
+                       spectral_library = TNO_spectra_51,
+                       filter_set       = NIRCam_filters,
+                       K_pca            = 10,
+                       KDE_h            = 0.5,
+                       N_aug            = 5000)
+
+# Step B: For any new TNO with sparse photometry
+observed_photometry ← [m_F090W, m_F115W, m_F150W, …]
+recon_spectrum, taxonomy ← RECONSTRUCT_SPECTRUM(
+                                 observed_photometry,
+                                 μ_s, V, enc, clf)
+
+# The returned `recon_spectrum` is a full‑resolution reflectance array;
+# `taxonomy` gives the posterior probability for each spectral class.

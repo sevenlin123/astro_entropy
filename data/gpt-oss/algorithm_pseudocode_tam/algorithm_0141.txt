@@ -1,0 +1,91 @@
+INPUT:
+    S_ref   – Reference set of N_ref high‑resolution spectra (wavelength, reflectance)
+    F       – List of M filter transmission curves {F_j(λ)}
+    h_kde   – KDE bandwidth parameter (≈0.5)
+    G       – Number of synthetic samples to generate (e.g., 5 000)
+    noise_level – Relative noise to add to synthetic photometry (≈0.2)
+
+OUTPUT:
+    For any new photometric measurement m = [m_1 … m_M]:
+        - Posterior samples of latent coefficients θ
+        - Reconstructed spectra S_rec(λ)
+        - Taxonomy probability vector P_type
+
+--------------------------------------------------------------------
+Step 0 – Pre‑processing
+--------------------------------------------------------------------
+1.  Align all reference spectra to a common wavelength grid λ_grid.
+2.  Normalize each spectrum (e.g., divide by flux at 1.0 µm).
+
+--------------------------------------------------------------------
+Step 1 – PCA latent space construction
+--------------------------------------------------------------------
+3.  Assemble data matrix X_ref ∈ ℝ^{N_ref × L}  (rows = spectra, columns = λ_grid points).
+4.  Center X_ref:  X_c = X_ref – mean(X_ref, axis=0).
+5.  Compute covariance C = (X_cᵀ · X_c) / (N_ref − 1).
+6.  Eigen‑decompose C → eigenvalues Λ and eigenvectors V.
+7.  Select K principal components (K ≈ 8–10; choose smallest K that explains ≥90 % variance).
+8.  Project reference spectra to latent space:
+        Θ_ref = X_c · V_K          # Θ_ref ∈ ℝ^{N_ref × K}
+9.  Store PCA mean μ_X = mean(X_ref, axis=0) and V_K.
+
+--------------------------------------------------------------------
+Step 2 – KDE augmentation of latent space
+--------------------------------------------------------------------
+10. Fit a multivariate kernel density estimate on Θ_ref using bandwidth h_kde.
+11. Sample G synthetic latent vectors:
+        Θ_syn[i] ~ KDE(Θ_ref)   for i = 1…G
+12. For each Θ_syn[i], reconstruct a synthetic spectrum:
+        S_syn[i] = μ_X + Θ_syn[i] · V_Kᵀ           # inverse PCA
+
+--------------------------------------------------------------------
+Step 3 – Forward photometry generation
+--------------------------------------------------------------------
+13. For each synthetic spectrum S_syn[i]:
+        a. For each filter j:
+                m_j = ∫ S_syn[i](λ) · F_j(λ) dλ   # convolve with filter response
+        b. Form vector m_syn[i] = [m_1 … m_M].
+        c. Add Gaussian noise:
+                m_syn_noisy[i] = m_syn[i] + ε_i,
+                where ε_i ∼ 𝒩(0, (noise_level·m_syn[i])²).
+14. Stack all noisy photometry vectors into matrix M_syn ∈ ℝ^{G × M}.
+15. Stack corresponding latent vectors into Θ_syn ∈ ℝ^{G × K}.
+
+--------------------------------------------------------------------
+Step 4 – Train AutoML regressor (encoder)
+--------------------------------------------------------------------
+16. Use an AutoML framework (e.g., AutoGluon Tabular) to train a regressor
+        f_enc : ℝ^M → ℝ^K
+    on training data (M_syn, Θ_syn).
+17. Save the trained model f_enc.
+
+--------------------------------------------------------------------
+Step 5 – Taxonomy classifier (optional)
+--------------------------------------------------------------------
+18. Label each reference spectrum with its taxonomy class (e.g., H₂O, CO₂, Organic, Methanol).
+19. Train a second AutoML classifier g_cls on the pair (Θ_ref, label).
+20. Save the trained classifier g_cls.
+
+--------------------------------------------------------------------
+Step 6 – Inference for new object
+--------------------------------------------------------------------
+Function RECONSTRUCT(m_obs):
+    Input: m_obs ∈ ℝ^M  (observed photometry for the new target)
+    Output: Sampled latent posterior θ_samples, reconstructed spectrum S_rec, taxonomy probabilities P_type
+
+    a. Predict latent coefficients:
+            θ_hat = f_enc(m_obs)                     # point estimate
+    b. Optionally, draw N_draw samples from the regressor’s predictive distribution
+            θ_samples = DrawSamples(f_enc, m_obs, N_draw)
+    c. Reconstruct spectrum(s):
+            S_rec = μ_X + θ_hat · V_Kᵀ               # single deterministic spectrum
+            For each θ ∈ θ_samples:
+                S_sample = μ_X + θ · V_Kᵀ
+    d. Taxonomy probabilities:
+            P_type = g_cls(θ_hat)                    # softmax over classes
+
+    Return θ_samples, S_rec, P_type
+
+--------------------------------------------------------------------
+End of Algorithm
+--------------------------------------------------------------------

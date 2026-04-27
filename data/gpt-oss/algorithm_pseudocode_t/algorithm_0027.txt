@@ -1,0 +1,26 @@
+For each filter i = 1 … N_bands
+    For each basis k = 1 … M
+        A[i,k] = ∫ B_k(λ) * T_i(λ) dλ   /   ∫ T_i(λ) dλ
+
+W = diag( 1/σ_i² )          // inverse variance weighting
+
+F_pred = A · c
+
+L(c) = ½ (F - A·c)^T · W · (F - A·c)   +   ½ c^T · Σ_prior⁻¹ · c
+
+K = (A^T · W · A + Σ_prior⁻¹)^(-1)
+c_hat = K · A^T · W · F
+
+Σ_c = K
+
+R̂(λ) = Σ_k  c_hat_k · B_k(λ)
+
+Σ_R = Σ_k Σ_j  (B_k ⊗ B_j) · Σ_c[k,j]
+
+d_m = Σ_λ  | R̂(λ) - T_m(λ) |
+
+Taxon = argmin_m d_m
+
+LL = -½ (F - A·c_hat)^T · W · (F - A·c_hat)   - ½ log det(A^T W A + Σ_prior⁻¹)
+
+OutlierFlag = (LL < LL_threshold)

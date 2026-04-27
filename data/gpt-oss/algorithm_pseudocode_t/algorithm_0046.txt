@@ -1,0 +1,73 @@
+Input:
+    P = { (band_j, time_t, mag_m, err_m) }   // sparse photometry set
+    B_k(λ)   for k = 1 … K                 // basis spectra (template bank)
+    T_ref(λ) // reference spectrum for reflectance normalization
+    FilterResponse_j(λ) for each band j
+    PriorCovariance Λ (K×K)                 // prior covariance for coefficients
+    ClassTemplates C_l(λ) for l = 1 … L     // taxonomy templates
+
+Output:
+    ĉ            // estimated coefficient vector (K elements)
+    Cov_c         // covariance of coefficients
+    S_hat(λ)      // reconstructed spectrum
+    Colors        // reflectance colors (relative to reference)
+    ClassProb[l]  // posterior probability for each taxonomy class
+    χ²_fit        // goodness‑of‑fit statistic
+
+Procedure:
+
+1. **Pre‑process Photometry**
+   1.1 For each observation (j,t,m,σ_m):
+          Convert apparent magnitude to flux:
+              F_obs = 10^(−0.4 * (m − ZP_j))          // ZP_j: zero‑point
+          Convert flux uncertainty:
+              σ_F = F_obs * ln(10)/2.5 * σ_m
+   1.2 Store vectors:
+          y = [F_obs_1, F_obs_2, …, F_obs_N]ᵀ
+          w = diag(1/σ_F²)   // weight matrix (N×N)
+
+2. **Build Design Matrix A (N × K)**
+   2.1 For each filter j:
+          For each basis spectrum k:
+              A_{j,k} = ∫ B_k(λ) * FilterResponse_j(λ) dλ
+          // Normalise A rows by effective bandwidth if desired
+
+3. **Bayesian Linear Regression (Gaussian Conjugate Prior)**
+   3.1 Compute posterior precision matrix:
+          Π = Aᵀ w A + Λ⁻¹
+   3.2 Invert to obtain posterior covariance:
+          Cov_c = Π⁻¹
+   3.3 Compute posterior mean (MAP estimate):
+          ĉ = Cov_c (Aᵀ w y)
+
+4. **Reconstruct Spectrum**
+   4.1 For any wavelength λ:
+          S_hat(λ) = Σ_{k=1}^{K} ĉ_k * B_k(λ)
+   4.2 Optionally interpolate onto a fine grid for plotting.
+
+5. **Compute Reflectance Colors**
+   5.1 Predict fluxes from reconstruction:
+          F_pred = A ĉ
+   5.2 For each filter j:
+          R_j = F_pred_j / (A_ref_j ⋅ ĉ)     // A_ref from T_ref spectrum
+   5.3 Store Colors = {R_j}.
+
+6. **Taxonomy Classification**
+   6.1 For each class l:
+          • Evaluate template spectrum C_l(λ) at same wavelength grid.
+          • Project template onto basis:
+                t_l = A⁻¹ C_l   // solve least‑squares or use Aᵀ A inverse
+          • Compute likelihood:
+                Δ = t_l – ĉ
+                L_l = exp( –0.5 * Δᵀ (Cov_c + Λ)⁻¹ Δ )
+   6.2 Normalize likelihoods to obtain posterior probabilities:
+          ClassProb[l] = L_l / Σ_{m=1}^{L} L_m
+
+7. **Outlier Detection (Goodness‑of‑Fit)**
+   7.1 Compute residuals:
+          r = y – A ĉ
+   7.2 χ²_fit = Σ_{i=1}^{N} (r_i² / σ_F_i²)
+   7.3 Flag as outlier if χ²_fit > Threshold (e.g., χ² > N + 3√(2N))
+
+8. **Return Results**
+   Return ĉ, Cov_c, S_hat, Colors, ClassProb, χ²_fit.

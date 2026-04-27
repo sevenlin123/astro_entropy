@@ -1,0 +1,56 @@
+pseudo
+# 2.1 Pre‑process reference spectra
+for each spectrum S in Spectra_Obs:
+    resample S onto common λ_grid
+    normalize S (e.g., divide by mean reflectance)
+
+# 2.2 Principal Component Analysis (PCA)
+Compute mean spectrum μ = average(Spectra_Obs)
+Center spectra: S_centered = S - μ
+Apply SVD to S_centered → eigenvectors U[0..K-1], eigenvalues λ_k
+Choose K such that cumulative variance ≥ 0.98
+Project spectra onto PCs:
+    for each S_centered:
+        c = U^T · S_centered          # latent coefficients (vector length K)
+
+# 2.3 Augment latent space with Kernel Density Estimation (KDE)
+Fit KDE with bandwidth h ≈ 0.5 on set {c}
+Sample N_aug synthetic latent vectors {c_syn_j} from KDE
+
+# 2.4 Generate synthetic spectra and mock photometry
+for each c_syn_j:
+    S_syn_j = μ + U · c_syn_j                       # inverse PCA (reconstruction)
+    for each filter f in Filter_Curves:
+        m_f_j = ∫ S_syn_j(λ) * R_f(λ) dλ / ∫ R_f(λ) dλ   # reflectance in filter f
+    add Gaussian noise to photometry:
+        for each f:
+            σ_f = 0.20 * m_f_j                      # 20 % relative uncertainty
+            m_f_j_noisy = m_f_j + Normal(0, σ_f)
+    store training pair: (m_noisy_j, c_syn_j)
+
+# 2.5 Build training set
+D_enc  = {(m_noisy_j, c_syn_j)}      # for encoder
+D_cls  = {(c_syn_j, label_j)}        # labels come from the original spectral taxonomy
+
+# 2.6 Train encoder (photometry → latent)
+Use AutoML framework (e.g., AutoGluon) to train regressor E:
+    input: vector m_noisy_j (length = number of filters)
+    output: latent vector c_pred_j (length K)
+
+# 2.7 Train classifier (latent → taxonomy)
+Use AutoML to train classifier C:
+    input: latent vector c
+    output: probability vector over taxonomic classes
+
+pseudo
+# 3.1 Encode new photometry
+c_hat = E(Photometry_New)                     # predicted latent coefficients
+
+# 3.2 Decode to full spectrum
+Spectrum_Recon = μ + U · c_hat                # inverse PCA reconstruction
+
+# 3.3 Classify taxonomy
+Taxonomy_Posterior = C(c_hat)
+
+# 3.4 Return results
+return Spectrum_Recon, Taxonomy_Posterior

@@ -1,0 +1,84 @@
+pseudocode
+INPUT
+    S_train[1…N][1…M]          // training spectra (relative reflectance)
+    F_filter[1…K][1…M]         // filter transmission curves
+    m_obs[1…K]                 // observed magnitudes (or fluxes)
+    sigma[1…K]                 // measurement uncertainties
+    p_prior[1…N] = 1/N         // flat prior over templates
+
+OUTPUT
+    R_mean[1…M]                // posterior‑mean reflectance spectrum
+    R_std[1…M]                 // posterior standard deviation at each λ
+    P_template[1…N]            // posterior probability of each template
+
+--------------------------------------------------------------------
+STEP 1 – PRE‑COMPUTE SYNTHETIC PHOTOMETRY FOR ALL TRAINING SPECTRA
+--------------------------------------------------------------------
+for i = 1 to N do
+    for j = 1 to K do
+        // Convolution of template spectrum with filter curve
+        num = Σ_{λ=1}^{M}  S_train[i][λ] * F_filter[j][λ]
+        denom = Σ_{λ=1}^{M}  F_filter[j][λ]
+        f_syn[i][j] = num / denom          // synthetic flux (relative reflectance)
+    end for
+end for
+
+--------------------------------------------------------------------
+STEP 2 – CALCULATE LIKELIHOOD FOR EACH TEMPLATE
+--------------------------------------------------------------------
+for i = 1 to N do
+    logL[i] = 0
+    for j = 1 to K do
+        diff = m_obs[j] - f_syn[i][j]
+        logL[i] += -0.5 * ( (diff*diff)/(sigma[j]*sigma[j]) 
+                           + log(2π * sigma[j]*sigma[j]) )
+    end for
+end for
+
+--------------------------------------------------------------------
+STEP 3 – COMPUTE POSTERIOR OVER TEMPLATES
+--------------------------------------------------------------------
+for i = 1 to N do
+    logPosterior[i] = log(p_prior[i]) + logL[i]
+end for
+// Convert to normalised probabilities
+maxLog = max_i(logPosterior[i])
+normConst = Σ_{i=1}^{N} exp(logPosterior[i] - maxLog)
+for i = 1 to N do
+    P_template[i] = exp(logPosterior[i] - maxLog) / normConst
+end for
+
+--------------------------------------------------------------------
+STEP 4 – SAMPL FROM POSTERIOR (MCMC)
+--------------------------------------------------------------------
+initialize current = argmax_i(P_template[i])          // highest‑probability template
+samples = []                                        // list of sampled template indices
+for n = 1 to N_MCMC do
+    propose = random_neighbor(current)              // e.g., choose random i ≠ current
+    alpha = min( 1,
+                  (P_template[propose]) / (P_template[current]) )
+    if rand() < alpha then
+        current = propose
+    end if
+    append(samples, current)
+end for
+
+--------------------------------------------------------------------
+STEP 5 – RECONSTRUCT POSTERIOR MEAN & STD OF REFLECTANCE
+--------------------------------------------------------------------
+for λ = 1 to M do
+    weightedSum = 0
+    weightedSq  = 0
+    for each s in samples do
+        w = 1 / length(samples)                    // equal weighting
+        val = S_train[s][λ]
+        weightedSum += w * val
+        weightedSq  += w * val * val
+    end for
+    R_mean[λ] = weightedSum
+    R_std[λ]  = sqrt( weightedSq - weightedSum*weightedSum )
+end for
+
+--------------------------------------------------------------------
+RETURN
+    R_mean, R_std, P_template

@@ -1,0 +1,75 @@
+INPUT:
+    - Observed high‑resolution spectra   S_obs[1…N]   // each is a vector of length M
+    - Corresponding taxonomic labels      L_obs[1…N]
+    - Instrument filter set                Filters[1…J]
+    - Desired number of synthetic samples  L_synth  (e.g. 5000)
+
+PARAMETERS:
+    - Number of principal components K  (chosen such that 4–10 capture >90 % variance)
+    - KDE bandwidth h  (default 0.5)
+    - Photometric noise σ_rel  (relative reflectance noise, default 0.20)
+
+--------------------------------------------------------------
+1. BUILD PRIOR MODEL
+--------------------------------------------------------------
+a. PCA on training spectra
+   [µ, V, C_obs] ← PCA(S_obs, K)        // µ : mean spectrum (M‑vector)
+                                            // V : eigenvector matrix (M×K)
+                                            // C_obs : projected coefficients (N×K)
+
+b. Estimate density in latent space
+   KDE_model ← KDE(C_obs, bandwidth=h)  // non‑parametric density estimator
+
+c. Sample synthetic latent vectors
+   C_synth[1…L_synth] ← Sample(KDE_model, L_synth)
+
+d. Reconstruct synthetic spectra
+   for i = 1 … L_synth:
+        S_synth[i] ← µ + V * C_synth[i]          // linear combination (M‑vector)
+
+--------------------------------------------------------------
+2. GENERATE SYNTHETIC PHOTOMETRY
+--------------------------------------------------------------
+for i = 1 … L_synth:
+    for j = 1 … J:
+        // Forward convolution of spectrum with filter throughput
+        R_true[j] ← ∫ S_synth[i](λ) · T_Filters[j](λ) dλ  /  ∫ T_Filters[j](λ) dλ
+        // Add Gaussian photometric noise
+        R_noisy[j] ← R_true[j] + Normal(0, σ_rel * R_true[j])
+    end for
+    P_synth[i] ← R_noisy                    // photometry vector (J‑dimensional)
+    C_target[i] ← C_synth[i]                // latent coefficient vector
+end for
+
+--------------------------------------------------------------
+3. TRAIN ENCODER (PHOTOMETRY → LATENT)
+--------------------------------------------------------------
+Encoder_Model ← AutoML_Regressor()          // e.g., ensemble of GBDT & NN
+Encoder_Model.train(inputs = P_synth[1…L_synth],
+                     targets = C_target[1…L_synth])
+
+--------------------------------------------------------------
+4. TRAIN CLASSIFIER (LATENT → TAXONOMY)
+--------------------------------------------------------------
+// Use only real spectra for supervised labels
+Classifier_Model ← AutoML_Classifier()
+Classifier_Model.train(inputs = C_obs,
+                       targets = L_obs)
+
+--------------------------------------------------------------
+5. INFERENCE ON NEW OBJECT
+--------------------------------------------------------------
+function RECONSTRUCT_AND_CLASSIFY(P_new):
+    // P_new : observed photometry vector (length J)
+
+    // 5.1 Predict latent coefficients
+    C_pred ← Encoder_Model.predict(P_new)          // (K‑vector)
+
+    // 5.2 Decode to full spectrum
+    S_pred ← µ + V * C_pred                        // (M‑vector)
+
+    // 5.3 Obtain taxonomy probabilities
+    Taxo_prob ← Classifier_Model.predict_proba(C_pred)
+
+    return S_pred, Taxo_prob
+end function

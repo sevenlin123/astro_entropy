@@ -1,0 +1,82 @@
+INPUT:
+    S_train   – matrix of N_train spectra (rows = wavelength points λ)
+    R_filter  – matrix of M_phot filters (rows = wavelengths λ, columns = filter profiles)
+    F_obs     – vector of observed photometric fluxes for a target TNO
+    σ_F       – vector of observational uncertainties for F_obs
+    K         – number of principal components to retain (e.g., 8)
+
+OUTPUT:
+    μ_spec    – reconstructed mean spectrum (length L_wavelength)
+    CI_spec   – credible‑interval bounds for spectrum at each λ
+    posterior – posterior distribution of PC coefficients
+
+--------------------------------------------------------------------
+STEP 0: Pre‑processing
+--------------------------------------------------------------------
+1. Normalize S_train by mean(λ) and median flux if required.
+2. Interpolate all spectra onto a common wavelength grid λ[1…L].
+3. Center spectra: S_centered = S_train - μ_S where μ_S = mean(S_train, axis=0).
+
+--------------------------------------------------------------------
+STEP 1: Principal Component Analysis (PCA)
+--------------------------------------------------------------------
+4. Compute singular value decomposition:
+        U, Σ, Vt = svd(S_centered, full_matrices=False)
+   (U: PCs in coefficient space, Σ: singular values, Vt: PCs in wavelength space)
+5. Select first K components:
+        PCs_K      = Vt[:K, :]          # shape K × L
+        eigenvals  = Σ[:K]^2 / (N_train-1)
+
+--------------------------------------------------------------------
+STEP 2: Construct Photometric Forward Model
+--------------------------------------------------------------------
+6. For each filter j = 1…M:
+        H_j = ∫ R_filter[:,j] * λ dλ          # normalizing integral
+   (Store H_j as vector of length L)
+7. Assemble matrix H of size M × L where H[j,:] = H_j.
+8. For any spectrum s(λ) = μ_S + Σ_{k=1}^K a_k * PCs_K[k,:],
+   the predicted flux in filter j is:
+        f_pred_j = (H[j,:] · s) / H_j_norm
+   where H_j_norm = ∑_λ R_filter[λ,j] * λ dλ.
+
+--------------------------------------------------------------------
+STEP 3: Bayesian Inference on PC Coefficients
+--------------------------------------------------------------------
+9. Define prior for coefficient vector a = [a1 … aK]ᵀ:
+        a ~ N(0, diag(eigenvals))
+10. Define likelihood for observed photometry:
+        p(F_obs | a) = Π_{j=1}^M N(f_pred_j(a) | F_obs_j, σ_F_j^2)
+11. Compute posterior distribution p(a | F_obs):
+        Because model is linear in a and prior is Gaussian,
+        posterior is also Gaussian:
+            Σ_post = (Σ_prior^{-1} + Jᵀ Σ_noise^{-1} J)^{-1}
+            μ_post = Σ_post (Jᵀ Σ_noise^{-1} F_obs)
+        where:
+            J = Jacobian matrix ∂f_pred/∂a evaluated at a=0
+              = H @ PCs_Kᵀ  (size M × K)
+            Σ_prior = diag(eigenvals)
+            Σ_noise = diag(σ_F^2)
+
+12. Draw N_samples (e.g., 500) draws from N(μ_post, Σ_post) to approximate posterior.
+
+--------------------------------------------------------------------
+STEP 4: Reconstruct Spectrum and Credible Intervals
+--------------------------------------------------------------------
+13. For each sampled coefficient vector a_s:
+        s_s(λ) = μ_S + Σ_{k=1}^K a_s[k] * PCs_K[k,:]
+14. Compute posterior mean spectrum:
+        μ_spec = mean_over_samples(s_s)
+15. Compute percentile bounds (e.g., 2.5% and 97.5%) across samples at each λ to obtain CI_spec.
+
+--------------------------------------------------------------------
+STEP 5: Optional Outlier Scoring
+--------------------------------------------------------------------
+16. Compute predictive likelihood:
+        L_pred = N(F_obs | μ_f_pred, Σ_f_pred + Σ_noise)
+    where μ_f_pred = H @ μ_spec  and
+          Σ_f_pred = H @ Σ_post @ Hᵀ
+17. Flag object if log(L_pred) below threshold.
+
+--------------------------------------------------------------------
+RETURN:
+    μ_spec, CI_spec, posterior (μ_post, Σ_post)

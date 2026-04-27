@@ -1,0 +1,63 @@
+INPUT:
+    • Photometric measurements {m_i, σ_mi} for i = 1 … N_filters
+    • Filter transmission curves {T_i(λ)}
+    • Reference spectral library {S_k(λ)} for k = 1 … N_basis
+    • Prior hyper‑parameters for coefficient vector w = (w_1 … w_N_basis)
+
+OUTPUT:
+    • Posterior samples of coefficients w
+    • Reconstructed reflectance spectrum R(λ) and its uncertainty
+    • (Optional) Taxonomic classification
+
+ALGORITHM:
+
+1. Pre‑processing
+   1.1 Convert observed magnitudes to relative fluxes:
+        f_obs,i   ← 10^(-0.4 * m_i)
+        σ_fi      ← ln(10)/2.5 * f_obs,i * σ_mi          // error propagation
+   1.2 Normalize each basis spectrum S_k(λ) to unit area over 0.5–2.5 µm
+   1.3 Pre‑compute synthetic photometry matrix A of size (N_filters × N_basis):
+        For each filter i and basis k:
+            A[i,k] ← ∫ S_k(λ) · T_i(λ) dλ / ∫ T_i(λ) dλ
+        // A relates coefficients w to expected fluxes in each filter
+
+2. Model specification
+   2.1 Define model flux in filter i:
+        f_model,i(w) = Σ_{k=1}^{N_basis} w_k · A[i,k]
+   2.2 Likelihood for all filters (assuming independent Gaussian errors):
+        L(w) = Π_{i=1}^{N_filters} 
+               Normal( f_obs,i | f_model,i(w), σ_fi )
+   2.3 Prior on coefficients:
+        p(w) = Normal( w | μ_prior, Σ_prior )
+        // typically μ_prior = 0, Σ_prior = α⁻¹ I with hyper‑parameter α
+
+3. Posterior sampling
+   3.1 Define log‑posterior:
+        logπ(w) = log L(w) + log p(w)
+   3.2 Initialize chain at w₀ (e.g., zeros or MAP estimate)
+   3.3 Run MCMC sampler (e.g., Hamiltonian Monte Carlo or Metropolis–Hastings):
+        For iter = 1 … N_iter:
+            Propose w' according to proposal distribution q(w'|w_current)
+            Compute acceptance ratio:
+                r = exp( logπ(w') – logπ(w_current) )
+            Accept w' with probability min(1, r); otherwise keep w_current
+            Store accepted w in sample list
+   3.4 Discard initial burn‑in samples and thin chain if desired
+
+4. Post‑processing
+   4.1 Compute mean and standard deviation of coefficients across retained samples:
+        w_mean(k)      = mean{ w_samples(k) }
+        w_std(k)       = std{ w_samples(k) }
+   4.2 Reconstruct mean reflectance spectrum:
+        R_mean(λ) = Σ_{k} w_mean(k) · S_k(λ)
+   4.3 Estimate spectral uncertainty:
+        For each λ:
+            R_std(λ) = sqrt( Σ_{k} (w_std(k))² · (S_k(λ))² )
+   4.4 (Optional) Taxonomic projection:
+        • Perform PCA on basis spectra to obtain eigenvectors {E_j}
+        • Project w_mean onto first two PCs:
+              pc1 = w_mean · E_1 , pc2 = w_mean · E_2
+        • Classify based on location in (pc1, pc2) space using pre‑defined boundaries
+
+5. Output results:
+   • Return samples {w_samples}, R_mean(λ), R_std(λ), and optional PC coordinates

@@ -1,0 +1,63 @@
+pseudocode
+INPUT  
+    SPECTRA = { S₁ , … , S_N }          // reflectance vectors (length L)
+    FILTERS  = { T¹ , … , T^M }         // effective throughput curves (length L)
+    K        = number of principal components (≤ 10)
+    H        = KDE bandwidth (≈ 0.5)
+    M_SYN    = number of synthetic latent samples (e.g., 5 000)
+    NOISE    = 0.20                       // 20 % relative Gaussian noise
+
+OUTPUT  
+    PCA_MODEL      // (mean μ_s , component matrix U [L×K])
+    REGRESSOR R    // maps photometry → latent coefficients
+    CLASSIFIER C   // maps latent coefficients → taxonomic class probabilities
+
+μ_s ← mean(SPECTRA)                                 // shape (L,)
+X   ← SPECTRA – μ_s                                // zero‑centered
+[U, Λ] ← PCA(X, K)                                  // U: (L×K), Λ: eigenvalues
+
+COEFFS_real ← { cᵢ = Uᵀ · (Sᵢ – μ_s)  for i = 1…N }   // each cᵢ ∈ ℝᴷ
+
+KDE_model ← fit_KDE(COEFFS_real, bandwidth = H)
+
+for m = 1 … M_SYN
+        c_syn[m] ← sample(KDE_model)               // synthetic latent vector
+        S_syn[m] ← μ_s + U · c_syn[m]              // synthetic spectrum
+
+for m = 1 … M_SYN
+        for j = 1 … M
+                // simple inner product approximation of filter response
+                pₘⱼ ← ⟨ S_syn[m] , FILTERS[j] ⟩
+                // optional: divide by solar spectrum if required
+        end
+        pₘ ← (pₘ₁ , … , pₘ_M)                        // noiseless photometry
+        noise_j ← Normal(0 , σ_j)  where σ_j = NOISE * pₘⱼ
+        pₘ_noisy ← pₘ + noise                     // shape (M,)
+        STORE training pair (pₘ_noisy , c_syn[m])
+end
+
+REGRESSOR R ← train_ensemble( INPUT = {p_noisy} ,
+                              OUTPUT = {c_syn} )
+
+CLASSIFIER C ← train_ensemble( INPUT = {cᵢ from COEFFS_real} ,
+                               LABELS = {known taxonomies of Sᵢ} )
+
+pseudocode
+INPUT  
+    p_obs = (p¹ , … , p^M)          // observed photometry (shape (M,))
+    PCA_MODEL   (μ_s , U)
+    REGRESSOR R
+    CLASSIFIER C
+
+ĉ  ← R.predict(p_obs)             // vector in ℝᴷ (point estimate)
+
+Ŝ  ← μ_s + U · ĉ                  // shape (L,)
+
+tax_prob ← C.predict_proba(ĉ)      // probabilities for each taxonomic class
+
+return { Ŝ  : reconstructed spectrum,
+         tax_prob : class probability vector }
+
+sample n times from regressor posterior: {ĉ^(k)}_{k=1}ⁿ
+for each ĉ^(k):  Ŝ^(k) ← μ_s + U · ĉ^(k)
+derive spectrum mean & credible intervals from {Ŝ^(k)}

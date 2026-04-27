@@ -1,0 +1,76 @@
+Inputs:
+    S_spec[1..N_s]   // N_s reference near‑IR spectra (flux vs λ)
+    F_filt[1..N_f]   // N_f filter transmission curves (wavelength‑dependent)
+    m_obs[1..N_f]    // Observed photometry (magnitude or flux) per filter
+    σ_obs[1..N_f]    // Measurement uncertainties per filter
+    K                // Number of principal components to retain
+    PriorCov[K]      // Prior covariance matrix for PCA coefficients (default = I)
+    N_iter           // Number of iterations for MCMC sampler
+
+Output:
+    PosteriorSamples[K]  // Samples of PCA coefficient vector c
+    ReconstructedSpectra // Ensemble of full‑band spectra (from samples)
+
+Procedure:
+
+1. TRAIN PCA ON SPECTRA
+   1.1 Normalize each spectrum in S_spec (e.g., median‑normalize or mean‑zero).
+   1.2 Compute mean spectrum μ_spec = mean(S_spec).
+   1.3 Center data: D[i] = S_spec[i] - μ_spec  for i = 1..N_s.
+   1.4 Perform Singular Value Decomposition (SVD):
+        [U, Σ, V] = svd(D)    // U: left singular vectors (spectra modes)
+   1.5 Select first K columns of U → PCs[1..K]   // Principal components
+   1.6 Store eigenvalues λ_k = Σ[k,k].
+
+2. PRECOMPUTE FILTER RESPONSE ON PRINCIPAL COMPONENTS
+   For each filter f = 1..N_f:
+       For each component k = 1..K:
+           R[f][k] = integral_over_λ( PCs[k](λ) * F_filt[f](λ) ) / 
+                     integral_over_λ( F_filt[f](λ) )
+   // R is a K×N_f matrix of linear responses.
+
+3. DEFINE LIKELIHOOD FUNCTION
+   Given coefficient vector c[1..K]:
+       // Predict flux in each filter:
+       For f = 1..N_f:
+           μ_pred[f] = μ_spec_flux_in_filter(f) + sum_{k=1}^K c[k] * R[f][k]
+           // μ_spec_flux_in_filter(f) is the flux of μ_spec through filter f
+       // Likelihood assuming Gaussian errors:
+       logL(c) = -0.5 * Σ_{f=1}^{N_f} ((m_obs[f] - μ_pred[f])^2 / σ_obs[f]^2)
+                 - 0.5 * Σ_{f=1}^{N_f} log(2π * σ_obs[f]^2)
+
+4. DEFINE PRIOR FOR COEFFICIENTS
+   // Zero‑mean multivariate normal with covariance PriorCov:
+   logPrior(c) = -0.5 * cᵀ * PriorCov⁻¹ * c
+                 - 0.5 * K * log(2π) - 0.5 * log(det(PriorCov))
+
+5. COMPUTE POSTERIOR PDF
+   logPosterior(c) = logL(c) + logPrior(c)
+
+6. SAMPLING VIA METROPOLIS‑HASTINGS (or other MCMC)
+   Initialize c_current = zeros(K)
+   For iter = 1 to N_iter:
+       6.1 Propose new state:
+            c_proposal = c_current + Normal(0, Σ_prop)   // Σ_prop tuned
+       6.2 Compute logPosterior for proposal and current:
+            logPost_proposal = logPosterior(c_proposal)
+            logPost_current = logPosterior(c_current)
+       6.3 Acceptance probability:
+            α = min(1, exp(logPost_proposal - logPost_current))
+       6.4 Draw u ~ Uniform(0,1)
+            If u < α:
+                c_current = c_proposal
+            EndIf
+       6.5 Store c_current in PosteriorSamples
+   EndFor
+
+7. RECONSTRUCT FULL SPECTRUM FROM SAMPLE OF COEFFICIENTS
+   For each stored coefficient vector c in PosteriorSamples:
+       ReconstructedSpec = μ_spec + Σ_{k=1}^K c[k] * PCs[k]
+       Append ReconstructedSpec to ReconstructedSpectra
+
+8. OPTIONAL: SUMMARY STATISTICS
+   Compute posterior mean and credible intervals for each wavelength point
+   by aggregating over ReconstructedSpectra.
+
+Return PosteriorSamples and ReconstructedSpectra.

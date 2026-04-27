@@ -1,0 +1,98 @@
+pseudocode
+# ------------------------------------------------------------------
+# 1. TRAINING PHASE – Build the spectral principal‑component model
+# ------------------------------------------------------------------
+
+INPUT:
+    S          // matrix of reference near‑IR spectra (N_spec rows × N_wave columns)
+    K          // desired number of principal components (e.g., 8–10)
+
+PROCESS:
+    1.1  Compute mean spectrum:
+            μ_S ← mean(S, axis=0)          // vector of length N_wave
+
+    1.2  Center spectra:
+            S_centered ← S − μ_S           // broadcast subtraction
+
+    1.3  Compute covariance matrix:
+            C ← (S_centeredᵀ · S_centered) / (N_spec−1)
+
+    1.4  Perform eigendecomposition:
+            (eig_vals, eig_vecs) ← eig(C)
+            Sort eig_vals descending; reorder eig_vecs accordingly
+
+    1.5  Select first K components:
+            V_K ← eig_vecs[:, 1…K]         // matrix of size N_wave × K
+            λ_K ← eig_vals[1…K]            // variances of the selected PCs
+
+OUTPUT:
+    μ_S   // mean spectrum
+    V_K   // K principal‑component basis vectors (each column)
+    λ_K   // variances of PCs (used as prior covariance)
+
+
+# ------------------------------------------------------------------
+# 2. FILTER RESPONSE PRECOMPUTATION
+# ------------------------------------------------------------------
+
+INPUT:
+    Filters     // list of photometric filters {f}
+    T_f(λ)      // transmission curve for each filter f
+    V_K, μ_S    // from training phase
+
+PROCESS:
+    For each filter f:
+        2.1  Compute mean flux through filter:
+                μ_f ← ∫ T_f(λ) · μ_S(λ) dλ
+        2.2  For each PC j = 1…K:
+                R_fj ← ∫ T_f(λ) · V_K(:, j)(λ) dλ
+    Assemble design matrix R of size (|Filters| × K):
+            R[f, j] = R_fj
+    Assemble mean vector m_p of size |Filters|:
+            m_p[f] = μ_f
+
+OUTPUT:
+    R      // filter–PC response matrix
+    m_p    // mean flux vector
+
+
+# ------------------------------------------------------------------
+# 3. BAYESIAN INFERENCE FOR A SINGLE OBJECT
+# ------------------------------------------------------------------
+
+INPUT:
+    p          // observed photometry vector (length |Filters|)
+    σ_p        // 1‑σ uncertainties for each photometry point
+    R, m_p     // from step 2
+    λ_K        // PC variances (prior)
+
+PROCESS:
+    3.1  Construct likelihood covariance:
+            Σ_lik ← diag(σ_p²)          // |Filters| × |Filters|
+
+    3.2  Define prior on PC coefficients c:
+            Prior(c) ~ N(0, diag(λ_K))
+
+    3.3  Compute posterior parameters (closed‑form Gaussian):
+            A ← diag(1/λ_K) + Rᵀ · Σ_lik⁻¹ · R
+            b ← Rᵀ · Σ_lik⁻¹ · (p − m_p)
+            c_post_mean ← A⁻¹ · b
+            Σ_c_post   ← A⁻¹
+
+    3.4  Draw L samples from posterior (optional):
+            For l = 1 … L:
+                c_l ← c_post_mean + chol(Σ_c_post) · ε_l
+                // ε_l ~ N(0, I_K)
+
+    3.5  Reconstruct spectra:
+            For each sample c_l:
+                s_l ← μ_S + V_K · c_l       // full‑resolution spectrum
+            Compute spectral statistics:
+                s_mean(λ)  ← mean(s_l across l)
+                s_std(λ)   ← std(s_l across l)
+                credible_interval(λ) ← s_mean ± 2·s_std   // 95 % CI
+
+OUTPUT:
+    s_mean          // posterior‑mean reconstructed spectrum
+    s_std           // posterior‑standard‑deviation spectrum
+    credible_intervals // 95 % confidence bounds per wavelength

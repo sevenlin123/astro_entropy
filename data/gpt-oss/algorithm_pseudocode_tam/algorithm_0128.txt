@@ -1,0 +1,81 @@
+text
+# ------------------------------------------------------------------
+# 1. PRE‑PROCESSSING AND LATENT SPACE DEFINITION
+# ------------------------------------------------------------------
+INPUT:
+    REF_SPECTRA   = {S_i[λ]}   # High‑resolution reflectance spectra (i=1…N_ref)
+    FILTER_CURVES = {T_f[λ]}   # Effective throughput of photometric filters (f=1…F)
+
+PARAMETERS:
+    K_pca        = number of principal components (e.g., 8–10)
+    KDE_bandwidth = h (≈0.5)
+    NOISE_LEVEL  = σ_rel (e.g., 0.20 for 20 % relative reflectance noise)
+
+STEP 1.1  Mean‑centering
+    μ_S = mean(REF_SPECTRA)          # vector of length L (wavelength points)
+    S_centered[i] = REF_SPECTRA[i] - μ_S
+
+STEP 1.2  Principal Component Analysis
+    [U, Σ, V] = SVD(S_centered)     # U: L×K_pca, V: N_ref×K_pca
+    PC_basis      = U[:, 1:K_pca]    # eigenvectors (basis)
+    PC_coeffs[i]  = V[i, 1:K_pca] * Σ[1:K_pca]   # latent vector for spectrum i
+
+STEP 1.3  Kernel Density Estimation in latent space
+    kde_model = KDE(PC_coeffs, bandwidth = KDE_bandwidth)
+
+STEP 1.4  Synthetic latent samples
+    N_syn = large number (e.g., 5000)
+    SYN_LATENT = sample_from_kde(kde_model, N_syn)   # each row = K_pca dim vector
+
+STEP 1.5  Reconstruct synthetic spectra
+    for each latent_vector in SYN_LATENT:
+        synth_spec = μ_S + PC_basis @ latent_vector.T
+        store synth_spec
+
+STEP 1.6  Forward photometry for synthetic spectra
+    for each synth_spec:
+        for each filter f:
+            # Convolution of spectrum with filter throughput
+            R_f = ∫ synth_spec(λ) * T_f(λ) dλ / ∫ T_f(λ) dλ
+        synth_photometry = {R_f}
+        # Add Gaussian noise (relative)
+        for each R_f:
+            σ_f = σ_rel * R_f
+            R_f_noisy = R_f + Normal(0, σ_f)
+        store synth_photometry
+
+STEP 1.7  Assemble training dataset
+    X_train = matrix of synthetic photometry (N_syn × F)
+    Y_train = matrix of synthetic latent vectors (N_syn × K_pca)
+
+# ------------------------------------------------------------------
+# 2. MODEL TRAINING
+# ------------------------------------------------------------------
+STEP 2.1  Photometry → Latent Coefficients Regressor
+    regressor = AutoML_Train(X_train, Y_train)
+    # e.g., ensemble of Gradient‑Boosted Trees
+
+STEP 2.2  Latent Coefficients → Taxonomy Classifier
+    # Build label vector from REF_SPECTRA taxonomy (Water, CO₂, Organic, Methanol)
+    Y_labels = taxonomy_labels_of_REF_SPECTRA
+    classifier = AutoML_Train(PC_coeffs, Y_labels)
+
+# ------------------------------------------------------------------
+# 3. INFERENCE FOR NEW OBJECT
+# ------------------------------------------------------------------
+INPUT:
+    OBS_PHOTOMETRY = {R_f_obs ± σ_f_obs}   # observed reflectance in each filter
+
+STEP 3.1  Predict latent coefficients
+    pred_latent = regressor.predict(OBS_PHOTOMETRY)
+    # If regressor outputs distribution, sample or use mean
+
+STEP 3.2  Reconstruct high‑resolution spectrum
+    recon_spec = μ_S + PC_basis @ pred_latent.T
+
+STEP 3.3  Classify taxonomy
+    tax_prob = classifier.predict_proba(pred_latent)
+
+OUTPUT:
+    recon_spec          # reconstructed reflectance spectrum
+    tax_prob            # probability vector over taxonomic classes

@@ -1,0 +1,86 @@
+INPUT:
+    S_ref[1..N_ref][1..M]          # Reference spectra (wavelength grid M)
+    Filt[1..L][1..M]              # Filter throughput curves (L filters)
+    K                              # Number of PCA components to keep
+    h                              # KDE bandwidth
+    N_samp                        # Number of synthetic latent samples
+    NoiseLevel = 0.20              # Relative photometric noise (20%)
+
+OUTPUT:
+    Reconstructed spectrum S_rec[1..M]
+    Credible interval CI[1..M]     # e.g., 68% & 95%
+    Taxonomy probabilities P_tax
+
+1.1 Pre‑process spectra
+    For each i in 1..N_ref:
+        S_norm[i] = S_ref[i] / SolarSpectrum   # normalize to reflectance
+
+1.2 Perform PCA
+    [U, Σ, V] = PCA(S_norm, components=K)
+    # U: eigenvectors (M × K)
+    # Σ: singular values
+    # V: projected coefficients (N_ref × K)
+
+1.3 Fit Kernel Density Estimate (KDE) to latent coefficients
+    kde_model = KDE(V, bandwidth=h)
+
+1.4 Draw synthetic latent vectors
+    Lat_synth[1..N_samp][1..K] = kde_model.sample(N_samp)
+
+1.5 Reconstruct synthetic spectra
+    For each j in 1..N_samp:
+        S_synth[j] = U * (Σ * Lat_synth[j])   # inverse PCA
+
+2.1 Convolve synthetic spectra with filters
+    For each j in 1..N_samp:
+        For each l in 1..L:
+            Phot_true[j,l] = ∫ S_synth[j] * Filt[l] / ∫ Filt[l]
+
+2.2 Add Gaussian noise
+    For each j,l:
+        Phot_noisy[j,l] = Phot_true[j,l] *
+                          (1 + Normal(mean=0, std=NoiseLevel))
+
+3.1 Prepare training data
+    X_train = Phot_noisy                # (N_samp × L)
+    y_train = Lat_synth                 # (N_samp × K)
+
+3.2 Train regressor
+    regressor = AutoML_Regressor()
+    regressor.train(X_train, y_train)
+
+4.1 Label latent vectors of reference spectra
+    Labels = taxonomy_labels[1..N_ref]   # e.g., {Water, CO2, Organic, Methanol}
+
+4.2 Train classifier on V (latent of real spectra)
+    classifier = AutoML_Classifier()
+    classifier.train(V, Labels)
+
+5.1 Input photometry m_obs[1..L]  (observed reflectances)
+
+5.2 Predict latent posterior with regressor
+    # Obtain mean μ and covariance Σ_pred if regressor supports probabilistic output,
+    # otherwise use point estimate μ
+    μ, Σ_pred = regressor.predict_posterior(m_obs)
+
+5.3 Sample latent vectors using Gaussian Copula
+    N_draw = 1000
+    For t in 1..N_draw:
+        z_t ~ Normal(0, I_K)
+        u_t = Φ(z_t)                     # standard normal CDF
+        w_t = Φ_Copula^{-1}(u_t; Σ_pred) # transform to correlated sample
+        Lat_sample[t] = μ + w_t
+
+5.4 Reconstruct spectra for each sample
+    For t in 1..N_draw:
+        S_t = U * (Σ * Lat_sample[t])
+
+5.5 Aggregate samples
+    S_rec = mean_{t}(S_t)
+    CI_low, CI_high = percentile_{t}(S_t, [16%,84%])   # 68% CI
+    # Similarly for 95% CI if desired
+
+5.6 Taxonomy probability
+    P_tax = classifier.predict_proba(μ)   # probability vector over classes
+
+Return S_rec, CI_low, CI_high, P_tax

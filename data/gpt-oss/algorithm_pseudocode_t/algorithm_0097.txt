@@ -1,0 +1,75 @@
+INPUT:
+    P      ← array of measured apparent magnitudes/fluxes (size Nf)
+    σP     ← corresponding measurement uncertainties (size Nf)
+    F[]    ← list of Nf filter transmission curves (function of wavelength λ)
+    T[]    ← list of NT template spectra (each function of λ)
+    priors ← prior distributions for linear‑combination weights w_j
+
+OUTPUT:
+    w_post   ← posterior samples of weight vector w (size NT)
+    S_pred    ← posterior‑predictive mean spectrum (λ grid)
+    S_err     ← posterior‑predictive standard deviation spectrum (λ grid)
+    tax_class ← taxonomy label derived from weights
+
+ALGORITHM:
+
+1. NORMALISE TO PHOTOMETRIC SYSTEM
+   1.1 For each template spectrum t ∈ T:
+          normalise t so that its integrated flux over a reference band (e.g., V) equals 1.
+          Store as T_norm[t].
+
+2. GENERATE SYNTHETIC PHOTOMETRY MATRIX
+   2.1 For each filter f ∈ {1,…,Nf}:
+          For each template t ∈ T_norm:
+              Compute synthetic flux S[f][t] = ∫ T_norm[t](λ) · F[f](λ) dλ
+   2.2 Assemble matrix S of size Nf × NT (rows = filters, columns = templates).
+
+3. DEFINE MODEL
+   3.1 Observed flux vector p (derived from P if magnitudes) satisfies:
+          p = S · w + ε
+          where ε ~ Normal(0, diag(σP²)).
+
+4. SET UP PRIOR ON WEIGHTS
+   4.1 For each j ∈ {1,…,NT}:
+          w_j ~ priors[j]   (e.g., non‑negative exponential or uniform).
+   4.2 Combine into joint prior p(w).
+
+5. COMPUTE LIKELIHOOD
+   5.1 Likelihood L(p | w) = ∏_{i=1}^{Nf} 
+          Normal(p[i] | (S·w)[i], σP[i]²)
+
+6. FORMULATE POSTERIOR
+   6.1 Posterior density p(w | p) ∝ L(p | w) · p(w)
+
+7. SAMPLE FROM POSTERIOR (MCMC)
+   7.1 Initialise w^(0) (e.g., uniform or random respecting priors).
+   7.2 For iteration k = 1 … N_iter:
+          7.2.1 Propose new weight vector w* using proposal kernel q(w*|w^(k−1)).
+          7.2.2 Compute acceptance ratio:
+                  α = min{1,
+                          [L(p|w*) · p(w*) · q(w^(k−1)|w*)] /
+                          [L(p|w^(k−1)) · p(w^(k−1)) · q(w*|w^(k−1))]}
+          7.2.3 Draw u ~ Uniform(0,1).
+          7.2.4 If u < α:
+                   w^(k) ← w*
+                else:
+                   w^(k) ← w^(k−1)
+   7.3 Discard initial N_burn iterations as burn‑in.
+   7.4 Store remaining samples {w^(k)} as w_post.
+
+8. COMPUTE POSTERIOR‑PREDICTIVE SPECTRUM
+   8.1 For each stored weight sample w^(s):
+          Compute spectral prediction:
+              S_pred_sample[λ] = Σ_{j=1}^{NT} w^(s)_j · T_norm[j](λ)
+   8.2 After all samples:
+          S_pred[λ] = mean_s( S_pred_sample[λ] )
+          S_err[λ]  = stddev_s( S_pred_sample[λ] )
+
+9. TAXONOMY CLASSIFICATION
+   9.1 Project each weight sample w^(s) onto a pre‑computed taxonomy space
+        (e.g., principal components of known classes or nearest‑neighbour in weight space).
+   9.2 Determine most frequent class among samples → tax_class.
+   9.3 Optionally compute class probabilities from sample counts.
+
+10. RETURN RESULTS
+    10.1 Output w_post, S_pred, S_err, tax_class.

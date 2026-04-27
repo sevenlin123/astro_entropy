@@ -1,0 +1,107 @@
+Algorithm ProbSpectralReconstruction
+Input:
+    M: array of observed magnitudes [m1,...,mN]
+    sigma: array of magnitude errors [σ1,...,σN]
+    T[1..N](λ): band response functions (discrete grid)
+    S(λ): solar spectrum (normalized)
+    λ_grid: array of wavelengths
+Parameters:
+    ℓ: GP length scale
+    σ_GP: GP amplitude
+Output:
+    μ_R(λ_grid): posterior mean reflectance
+    Σ_R(λ_grid,λ_grid): posterior covariance
+
+Procedure:
+1. // Preprocessing: Convert magnitudes to relative fluxes
+   for i=1..N:
+       f_i = 10^(-0.4*m_i)
+       err_f_i = 0.4*ln(10)*f_i*σ_i  // propagate error
+
+2. // Build forward model: compute synthetic flux for a given spectrum
+   // For discretized λ, compute matrix B[i,j] = ∫ S(λ)*T_i(λ) * δ_j(λ) dλ / ∫ S(λ)*T_i(λ) dλ
+   // Equivalent: B[i,j] ≈ (S(λ_j)*T_i(λ_j)) / ∑_k S(λ_k)*T_i(λ_k) * Δλ
+   for i=1..N:
+       denom_i = sum_over_j( S[λ_j]*T_i[λ_j] ) * Δλ
+       for j=1..L:
+           B[i,j] = (S[λ_j]*T_i[λ_j]) / denom_i * Δλ
+
+3. // Prior: GP over reflectance R(λ)
+   // Compute covariance matrix K_prior[j,k] = σ_GP^2 * exp(-|λ_j-λ_k|^2/(2ℓ^2))
+   for j=1..L:
+       for k=1..L:
+           K_prior[j,k] = σ_GP^2 * exp(- (λ_j-λ_k)^2 / (2*ℓ^2))
+
+4. // Observation noise matrix
+   N_noise = diag( err_f_i^2 )
+
+5. // Compute posterior of R using linear Gaussian model:
+   // Observation model: f = B * R + ε
+   // Prior: R ~ N(0, K_prior)
+   // Posterior mean: μ_R = K_prior * B^T * (B*K_prior*B^T + N_noise)^(-1) * f
+   // Posterior covariance: Σ_R = K_prior - K_prior * B^T * (B*K_prior*B^T + N_noise)^(-1) * B * K_prior
+
+6. Return μ_R, Σ_R
+
+pseudocode
+PROCEDURE ProbSpectralReconstruction(
+            M[1…N]          // observed magnitudes
+            σ_mag[1…N]      // magnitude uncertainties
+            T[1…N][1…L]     // band‑pass transmission values on λ_grid
+            S[1…L]          // normalized solar spectrum on λ_grid
+            λ_grid[1…L]     // discretised wavelength grid
+            ℓ, σ_GP         // GP hyper‑parameters
+        )
+    // ------------------------------------------------------------------
+    // 1. Convert magnitudes → relative fluxes (solar‑normalised)
+    // ------------------------------------------------------------------
+    FOR i FROM 1 TO N DO
+        f[i]      ← 10^(‑0.4 * M[i])                      // flux ratio
+        err_f[i]  ← 0.4 * ln(10) * f[i] * σ_mag[i]        // propagated error
+    END FOR
+
+    // ------------------------------------------------------------------
+    // 2. Build forward‑model matrix B (size N × L)
+    //    f ≈ B · R   ,  where R is the unknown reflectance vector
+    // ------------------------------------------------------------------
+    FOR i FROM 1 TO N DO
+        denom ← Σ_{j=1}^{L} ( S[j] * T[i][j] ) * Δλ
+        FOR j FROM 1 TO L DO
+            B[i][j] ← ( S[j] * T[i][j] ) / denom * Δλ
+        END FOR
+    END FOR
+
+    // ------------------------------------------------------------------
+    // 3. Gaussian‑process prior over R
+    //    K_prior[j,k] = σ_GP² * exp( – (λ_j – λ_k)² / (2ℓ²) )
+    // ------------------------------------------------------------------
+    FOR j FROM 1 TO L DO
+        FOR k FROM 1 TO L DO
+            K_prior[j][k] ← σ_GP^2 *
+                             exp( – ( λ_grid[j] – λ_grid[k] )^2 /
+                                  ( 2 * ℓ^2 ) )
+        END FOR
+    END FOR
+
+    // ------------------------------------------------------------------
+    // 4. Observation‑noise covariance
+    // ------------------------------------------------------------------
+    N_noise ← diagonal( err_f[1]^2 , … , err_f[N]^2 )
+
+    // ------------------------------------------------------------------
+    // 5. Posterior over R  (analytic solution for linear Gaussian model)
+    //    μ_R = K_prior * Bᵀ * ( B*K_prior*Bᵀ + N_noise )⁻¹ * f
+    //    Σ_R = K_prior – K_prior * Bᵀ * ( B*K_prior*Bᵀ + N_noise )⁻¹ *
+    //              B * K_prior
+    // ------------------------------------------------------------------
+    KBB_T  ← B * K_prior * Bᵀ                    // N × N matrix
+    Inv    ← inverse( KBB_T + N_noise )          // N × N matrix
+    μ_R    ← K_prior * Bᵀ * Inv * f              // L × 1 vector
+    Σ_R    ← K_prior
+             – K_prior * Bᵀ * Inv * B * K_prior   // L × L matrix
+
+    // ------------------------------------------------------------------
+    // 6. Return posterior mean and covariance of the reflectance
+    // ------------------------------------------------------------------
+    RETURN μ_R , Σ_R
+END PROCEDURE

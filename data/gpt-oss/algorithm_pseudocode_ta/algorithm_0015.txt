@@ -1,0 +1,64 @@
+INPUT
+    S_train[nspec][nw]         # high‑resolution training spectra
+    F_obs[Nf]                  # observed photometry fluxes
+    Sigma_obs[Nf]              # observational uncertainties (diagonal)
+    T_filter[Nf][nw]           # filter transmission curves
+    K_max                       # maximum number of principal components to retain
+
+OUTPUT
+    mean_spectrum[nw]          # posterior mean spectrum
+    cred_int_lower[nw], cred_int_upper[nw]   # 95% credible interval bounds
+
+ALGORITHM
+--------------------------------------------------------------------
+1. PREPROCESS TRAINING SPECTRA
+    1.1. Align all spectra to common wavelength grid lambda[1..nw]
+    1.2. Normalize or rescale if required (e.g., divide by median)
+    1.3. Compute mean spectrum μ[1..nw] = mean(S_train, axis=0)
+    1.4. Centered spectra: X[nspec][nw] = S_train - μ
+
+2. PRINCIPAL COMPONENT ANALYSIS
+    2.1. Compute covariance matrix C = (X^T · X) / (nspec – 1)
+    2.2. Perform eigen-decomposition: [eig_vals, eig_vecs] = eig(C)
+    2.3. Sort eigenvalues/eigenvectors descending by eig_vals
+    2.4. Select first K ≤ K_max components:
+            PCs[k][1..nw] = eig_vecs[:,k]      # k = 1…K
+            λ[k] = eig_vals[k]
+
+3. FILTER-INTEGRATED BASIS
+    3.1. For each filter i (1…Nf):
+            m[i] = Σ_{λ} μ[λ] * T_filter[i][λ] * Δλ          # mean flux in filter
+            For each component k:
+                M[i][k] = Σ_{λ} PCs[k][λ] * T_filter[i][λ] * Δλ
+    3.2. Assemble design matrix M[Nf][K] and mean vector m[Nf]
+
+4. BAYESIAN INFERENCE OF COMPONENT COEFFICIENTS
+    4.1. Define likelihood:
+            L(a) ∝ exp{ –0.5 * (F_obs – m – M·a)^T · Σ_err⁻¹ · (F_obs – m – M·a) }
+       where Σ_err = diag(Sigma_obs^2)
+    4.2. Define Gaussian prior on a:
+            P(a) ∝ exp{ –0.5 * a^T · Λ⁻¹ · a },   Λ = diag(λ[1]^2 … λ[K]^2)
+    4.3. Posterior precision matrix:
+            Σ_post⁻¹ = M^T · Σ_err⁻¹ · M + Λ⁻¹
+    4.4. Posterior covariance:
+            Σ_post = inverse(Σ_post⁻¹)
+    4.5. Posterior mean:
+            a_mean = Σ_post · M^T · Σ_err⁻¹ · (F_obs – m)
+
+5. UNCERTAINTY PROPAGATION
+    5.1. Draw N_samples (e.g., 1000) draws from multivariate normal:
+            a_sample[s] ~ N(a_mean, Σ_post)   for s = 1…N_samples
+    5.2. For each draw s:
+            5.2.1. Reconstruct spectrum:
+                    s_sample[λ] = μ[λ] + Σ_{k=1}^{K} a_sample[s][k] * PCs[k][λ]
+            5.2.2. Store s_sample[λ] in array Recon[s][λ]
+
+6. STATISTICAL SUMMARY
+    6.1. For each wavelength λ:
+            mean_spectrum[λ] = mean(Recon[:,λ])
+            cred_int_lower[λ] = percentile(Recon[:,λ], 2.5)
+            cred_int_upper[λ] = percentile(Recon[:,λ], 97.5)
+
+RETURN mean_spectrum, cred_int_lower, cred_int_upper
+--------------------------------------------------------------------
+END

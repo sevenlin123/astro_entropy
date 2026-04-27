@@ -1,0 +1,76 @@
+text
+INPUT
+  • Spectral library   : S_ref[n][m]          (n spectra, m wavelength bins)
+  • Filter curves      : T_f[f][λ]            (F filters, λ wavelengths)
+  • New photometry     : m_obs[f]             (observed fluxes or reflectances)
+  • Photometric errors : σ_m[f]               (optional)
+
+OUTPUT
+  • Reconstructed spectrum : S_rec[m]
+  • Credible‑interval band  : CI_low[m], CI_high[m]
+  • Taxonomic probability  : P_tax[class]
+
+--------------------------------------------------------------------
+STEP 0 – Common configuration
+  K       ← number of principal components to retain  (e.g., 5–8)
+  h_KDE   ← KDE bandwidth (≈ 0.5)
+  N_syn   ← number of synthetic latent samples (e.g., 10 000)
+  n_samples ← number of posterior draws (e.g., 1 000)
+
+--------------------------------------------------------------------
+STEP 1 – Build the latent (prior) model
+  1.1  Normalize S_ref to reflectance and resample to a common λ grid.
+  1.2  Compute mean spectrum μ_S = mean(S_ref, axis=0).
+  1.3  Center spectra: S_center = S_ref – μ_S.
+  1.4  Perform PCA on S_center → eigenvectors E[m×K] and scores C_ref[n×K].
+  1.5  Fit a Gaussian‑kernel KDE to C_ref with bandwidth h_KDE.
+  1.6  Draw N_syn samples C_syn[n_syn×K] from the KDE.
+  1.7  Reconstruct synthetic spectra:
+        S_syn[n_syn][m] = μ_S + C_syn[n_syn] @ Eᵀ
+
+--------------------------------------------------------------------
+STEP 2 – Forward modelling of photometry (implicit likelihood)
+  2.1  For each synthetic spectrum S_syn:
+         For each filter f:
+           Compute ideal reflectance:
+             r_f = ∫ S_syn(λ) * T_f[f][λ] dλ / ∫ Solar(λ) * T_f[f][λ] dλ
+           Store r_f in array r_syn[n_syn][F].
+  2.2  Add Gaussian noise to emulate photometric uncertainty:
+         r_syn_noisy = r_syn + Normal(0, 0.2*r_syn)   // 20 % relative noise
+  2.3  Rename r_syn_noisy → X_train (features) and keep C_syn → Y_train (targets).
+
+--------------------------------------------------------------------
+STEP 3 – Train the encoder (regressor) and classifier
+  3.1  Encoder:
+        Train an AutoML ensemble (e.g., gradient‑boosted trees) to map
+        X_train → Y_train.  The model outputs mean latent vector Ŷ and
+        an estimate of the prediction covariance Σ̂_Ŷ (via ensemble variance).
+  3.2  Classifier:
+        Train a second AutoML model on Y_train with known taxonomic labels
+        to output class probabilities P_cls(Y).
+
+--------------------------------------------------------------------
+STEP 4 – Inference on new photometry
+  4.1  Apply the encoder to the observed photometry:
+        Ŷ = Encoder(m_obs)
+        Σ̂_Ŷ = Encoder.predict_covariance(m_obs)   // optional, otherwise assume diagonal
+  4.2  Sample latent space:
+        For i in 1 … n_samples:
+           Draw C_i ~ Gaussian(Ŷ, Σ̂_Ŷ)                // draw from posterior
+           Optionally apply a Gaussian copula to preserve inter‑component correlations.
+  4.3  Decode spectra:
+        For each C_i:
+           S_i = μ_S + C_i @ Eᵀ
+        Collect all S_i to form an ensemble of spectra.
+  4.4  Derive posterior statistics:
+        S_rec = median(S_i over i)                     // or mean
+        CI_low, CI_high = percentile(S_i, [2.5%, 97.5%])
+  4.5  Taxonomy probabilities:
+        If classifier accepts Ŷ directly:
+           P_tax = Classifier(Ŷ)
+        else:
+           For each C_i, compute P_cls(C_i); average over i.
+
+--------------------------------------------------------------------
+RETURN
+  S_rec, CI_low, CI_high, P_tax

@@ -1,0 +1,53 @@
+INPUT:   Spectra matrix S [N_spec × N_wave]      // observed near‑IR spectra
+         Filter set F = {f_1,…,f_J}               // instrument bandpasses
+OUTPUT:  Mean spectrum μ[1×N_wave]
+         Principal components U[ N_wave × K ]     // K components retained
+         Component‑filter response matrix B[K × J]
+         Mean filter flux vector μ_f[1×J]
+
+μ ← mean(S over all spectra, axis=0)          // average spectrum
+S_std ← S – μ                                // zero‑mean spectra
+
+C ← covariance(S_std)                       // N_wave × N_wave
+(U, λ) ← eigen_decompose(C)                 // eigenvectors, eigenvalues
+Select first K eigenvectors → U_K           // N_wave × K
+
+For each filter f_j in F:
+    μ_f[j] ← ∫ μ(λ) * R_j(λ) dλ              // mean flux through filter j
+    For each component k in 1..K:
+        B[k,j] ← ∫ U_K[:,k] * R_j(λ) dλ     // component contribution to filter j
+
+INPUT:   Photometric flux vector y[1×J]      // observed fluxes
+         Flux uncertainties σ[1×J]
+         Trained model parameters (μ, U_K, B, μ_f)
+OUTPUT:  Posterior mean spectrum Ŝ[1×N_wave]
+         Posterior std dev σ̂[1×N_wave]
+
+Define weight matrix W = diag(1 / σ²)                     // J×J
+Define design matrix M = Bᵀ W B + I_K                    // K×K  (I_K = identity)
+Define rhs vector r = Bᵀ W (y – μ_f)                      // K×1
+
+c_mean = inverse(M) * r                                 // K×1
+
+Σ_c = inverse(M)                                         // K×K
+
+Ŝ = μ + U_K * c_mean                                    // 1×N_wave
+
+For each wavelength λ_i (i=1..N_wave):
+    var_i = 0
+    For k,l in 1..K:
+        var_i += U_K[i,k] * U_K[i,l] * Σ_c[k,l]
+    σ̂[i] = sqrt(var_i)
+
+Compute likelihood L = N(y | μ_f + B*c_mean, σ²)
+If L below threshold:
+    Flag object as potential rare type
+    (Optionally re‑run inference with broader prior or alternative component subset)
+
+# Training phase (once)
+[μ, U_K, B, μ_f] = TrainLatentSpaceModel(Spectra, Filters)
+
+# Reconstruction phase (for each target)
+For each target with photometry (y, σ):
+    [Ŝ, σ̂] = ReconstructSpectrum(y, σ, μ, U_K, B, μ_f)
+    Store Ŝ, σ̂

@@ -1,0 +1,93 @@
+INPUT:
+    S_seed  : {s_1,…,s_N}   // High‑resolution reflectance spectra of N TNOs
+    F       : {f_1,…,f_M}   // Effective throughput curves of M photometric filters
+    K       : number of PCA components to retain (default 5–10)
+    h       : KDE bandwidth          // e.g., 0.5
+    N_aug   : number of synthetic latent samples to generate (e.g., 5000)
+
+OUTPUT:
+    For any new photometric observation m_new:
+        S_rec   : reconstructed full‑resolution spectrum
+        P_cls   : probability distribution over taxonomic classes
+
+--------------------------------------------------------------------
+STEP 0. PRE‑PROCESSING (for all spectra)
+--------------------------------------------------------------------
+For each spectrum s in S_seed:
+    • Normalize (e.g., divide by solar spectrum → reflectance)
+    • Interpolate onto common wavelength grid λ_grid
+    • Store as vector of length L
+
+--------------------------------------------------------------------
+STEP 1. BUILD PRIOR IN LATENT SPACE
+--------------------------------------------------------------------
+1.1 PCA on S_seed
+        * Compute mean spectrum μ_s
+        * Compute covariance matrix C_s
+        * Eigen‑decompose C_s → eigenvectors V = [v_1,…,v_L]
+        * Select first K columns → V_K  (L×K matrix)
+        * Compute coefficient matrix Z_seed = (S_seed − μ_s) · V_K     // shape N×K
+
+1.2 KDE density estimation on Z_seed
+        * Use non‑parametric KDE with bandwidth h
+        * Result: probability density function p_Z(z) over ℝ^K
+
+1.3 Synthetic latent augmentation
+        * Sample N_aug latent vectors {z_i} from p_Z(z)
+        * Store as matrix Z_aug (N_aug×K)
+
+--------------------------------------------------------------------
+STEP 2. GENERATE NOISY PHOTOMETRIC TRAINING DATA
+--------------------------------------------------------------------
+For each latent vector z in Z_aug:
+    2.1 Reconstruct high‑res spectrum:
+            s_hat = μ_s + V_K · z          // shape L
+    2.2 Forward‑model photometry:
+            For each filter f_j:
+                r_j = ∫ s_hat(λ) · f_j(λ) dλ / ∫ f_j(λ) dλ
+            Collect into vector m = [r_1,…,r_M]
+    2.3 Inject Gaussian noise:
+            For each band j:
+                σ_j = 0.2 * r_j            // 20 % relative uncertainty
+                r_j_noisy = Normal(r_j, σ_j)
+            Store noisy photometry m_noisy
+    2.4 Record training pair:
+            X_train ← X_train ∪ {m_noisy}
+            Y_train ← Y_train ∪ {z}
+
+--------------------------------------------------------------------
+STEP 3. TRAIN AUTOML REGRESSOR (Encoder)
+--------------------------------------------------------------------
+3.1 Define regressor:
+        • Use AutoML framework (e.g., AutoGluon Tabular)
+        • Specify output dimension K (latent coefficients)
+3.2 Fit regressor on (X_train, Y_train)
+
+--------------------------------------------------------------------
+STEP 4. TRAIN AUTOML CLASSIFIER (in Latent Space)
+--------------------------------------------------------------------
+4.1 Label assignment:
+        • For each seed spectrum s_i, assign taxonomic label ℓ_i
+        • Map label to one‑hot vector y_i
+4.2 Training data for classifier:
+        • Use Z_seed (coefficients of real spectra) as features
+        • Use labels y_i as targets
+4.3 Define classifier (AutoML, e.g., Gradient Boosted Trees)
+4.4 Fit classifier on (Z_seed, y_i)
+
+--------------------------------------------------------------------
+STEP 5. INFERENCE ON NEW OBSERVATIONS
+--------------------------------------------------------------------
+Given new sparse photometry m_new (length M):
+
+5.1 Predict latent coefficients:
+        z_pred = Regressor.predict(m_new)    // shape K
+        // Optional: obtain predictive distribution if regressor supports it
+
+5.2 Reconstruct spectrum:
+        S_rec = μ_s + V_K · z_pred          // shape L
+
+5.3 Taxonomic probabilities:
+        P_cls = Classifier.predict_proba(z_pred)   // vector over classes
+
+RETURN (S_rec, P_cls)

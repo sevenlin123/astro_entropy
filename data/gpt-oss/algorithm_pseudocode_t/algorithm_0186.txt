@@ -1,0 +1,54 @@
+INPUT
+    m[1…F]          – observed fluxes in F filters
+    σ[1…F]          – 1‑σ uncertainties of the observations
+    B[1…N]          – N basis spectra (high‑resolution reflectances)
+    Filter[1…F]     – transmission curves of the filters
+
+OUTPUT
+    R(λ)            – reconstructed high‑resolution spectrum
+    Pr[1…C]         – posterior probabilities for each taxonomy class
+
+PRECOMPUTE
+    1. For each basis j = 1…N
+           For each filter f = 1…F
+               s[j,f] ← ∫ B[j](λ) · Filter[f](λ) dλ      // synthetic photometry
+       // S is an F×N matrix of synthetic photometries
+    2. For each taxonomy class c = 1…C
+           Define index set Jc ⊂ {1,…,N} of basis spectra belonging to class c
+
+PROCEDURE RECONSTRUCT()
+
+    // ---------- Bayesian Linear Regression ----------
+    3. Define likelihood:
+           p(m | w) = Π_{f=1}^{F}  N( m_f | Σ_{j=1}^{N} w_j · s[j,f] , σ_f² )
+    4. Define prior on weights w[1…N]:
+           • w_j ≥ 0   (non‑negativity constraint)
+           • Σ_j w_j = 1   (normalisation)
+           • Prior density p(w)  ←  Dirichlet(α)  // α ≡ (α₁,…,α_N), e.g. all = 1
+    5. Sample from posterior p(w | m)  using a constrained MCMC sampler
+           (e.g., slice‑sampling on the simplex).
+        Store the posterior mean weight vector  w̄[1…N].
+
+    // ---------- Class Posterior Probabilities ----------
+    6. For each class c = 1…C
+           a. Restrict weights to class members:
+                  w_c[j] = w̄[j]   if j ∈ Jc
+                           0        otherwise
+           b. Compute predicted flux for class c:
+                  m̂_c[f] = Σ_{j∈Jc} w_c[j] · s[j,f]
+           c. Compute χ²_c = Σ_{f=1}^{F} ( m_f − m̂_c[f] )² / σ_f²
+           d. Compute evidence proxy:
+                  E_c = exp( −0.5 · χ²_c )
+           e. Class prior P(c)   // e.g., uniform or from survey statistics
+           f. Unnormalized posterior:
+                  U_c = E_c · P(c)
+
+    7. Normalise posteriors:
+           Pr[c] = U_c / Σ_{k=1}^{C} U_k
+
+    // ---------- Spectrum Reconstruction ----------
+    8. Reconstruct high‑resolution spectrum:
+           For each wavelength λ in the spectral grid:
+                 R(λ) = Σ_{j=1}^{N} w̄[j] · B[j](λ)
+
+RETURN R(λ), Pr[1…C]

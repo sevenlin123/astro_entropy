@@ -1,0 +1,91 @@
+INPUT
+    - Photometric catalog for a target object:
+        * N_obs   : number of observed photometric points
+        * λ_f[i]  : effective wavelength of filter i (i = 1…N_obs)
+        * Δλ_f[i] : bandwidth of filter i
+        * m_i     : measured apparent magnitude in filter i
+        * σ_i     : measurement uncertainty in magnitude i
+    - Stellar/solar spectral template S_⊙(λ)   // reference spectrum
+    - Instrumental throughput curves R_j(λ)    // for all filters j
+    - Basis spectrum set {B_k(λ)}              // k = 1…K (e.g., polynomial, empirical)
+    - Priors for basis weights w_k
+
+OUTPUT
+    - Posterior probability distribution P(w | data)
+    - Reconstructed surface spectrum S_rec(λ) = Σ_k w_k B_k(λ)
+    - Taxonomic class assignment
+
+PROCEDURE
+
+1. **Flux Conversion**
+   FOR each observation i = 1 TO N_obs DO
+       f_i ← 10^(-0.4 * (m_i))                                 // convert magnitude to relative flux
+       σ_f_i ← 0.4 * ln(10) * f_i * σ_i                       // propagate error to flux
+   END FOR
+
+2. **Filter Response Normalisation**
+   FOR each filter i = 1 TO N_obs DO
+       R_i_norm(λ) ← R_i(λ) / ∫ R_i(λ) dλ                      // normalise throughput
+   END FOR
+
+3. **Forward Model Construction**
+   DEFINE MODEL_FIT(w):
+       FOR each filter i = 1 TO N_obs DO
+           μ_i(w) ← ∫ [S_⊙(λ) * Σ_k w_k B_k(λ)] * R_i_norm(λ) dλ
+           // μ_i is predicted flux in filter i for weights w
+       END FOR
+       RETURN μ = {μ_1,…,μ_N_obs}
+
+4. **Likelihood Function**
+   DEFINE LIKELIHOOD(w):
+       μ ← MODEL_FIT(w)
+       ℓ ← 0
+       FOR each i = 1 TO N_obs DO
+           ℓ ← ℓ + 0.5 * ((f_i - μ_i)^2 / σ_f_i^2 + log(2πσ_f_i^2))
+       END FOR
+       RETURN exp(-ℓ)
+
+5. **Prior Specification**
+   DEFINE PRIOR(w):
+       // Example: independent zero‑mean Gaussian priors
+       p ← 1
+       FOR each k = 1 TO K DO
+           p ← p * exp(-w_k^2 / (2σ_wk^2)) / sqrt(2πσ_wk^2)
+       END FOR
+       RETURN p
+
+6. **Posterior Sampling (e.g., Metropolis–Hastings MCMC)**
+   INITIALISE w^(0) ← 0 vector
+   SET n_iter ← 10000
+   SET n_burn ← 2000
+   INITIALISE empty list samples
+   FOR t = 1 TO n_iter DO
+       PROPOSE w' ← w^(t-1) + ε,    ε ~ Normal(0, Σ_proposal)
+       COMPUTE α ← min(1,
+            (LIKELIHOOD(w') * PRIOR(w')) / (LIKELIHOOD(w^(t-1)) * PRIOR(w^(t-1))) )
+       DRAW u ~ Uniform(0,1)
+       IF u < α THEN
+           w^(t) ← w'
+       ELSE
+           w^(t) ← w^(t-1)
+       END IF
+       IF t > n_burn THEN
+           APPEND w^(t) TO samples
+       END IF
+   END FOR
+
+7. **Posterior Summaries**
+   CALCULATE posterior mean weights:
+       w̄_k = (1 / |samples|) Σ_{sample} w_k
+   RECONSTRUCT spectrum:
+       S_rec(λ) = Σ_k w̄_k B_k(λ)
+
+8. **Taxonomic Classification**
+   // Pre‑defined class templates C_m(λ) , m = 1…M
+   FOR each class m = 1 TO M DO
+       distance_m ← ∫ [S_rec(λ) - C_m(λ)]^2 dλ
+   END FOR
+   ASSIGN class = argmin_m distance_m
+
+9. **Return Results**
+   OUTPUT S_rec(λ), posterior samples of w, assigned taxonomic class

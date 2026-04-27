@@ -1,0 +1,44 @@
+F_obs_ij = 10^{-0.4*(mag_ij - ZP_fj)}
+   where ZP_fj is the zero‑point for filter fj
+
+σ_Fij = ln(10)/2.5 * F_obs_ij * σ_ij
+
+1. Compute composite spectrum:
+      S_c(λ) = Σ_k c_k * s_k(λ)
+
+2. Convolve with filter response:
+      F_syn_fj = ∫ S_c(λ) * R_fj(λ) dλ / ∫ R_fj(λ) dλ
+
+L(c) = Π_i,j exp[ -(F_obs_ij - SyntheticFlux(c, f_j))² / (2 σ_Fij²) ]
+
+ln L(c) = -½ Σ_i,j [ (F_obs_ij - SyntheticFlux(c, f_j))² / σ_Fij² + ln(2π σ_Fij²) ]
+
+posterior(c) ∝ L(c) * π(c)
+
+Initialize c^(0) (e.g., zeros or random within prior bounds).
+Set step size parameters Δ_k for proposal distribution.
+
+For iteration n = 1 to N_samples:
+    1. Propose new coefficients:
+          c* = c^(n-1) + ε
+        where each ε_k ~ Normal(0, Δ_k²)
+
+    2. Compute log-posterior difference:
+          ΔlogP = ln posterior(c*) - ln posterior(c^(n-1))
+
+    3. Acceptance probability:
+          α = min(1, exp(ΔlogP))
+
+    4. Draw u ~ Uniform(0,1)
+          If u < α:
+              accept: c^(n) = c*
+          Else:
+              reject: c^(n) = c^(n-1)
+
+Record c^(n).
+
+F_recon(λ) = Σ_k ⟨c_k⟩ * s_k(λ)
+
+χ² = Σ_i,j [ (F_obs_ij - SyntheticFlux(⟨c⟩, f_j))² / σ_Fij² ]
+Degrees_of_freedom = N_data_points - K
+Reduced_chi² = χ² / Degrees_of_freedom

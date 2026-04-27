@@ -1,0 +1,65 @@
+text
+--------------------------------------------------------------------
+Phase 0 – GLOBAL SETTINGS
+--------------------------------------------------------------------
+K            := number of principal components (e.g. 8–10)
+h            := KDE bandwidth (e.g. 0.5)
+N_SYNTH      := number of synthetic latent samples (e.g. 5000)
+σ_phot       := relative photometric noise (0.20  → 20 %)
+FILTERS      := list of filter transmission curves
+
+spectra_raw ← {S_i(λ)} for i = 1…N_spec
+
+[U, Σ, V]  ← SVD(spectra_raw)          // U = PCs (orthonormal)
+   PCs_K       ← U[:, 1:K]                 // first K PCs
+   mean_spec   ← mean(spectra_raw)
+
+for each S_i:
+       c_i ← PCs_Kᵀ · (S_i – mean_spec)    // latent coefficient vector (size K)
+   latent_real ← {c_i}
+
+kde ← fit_Gaussian_KDE(latent_real, bandwidth=h)
+
+latent_syn ← sample_from(kde, N_SYNTH)
+
+for each c_j in latent_syn:
+       S_syn_j ← mean_spec + PCs_K · c_j
+
+for each S_syn_j:
+       for each filter f in FILTERS:
+           m_f_j ← integrate(S_syn_j * T_f) / integrate(T_f)
+       phot_syn_j ← {m_f_j}
+
+for each phot_syn_j:
+       for each band f:
+           m_f_j ← m_f_j * (1 + Gaussian(0, σ_phot))
+
+X_train ← {phot_syn_j}      // input: noisy photometry (|FILTERS|‑dimensional)
+    Y_train ← {c_j}             // output: latent coefficients (K‑dimensional)
+
+regressor ← AutoML_Regression(X_train, Y_train)
+    // e.g. ensemble of Gradient Boosted Trees + Neural Nets
+
+Y_class ← {class_label_i}   // derived from latent_real via nearest‑neighbour or predefined labels
+    classifier ← AutoML_Classification(Y_class)
+
+c_pred_mean, c_pred_cov := regressor.predict(m_obs)
+    // some regressors return point estimate and uncertainty;
+    // if not available, use bootstrap/quantile regression to estimate spread.
+
+for s = 1 … N_SAMPLES:
+        c_sample_s ← draw_from(Copula(c_pred_mean, c_pred_cov))
+        // Copula preserves correlations learned from latent_real
+
+for each c_sample_s:
+        S_rec_s ← mean_spec + PCs_K · c_sample_s
+
+S_mean  ← mean_over_s(S_rec_s)
+    S_std   ← std_over_s(S_rec_s)
+    CredibleIntervals ← percentile_over_s(S_rec_s, [2.5%, 97.5%])
+
+class_probs ← classifier.predict_proba(c_pred_mean)
+
+Return:
+        S_mean, S_std, CredibleIntervals,
+        class_probs

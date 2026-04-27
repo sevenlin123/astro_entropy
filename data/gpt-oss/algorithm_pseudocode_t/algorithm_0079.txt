@@ -1,0 +1,125 @@
+Input:
+    - Observational catalog for a target TNO:
+        * For each band b ∈ {B, V, R, I, J, H, K}:
+            – Apparent magnitude m_b
+            – Measurement uncertainty σ_b
+            – Filter transmission curve T_b(λ)
+    - Reference wavelengths λ_b for each filter
+    - Solar flux spectrum S_⊙(λ)  (or standard solar colour table)
+    - Distance and phase geometry (heliocentric distance r, geocentric distance Δ,
+      phase angle α)
+    - Physical constants (phase coefficient β, etc.)
+
+Output:
+    - Posterior sample set Θ = {θ_i} describing the reflectance spectrum of the TNO:
+        * Spectral slope S (units: % / 100 nm)
+        * Reference albedo p_0 at λ_0
+        * Optional absorption parameters (center λ_a, depth d_a, width w_a)
+    - Derived quantities per sample:
+        * Reflectance spectrum R(λ)
+        * Colour indices (e.g., B–V, V–R, J–K)
+        * Taxonomic class probability P(class | data)
+
+--------------------------------------------------------------------
+Step 1 – Data Preparation
+--------------------------------------------------------------------
+1.1 Convert apparent magnitudes to fluxes:
+        f_b = f_0(b) * 10^(-0.4 * m_b)          // f_0(b): zero‑point flux for band b
+        σ_f_b = ln(10)/2.5 * f_b * σ_b
+
+1.2 Apply distance corrections:
+        F_b = f_b * (Δ / r)^2                 // Δ = geocentric distance, r = heliocentric distance
+
+1.3 Store (λ_b, F_b, σ_f_b) for all bands.
+
+--------------------------------------------------------------------
+Step 2 – Spectral Model Definition
+--------------------------------------------------------------------
+2.1 Define base reflectance model R_base(λ; S, p_0):
+        R_base(λ) = p_0 * 10^[ S * (λ - λ_0) / 100 ]   // linear slope in log space
+
+2.2 (Optional) Add Gaussian absorption feature:
+        R(λ) = R_base(λ) * [ 1 - d_a * exp( - ((λ - λ_a)^2) / (2*w_a^2) ) ]
+
+2.3 Normalise model to match solar spectrum:
+        R_norm(λ) = R(λ) * S_⊙(λ) / ⟨S_⊙⟩
+        where ⟨S_⊙⟩ is the solar mean over the visible range.
+
+--------------------------------------------------------------------
+Step 3 – Forward Flux Prediction
+--------------------------------------------------------------------
+For each band b:
+    3.1 Compute model flux:
+            F_b_model = ∫ R_norm(λ) * T_b(λ) dλ
+    3.2 Scale by geometry factor:
+            F_b_pred = F_b_model * (r / Δ)^2
+
+--------------------------------------------------------------------
+Step 4 – Likelihood Function
+--------------------------------------------------------------------
+Assume Gaussian measurement errors:
+    L(Θ) = Π_b  exp( - (F_b_pred - F_b)^2 / (2 * σ_f_b^2) )
+           / sqrt(2π * σ_f_b^2)
+
+Take log‑likelihood for numerical stability:
+    lnL(Θ) = Σ_b [ - (F_b_pred - F_b)^2 / (2σ_f_b^2)
+                   - 0.5 ln(2πσ_f_b^2) ]
+
+--------------------------------------------------------------------
+Step 5 – Prior Specification
+--------------------------------------------------------------------
+5.1 Spectral slope prior:
+        S ~ Uniform( -0.05 , 0.05 )  // slopes between -5%/100nm and +5%/100nm
+
+5.2 Albedo prior:
+        p_0 ~ Beta(a=2, b=5)          // favour low albedos typical of TNOs
+
+5.3 (If absorption used):
+        λ_a ~ Uniform( 700 nm , 1300 nm )
+        d_a ~ Uniform( 0 , 0.3 )
+        w_a ~ Uniform( 20 nm , 200 nm )
+
+5.4 Combine into joint prior:
+        π(Θ) = π(S) * π(p_0) * π(λ_a) * π(d_a) * π(w_a)
+
+--------------------------------------------------------------------
+Step 6 – Posterior Sampling (MCMC)
+--------------------------------------------------------------------
+6.1 Initialise chain at random θ_0 drawn from priors.
+6.2 For iteration i = 1 … N_iter:
+        6.2.1 Propose new θ* by Gaussian perturbation:
+                θ* = θ_{i-1} + ε ,  ε ~ N(0, Σ_proposal)
+        6.2.2 Compute lnL(θ*) and lnL(θ_{i-1}) from Steps 4–5.
+        6.2.3 Accept with probability:
+                α = min(1, exp[ lnL(θ*) + lnπ(θ*) - lnL(θ_{i-1}) - lnπ(θ_{i-1}) ])
+                If rand() < α:
+                    θ_i = θ*
+                else:
+                    θ_i = θ_{i-1}
+        6.2.4 Store θ_i in sample set Θ.
+
+6.3 After burn‑in, thin the chain to reduce autocorrelation.
+6.4 Ensure convergence diagnostics (Gelman‑Rubin, effective sample size).
+
+--------------------------------------------------------------------
+Step 7 – Derived Quantities
+--------------------------------------------------------------------
+For every stored sample θ ∈ Θ:
+    7.1 Compute full reflectance spectrum R(λ) over a fine wavelength grid.
+    7.2 Convolve R(λ) with any desired filter to obtain synthetic colours.
+    7.3 Compute taxonomic probability:
+            P_taxonomy | θ = f(θ)   // lookup in empirical colour–class mapping
+    7.4 Aggregate over Θ to get posterior means, medians, credible intervals.
+
+--------------------------------------------------------------------
+Step 8 – Output Packaging
+--------------------------------------------------------------------
+Return:
+    - Sampled parameter set Θ with uncertainties.
+    - Posterior predictive spectra R(λ).
+    - Colour indices and taxonomic class probabilities.
+    - Summary statistics (mean, 68% CI) for each physical quantity.
+
+--------------------------------------------------------------------
+End of Algorithm
+--------------------------------------------------------------------

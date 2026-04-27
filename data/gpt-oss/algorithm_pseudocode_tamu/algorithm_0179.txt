@@ -1,0 +1,88 @@
+INPUT
+    SpecTrain   :  {S_i | i = 1 … N}          // high‑resolution spectra (reflectance vs λ)
+    FilterCurves:  {T_j(λ) | j = 1 … M}      // instrument filter transmission curves
+    PhotObs     :  {m_k | k = 1 … K}         // observed photometry for a new object
+    NoiseLevel  :  σ_rel  (default 0.20)     // relative reflectance noise for simulation
+
+OUTPUT
+    SpectRecon  :  reconstructed high‑res spectrum
+    CovSpect    :  covariance matrix of reconstructed spectrum
+    TaxProb     :  probability vector over taxonomic classes
+
+--------------------------------------------------------------------
+1.  TRAINING PHASE
+--------------------------------------------------------------------
+
+1.1  // Dimensionality reduction (PCA)
+      Assemble data matrix X ∈ ℝ^{N×P}  // P = number of wavelength bins
+      Center X by subtracting column means
+      Compute covariance C = (Xᵀ X)/(N–1)
+      Perform eigen decomposition of C → eigenvectors U = [u_1 … u_K]
+          // K = desired latent dimensionality (typically 5–10)
+      Project training spectra to latent space:
+          z_i = Uᵀ (S_i – mean_X)      // z_i ∈ ℝ^K
+
+1.2  // Build continuous prior on latent space (KDE)
+      Choose kernel bandwidth h ≈ 0.5
+      Define Gaussian kernel K_h(z) = exp(−‖z‖²/(2h²))
+      Estimate density p(z) ≈ (1/N) Σ_i K_h(z – z_i)
+
+1.3  // Generate synthetic latent samples
+      Sample L ≫ N latent vectors {z̃_l} from p(z)   // e.g. L = 5 000
+      For each z̃_l:
+          Reconstruct spectrum via inverse PCA:
+              Ŝ_l = mean_X + U z̃_l
+          Store (z̃_l , Ŝ_l)
+
+1.4  // Forward‑model synthetic photometry
+      For each Ŝ_l:
+          For each filter j:
+              m̃_{l,j} = ∫ Ŝ_l(λ) T_j(λ) dλ / ∫ T_j(λ) dλ
+          Add Gaussian noise:
+              m̃_{l,j} ← m̃_{l,j} + 𝒩(0, σ_rel · m̃_{l,j})
+      Collect pairs (m̃_l, z̃_l)
+
+1.5  // Train encoder (photometry → latent space)
+      Input: noisy photometry vectors {m̃_l}
+      Target: latent coefficients {z̃_l}
+      Use AutoML regressor (e.g. ensemble of GBDTs + NN)
+      Train model R: ℝ^M → ℝ^K  to minimize mean‑squared error
+
+1.6  // Train taxonomy classifier
+      Label each training spectrum by class label c_i
+      Encode labels to one‑hot vectors y_i
+      Train classifier C: ℝ^K → ℝ^{C}  (C = number of classes)
+          // same AutoML framework, loss = cross‑entropy
+
+--------------------------------------------------------------------
+2.  INFERENCE PHASE  (new observation)
+--------------------------------------------------------------------
+
+2.1  // Predict latent coefficient distribution
+      Feed observed photometry PhotObs to encoder R
+      Obtain point estimate ẑ = R(PhotObs)
+      Estimate uncertainty Δz by:
+          - (a) sampling R’s internal model uncertainty (e.g. using an ensemble)
+          - (b) approximating posterior p(z | PhotObs) as Gaussian N(ẑ, Σ̂)
+              where Σ̂ is derived from ensemble variance
+
+2.2  // Sample from posterior using Gaussian Copula
+      Draw N_samp samples {z⁽s⁾} from N(ẑ, Σ̂)
+      Optionally impose copula to preserve correlations if needed
+
+2.3  // Decode to spectra
+      For each sample z⁽s⁾:
+          Ŝ⁽s⁾ = mean_X + U z⁽s⁾
+      Compute mean spectrum:
+          SpectRecon = (1/N_samp) Σ_s Ŝ⁽s⁾
+      Compute covariance:
+          CovSpect = (1/(N_samp–1)) Σ_s (Ŝ⁽s⁾ – SpectRecon)(Ŝ⁽s⁾ – SpectRecon)ᵀ
+
+2.4  // Taxonomy probability
+      Compute class logits: ℓ = C(ẑ)
+      Apply softmax: TaxProb = softmax(ℓ)
+
+--------------------------------------------------------------------
+3.  OUTPUT
+--------------------------------------------------------------------
+Return SpectRecon, CovSpect, TaxProb

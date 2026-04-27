@@ -1,0 +1,72 @@
+INPUT
+    S_train[1..N][λ]          // Near‑IR spectra of training TNOs
+    T_filter[1..M][λ]         // Transmission curves of all photometric filters
+    y_obs[M]                  // Measured photometry of a new target
+    σ_obs[M]                  // Measurement uncertainties
+    K                         // Number of principal components to retain (4–10)
+
+OUTPUT
+    S_rec_mean[λ]             // Posterior‑mean reconstructed spectrum
+    S_rec_CI_low[λ], S_rec_CI_high[λ]  // 95 % credible‑interval bounds
+
+ALGORITHM
+
+1.  **Pre‑processing of training spectra**
+    1.1  Resample every S_train[i] onto a common wavelength grid λ_common.
+    1.2  Compute the mean spectrum:
+           μ[λ] = (1/N) Σ_i S_train[i][λ].
+    1.3  Center spectra:
+           X[i][λ] = S_train[i][λ] – μ[λ]     for all i.
+
+2.  **Principal Component Analysis (PCA)**
+    2.1  Compute covariance matrix:
+           C = (1/(N–1)) * Xᵀ X
+    2.2  Eigen‑decompose C:
+           {λ_m[λ], Λ_m} = eig(C)            // λ_m : eigenvector, Λ_m : eigenvalue
+    2.3  Sort eigenvectors by descending Λ_m.
+    2.4  Select first K eigenvectors:
+           B[m][λ] = λ_m[λ]  for m = 1…K     // Reduced basis (PCs)
+
+3.  **Projection of PCs into filter space**
+    3.1  For each filter j = 1…M:
+            μ_j      = (∫ T_filter[j][λ] * μ[λ] dλ) / (∫ T_filter[j][λ] dλ)
+            For each component m = 1…K:
+                P[j][m] = (∫ T_filter[j][λ] * B[m][λ] dλ) /
+                           (∫ T_filter[j][λ] dλ)
+
+4.  **Define Bayesian model for a new object**
+    4.1  Latent weight vector w ∈ ℝⁿ, n = K.
+    4.2  Predicted photometry:
+           y_pred[j](w) = μ_j + Σ_{m=1}^{K} w[m] * P[j][m]
+    4.3  Likelihood (independent Gaussian errors):
+           L(w) = Π_{j=1}^{M}  exp( -½ * (y_obs[j] – y_pred[j](w))² / σ_obs[j]² )
+    4.4  Prior on w (zero‑mean, diagonal with variances proportional to Λ_m):
+           p(w) = Π_{m=1}^{K}  exp( -½ * w[m]² / Λ_m )
+
+5.  **Posterior sampling (Metropolis–Hastings MCMC)**
+    5.1  Set initial state w₀ = (0,…,0).
+    5.2  Choose proposal covariance Σ_prop (e.g., scaled identity).
+    5.3  For iter = 1 … N_iter:
+           a) Sample proposal:
+                 w′ = w_{iter‑1} + ε ,  ε ~ N(0, Σ_prop)
+           b) Compute acceptance ratio:
+                 α = min(1,
+                          [L(w′) * p(w′)] / [L(w_{iter‑1}) * p(w_{iter‑1})])
+           c) Draw u ~ Uniform(0,1)
+           d) If u < α:  w_iter = w′   (accept)
+               Else:      w_iter = w_{iter‑1}  (reject)
+    5.4  Discard first N_burn samples and thin every N_thin samples.
+    5.5  Collect posterior ensemble W = {w^{(s)}}.
+
+6.  **Reconstruct spectra from posterior samples**
+    6.1  For each sample s in W:
+           S_s[λ] = μ[λ] + Σ_{m=1}^{K} w^{(s)}[m] * B[m][λ]
+    6.2  Compute posterior‑mean spectrum:
+           S_rec_mean[λ] = (1/|W|) Σ_s S_s[λ]
+    6.3  For each λ:
+           Sort {S_s[λ]} over s.
+           S_rec_CI_low[λ]  = value at 2.5 percentile
+           S_rec_CI_high[λ] = value at 97.5 percentile
+
+7.  **Return results**
+    Output S_rec_mean, S_rec_CI_low, S_rec_CI_high.

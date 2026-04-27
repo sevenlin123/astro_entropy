@@ -1,0 +1,88 @@
+Input:
+    - Training spectra {S_i(λ)} for i = 1 … N_train, sampled at M wavelengths.
+    - Photometric measurements for target object:
+        • observed magnitudes/fluxes {m_j}
+        • measurement uncertainties {σ_j}
+        • filter response curves {R_j(λ)} for j = 1 … N_phot
+    - Number of principal components to retain, K  (e.g., 8–10).
+
+Output:
+    - Reconstructed spectrum Ŝ(λ) with uncertainty bounds (e.g., 95 % credible interval).
+
+--------------------------------------------------------------------
+1. Pre‑process training spectra
+   ---------------------------------------------------------------
+   a. Compute mean spectrum:
+          μ(λ) = (1/N_train) Σ_i S_i(λ)
+   b. Center spectra:
+          X_i(λ) = S_i(λ) – μ(λ)
+   c. Assemble centered matrix X of shape (N_train × M).
+
+2. Principal Component Analysis
+   ---------------------------------------------------------------
+   a. Covariance matrix:
+          C = (Xᵀ X) / (N_train – 1)           // shape (M × M)
+   b. Eigen-decomposition:
+          { (λ_k, v_k(λ)) }_{k=1..M}
+      where λ_k are eigenvalues sorted descending, v_k are eigenvectors.
+   c. Select first K components:
+          V_K(λ) = [v_1(λ) … v_K(λ)]            // shape (M × K)
+   d. Project training spectra onto PCs:
+          a_i,k = v_kᵀ · X_i                      // coefficient vector a_i (size K)
+
+3. Define priors on PC coefficients
+   ---------------------------------------------------------------
+   For each component k:
+        Prior ~ Normal(0, σ_k²) with σ_k² = λ_k
+   // This encodes typical variance seen in training set.
+
+4. Construct filter projection matrix
+   ---------------------------------------------------------------
+   For each filter j:
+        P_jk = ∫ R_j(λ) · v_k(λ) dλ               // integral over wavelength
+   Build matrix P of shape (N_phot × K):
+        P(j,k) = P_jk
+   Also compute baseline flux in each filter from mean spectrum:
+        f_j^0 = ∫ R_j(λ) · μ(λ) dλ
+
+5. Model photometric predictions
+   ---------------------------------------------------------------
+   For any coefficient vector a (size K):
+        Predicted flux vector f_pred = f^0 + P · a
+   (Linear relation because integral of linear combination of PCs.)
+
+6. Likelihood function (Gaussian photometric errors)
+   ---------------------------------------------------------------
+   Given observed fluxes f_obs derived from m_j and σ_j:
+        χ²(a) = Σ_j [(f_obs,j – f_pred,j)/σ_j]²
+   Likelihood:
+        L(a) ∝ exp(–½ χ²(a))
+
+7. Posterior distribution (analytic Gaussian)
+   ---------------------------------------------------------------
+   The prior is Gaussian N(0, Λ_prior) with Λ_prior = diag(σ_k²).
+   The likelihood induces precision matrix:
+        Λ_lik = Pᵀ · W · P                   // W = diag(1/σ_j²)
+   Posterior precision:
+        Λ_post = Λ_prior + Λ_lik
+   Posterior mean (MAP estimate):
+        a_hat = Λ_post⁻¹ · (Pᵀ · W · f_obs)
+   Posterior covariance:
+        Σ_post = Λ_post⁻¹
+
+8. Reconstruct spectrum
+   ---------------------------------------------------------------
+   a. Mean spectrum:
+          Ŝ_mean(λ) = μ(λ) + Σ_k a_hat_k · v_k(λ)
+   b. Uncertainty propagation:
+        For n_samples times:
+            Draw a_sample ~ N(a_hat, Σ_post)
+            Compute Ŝ_sample(λ) = μ(λ) + Σ_k a_sample_k · v_k(λ)
+        From all samples compute per‑wavelength statistics:
+            • 95 % credible interval bounds (e.g., 2.5 % and 97.5 % percentiles).
+            • Optionally, sample standard deviation.
+
+9. Return
+   ---------------------------------------------------------------
+   • Reconstructed spectrum Ŝ_mean(λ)
+   • Credible‑interval bounds for each wavelength

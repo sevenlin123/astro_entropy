@@ -1,0 +1,54 @@
+Input
+    X      – (Ns × Nλ) matrix of training spectra (flux vs wavelength)
+    R_j(λ) – transmission curve of each photometric filter j (j = 1 … M)
+    y      – observed fluxes in the M filters (vector of length M)
+    σ_y    – measurement uncertainties in the M filters (vector)
+    K      – desired number of principal components (e.g. 4–10)
+
+Output
+    μ_s(λ)          – posterior‑mean reconstructed spectrum
+    CI_low(λ),CI_hi(λ) – lower/upper bounds of 95 % credible interval
+    z_samples       – posterior samples of latent variables
+
+Procedure
+-------------------------------------------------------
+1. **Pre‑processing of training spectra**
+   1.1 μ ← mean(X)                                 // mean spectrum (length Nλ)
+   1.2 X_c ← X – μ                               // center spectra
+
+2. **Principal‑Component Analysis (PCA)**
+   2.1 Σ ← (1/(Ns-1)) * X_cᵀ X_c                // covariance (Nλ×Nλ)
+   2.2 (eigvals, eigvecs) ← eigendecompose(Σ)   // eigenpairs
+   2.3 sort eigvecs by decreasing eigvals
+   2.4 P ← eigvecs[:, 1:K]                      // first K eigenvectors (PC basis)
+   2.5 C ← X_c * P                              // latent coefficients for training (Ns×K)
+
+3. **Prior on latent variables**
+   3.1 σ_z² ← var(C, axis=0)                    // variance of each PC in the training set
+   3.2 prior_z(z) ← Normal(mean=0, cov=diag(σ_z²))
+
+4. **Forward photometric model**
+   For each filter j = 1 … M
+        4.1 g_j(λ) ← R_j(λ) / ∫ R_j(λ) dλ        // normalized response
+        4.2 μ_j   ← Σ_λ μ[λ] * g_j(λ)            // mean flux in filter j
+        4.3 p_jk  ← Σ_λ P[λ,k] * g_j(λ)          // projection of PC k onto filter j
+   Define predicted flux:
+        f_j(z) = μ_j + Σ_k z_k * p_jk          // for all j
+
+5. **Likelihood**
+   5.1 L(z) = Π_{j=1}^{M} Normal(y[j] | f_j(z), σ_y[j])
+
+6. **Posterior sampling**
+   6.1 Posterior density:  p(z | y) ∝ L(z) * prior_z(z)
+   6.2 Draw N_samp samples {z^{(t)}} from p(z | y)  
+        (e.g. using Hamiltonian Monte Carlo or Metropolis‑Hastings)
+
+7. **Spectrum reconstruction**
+   For each sample t = 1 … N_samp
+        7.1 s^{(t)}(λ) = μ[λ] + Σ_k z^{(t)}_k * P[λ,k]
+   7.2 μ_s(λ)     = mean_t s^{(t)}(λ)             // posterior‑mean spectrum
+   7.3 CI_low(λ), CI_hi(λ) =
+          percentile_t( s^{(t)}(λ), [2.5, 97.5] ) // 95 % credible interval
+
+Return
+    μ_s(λ), CI_low(λ), CI_hi(λ), {z^{(t)}}

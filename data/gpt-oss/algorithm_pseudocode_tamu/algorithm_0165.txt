@@ -1,0 +1,93 @@
+Input: ReferenceSpectra[N_ref][N_wl]        // high‑resolution reflectance spectra  
+       FilterThroughputs[M][N_wl]           // effective transmission curves for M filters  
+       K                                    // number of principal components (e.g., 8–10)
+
+1.1  Center spectra:
+      For each spectrum s in ReferenceSpectra:
+          s_centered = s – mean(s)          // subtract per‑wavelength mean
+
+1.2  Perform PCA on centered spectra:
+      Compute covariance matrix C = (s_centered)^T * s_centered / (N_ref – 1)
+      Obtain eigenpairs (λ_i, v_i) sorted by λ_i descending
+      Retain first K eigenvectors V = [v_1 … v_K]   // shape: N_wl × K
+      Store projection matrix P = V^T              // shape: K × N_wl
+
+1.3  Project training spectra into latent space:
+      For each s_centered:
+          z = P * s_centered                  // latent coefficient vector (K)
+
+1.4  Estimate latent density with KDE:
+      Choose Gaussian kernel bandwidth h ≈ 0.5
+      Fit KDE on {z_1 … z_Nref}                // multivariate density f(z)
+
+1.5  Generate synthetic latent samples:
+      Draw N_syn >> N_ref latent vectors {z_syn} from f(z)
+
+1.6  Reconstruct synthetic spectra:
+      For each z_syn:
+          s_syn = V * z_syn + mean_spectrum    // inverse PCA + mean
+          Clip or enforce physical bounds if needed
+
+Input: Synthetic spectra {s_syn}  
+       FilterThroughputs  
+       σ_rel = 0.20                         // 20 % relative noise
+
+2.1  Compute noiseless photometry:
+      For each filter m in 1…M:
+          F_m = ∫ s_syn(λ) * FilterThroughputs[m,λ] dλ
+      Convert to reflectance or magnitude as desired → phot_noisy
+
+2.2  Add Gaussian noise:
+      For each filter m:
+          μ_m = phot_noisy[m]
+          σ_m = σ_rel * μ_m
+          phot_obs[m] ~ Normal(μ_m, σ_m)
+
+2.3  Store training pairs:
+      X_train = {phot_obs}                 // shape: N_syn × M
+      Y_train = {z_syn}                    // shape: N_syn × K
+
+Input: X_train, Y_train
+
+3.1  Select AutoML framework (e.g., AutoGluon, AutoML‑Ensemble)
+3.2  Configure regressor:
+      Input dimension = M
+      Output dimension = K
+      Enable bootstrapped ensembles for uncertainty estimates
+
+3.3  Train regressor R to minimize prediction error on Y_train
+
+Input: Latent vectors {z_i} with taxonomic labels L_i
+
+4.1  Train a second AutoML classifier C to predict class probabilities P(L|z)
+
+Input: ObservedPhotometry y_obs[M]   // sparse photometric measurements
+       Trained encoder R
+       PCA components V, mean_spectrum
+       KDE density f(z)
+       Gaussian Copula parameters (optional)
+
+5.1  Predict latent distribution:
+      Use R to obtain predictive mean μ_z and predictive variance Σ_z for y_obs
+      (If R is ensemble, use ensemble predictions to form μ_z, Σ_z)
+
+5.2  Sample posterior latent coefficients:
+      For n = 1 … N_samples:
+          Draw z_n from multivariate normal N(μ_z, Σ_z)
+          Optionally apply Gaussian Copula to respect correlations
+
+5.3  Decode spectra:
+      For each sampled z_n:
+          s_n = V * z_n + mean_spectrum
+
+5.4  Assemble posterior spectrum:
+      Compute point‑estimate (e.g., median across samples)
+      Compute credible intervals per wavelength (e.g., 16th & 84th percentiles)
+
+5.5  Taxonomic probability (optional):
+      Pass μ_z (or each z_n) to classifier C to obtain class probabilities
+      Aggregate probabilities over samples if desired
+
+ReconstructedSpectrum: array[N_wl] with mean and credible intervals
+ClassProbabilities: dictionary{class: probability}
+Optionally: Full posterior samples {s_n} for downstream analysis

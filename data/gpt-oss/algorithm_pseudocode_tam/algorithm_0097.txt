@@ -1,0 +1,81 @@
+Input:
+    S_ref  : Array of N_ref reference spectra (wavelength λ_i, reflectance R_i)
+    F      : Set of M photometric filter transmission curves {T_f(λ)}
+    NoiseFrac : Relative photometric noise (e.g. 0.20)
+
+Parameters:
+    K        : Number of principal components to retain (e.g. 8)
+    KDE_bw   : Kernel density bandwidth for latent space (e.g. 0.5)
+    N_aug    : Number of synthetic latent samples to generate (e.g. 5000)
+
+Output:
+    Reconstructed spectrum Ŝ(λ) for any new photometry vector m
+    Taxonomic probability vector p_tax (optional)
+
+Procedure:
+
+1.  Build Latent Prior (PCA + KDE)
+    -------------------------------------------------
+    1.1  Standardise spectra:
+         For each spectrum s in S_ref, subtract mean spectrum μ(λ)
+         (μ(λ) = mean over all reference spectra).
+    1.2  Assemble data matrix X ∈ ℝ^(N_ref × L) where L = number of wavelength bins.
+    1.3  Compute PCA on X:
+         - Eigen-decompose covariance matrix C = (X^T X)/(N_ref-1).
+         - Select top K eigenvectors E_k (k=1..K) → matrix V ∈ ℝ^(L × K).
+         - Project each centred spectrum onto PCs:
+           z_j = V^T (s_j – μ)  for j = 1..N_ref.
+    1.4  Estimate density of latent vectors {z_j} via Kernel Density Estimation (KDE):
+         - Use Gaussian kernel with bandwidth KDE_bw.
+    1.5  Sample N_aug synthetic latent vectors {z'_i} from KDE.
+         For each sampled z'_i:
+             - Generate synthetic spectrum:
+               s'_i = μ + V z'_i
+             - Store (s'_i, z'_i) pair.
+
+2.  Generate Synthetic Photometry (Forward Model)
+    -------------------------------------------------
+    For every synthetic spectrum s'_i (including original reference spectra if desired):
+        2.1  For each filter f in F:
+              - Compute reflected flux in filter:
+                m_f = ∫ s'_i(λ) * T_f(λ) dλ   /   ∫ T_f(λ) dλ
+              - Convert to reflectance or magnitude as needed.
+        2.2  Add Gaussian noise:
+              m_f ← m_f + Normal(0, NoiseFrac * m_f)
+        2.3  Stack noisy fluxes into photometry vector m_i ∈ ℝ^M.
+        2.4  Record training example (m_i, z'_i).
+
+3.  Train Encoder (Photometry → Latent)
+    -------------------------------------------------
+    3.1  Choose regression model (e.g., ensemble of Gradient‑Boosted Trees).
+    3.2  Fit model to training set {(m_i, z'_i)}:
+          For each dimension k = 1..K:
+              Train separate regressor f_k : ℝ^M → ℝ mapping m → z'_k.
+    3.3  Store all K regressors {f_k}.
+
+4.  Optional: Train Taxonomy Classifier
+    -------------------------------------------------
+    4.1  Assign each reference spectrum a taxonomic label y_j ∈ {H2O, CO2, Organic, Methanol}.
+    4.2  Use corresponding latent vectors {z_j} as features.
+    4.3  Train a multi‑class classifier (e.g., Random Forest) on {(z_j, y_j)}.
+    4.4  Store classifier C_tax.
+
+5.  Reconstruction Inference
+    -------------------------------------------------
+    Given new photometric observation m_new ∈ ℝ^M:
+        5.1  Predict latent vector:
+              ẑ_k = f_k(m_new) for k = 1..K
+              ẑ = [ẑ_1, …, ẑ_K]^T
+        5.2  Reconstruct spectrum:
+              Ŝ = μ + V ẑ            (shape ℝ^L)
+        5.3  (Optional) Predict taxonomy:
+              ŷ = C_tax(ẑ)  → probability vector p_tax
+        5.4  Return Ŝ (and p_tax if required).
+
+Notes:
+    • All operations are vectorised for efficiency.
+    • The KDE density can be evaluated on a grid or by random sampling.
+    • Noise fraction can be tuned to match expected survey S/N.
+    • No cross‑validation or bootstrapping is performed in this core routine.
+
+End Algorithm

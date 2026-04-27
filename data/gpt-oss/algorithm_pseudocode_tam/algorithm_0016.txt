@@ -1,0 +1,110 @@
+# ------------------------------------------
+# 1. TRAINING PHASE
+# ------------------------------------------
+
+# 1.1 Load reference spectra
+S_ref = load_spectra()                      # matrix (N_ref × N_lambda)
+
+# 1.2 Standardise spectra (mean‑zero, unit variance per λ)
+S_std = standardise(S_ref)
+
+# 1.3 Perform Principal Component Analysis (PCA)
+PC, eig_vals, mean_vec = PCA(S_std, n_components = K)   # K ≈ 5–10
+#   PC : matrix (N_lambda × K)  – principal eigenvectors
+#   eig_vals : eigenvalues
+#   mean_vec : mean spectrum used for centring
+
+# 1.4 Project reference spectra onto PCA space
+coeff_ref = (S_std - mean_vec) @ PC           # matrix (N_ref × K)
+
+# 1.5 Build continuous prior via Kernel Density Estimation (KDE)
+kde = KDE(coeff_ref, bandwidth = h)          # h ≈ 0.5
+
+# 1.6 Sample synthetic latent vectors from KDE
+N_aug = 5000                                 # number of synthetic samples
+coeff_syn = kde.sample(N_aug)                # matrix (N_aug × K)
+
+# 1.7 Reconstruct synthetic spectra from latent vectors
+S_syn = coeff_syn @ PC.T + mean_vec          # matrix (N_aug × N_lambda)
+
+# 1.8 Generate synthetic photometry for each synthetic spectrum
+#     for each desired filter i:
+#        m_i = integrate( S_syn * throughput_i ) / integrate( Sun * throughput_i )
+phot_syn = forward_photometry(S_syn, filter_set)
+
+# 1.9 Add realistic Gaussian noise (σ ≈ 20 % of reflectance)
+phot_syn_noisy = phot_syn + randn_like(phot_syn) * 0.2 * phot_syn
+
+# 1.10 Assemble training data for the encoder
+X_train_enc = phot_syn_noisy                  # (N_aug × N_filter)
+Y_train_enc = coeff_syn                       # (N_aug × K)
+
+# 1.11 Train the encoder (regressor) using an AutoML ensemble
+regressor = AutoML_Regression()
+regressor.fit(X_train_enc, Y_train_enc)
+
+# 1.12 (Optional) Train a latent‑space taxonomic classifier
+#     Use the labelled reference spectra (coeff_ref, label)
+X_train_cls = coeff_ref
+Y_train_cls = labels_ref                     # e.g. ['H2O', 'CO2', 'Organics']
+classifier = AutoML_Classifier()
+classifier.fit(X_train_cls, Y_train_cls)
+
+
+# ------------------------------------------
+# 2. INFERENCE PHASE
+# ------------------------------------------
+
+def reconstruct_spectrum(phot_obs):
+    """
+    phot_obs : array (N_filter) – observed photometry (reflectance or magnitude)
+    Returns:
+        S_recon : array (N_lambda) – reconstructed high‑resolution spectrum
+        posterior : distribution over latent coefficients (optional)
+    """
+    # 2.1 Predict posterior mean of latent coefficients
+    coeff_mean = regressor.predict(phot_obs)              # shape (K,)
+
+    # 2.2 (Optional) Sample posterior: draw n_samples from a multivariate normal
+    #      centred at coeff_mean with covariance estimated from regressor residuals
+    #      coeff_samples = multivariate_normal(mean=coeff_mean, cov=Sigma).sample(n)
+
+    # 2.3 Decode spectrum via inverse PCA
+    S_recon = coeff_mean @ PC.T + mean_vec               # shape (N_lambda,)
+
+    return S_recon
+
+
+def classify_taxonomy(phot_obs):
+    """
+    Returns a probability vector over taxonomic classes.
+    """
+    # 2.4 Predict latent coefficients
+    coeff_pred = regressor.predict(phot_obs)              # shape (K,)
+
+    # 2.5 Apply classifier in latent space
+    probs = classifier.predict_proba(coeff_pred)          # shape (n_classes,)
+
+    return probs
+
+
+# ------------------------------------------
+# 3. USAGE
+# ------------------------------------------
+
+# Example: given new photometric data
+phot_new = acquire_photometry(target_id)
+
+# Reconstruct spectrum
+S_est = reconstruct_spectrum(phot_new)
+
+# Taxonomic probabilities
+tax_probs = classify_taxonomy(phot_new)
+
+# (Optional) Compute diagnostic quantities from S_est
+slope = compute_slope(S_est, λ_start, λ_end)
+absorption_depth = measure_absorption(S_est, band_center)
+
+# ------------------------------------------
+# End of Algorithm
+# ------------------------------------------

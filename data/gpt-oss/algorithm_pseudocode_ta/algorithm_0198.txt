@@ -1,0 +1,134 @@
+pseudocode
+# ------------------------------------------------------------------
+# Training phase – construct low‑dimensional spectral manifold
+# ------------------------------------------------------------------
+
+function TRAIN_PCA(S, N):
+    # S : M × L matrix of M reference spectra sampled at L wavelengths
+    # N : desired number of principal components
+
+    # 1. Compute mean spectrum
+    μ = mean_rows(S)                # vector length L
+
+    # 2. Center spectra
+    X = S - μ                       # M × L
+
+    # 3. Compute covariance matrix
+    C = (Xᵀ * X) / (M – 1)          # L × L
+
+    # 4. Eigen‑decomposition
+    [eig_vals, eig_vecs] = eig(C)
+
+    # 5. Sort eigenpairs by decreasing eigenvalue
+    order = argsort(eig_vals, descending=True)
+    eig_vecs = eig_vecs[:, order]
+    eig_vals = eig_vals[order]
+
+    # 6. Keep first N components
+    PCs      = eig_vecs[:, 0:N]     # L × N
+    σ²_N     = eig_vals[0:N]        # variances of components
+
+    # 7. Project all spectra onto PCs (latent coordinates)
+    Z = X * PCs                     # M × N
+
+    return μ, PCs, σ²_N, Z
+
+# ------------------------------------------------------------------
+# Observation model – mapping latent coefficients to filter fluxes
+# ------------------------------------------------------------------
+
+function BUILD_FILTER_MATRIX(filters, μ, PCs):
+    # filters : list of filter transmission functions T_f(λ)
+    # returns L × |filters| matrix F where each column is the
+    # filter‑integrated basis (mean + PCs)
+
+    # 1. For each filter f, compute integrated response of the
+    #    mean spectrum and each principal component.
+    F_mean   = ∫ μ * T_f dλ
+    F_PC[f,i] = ∫ PCs[:, i] * T_f dλ     for all i=1..N
+
+    # 2. Assemble matrix M_fi = F_mean + Σ_i F_PC[f,i] * c_i
+    #    In linear algebra form, the relation is:
+    #        p_f = F_mean_f + (F_PC_f · c)  ,  f=1..|filters|
+    #    So construct matrix L (|filters| × N) whose rows are F_PC_f
+    #    and vector l0 = F_mean (|filters|)
+
+    L = matrix([F_PC_f] for f in filters)   # |filters| × N
+    l0 = vector([F_mean_f] for f in filters)
+
+    return L, l0
+
+# ------------------------------------------------------------------
+# Bayesian inference – obtain posterior distribution of latent
+# coefficients given noisy photometry
+# ------------------------------------------------------------------
+
+function INFER_COEFFICIENTS(p_obs, σ_obs, L, l0, σ²_N):
+    # p_obs  : observed filter flux vector (length M_f)
+    # σ_obs  : measurement std dev vector (length M_f)
+    # L      : filter–basis matrix (M_f × N)
+    # l0     : filter mean offsets (M_f)
+    # σ²_N   : prior variances of PCs (length N)
+
+    # 1. Prior on coefficients: c ~ N(0, diag(σ²_N))
+    Σ_prior = diag(σ²_N)                 # N × N
+
+    # 2. Likelihood: p_obs = l0 + L·c + ε ,  ε ~ N(0, Σ_noise)
+    Σ_noise = diag(σ_obs²)              # M_f × M_f
+
+    # 3. Posterior covariance (closed‑form for Gaussian linear model)
+    Σ_post = inverse( Lᵀ * Σ_noise⁻¹ * L + Σ_prior⁻¹ )  # N × N
+
+    # 4. Posterior mean
+    μ_post = Σ_post * ( Lᵀ * Σ_noise⁻¹ * (p_obs – l0) )  # N
+
+    return μ_post, Σ_post
+
+# ------------------------------------------------------------------
+# Spectrum reconstruction – generate full wavelength spectrum and
+# associated uncertainties
+# ------------------------------------------------------------------
+
+function RECONSTRUCT_SPECTRUM(μ, PCs, μ_post, Σ_post):
+    # μ       : mean spectrum (L)
+    # PCs     : L × N matrix of principal components
+    # μ_post  : posterior mean of coefficients (N)
+    # Σ_post  : posterior covariance (N × N)
+
+    # 1. Reconstructed mean spectrum
+    spec_mean = μ + PCs * μ_post         # L
+
+    # 2. Propagate coefficient uncertainty to spectral uncertainty
+    #    Var(spec) = diag( PCs * Σ_post * PCsᵀ )
+    cov_spec = PCs * Σ_post * PCsᵀ      # L × L
+    spec_std = sqrt(diag(cov_spec))     # L
+
+    return spec_mean, spec_std
+
+# ------------------------------------------------------------------
+# Full reconstruction pipeline for one object
+# ------------------------------------------------------------------
+
+function RECONSTRUCT_OBJECT(p_obs, σ_obs, filters,
+                            μ, PCs, σ²_N):
+    # Build filter matrix for chosen filter set
+    L, l0 = BUILD_FILTER_MATRIX(filters, μ, PCs)
+
+    # Infer posterior distribution of latent coefficients
+    μ_post, Σ_post = INFER_COEFFICIENTS(p_obs, σ_obs, L, l0, σ²_N)
+
+    # Reconstruct spectrum and uncertainties
+    spec_mean, spec_std = RECONSTRUCT_SPECTRUM(μ, PCs, μ_post, Σ_post)
+
+    return spec_mean, spec_std
+
+# ------------------------------------------------------------------
+# Batch processing – apply to many TNOs
+# ------------------------------------------------------------------
+
+function PROCESS_TNO_SET(tno_list, filters, μ, PCs, σ²_N):
+    for tno in tno_list:
+        p_obs, σ_obs = read_photometry(tno, filters)
+        mean_spectrum, std_spectrum = RECONSTRUCT_OBJECT(
+            p_obs, σ_obs, filters, μ, PCs, σ²_N)
+        store_result(tno, mean_spectrum, std_spectrum)

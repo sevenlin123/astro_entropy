@@ -1,0 +1,78 @@
+Input:
+    - Photometric catalog P = { (f_i, σ_i, filter_i) } for each object
+    - Filter transmission curves {T_i(λ)}  (i = 1 … N_filters)
+    - Library of template spectra {φ_k(λ)}  (k = 1 … N_templates)
+    - Prior distributions for template weights {a_k}
+    - Number of Monte‑Carlo iterations M
+
+Output for each object:
+    - Posterior mean spectrum Ŝ(λ)
+    - Posterior probability vector for taxonomic classes
+    - Optional outlier flag based on χ² statistic
+
+Procedure:
+
+1. Pre‑processing
+   1.1 For every filter i, pre‑compute its effective bandwidth:
+           Δλ_i = ∫ T_i(λ) dλ
+   1.2 Normalize each template φ_k(λ) to unity at a reference wavelength (optional).
+
+2. Construct Spectral Model
+   2.1 Define the modeled reflectance spectrum as a linear combination of templates:
+           S(λ; a) = Σ_{k=1}^{N_templates} a_k · φ_k(λ)
+   2.2 For each filter i compute the synthetic photometry:
+           F_model_i(a) = [∫ S(λ; a) · T_i(λ) dλ] / Δλ_i
+   2.3 Store the mapping a → {F_model_i} for later evaluation.
+
+3. Likelihood Function
+   3.1 For a given set of weights a, evaluate the likelihood:
+           L(a | data) = Π_{i=1}^{N_filters}
+                         N( f_i  |  F_model_i(a),  σ_i )
+   3.2 Take logarithm for numerical stability:
+           logL(a) = Σ_{i} [ -½ (f_i – F_model_i(a))² / σ_i²  – ½ ln(2πσ_i²) ]
+
+4. Priors
+   4.1 Specify prior for each weight a_k (e.g., Gaussian with mean μ_k, variance τ_k²,
+       or truncated normal enforcing a_k ≥ 0).
+   4.2 Compute log prior:
+           logP_prior(a) = Σ_{k} log p(a_k)
+
+5. Posterior Sampling (MCMC)
+   5.1 Initialize weights a^(0) (e.g., random draw from priors).
+   5.2 For iteration m = 1 … M:
+         5.2.1 Propose new weights a' = a^(m‑1) + ε,
+                 where ε ~ N(0, Σ_prop)  (covariance tuned to acceptance rate).
+         5.2.2 Compute log posterior:
+                 logP_post(a') = logL(a') + logP_prior(a')
+                 logP_post(a^(m‑1)) = logL(a^(m‑1)) + logP_prior(a^(m‑1))
+         5.2.3 Acceptance probability:
+                 α = min(1, exp(logP_post(a') – logP_post(a^(m‑1))))
+         5.2.4 Draw u ~ Uniform(0,1). If u < α, accept:
+                 a^(m) = a'
+             else reject:
+                 a^(m) = a^(m‑1)
+   5.3 After burn‑in, collect posterior samples {a^(m)}.
+
+6. Spectrum Reconstruction
+   6.1 For each λ in desired wavelength grid:
+         Compute Ŝ(λ) = mean_{samples} [ S(λ; a^(m)) ]
+   6.2 Optionally compute uncertainty band:
+         σ_S(λ) = stddev_{samples} [ S(λ; a^(m)) ]
+
+7. Taxonomic Probability Estimation
+   7.1 For each taxonomic class t (defined by a canonical template Φ_t(λ)):
+         Compute similarity score s_t = Σ_{samples}  ⟨ S(·; a^(m)), Φ_t ⟩
+         (inner product over wavelength grid, weighted by measurement errors if desired)
+   7.2 Convert scores to probabilities:
+         P(t) = exp(s_t) / Σ_{t'} exp(s_{t'})
+   7.3 Store probability vector {P(t)}.
+
+8. Outlier Detection (Optional)
+   8.1 For each object compute reduced χ²:
+           χ²_red = Σ_i [ (f_i – F_model_i(⟨a⟩))² / σ_i² ] / (N_filters – N_templates)
+   8.2 Flag object as outlier if χ²_red > threshold (e.g., 3σ).
+
+9. Return Results
+   9.1 Output Ŝ(λ), σ_S(λ), {P(t)}, and outlier flag for each object.
+
+End Procedure

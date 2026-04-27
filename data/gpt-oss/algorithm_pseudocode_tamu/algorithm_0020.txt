@@ -1,0 +1,17 @@
+for each S_i in S_ref:
+         a_i = Eᵀ · (S_i – μ_S)          // latent coefficient vector (size K)
+
+for each ã_j:
+         S̃_j = μ_S + E · ã_j
+
+m_k_noisy = m_k × (1 + N(0,0.2))
+
+X_train = {m_noisy vectors}      // shape (N_samples, N_filters)
+     Y_train = {latent vectors}       // corresponding a or ã (shape (N_samples, K))
+
+â = Encoder.predict(m_obs)           // latent coefficient vector (size K)
+
+for each sampled a_p:
+         S_p = μ_S + E · a_p                // reconstructed spectrum
+
+tax_prob = Classifier.predict_proba(â)

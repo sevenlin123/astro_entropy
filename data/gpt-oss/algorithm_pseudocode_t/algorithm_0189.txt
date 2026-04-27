@@ -1,0 +1,49 @@
+Input:
+    D = { (m_i, σ_mi, f_i) }   // i = 1…N, where m_i = photometric magnitude in band i,
+                                // σ_mi = magnitude uncertainty, f_i = filter transmission
+    λ_ref = { λ_k }            // Reference wavelength grid
+    B(λ) = { φ_j(λ) }          // Basis set of spectral shapes (e.g., Legendre polynomials)
+    priors = { μ_αj, σ_αj }     // Prior means and stds for coefficients α_j
+    n_samp = integer           // Number of posterior samples to draw
+
+Output:
+    { α̂_j }                    // Posterior mean coefficient vector
+    Ŝ(λ)                       // Reconstructed spectral energy distribution
+    Σ_S(λ, λ')                  // Covariance of reconstructed spectrum
+
+Procedure:
+
+1. **Convert magnitudes to fluxes**
+   For each observation i:
+       F_i   ← 10^(-0.4 * (m_i - ZP_i))         // ZP_i: zero‑point for band i
+       σ_Fi  ← ln(10)/2.5 * σ_mi * F_i           // propagate uncertainty
+
+2. **Build filter–basis convolution matrix A**
+   For each band i and basis function j:
+       A[i, j] ← ∫ φ_j(λ) * f_i(λ) dλ / ∫ f_i(λ) dλ
+   // A has dimensions N × J (J = number of basis functions)
+
+3. **Define the probabilistic model**
+   *Likelihood*:  
+      F_i | α  ~ Normal( (A α)_i , σ_Fi^2 )
+   *Prior on coefficients*:
+      α_j ~ Normal( μ_αj , σ_αj^2 ),   for j = 1…J
+
+4. **Posterior sampling (e.g., Gibbs or Hamiltonian Monte Carlo)**
+   Initialize α^(0) = μ_α
+   For t = 1 … n_samp:
+       Sample α^(t) ~ P( α | F, A, σ_F, priors )
+       Store α^(t)
+
+5. **Compute posterior summaries**
+   α̂ ← mean_t [ α^(t) ]                         // Posterior mean of coefficients
+   Ŝ(λ) ← Σ_j α̂_j * φ_j(λ)                     // Expected spectrum on λ_ref
+
+6. **Estimate spectrum covariance**
+   For each pair (λ_a, λ_b) in λ_ref:
+       Σ_S(λ_a, λ_b) = Σ_t [ (S^(t)(λ_a) - Ŝ(λ_a))
+                             (S^(t)(λ_b) - Ŝ(λ_b)) ] / (n_samp - 1)
+   where S^(t)(λ) = Σ_j α_j^(t) * φ_j(λ)
+
+7. **Return results**
+   Output α̂, Ŝ(λ), Σ_S(λ, λ')

@@ -1,0 +1,85 @@
+INPUT:
+    - Reference spectra S_ref[1…N]  (flux vs λ)
+    - Filter throughput curves T_f[1…F]   (λ → transmission)
+    - Desired latent dimensionality K  (e.g., 5–10)
+
+STEP 1: Spectral Normalization
+    For each spectrum s in S_ref:
+        * Divide by solar spectrum to obtain reflectance R
+        * Resample R onto common wavelength grid λ_grid
+        * Store R_normalized
+
+STEP 2: Principal Component Analysis (PCA)
+    * Stack all R_normalized into matrix X (size N × M, M = # wavelength bins)
+    * Compute mean μ_X and covariance Σ_X
+    * Eigen-decompose Σ_X → eigenvectors U[1…K], eigenvalues Λ
+    * Project spectra onto PCs:  Z_real = (X – μ_X) · U   (size N × K)
+    * Store projection matrix P_enc = U and inverse matrix P_dec = Uᵀ
+
+STEP 3: Latent Density Augmentation (KDE)
+    * Fit Gaussian‑kernel KDE to {Z_real[i]}:
+          p_lat(z) ∝ Σ_i exp(–‖z – Z_real[i]‖² / (2 h²))
+      with bandwidth h ≈ 0.5
+    * Sample N_aug synthetic latent vectors Z_synth ~ p_lat(z)
+    * For each Z_synth:
+        – Decode to spectrum: R_synth = μ_X + Z_synth · Uᵀ
+        – Store R_synth
+
+STEP 4: Forward‑Model Photometry Generation
+    For each spectrum R (real + synthetic):
+        For each filter f:
+            * Integrate R * T_f over λ
+            * Convert to apparent magnitude m_f (or reflectance)
+            * Add Gaussian noise σ_rel = 0.20 (20 %) → m_f_noisy
+        * Stack noisy magnitudes into vector m_vec
+        * Store pair (m_vec , Z_target) where Z_target = PCA projection of R
+    Resulting training set:  {(m_vec, Z_target)}  size ≈ N + N_aug
+
+STEP 5: Train Encoder (Regressor)
+    * Input: m_vec (size F)
+    * Target: Z_target (size K)
+    * Use AutoML framework (e.g., AutoGluon) to train an ensemble of regressors
+    * Output: Trained model M_enc
+
+STEP 6: Train Classifier
+    * Input: Z_real (size N × K)
+    * Labels: Taxonomic class per spectrum
+    * Train an AutoML classifier (e.g., Gradient‑Boosted Trees)
+    * Output: Trained model M_cls
+
+INPUT:
+    - Measured photometry m_obs[1…F]  (magnitudes or reflectance)
+    - Trained models M_enc, M_cls
+    - PCA matrices P_enc, P_dec, mean μ_X, eigenvectors U
+
+STEP A: Predict Latent Coefficients
+    * Pass m_obs through M_enc → obtain point estimate ẑ  (size K)
+    * Retrieve predictive uncertainty σ_z (from model ensemble or quantile regression)
+    * Construct marginal Gaussian PDFs φ_k(z_k | μ_k=ẑ_k, σ_k=σ_z_k) for k = 1…K
+
+STEP B: Posterior Sampling via Gaussian Copula
+    * Define correlation matrix Σ_corr among latent dimensions (learned from training set or identity)
+    * Sample N_post draws u_i ∼ Uniform(0,1)^K
+    * Map to latent space:
+          z_i = Φ⁻¹(u_i)   (Φ⁻¹ inverse CDF of standard normal)
+          z_i = μ_z + L·z_i   where LLᵀ = Σ_corr
+    * Each z_i is a draw from the joint posterior p(z | m_obs)
+
+STEP C: Decode Spectra
+    For each sampled latent vector z_i:
+        * R_i = μ_X + z_i · Uᵀ      // inverse PCA
+        * Store R_i
+    Result: Ensemble of reconstructed spectra {R_i}
+
+STEP D: Summarize Reconstructions
+    * Compute mean spectrum R_mean = average({R_i})
+    * Compute credible intervals per wavelength (e.g., 2.5th & 97.5th percentiles)
+    * Optionally fit absorption band parameters to R_mean
+
+STEP E: Taxonomic Classification
+    * Pass ẑ through M_cls → obtain class probabilities {p_class}
+    * Return most probable class or full probability distribution
+
+OUTPUT:
+    - Posterior distribution of reconstructed spectra (mean + confidence bands)
+    - Taxonomic probability vector

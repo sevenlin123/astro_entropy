@@ -1,0 +1,91 @@
+Input:
+    – Training spectra set {S_i(λ)}   i = 1 … N
+    – Photometric filter set {T_k(λ)}  k = 1 … K
+    – Observed photometry {m_k} with uncertainties {σ_k}
+    – Desired number of principal components k_pc  (e.g., 5 or 10)
+
+Output:
+    – Posterior mean spectrum  Ŝ(λ)
+    – Posterior covariance of spectrum  C_spectra(λ,λ')
+    – Optional samples {S_sample(λ)} drawn from posterior
+
+--------------------------------------------------------------------
+1. Pre‑processing – build spectral basis
+--------------------------------------------------------------------
+1.1 Compute mean spectrum:
+        μ(λ) = (1/N) * Σ_i S_i(λ)
+
+1.2 Compute residual spectra:
+        R_i(λ) = S_i(λ) – μ(λ)
+
+1.3 Construct covariance matrix:
+        C = (1/(N-1)) * Σ_i R_i R_iᵀ      // (dimension L × L, L = # of wavelength points)
+
+1.4 Perform eigen‑decomposition:
+        [λ_j, v_j]  = eig(C)              // λ_j sorted descending
+1.5 Select first k_pc eigenvectors:
+        V = [v_1, …, v_k_pc]             // L × k_pc matrix
+        Λ = diag(λ_1, …, λ_k_pc)          // k_pc × k_pc diagonal
+
+--------------------------------------------------------------------
+2. Construct photometric forward operator
+--------------------------------------------------------------------
+For each filter k:
+    2.1 Compute denominator: D_k = ∫ T_k(λ) dλ
+    2.2 Compute mean flux in filter:
+            m̄_k = (1/D_k) * ∫ μ(λ) T_k(λ) dλ
+    2.3 For each principal component j:
+            M_kj = (1/D_k) * ∫ v_j(λ) T_k(λ) dλ
+    Store row vector M_k = [M_k1 … M_kk_pc]
+End
+
+Collect all rows into matrix M (K × k_pc) and mean vector m̄ (K).
+
+--------------------------------------------------------------------
+3. Define priors
+--------------------------------------------------------------------
+Prior on coefficient vector a ∈ ℝ^{k_pc}:
+    a ~ Normal(0 , Λ)           // zero mean, covariance = Λ
+
+--------------------------------------------------------------------
+4. Likelihood from photometry
+--------------------------------------------------------------------
+Model prediction for filter k:
+    m̂_k(a) = m̄_k + Σ_{j=1}^{k_pc} M_kj * a_j
+Define vector m̂(a) = m̄ + M a
+
+Likelihood:
+    p(m | a) ∝ exp[ -½ (m – m̂(a))ᵀ W (m – m̂(a)) ]
+where W = diag(1/σ_k²)
+
+--------------------------------------------------------------------
+5. Analytic posterior (Gaussian)
+--------------------------------------------------------------------
+Because both prior and likelihood are Gaussian and linear in a,
+the posterior is Gaussian:
+
+    Σ_post = (Λ⁻¹ + Mᵀ W M)⁻¹
+    a_post = Σ_post * (Mᵀ W (m – m̄))
+
+--------------------------------------------------------------------
+6. Reconstruct spectrum and its uncertainty
+--------------------------------------------------------------------
+6.1 Posterior mean spectrum:
+        Ŝ(λ) = μ(λ) + Σ_{j=1}^{k_pc} a_post_j * v_j(λ)
+
+6.2 Posterior spectrum covariance:
+        C_spectra(λ, λ') = Σ_{p,q} v_p(λ) * Σ_post(p,q) * v_q(λ')
+
+--------------------------------------------------------------------
+7. Optional sampling of spectra
+--------------------------------------------------------------------
+Generate N_samples draws from a ∼ Normal(a_post, Σ_post):
+    For each draw:
+        S_sample(λ) = μ(λ) + Σ_j a_j * v_j(λ)
+Collect {S_sample(λ)} as realizations of the posterior.
+
+--------------------------------------------------------------------
+Return:
+    – Ŝ(λ)   (posterior mean spectrum)
+    – C_spectra  (uncertainty of reconstructed spectrum)
+    – (optional) sample spectra for credible‑interval estimation

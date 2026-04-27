@@ -1,0 +1,80 @@
+INPUT:
+    - Reference spectral library R = {S_i | i = 1..N}   // 51 TNO spectra
+    - Instrument throughput curves T_k            // JWST NIRCam filter responses
+    - Desired number of principal components K      // e.g., 8–10
+    - KDE bandwidth h (default 0.5)
+    - Number of synthetic latent samples M          // e.g., 5000
+    - Photometric noise level σ_phot = 0.20 (20%)
+    - New sparse photometry m_new for target object
+
+OUTPUT:
+    - Posterior spectrum S_post (high‑resolution reflectance)
+    - Posterior taxonomic probabilities P_tax
+    - Optional: latent coefficient vector c_pred
+
+--------------------------------------------------------------------
+Step 1: Build PCA prior
+--------------------------------------------------------------------
+1.1 Align all spectra S_i to common wavelength grid λ_j (j = 1..L).
+1.2 Subtract mean spectrum μ_S from each S_i to obtain centered spectra C_i.
+1.3 Compute covariance matrix Σ = (1/(N-1)) * Σ_i (C_i C_iᵀ).
+1.4 Perform eigen decomposition of Σ → eigenvalues Λ and eigenvectors V.
+1.5 Select first K eigenvectors V_K = [v_1 … v_K].
+1.6 Project each centered spectrum onto V_K:
+        c_i = V_Kᵀ * C_i      // c_i ∈ ℝ^K
+    Store set of latent vectors C = {c_i}.
+
+--------------------------------------------------------------------
+Step 2: Generate synthetic latent manifold (KDE augmentation)
+--------------------------------------------------------------------
+2.1 Fit kernel density estimator KDE over C with bandwidth h.
+2.2 Sample M latent vectors {c_synth_m} ~ KDE  (m = 1..M).
+2.3 For each c_synth_m:
+        - Reconstruct full spectrum:
+              S_synth_m = μ_S + V_K * c_synth_m
+        - Store pair (c_synth_m, S_synth_m).
+
+--------------------------------------------------------------------
+Step 3: Forward‑model synthetic photometry
+--------------------------------------------------------------------
+3.1 For each synthetic spectrum S_synth_m:
+        For each filter k:
+            - Compute noiseless flux:
+                  f_k = ∫ S_synth_m(λ) * T_k(λ) dλ
+            - Add Gaussian noise:
+                  f_k_noisy = f_k * (1 + Normal(0, σ_phot))
+        - Assemble noisy photometry vector m_synth_m = [f_1_noisy … f_Knoise].
+3.2 Create training dataset D = {(m_synth_m, c_synth_m)}.
+
+--------------------------------------------------------------------
+Step 4: Train photometry→latent regressor
+--------------------------------------------------------------------
+4.1 Initialize AutoML regressor (e.g., ensemble of GBDTs).
+4.2 Train regressor on D to learn mapping:
+        c_hat = Regressor.predict(m_synth_m)
+   where m_synth_m is input, c_synth_m is target.
+4.3 Store trained model R_model.
+
+--------------------------------------------------------------------
+Step 5: Train taxonomic classifier in latent space (optional)
+--------------------------------------------------------------------
+5.1 Label each reference spectrum S_i with taxonomic class L_i.
+5.2 Map labels to latent vectors c_i from Step 1.5.
+5.3 Train AutoML classifier on {(c_i, L_i)} → model C_model.
+5.4 Store classifier.
+
+--------------------------------------------------------------------
+Step 6: Inference on new object
+--------------------------------------------------------------------
+6.1 Input new photometry m_new (size = number of filters used).
+6.2 Predict latent coefficients:
+        c_pred = R_model.predict(m_new)
+6.3 Decode to full spectrum:
+        S_post = μ_S + V_K * c_pred
+6.4 (Optional) Classify taxonomic type:
+        P_tax = C_model.predict_proba(c_pred)
+6.5 Return S_post, P_tax, c_pred.
+
+--------------------------------------------------------------------
+End of Algorithm
+--------------------------------------------------------------------

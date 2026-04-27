@@ -1,0 +1,98 @@
+# ---------------------------------------------------------------
+# 1.  TRAIN PRINCIPAL COMPONENT MODEL
+# ---------------------------------------------------------------
+Input:    training spectra matrix X [N_samples × N_wavelengths]
+          number of principal components K  (e.g. 5–10)
+
+Procedure:
+1.1 Compute mean spectrum m[1:N_wavelengths] = mean(X, axis=0)
+1.2 Center data:   C = X – m
+1.3 Covariance:    S = (Cᵀ · C) / N_samples
+1.4 Eigen decomposition:  eig_vals, eig_vecs = eig(S)
+1.5 Sort eigenvalues descending → indices idx
+1.6 Select first K columns:  U = eig_vecs[:, idx[:K]]     # basis vectors
+1.7 Store:  m, U, K
+
+# ---------------------------------------------------------------
+# 2.  PROJECT BASIS VECTORS INTO PHOTOMETRIC FILTERS
+# ---------------------------------------------------------------
+Input:    basis vectors U [N_wavelengths × K]
+          list of filter transmission functions T_j[1:N_wavelengths]
+          mean spectrum m[1:N_wavelengths]
+          number of filters P
+
+Procedure:
+2.1 For each filter j = 1 … P
+       denom_j = Σ_k T_j[k]                     # total transmission
+       mean_proj[j] = Σ_k (m[k] · T_j[k]) / denom_j
+
+2.2 For each component l = 1 … K
+       For each filter j = 1 … P
+           proj[j,l] = Σ_k (U[k,l] · T_j[k]) / denom_j
+
+Output:   mean_proj[1:P], proj[P × K]
+
+# ---------------------------------------------------------------
+# 3.  BAYESIAN INFERENCE OF LATENT COORDINATES
+# ---------------------------------------------------------------
+Input:    observed photometry y[1:P]
+          photometric uncertainties σ[1:P]
+          mean_proj[1:P], proj[P × K]
+          prior over latent vector z:  z ~ N(0, I_K)
+
+Procedure:
+3.1 Weight matrix:  W = diag(1/σ²)
+
+3.2 Posterior covariance:
+        Σ_post = inv( I_K + projᵀ · W · proj )
+
+3.3 Posterior mean:
+        μ_post = Σ_post · (projᵀ · W · (y – mean_proj))
+
+Output:   μ_post[K], Σ_post[K × K]
+
+# ---------------------------------------------------------------
+# 4.  RECONSTRUCT FULL SPECTRUM AND UNCERTAINTY
+# ---------------------------------------------------------------
+Input:    mean spectrum m[1:N_wavelengths]
+          basis vectors U[1:N_wavelengths × K]
+          μ_post[K], Σ_post[K × K]
+
+Procedure:
+4.1 Reconstructed spectrum:
+        S_recon[1:N_wavelengths] = m + U · μ_post
+
+4.2 Spectral variance (diagonal of covariance):
+        Var_S = diag( U · Σ_post · Uᵀ )    # element‑wise variance
+        σ_S  = sqrt(Var_S)
+
+Output:   S_recon[1:N_wavelengths], σ_S[1:N_wavelengths]
+
+# ---------------------------------------------------------------
+# 5.  OPTIONAL OUTLIER DETECTION
+# ---------------------------------------------------------------
+Input:    observed photometry y[1:P]
+          posterior mean μ_post, posterior covariance Σ_post
+          proj[P × K], mean_proj[1:P]
+          threshold L_min (e.g. –10 in log‑likelihood)
+
+Procedure:
+5.1 Predicted flux vector:
+        y_hat = mean_proj + proj · μ_post
+
+5.2 Log‑likelihood:
+        LL = –0.5 * ( (y – y_hat)ᵀ · W · (y – y_hat) + const )
+
+5.3 Flag outlier if LL < L_min
+
+Output:   outlier_flag (boolean)
+
+train PCA on spectra → basis U, mean m
+project U into filters → proj, mean_proj
+for each target object:
+    read photometry y, σ
+    infer μ_post, Σ_post from proj, mean_proj, y, σ
+    reconstruct spectrum S_recon = m + U·μ_post
+    compute spectral uncertainty σ_S from U·Σ_post·Uᵀ
+    (optional) flag outlier using log‑likelihood
+return S_recon and σ_S for downstream analysis

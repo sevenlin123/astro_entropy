@@ -1,0 +1,65 @@
+text
+Inputs
+------
+S_train   : matrix of training spectra (N_samples × N_wave)
+Filt      : list of photometric filter transmission curves
+m_obs     : observed magnitudes/fluxes for target object (M_filters)
+sigma_obs : measurement uncertainties for m_obs (M_filters)
+
+Parameters
+----------
+k_pc      : number of principal components to retain (default 8 or 10)
+
+Outputs
+-------
+s_mean    : reconstructed mean spectrum (N_wave)
+cov_s     : posterior covariance matrix of the spectrum (N_wave × N_wave)
+ci_low, ci_high : lower/upper bounds of 95 % credible interval per wavelength
+
+1.1  Compute mean spectrum:
+        μ = mean(S_train, axis=0)          # shape (N_wave,)
+1.2  Center training spectra:
+        S_c = S_train - μ                  # shape (N_samples × N_wave)
+1.3  Compute covariance matrix:
+        C = (S_c.T @ S_c) / (N_samples-1)  # shape (N_wave × N_wave)
+1.4  Eigen‑decompose C:
+        [Λ, U] = eig(C)                    # Λ: eigenvalues, U: eigenvectors
+1.5  Sort eigenpairs by descending eigenvalues.
+1.6  Select first k_pc components:
+        P = U[:, 0:k_pc]                   # shape (N_wave × k_pc)
+
+2.1  For each filter j (j = 1 … M_filters):
+        • Compute filter response vector R_j(λ) over wavelengths.
+        • Normalize:  w_j = ∫ R_j(λ) dλ
+        • Project basis onto filter:
+              K[j, :] = (R_j(λ) · P[:, λ]) / w_j      # dot over λ
+        • Compute synthetic photometry of mean spectrum:
+              b[j]   = (R_j(λ) · μ[λ]) / w_j
+
+3.1  Residual between observation and mean prediction:
+        r = m_obs - b                     # shape (M_filters,)
+
+3.2  Measurement covariance:
+        Σ = diag(sigma_obs^2)             # shape (M_filters × M_filters)
+
+3.3  Prior on latent coefficients:
+        Σ_prior = I_k_pc                   # identity, uninformative prior
+
+3.4  Posterior covariance:
+        Σ_post = inv( K.T @ inv(Σ) @ K + inv(Σ_prior) )    # shape (k_pc × k_pc)
+
+3.5  Posterior mean:
+        μ_post = Σ_post @ K.T @ inv(Σ) @ r                 # shape (k_pc,)
+
+4.1  Reconstructed mean spectrum:
+        s_mean = μ + P @ μ_post           # shape (N_wave,)
+
+4.2  Posterior covariance of the spectrum:
+        cov_s = P @ Σ_post @ P.T          # shape (N_wave × N_wave)
+
+4.3  95 % credible interval at each wavelength λ:
+        std_lam = sqrt( diag(cov_s) )
+        ci_low  = s_mean - 1.96 * std_lam
+        ci_high = s_mean + 1.96 * std_lam
+
+return s_mean, cov_s, ci_low, ci_high

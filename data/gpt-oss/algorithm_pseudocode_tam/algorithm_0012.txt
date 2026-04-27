@@ -1,0 +1,66 @@
+INPUT
+    SeedSpectra[N][L]          # N reference spectra, L wavelength bins
+    FilterResponse[F][L]       # Effective throughput for each filter F
+    K                          # Number of principal components (e.g. 8–10)
+    h                          # KDE bandwidth (e.g. 0.5)
+    M                          # Number of synthetic latent samples to draw (e.g. 5000)
+    σ_phot                     # Relative photometric noise (e.g. 0.20)
+
+OUTPUT
+    ReconstructedSpectrum[L]  # High‑resolution spectrum for the target object
+    TaxonomyProbs[Class]      # Posterior probabilities for each taxonomic class
+
+--------------------------------------------------------------------
+STEP 1 – Build the latent manifold (the prior)
+--------------------------------------------------------------------
+1.1  Compute mean spectrum μ_s   ← mean(SeedSpectra, axis=0)
+1.2  CenteredSpectra           ← SeedSpectra – μ_s
+1.3  CovMatrix                 ← cov(CenteredSpectra)
+1.4  EigVals, EigVecs          ← eig(CovMatrix)
+1.5  Sort eigenpairs descending by EigVals
+1.6  PC_basis[K]               ← first K columns of EigVecs
+1.7  PC_coeffs[N][K]           ← (CenteredSpectra) * PC_basis   # projection
+
+1.8  Fit KDE over PC_coeffs with bandwidth h
+1.9  Draw M samples from KDE → LatentSamples[M][K]
+
+--------------------------------------------------------------------
+STEP 2 – Generate synthetic training data (photometry ↔ latent)
+--------------------------------------------------------------------
+FOR i = 1 TO M DO
+2.1  z         ← LatentSamples[i]                          # latent vector
+2.2  s_gen[L]  ← μ_s + PC_basis * z                        # inverse PCA → synthetic spectrum
+2.3  FOR each filter f in 1..F DO
+        # Compute monochromatic reflectance integrated over filter
+        R_f ← ∫ s_gen(λ) * FilterResponse[f](λ) dλ
+    END FOR
+2.4  Photometry[i][F] ← R_f for all f
+2.5  # Inject Gaussian noise (relative to reflectance)
+     PhotometryNoisy[i][f] ← Photometry[i][f] * (1 + Normal(0, σ_phot))
+END FOR
+
+--------------------------------------------------------------------
+STEP 3 – Train the photometry‑to‑latent encoder
+--------------------------------------------------------------------
+3.1  Train an AutoML regressor R on (PhotometryNoisy, LatentSamples)
+     # e.g., AutoGluon tabular model ensemble of GBDT, RandomForest, NN
+3.2  Save the trained regressor R
+
+--------------------------------------------------------------------
+STEP 4 – Train the latent‑space taxonomy classifier
+--------------------------------------------------------------------
+4.1  Label the seed spectra with their known taxonomic classes
+4.2  Train an AutoML classifier C on (PC_coeffs, Labels)
+     # classifier outputs class posterior probabilities
+4.3  Save the trained classifier C
+
+--------------------------------------------------------------------
+STEP 5 – Forward inference for a new object
+--------------------------------------------------------------------
+5.1  Observe photometry m_obs[F] with uncertainties σ_m
+5.2  # Optional: propagate uncertainties through regressor
+     z_pred ← R.predict(m_obs)          # returns estimated latent vector
+5.3  ReconstructedSpectrum[L] ← μ_s + PC_basis * z_pred
+5.4  TaxonomyProbs[Class] ← C.predict_proba(z_pred)
+
+RETURN ReconstructedSpectrum, TaxonomyProbs

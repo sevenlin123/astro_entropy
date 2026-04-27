@@ -1,0 +1,72 @@
+Input: 
+    - High‑resolution spectra {S_i}   i = 1…N_spec   (Δλ ~ 0.01 μm)
+    - Corresponding photometric filter set {F_j}   j = 1…N_filt
+    - Desired number of PCA components K  (e.g., K = 8)
+
+Output: 
+    - PCA basis U_K (size N_λ × K)
+    - Kernel density estimate (KDE) model p(z) over latent space
+    - Trained encoder E (auto‑ML regressor) mapping photometry → latent coefficients
+    - Trained taxonomic classifier C operating on latent space
+
+for each spectrum S_i:
+    normalize reflectance (divide by solar spectrum)
+    resample onto common wavelength grid {λ_t}   t = 1…N_λ
+
+Form data matrix X = [S_1, S_2, …, S_N_spec]  (size N_λ × N_spec)
+Center X by subtracting column means
+Compute covariance Σ = (1/(N_spec-1)) * X_centered * X_centeredᵀ
+Perform eigen‑decomposition of Σ
+Select top K eigenvectors U_K
+Project spectra onto PCA basis: Z_real = U_Kᵀ * X_centered   (size K × N_spec)
+
+Choose Gaussian kernel bandwidth h (e.g., h = 0.5)
+Fit multivariate KDE p(z) to Z_real  (K‑dimensional data)
+Generate M synthetic latent vectors {z_synth_m} by sampling from KDE
+For each z_synth_m:
+    reconstruct synthetic spectrum: S_synth_m = U_K * z_synth_m + mean_vector
+
+For each synthetic spectrum S_synth_m:
+    for each filter F_j:
+        compute theoretical reflectance m_{m,j} = ∫ S_synth_m(λ) * T_j(λ) dλ
+    Add Gaussian noise to each m_{m,j} with σ_rel = 0.20  (20% relative uncertainty)
+    Store noisy photometry vector m_m = [m_{m,1}, …, m_{m,N_filt}]
+    Store corresponding latent vector z_synth_m
+
+Inputs:  {m_m}   (size M × N_filt)
+Targets:  {z_synth_m}   (size M × K)
+Use AutoML framework (e.g., AutoGluon) to search ensembles of GBDT and NN models
+Optimize validation MSE over latent coefficients
+Select best performing model → encoder E
+
+Labels: taxonomy of original spectra (H₂O, CO₂, ORGANIC, METHANOL)
+Inputs:  Z_real  (K × N_spec)
+Use AutoML to train classifier C on latent vectors
+Store classifier C
+
+Input: 
+    - New sparse photometry vector m_obs = [m_obs,1 … m_obs,N_filt]
+    - Encoder E
+    - PCA basis U_K, mean_vector
+    - KDE model p(z)
+    - Classifier C
+    - Number of posterior samples L (e.g., L = 500)
+
+Compute point estimate z_hat = E(m_obs)      (size K)
+Estimate uncertainty covariance Σ_z by:
+    - Propagating encoder prediction uncertainty (e.g., via bootstrap or model ensemble)
+    - Or using KDE posterior p(z | m_obs) ≈ p(m_obs | z) * p(z)  (implicit likelihood)
+Sample {z_l} for l = 1…L from Σ_z (Gaussian or via Gaussian copula to preserve correlations)
+
+For each sampled latent vector z_l:
+    S_l = U_K * z_l + mean_vector          (size N_λ)
+Collect ensemble {S_l}  → posterior distribution over spectra
+Compute point estimate (e.g., mean or MAP) and credible intervals per wavelength
+
+Apply classifier C to z_hat (or to each z_l for posterior probabilities)
+Return posterior taxonomic probability vector P_tax = C(z_hat)
+
+Return:
+    - Reconstructed spectrum mean S_mean and 68%/95% credible intervals
+    - Taxonomic probability vector P_tax
+    - (Optional) Full posterior sample set {S_l}

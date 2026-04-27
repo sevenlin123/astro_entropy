@@ -1,0 +1,55 @@
+Inputs:
+    S_ref      – Matrix of reference near‑IR spectra (n_spec × n_wave)
+    F_filters  – Array of instrument filter throughput curves
+    L_labels   – Taxonomic labels for each reference spectrum
+    K          – Number of principal components to retain (e.g., 10)
+    h_KDE      – Bandwidth for kernel density estimation
+    N_aug      – Number of synthetic latent vectors to generate (e.g., 5000)
+    σ_phot     – Standard deviation for photometric noise (fractional)
+
+Outputs:
+    Reconstructed spectrum for any new photometric observation
+    Probabilistic taxonomy prediction
+
+U, Σ, Vt = SVD(S_centered)                     # Singular Value Decomposition
+PC_basis = U[:, :K]                            # First K eigenvectors
+coeff_real = S_centered @ PC_basis              # Projection onto PCs
+
+kde_model = KDE(coeff_real, bandwidth=h_KDE)    # e.g., Gaussian kernel
+
+coeff_syn = kde_model.sample(N_aug)             # Draw N_aug samples
+
+S_syn_centered = coeff_syn @ PC_basis.T         # Back‑projection
+S_syn = S_syn_centered + μ_spectrum            # Add mean spectrum
+
+for each filter f in F_filters:
+    R_f[i] = integral( S_syn[i] * f_response(f) ) / integral( f_response(f) )
+
+R_f_noisy[i] = R_f[i] + Normal(0, σ_phot * R_f[i])
+
+regressor = AutoML_Regressor(
+                estimators=['GBDT', 'RandomForest', 'NeuralNet'],
+                search_strategy='grid')
+
+regressor.fit( X = R_f_noisy , y = coeff_syn )
+
+class_labels = L_labels
+
+classifier = AutoML_Classifier(
+                 estimators=['XGBoost', 'LogisticRegression', 'NeuralNet'],
+                 search_strategy='grid')
+
+classifier.fit( X = coeff_real , y = class_labels )
+
+m_norm = (m_obs – mean(m_obs)) / std(m_obs)   # optional scaling
+
+coeff_pred_mean, coeff_pred_cov = regressor.predict_with_uncertainty(m_norm)
+# For probabilistic reconstruction, sample N_samples from the predictive distribution
+coeff_samples = multivariate_normal(mean=coeff_pred_mean,
+                                   cov=coeff_pred_cov,
+                                   size=N_samples)
+
+S_decoded_centered = coeff_samples @ PC_basis.T
+S_decoded = S_decoded_centered + μ_spectrum
+
+tax_prob = classifier.predict_proba(coeff_pred_mean)

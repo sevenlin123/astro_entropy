@@ -1,0 +1,107 @@
+INPUT:
+   Photometric catalog of targets:
+      For each target t:
+         Observed magnitudes m_t[j]   (j = 1 … M filters)
+         Uncertainties σ_t[j]
+         Filter zero‑points ZP[j]
+   Spectral library:
+      Reference spectra S_ref[i](λ)   (i = 1 … N_ref)
+
+OUTPUT:
+   For each target t:
+      Reconstructed reflectance spectrum S_rec_t(λ)
+      Taxonomic probability vector P_t(k)   (k = 1 … K classes)
+      χ²_outlier_flag(t)
+
+--------------------------------------------------------------------
+STEP 1 – Pre‑process Library
+--------------------------------------------------------------------
+1.1  Compute mean spectrum μ(λ) = mean_i{S_ref[i](λ)}
+1.2  Subtract mean: ΔS_ref[i](λ) = S_ref[i](λ) – μ(λ)
+1.3  Perform Principal Component Analysis (PCA):
+      • Assemble matrix D with rows ΔS_ref[i](λ)
+      • Eigen‑decompose covariance of D
+      • Select first N_pc components → basis set B[ℓ](λ), ℓ = 1 … N_pc
+      • Store projection matrix P_{iℓ} = <ΔS_ref[i] , B[ℓ]>
+
+--------------------------------------------------------------------
+STEP 2 – Build Filter Response Matrix
+--------------------------------------------------------------------
+For each filter j:
+   2.1  Obtain transmission curve T_j(λ)
+   2.2  Compute kernel vector R_j[ℓ] =
+          ∫ B[ℓ](λ) * T_j(λ) dλ      for all ℓ
+
+Form global response matrix R of shape (M × N_pc).
+
+--------------------------------------------------------------------
+STEP 3 – Convert Photometry to Relative Fluxes
+--------------------------------------------------------------------
+For each target t:
+   3.1  For each filter j:
+         f_t[j]   = 10^( –0.4 * (m_t[j] – ZP[j]) )    // relative flux
+         c_t[j]² = (0.4*ln10 * σ_t[j])² * f_t[j]²   // variance propagated
+
+Store flux vector f_t and covariance matrix C_t = diag(c_t[j]²).
+
+--------------------------------------------------------------------
+STEP 4 – Bayesian Inference of Coefficients
+--------------------------------------------------------------------
+Assume Gaussian prior on coefficients:
+      w ~ N(0, α⁻¹ I)            // α controls weight regularisation
+
+Posterior over w given data f_t:
+      P(w | f_t) ∝ exp[ –½ (f_t – R w)^T C_t⁻¹ (f_t – R w) ]
+                 * exp[ –½ α w^T w ]
+
+MAP estimate (closed form):
+      w_map = (R^T C_t⁻¹ R + α⁻¹ I)^(-1) R^T C_t⁻¹ f_t
+
+If desired, obtain full posterior covariance:
+      Σ_w = (R^T C_t⁻¹ R + α⁻¹ I)^(-1)
+
+--------------------------------------------------------------------
+STEP 5 – Reconstruct Spectrum
+--------------------------------------------------------------------
+5.1  Compute mean‑subtracted spectrum:
+        ΔS_t(λ) = Σ_{ℓ=1}^{N_pc} w_map[ℓ] * B[ℓ](λ)
+5.2  Add mean back:
+        S_rec_t(λ) = μ(λ) + ΔS_t(λ)
+
+--------------------------------------------------------------------
+STEP 6 – Compute Predicted Colors & χ²
+--------------------------------------------------------------------
+6.1  For any desired photometric system:
+        For each band b:
+           p_b = ∫ S_rec_t(λ) * T_b(λ) dλ
+           c_b = 10^(–0.4*(−2.5 log10(p_b) – ZP[b]))
+6.2  χ²_t = Σ_{j=1}^{M} [(f_t[j] – (R w_map)[j])² / c_t[j]²]
+
+--------------------------------------------------------------------
+STEP 7 – Taxonomy Assignment
+--------------------------------------------------------------------
+7.1  For each class k (e.g., C‑type, M‑type, etc.):
+        • Define prototype spectrum S_k(λ)
+        • Compute distance d_k = || S_rec_t(λ) – S_k(λ) ||₂
+7.2  Convert distances to probabilities (soft‑max):
+        P_t(k) = exp(–d_k) / Σ_{k'} exp(–d_{k'})
+
+--------------------------------------------------------------------
+STEP 8 – Outlier Flagging
+--------------------------------------------------------------------
+8.1  If χ²_t > χ²_threshold (pre‑set, e.g., 3σ), set χ²_outlier_flag(t)=TRUE
+      else FALSE
+
+--------------------------------------------------------------------
+STEP 9 – Store Results
+--------------------------------------------------------------------
+For each target t store:
+     S_rec_t(λ)
+     w_map
+     Σ_w
+     P_t(k)
+     χ²_t
+     χ²_outlier_flag(t)
+
+--------------------------------------------------------------------
+END

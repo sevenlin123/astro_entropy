@@ -1,0 +1,125 @@
+#---------------------------------------------
+# 1. Pre‑processing – Train the spectral manifold
+#---------------------------------------------
+
+function TRAIN_PCA(spectra_matrix, K):
+    # spectra_matrix: N_spec x N_wave   (each row is one observed spectrum)
+    # K: desired number of principal components
+    #
+    # STEP 1: Center the data
+    mean_spectrum = mean(spectra_matrix, axis=0)          # vector of length N_wave
+    centered = spectra_matrix - mean_spectrum            # N_spec x N_wave
+
+    # STEP 2: Compute covariance matrix (or use SVD for stability)
+    U, S, Vt = svd(centered, full_matrices=False)       # U: N_spec x N_spec, S: vector, Vt: N_wave x N_wave
+    PCs = Vt[:K, :]                                      # K x N_wave (rows are eigen‑spectra)
+
+    # STEP 3: Compute prior statistics in PC space
+    coeffs = (centered @ PC.T).T                         # K x N_spec   (coefficients of each spectrum)
+    prior_mean = zeros(K)                                # assume zero mean in PC space
+    prior_cov  = diag(S[:K]**2 / (N_spec-1))              # diagonal covariance (eigen‑values)
+
+    return mean_spectrum, PCs, prior_mean, prior_cov
+
+#---------------------------------------------
+# 2. Forward model – From PC coefficients to photometry
+#---------------------------------------------
+
+function MODEL_PHOTOMETRY(coeff_vec, mean_spectrum, PCs, filter_response):
+    # coeff_vec: K‑dim vector of PC coefficients
+    # filter_response: dictionary {filter_name: array(N_wave)}
+    #
+    # Reconstruct spectrum from coefficients
+    recon_spectrum = mean_spectrum + (coeff_vec @ PCs)    # shape: (N_wave,)
+    photom = {}
+    for name, resp in filter_response.items():
+        # Integrate spectrum weighted by filter transmission
+        photom[name] = sum(recon_spectrum * resp) / sum(resp)
+    return photom
+
+#---------------------------------------------
+# 3. Bayesian inference – Posterior of PC coeffs
+#---------------------------------------------
+
+function INFER_POSTERIOR(observed_phot, err_phot, filter_response,
+                        mean_spectrum, PCs, prior_mean, prior_cov):
+    # observed_phot, err_phot: dictionaries {filter_name: value} (same keys)
+    # Build design matrix A where each column corresponds to a PC contribution to a filter
+    filter_names = list(filter_response.keys())
+    K = PCs.shape[0]
+    M = len(filter_names)                                 # number of filters
+
+    A = zeros((M, K))
+    for i, name in enumerate(filter_names):
+        resp = filter_response[name]
+        # derivative of photometry w.r.t. each PC coefficient
+        for k in range(K):
+            pc_contrib = PCs[k, :] * resp
+            A[i, k] = sum(pc_contrib) / sum(resp)
+
+    # Observation vector y and noise covariance C_y
+    y = np.array([observed_phot[name] for name in filter_names])
+    C_y = diag([err_phot[name]**2 for name in filter_names])   # M x M
+
+    # Prior (mean, cov)
+    mu0 = prior_mean                                   # K
+    C0  = prior_cov                                     # K x K
+
+    # Likelihood: y | coeff ~ N(A*coeff, C_y)
+    # Posterior (Gaussian): p(coeff | y) ∝ N(μ_post, Σ_post)
+    # Analytical solution:
+    Σ_post = inv(inv(C0) + A.T @ inv(C_y) @ A)
+    μ_post = Σ_post @ (inv(C0) @ mu0 + A.T @ inv(C_y) @ y)
+
+    return μ_post, Σ_post
+
+#---------------------------------------------
+# 4. Spectrum reconstruction & uncertainty
+#---------------------------------------------
+
+function RECONSTRUCT_SPECTRUM(μ_post, Σ_post, mean_spectrum, PCs, n_samples=1000):
+    # Draw samples from posterior
+    coeff_samples = mvn_sample(μ_post, Σ_post, size=n_samples)   # n_samples x K
+    spectra_samples = []
+    for coeff_vec in coeff_samples:
+        recon = mean_spectrum + (coeff_vec @ PCs)                 # vector (N_wave,)
+        spectra_samples.append(recon)
+
+    spectra_samples = stack(spectra_samples)                       # n_samples x N_wave
+
+    # Compute posterior predictive mean and confidence bands
+    spectrum_mean   = mean(spectra_samples, axis=0)
+    spectrum_std    = std(spectra_samples, axis=0)                 # per‑wavelength 1‑sigma
+
+    return spectrum_mean, spectrum_std, spectra_samples
+
+#---------------------------------------------
+# 5. Full workflow for a catalog of TNOs
+#---------------------------------------------
+
+# Load training spectra and filter transmissions
+spectra_matrix = load_spectra()           # N_spec x N_wave
+filter_response = load_filters()         # dict of filter_name -> N_wave array
+
+# Step 1: Train PCA
+mean_spectrum, PCs, prior_mean, prior_cov = TRAIN_PCA(spectra_matrix, K=10)
+
+# Loop over all TNOs with sparse photometry
+for obj in catalog:
+    observed_phot = obj.photometry            # dict {filter: value}
+    err_phot     = obj.photometric_errors    # dict {filter: error}
+
+    # Step 3: Infer posterior over PC coefficients
+    μ_post, Σ_post = INFER_POSTERIOR(observed_phot, err_phot,
+                                     filter_response,
+                                     mean_spectrum, PCs, prior_mean, prior_cov)
+
+    # Step 4: Reconstruct spectrum and uncertainty bands
+    spec_mean, spec_std, spec_samples = RECONSTRUCT_SPECTRUM(μ_post, Σ_post,
+                                                             mean_spectrum, PCs)
+
+    # Store or export results
+    obj.reconstructed_spectrum = spec_mean
+    obj.spectrum_uncertainty   = spec_std
+    obj.posterior_coeffs       = μ_post
+    obj.coeff_covariance       = Σ_post

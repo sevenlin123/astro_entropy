@@ -1,0 +1,64 @@
+INPUT
+    S_train[1..N][1..L]          # Training spectra (flux vs. wavelength)
+    w_train[1..N]                # Optional uncertainties of training spectra
+    m_obs[1..M]                  # Observed photometry for target object
+    σ_obs[1..M]                  # Measurement uncertainties of photometry
+    R[1..M][1..L]                # Filter response functions (normalized)
+
+PARAMETERS
+    K                            # Number of principal components to retain (4–10)
+
+STEP 1 – Build Spectral Mean and Principal Components
+----------------------------------------------------
+1.1  Compute mean spectrum μ[1..L] = (1/N) Σ_{i=1..N} S_train[i]
+1.2  Center training data: X[i,λ] = S_train[i,λ] – μ[λ]   for all i,λ
+1.3  Perform Singular Value Decomposition: X = U * Σ * V^T
+1.4  Extract first K right‑singular vectors: PC_k[1..L] = V[:,k]  for k = 1..K
+1.5  Store singular values σ_k = Σ[k,k] to compute prior covariance
+
+STEP 2 – Construct Design Matrix for Photometry
+----------------------------------------------
+2.1  For each filter j = 1..M:
+       For each component k = 1..K:
+           H[j,k] = Σ_{λ=1..L}  PC_k[λ] * R[j,λ]      # Integral over wavelength
+       d[j]   = Σ_{λ=1..L}  μ[λ] * R[j,λ]            # Photometry of mean spectrum
+
+STEP 3 – Define Priors for Component Coefficients
+------------------------------------------------
+3.1  Prior mean a_prior = 0 (vector of length K)
+3.2  Prior covariance Λ = diag(σ_1^2, …, σ_K^2)  # From training singular values
+
+STEP 4 – Bayesian Inference (Linear Gaussian Model)
+--------------------------------------------------
+4.1  Observation noise covariance Σ_y = diag(σ_obs[1]^2, …, σ_obs[M]^2)
+4.2  Compute precision matrices:
+       P_y = Σ_y^{-1}
+       P_a = Λ^{-1}
+4.3  Compute posterior precision:
+       P_post = H^T * P_y * H + P_a
+4.4  Compute posterior mean:
+       a_hat = P_post^{-1} * H^T * P_y * (m_obs – d)
+4.5  Compute posterior covariance:
+       C_a   = P_post^{-1}
+
+STEP 5 – Reconstruct Full Spectrum
+----------------------------------
+5.1  For each wavelength λ = 1..L:
+        s_hat[λ] = μ[λ] + Σ_{k=1..K} a_hat[k] * PC_k[λ]
+5.2  Propagate uncertainties to spectrum:
+        var_s[λ] = Σ_{k=1..K} Σ_{l=1..K}
+                      PC_k[λ] * C_a[k,l] * PC_l[λ]
+
+OUTPUT
+------
+    s_hat[1..L]      # Mean reconstructed spectrum
+    var_s[1..L]      # Variance per wavelength (confidence intervals)
+    a_hat[1..K]      # Posterior means of component coefficients
+    C_a[1..K,1..K]   # Posterior covariance of coefficients
+
+FOR n = 1 TO N_samples:
+    Sample a_sample ~ N(a_hat, C_a)
+    For λ = 1..L:
+        s_sample[λ] = μ[λ] + Σ_k a_sample[k]*PC_k[λ]
+    Store s_sample
+END FOR

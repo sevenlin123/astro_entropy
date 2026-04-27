@@ -1,0 +1,11 @@
+F_pred[i](θ) = Σ_k a_k * S_k[i]
+
+L(F_obs | θ) = Π_i exp[ -(F_obs[i] - F_pred[i](θ))^2 / (2 σ[i]^2) ] / √(2πσ[i]^2)
+
+min(1, exp[logL(θ') - logL(θ_{t-1})])
+
+F_recon(λ) = (1/N_samp) Σ_s Σ_k a_k^(s) * T_k(λ)
+
+r_i^(s) = F_obs[i] - F_pred[i](θ^(s))
+
+|median(r_i)| > τ * MAD_i

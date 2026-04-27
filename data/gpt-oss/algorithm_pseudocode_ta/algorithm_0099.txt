@@ -1,0 +1,48 @@
+INPUT:  Full‑resolution spectra S = { s_1, …, s_N }   // each s_n is a vector of fluxes at M wavelengths
+        Number of principal components K   // 4–10 depending on desired accuracy
+
+1. Compute the mean spectrum μ ← (1/N) Σ_n s_n
+2. Center all spectra:  s'_n ← s_n – μ
+3. Form data matrix X ∈ ℝ^{N×M} from centered spectra {s'_n}
+4. Compute covariance matrix C_X ← (1/(N−1)) Xᵀ X
+5. Perform eigendecomposition:  [λ, v] = eig(C_X)
+6. Sort eigenvectors v by descending eigenvalues λ
+7. Select the first K eigenvectors → PC = [v₁ … v_K]   // each column is a principal component
+8. Store (μ, PC, λ) for inference
+
+INPUT:  Sparse photometry vector d = {d_1,…,d_L}   // L filters (flux or magnitude)
+        Photometric uncertainties σ_d = {σ_1,…,σ_L}
+        Filter response matrices R_l ∈ ℝ^{M}  // for each filter l: R_l(λ) ≡ transmission
+
+1. Build the forward‑model matrix A ∈ ℝ^{L×K}:
+   FOR l = 1 TO L:
+       a_l ← Σ_{m=1}^{M} R_l(m) * PC_{m,:}          // dot product of filter with each PC
+       Set row l of A to a_l
+   END
+
+2. Build the observation vector y_obs:
+   y_obs ← Σ_{l=1}^{L} R_l * (μ)              // integrate mean spectrum over each filter
+   // (if magnitudes, convert to fluxes before this step)
+
+3. Define the likelihood:
+   p(d | α) ∝ exp[ −½ (d – (y_obs + Aα))ᵀ Σ⁻¹ (d – (y_obs + Aα)) ]
+   where Σ = diag(σ_d²)
+
+4. Define the prior on latent coefficients α:
+   α ~ N(0, Λ) ,  Λ = diag(λ₁,…,λ_K)    // principal‑component variances
+
+5. Compute the posterior analytically (linear Gaussian):
+   S  ← ( Aᵀ Σ⁻¹ A + Λ⁻¹ )⁻¹                     // posterior covariance (K×K)
+   m  ← S  Aᵀ Σ⁻¹ ( d – y_obs )                 // posterior mean (K-vector)
+
+6. Reconstruct the full spectrum:
+   ŝ   ← μ + PC * m                            // posterior mean spectrum
+   Var(ŝ) ← PC * S * PCᵀ                       // posterior variance per wavelength
+
+7. Return:
+   - Reconstructed spectrum ŝ
+   - Uncertainty interval: ŝ ± √Var(ŝ)
+   - Posterior coefficients m, covariance S
+
+1. Classify ŝ using existing spectral taxonomy schemes.
+2. Flag objects whose posterior probability mass lies far from the bulk of the training manifold (e.g., χ² > threshold).

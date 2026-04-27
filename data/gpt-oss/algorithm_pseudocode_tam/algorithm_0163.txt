@@ -1,0 +1,78 @@
+text
+Input:
+    - Seed spectra S_seed = {S_i}   // high‑resolution reflectance vectors (λ1 … λN)
+    - JWST NIRCam filter throughputs T_j(λ)   // j = 1…M
+    - Desired number of principal components K (e.g., 8–10)
+    - KDE bandwidth h (≈0.5)
+    - Number of synthetic latent samples N_syn (e.g., 10 000)
+    - Photometric noise level σ_rel (e.g., 0.20)
+
+Output:
+    - PCA model (mean μ_s, eigenvectors U_K)
+    - Synthetic latent dataset L_syn
+    - Synthetic photometry matrix P_syn (M×N_syn)
+
+text
+Compute mean spectrum μ_s = mean(S_seed)
+Center spectra: S_centered = S_seed – μ_s
+Perform SVD on S_centered → eigenvectors U (N×N), singular values Σ
+Select first K columns: U_K = U[:, 0:K]
+Project seed spectra to latent space: Z_seed = S_centered @ U_K   // K×N_seed
+
+text
+Fit multivariate KDE to Z_seed with bandwidth h
+Sample N_syn latent vectors: Z_syn ~ KDE
+
+text
+For each z in Z_syn:
+    Reconstruct spectrum: s = μ_s + U_K @ z          // length N
+    Store s in S_syn
+
+text
+For each synthetic spectrum s in S_syn:
+    For each filter j:
+        Compute theoretical reflectance m_j = ∫ s(λ) * T_j(λ) dλ / ∫ T_j(λ) dλ
+    Form photometry vector m = [m_1 … m_M]
+    Add Gaussian noise: m_noisy = m + N(0, σ_rel² * m²)
+    Store m_noisy in P_syn
+
+text
+Training inputs X = P_syn      // M‑dimensional photometry
+Training targets Y = Z_syn     // K‑dimensional latent coefficients
+
+text
+2.1 Latent‑Space Regressor (Encoder)
+    Use AutoML (e.g., AutoGluon) to train an ensemble regressor R_enc
+    Input: X
+    Output: Predicted latent coefficients ŷ = R_enc(X)
+
+2.2 Taxonomy Classifier
+    Define taxonomy labels for each seed spectrum (H₂O, CO₂, Organic, Methanol)
+    Map labels onto latent coordinates Z_seed
+    Train AutoML classifier C_tax on (Z_seed, labels)
+
+text
+Input:
+    - New photometric measurement p_obs = [p_1 … p_M]
+
+Procedure:
+1. Predict latent coefficients:
+       z_pred = R_enc(p_obs)          // point estimate
+   (Optional: obtain predictive distribution if regressor supports it.)
+
+2. Decode spectrum:
+       s_recon = μ_s + U_K @ z_pred    // high‑resolution spectrum
+
+3. Taxonomy prediction:
+       tax_prob = C_tax(z_pred)       // probability vector over classes
+
+Output:
+    - Reconstructed spectrum s_recon
+    - Taxonomic probability tax_prob
+
+text
+If R_enc supplies a predictive distribution:
+    Sample L times: {z_l} ~ R_enc(p_obs)
+    For each sample:
+        s_l = μ_s + U_K @ z_l
+    Estimate spectral mean and variance across {s_l}

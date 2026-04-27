@@ -1,0 +1,11 @@
+for i in 1..N:
+         z_real[i] = eig_vecs[:,1:K]ᵀ * S_centered[i]
+
+S_syn[j] = μ_S + E * z_syn[j]
+
+for each filter f:
+         m_syn[j,f] = ∫ S_syn[j](λ) * T_f(λ) dλ / ∫ T_f(λ) dλ
+
+m_noisy[j,f] = m_syn[j,f] * (1 + Normal(0, σ_rel))
+
+S_rec = μ_S + E * z_s

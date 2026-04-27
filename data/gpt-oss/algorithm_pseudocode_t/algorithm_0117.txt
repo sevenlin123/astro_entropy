@@ -1,0 +1,53 @@
+INPUT
+    P_j,i       – observed apparent magnitude for object j in filter i
+    σ_j,i       – photometric uncertainty for P_j,i
+    T_i(λ)      – transmission curve of filter i
+    {S_k(λ)}    – set of K reference spectra (k = 1 … K)
+    α           – Dirichlet concentration hyper‑parameter (default 1/K)
+
+OUTPUT
+    ŵ_j        – posterior mean vector of class weights for object j
+    f̂_j(λ)     – reconstructed spectrum for object j
+    U_j(λ)      – spectral uncertainty envelope for object j
+
+--------------------------------------------------------------------
+PRE‑COMPUTATION
+--------------------------------------------------------------------
+1. For each reference spectrum k and each filter i:
+       M_k,i ← ∫ S_k(λ) · T_i(λ) dλ          // expected magnitude of class k in filter i
+   Store matrix M of size K × N_filters.
+
+--------------------------------------------------------------------
+FOR EACH OBJECT j
+--------------------------------------------------------------------
+2. Initialize MCMC (or VI) sampler with parameters:
+       w_j      ~ Dirichlet(α)                     // class probability vector
+       μ_j      ~ Normal(μ0, σ0^2)                 // global magnitude offset
+   (Optional: include scaling factor if albedo needed.)
+
+3. DEFINE likelihood for all filters i:
+       L_j = Π_i  Normal(P_j,i | μ_j + Σ_k w_j,k * M_k,i , σ_j,i^2)
+
+4. Run sampler for sufficient iterations:
+       - At each iteration:
+           * Sample w_j^(t) from its full conditional
+           * Sample μ_j^(t) from its full conditional
+       - Collect samples {w_j^(t), μ_j^(t)} for t = 1 … N_samp
+
+5. Compute posterior estimates:
+       ŵ_j ← mean_t( w_j^(t) )                    // vector of class fractions
+       μ̂_j ← mean_t( μ_j^(t) )
+
+6. Reconstruct spectrum:
+       f̂_j(λ) ← Σ_k ŵ_j,k * S_k(λ)               // weighted sum of reference spectra
+
+7. Quantify uncertainty:
+       For each λ:
+           U_j(λ) ← quantile_range{ Σ_k w_j^(t),k * S_k(λ) }  // e.g., 16th–84th percentile
+
+--------------------------------------------------------------------
+END FOR
+--------------------------------------------------------------------
+
+RETURN
+    {ŵ_j, f̂_j(λ), U_j(λ)} for all objects j

@@ -1,0 +1,69 @@
+INPUT:
+  S_train[1..N]          # N training near‑IR spectra (vector of fluxes at M wavelengths)
+  F_filters[1..L]        # L filter transmission curves (each defined over the same M wavelengths)
+  phot_obs[obj]          # Observed photometry for each target object: fluxes f_j and uncertainties σ_j for j = 1..L
+  K_pc                   # Desired number of principal components (e.g. 8)
+
+OUTPUT:
+  spec_mean[obj]         # Reconstructed mean spectrum (length M) for each object
+  spec_cov[obj]          # Spectral covariance matrix (M×M) representing propagated uncertainties
+  coeff_post_mean[obj]   # Posterior mean of PC coefficients (length K_pc)
+  coeff_post_cov[obj]    # Posterior covariance of PC coefficients (K_pc×K_pc)
+
+--------------------------------------------------------------------
+STEP 0 – Pre‑processing of Training Spectra
+--------------------------------------------------------------------
+1. Compute mean spectrum μ_s = (1/N) Σ_{i=1}^{N} S_train[i]
+2. Center spectra: X[i] = S_train[i] – μ_s  for i = 1..N
+3. Perform Singular Value Decomposition (SVD):
+       [U, Σ, V^T] = svd(X, full_matrices=False)
+   where columns of U are orthonormal principal components.
+4. Select first K_pc columns of U → PC[1..K_pc]   # each PC is a vector of length M
+5. Record singular values s_k = diag(Σ)[k], k=1..K_pc
+
+--------------------------------------------------------------------
+STEP 1 – Forward Photometric Model
+--------------------------------------------------------------------
+For each filter l = 1..L:
+  1. Compute filter response vector r_l (length M) from F_filters[l]
+  2. Compute projected basis vectors:
+        p_k[l] = dot(PC[k], r_l)   for k = 1..K_pc
+     (scalar projection of each PC onto filter l)
+  3. Compute mean photometric flux for filter l:
+        m_l = dot(μ_s, r_l)
+
+--------------------------------------------------------------------
+STEP 2 – Bayesian Inference of PC Coefficients
+--------------------------------------------------------------------
+Assume prior on coefficients c ~ Normal(0, I_K)  (standard normal)
+Likelihood for an object given coefficients c:
+  For each filter l:
+      predicted_f_l(c) = m_l + Σ_{k=1}^{K_pc} c_k * p_k[l]
+  Likelihood:  L(c) = Π_{l=1}^{L} N(f_obs[l] | predicted_f_l(c), σ_l^2)
+
+Use analytical solution for linear Gaussian model:
+  A[l,k] = p_k[l]                     # Design matrix A (L × K_pc)
+  b[l]   = f_obs[l] – m_l             # Data vector
+  Σ_prior = I_K
+  Σ_post = inv(A^T * W * A + Σ_prior^{-1})            # Posterior covariance
+  μ_post = Σ_post * (A^T * W * b)                      # Posterior mean
+where W = diag(1/σ_l^2) is weight matrix.
+
+Store:
+  coeff_post_mean[obj]  = μ_post
+  coeff_post_cov[obj]   = Σ_post
+
+--------------------------------------------------------------------
+STEP 3 – Spectrum Reconstruction and Uncertainty Propagation
+--------------------------------------------------------------------
+Reconstruct mean spectrum:
+  spec_mean[obj] = μ_s + Σ_{k=1}^{K_pc} coeff_post_mean[obj][k] * PC[k]
+
+Propagate coefficient covariance to spectral covariance:
+  Let B be matrix of shape (M × K_pc) where B[:,k] = PC[k]
+  spec_cov[obj] = B * coeff_post_cov[obj] * B^T
+
+--------------------------------------------------------------------
+RETURN
+--------------------------------------------------------------------
+Return spec_mean, spec_cov, coeff_post_mean, coeff_post_cov for all target objects.

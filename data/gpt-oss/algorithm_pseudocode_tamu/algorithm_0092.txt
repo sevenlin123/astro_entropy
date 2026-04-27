@@ -1,0 +1,90 @@
+INPUT
+    S_ref[1..N][1..L]      // Reference spectra (N spectra, L wavelength bins)
+    F[1..M][1..L]          // Effective throughput curves for M filters
+    K                      // Number of retained PCA components (e.g., K = 8–10)
+    h                      // KDE bandwidth (e.g., h = 0.5)
+    n_aug                  // Number of synthetic latent samples (e.g., 10 000)
+    n_mc                   // Number of Monte‑Carlo perturbations per observation
+    rel_noise              // Relative photometric noise level (e.g., 0.20)
+
+STEP 1 – PRE‑PROCESS REFERENCE SPECTRA
+    1.1 Normalize each S_ref[n] to its median reflectance.
+    1.2 Store mean spectrum μ_s ≡ mean(S_ref).
+
+STEP 2 – PRINCIPAL COMPONENT ANALYSIS
+    2.1 Center spectra:  S_centered[n] = S_ref[n] – μ_s.
+    2.2 Compute covariance matrix C = (S_centeredᵀ · S_centered) / (N‑1).
+    2.3 Perform eigendecomposition:  C = U·Λ·Uᵀ.
+    2.4 Select first K eigenvectors U_K (size L×K) and eigenvalues Λ_K.
+    2.5 Project reference spectra to latent space:
+            Z_ref[n] = U_Kᵀ · S_centered[n]       // shape: N×K
+
+STEP 3 – BUILD CONTINUOUS PRIOR VIA KDE
+    3.1 Fit Gaussian KDE to {Z_ref[n]} with bandwidth h.
+    3.2 Draw n_aug samples:  Z_syn[i] ~ KDE(Z_ref), i = 1…n_aug   // shape: n_aug × K
+    3.3 For each Z_syn[i], reconstruct spectrum:
+            S_syn[i] = μ_s + U_K · Z_syn[i]    // shape: n_aug × L
+
+STEP 4 – GENERATE NOISY SYNTHETIC PHOTOMETRY
+    4.1 For each synthetic spectrum S_syn[i]:
+            (a) For each filter m = 1…M:
+                    p_syn[i,m] = ∫ S_syn[i](λ) · F[m](λ) dλ      // band flux
+            (b) Add Gaussian noise:
+                    p_noisy[i,m] = p_syn[i,m] * (1 + ε), where ε ~ N(0, rel_noise²)
+    4.2 Assemble training set:
+            X_train = {p_noisy[i,:]}      // shape: n_aug × M
+            Y_train = {Z_syn[i,:]}        // shape: n_aug × K
+
+STEP 5 – TRAIN AUTOML REGRESSOR
+    5.1 Instantiate AutoML framework (e.g., AutoGluon Tabular).
+    5.2 Feed X_train → Y_train to learn mapping f_reg : ℝᴹ → ℝᴷ.
+    5.3 Save trained regressor R.
+
+STEP 6 – OPTIONAL: TAXONOMY CLASSIFIER
+    6.1 Label each reference spectrum with class C[n] (Water, CO₂, Organic, Methanol).
+    6.2 Train classifier on {Z_ref[n]} → C[n] using AutoML, yielding model C_tr.
+    6.3 Save trained classifier C_tr.
+
+--------------------------------------------------------------------
+PHASE: INFERENCE (FOR A NEW OBSERVED OBJECT)
+--------------------------------------------------------------------
+INPUT
+    p_obs[1..M]             // Observed photometry
+    σ_obs[1..M]             // Associated 1σ uncertainties
+
+OUTPUT
+    S_hat[1..L]             // Mean reconstructed spectrum
+    CI_low[1..L], CI_up[1..L]   // 68% (or desired) confidence interval
+    P_class[1..4]           // Taxonomy probabilities (optional)
+
+PROCEDURE
+
+    1. Monte‑Carlo perturbation of photometry:
+        For j = 1 … n_mc:
+            For m = 1 … M:
+                p_j[m] = p_obs[m] + η,  η ~ N(0, σ_obs[m]²)
+            # Predict latent vector:
+            z_j = R.predict(p_j)          # shape: K
+            Store z_j in list Z_pred
+
+    2. Optional: impose covariance structure via Gaussian Copula:
+        Compute empirical covariance Σ_z from Z_pred.
+        Sample additional latent vectors z'_j ~ Copula(Σ_z) if desired.
+
+    3. Reconstruct spectra from each latent sample:
+        For each z in Z_pred (and/or z'):
+            s = μ_s + U_K · z               # shape: L
+            Store s in list S_samples
+
+    4. Compute statistics over S_samples:
+        S_hat  = mean(S_samples)           # element‑wise mean
+        CI_low = percentile(S_samples, 16%)  # lower bound of 68% interval
+        CI_up  = percentile(S_samples, 84%)  # upper bound
+
+    5. Taxonomy probabilities (optional):
+        For each z in Z_pred:
+            c = C_tr.predict_proba(z)      # probability vector over classes
+            Accumulate probabilities over all samples.
+        P_class = mean(accumulated probabilities)
+
+RETURN S_hat, CI_low, CI_up, P_class

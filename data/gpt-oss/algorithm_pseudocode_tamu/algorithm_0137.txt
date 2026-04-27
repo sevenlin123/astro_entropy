@@ -1,0 +1,92 @@
+INPUT:
+    - Reference spectra S_ref[1…N]          // high‑resolution reflectance vectors
+    - Filter throughput curves T_filt[j]    // j = 1 … J (e.g., JWST NIRCam bands)
+    - Sparse photometry m_obs[1…J]         // observed reflectances with uncertainties
+    - Hyperparameters:
+        * K       // number of PCA components to retain (e.g., 8–10)
+        * h_kde   // KDE bandwidth
+        * N_aug   // number of synthetic latent samples to generate (e.g., 10⁴)
+        * σ_noise // relative photometric noise level for forward modeling (e.g., 0.20)
+
+OUTPUT:
+    - Reconstructed spectrum S_rec[λ]   // dense reflectance over λ
+    - Credible interval bounds for S_rec
+    - Taxonomic probability vector P_tax[1…C]
+    
+--------------------------------------------------------------------
+STEP 1 – BUILD PRIOR (Latent Manifold)
+--------------------------------------------------------------------
+1.1  Perform PCA on the reference spectra:
+        [U, Λ] = PCA(S_ref)                 // U : eigenvectors (size L×K), Λ: eigenvalues
+        // project spectra into latent space
+        Z_ref[i] = (S_ref[i] · U)            // i = 1 … N, each Z_ref[i] is K‑dim vector
+
+1.2  Estimate continuous density over latent space via Kernel Density Estimation:
+        f_Z(z) ← KDE(Z_ref, bandwidth=h_kde) // Gaussian kernel
+
+1.3  Generate synthetic latent samples:
+        For n = 1 … N_aug:
+            z_syn[n] ← sample_from(f_Z)      // draw a K‑dim vector from KDE density
+            S_syn[n] ← U · z_syn[n]          // inverse PCA → synthetic spectrum
+
+--------------------------------------------------------------------
+STEP 2 – CREATE TRAINING DATABASE (Photometry ↔ Latent)
+--------------------------------------------------------------------
+2.1  FOR each synthetic spectrum S_syn[n]:
+        2.1.1  Compute noiseless synthetic photometry:
+                m_syn_noisy[n,j] = ∫ S_syn[n](λ) · T_filt[j](λ) dλ     // for j = 1…J
+        2.1.2  Add Gaussian noise per band:
+                ε_j ~ Normal(0, σ_noise · m_syn_noisy[n,j])
+                m_syn[n,j] = m_syn_noisy[n,j] + ε_j
+        2.1.3  Store pair (m_syn[n,1…J],  z_syn[n,1…K]) in training set
+
+2.2  Train an encoder (photometry → latent):
+        Encoder_model ← AutoML_Regression(
+                            X = {m_syn[n,1…J]},
+                            y = {z_syn[n,1…K]})
+        // AutoML selects best ensemble (GBDT + NN) and tunes hyper‑parameters.
+
+--------------------------------------------------------------------
+STEP 3 – TAXONOMY CLASSIFIER (Optional but recommended)
+--------------------------------------------------------------------
+3.1  Label each synthetic latent point with taxonomic class (if available):
+        c_syn[n] ← assign_label(S_syn[n])   // e.g., H₂O, CO₂, Organic, Methanol
+3.2  Train a classifier on latent space:
+        Taxo_model ← AutoML_Classifier(
+                          X = {z_syn[n,1…K]}, 
+                          y = {c_syn[n]})
+
+--------------------------------------------------------------------
+STEP 4 – INFERENCE ON NEW OBSERVATION
+--------------------------------------------------------------------
+4.1  Encode observed photometry:
+        z_pred_mean, z_pred_cov ← Encoder_model.predict(m_obs[1…J])
+        // Returns mean vector and covariance (or uncertainty estimates) of latent coeffs
+
+4.2  Sample posterior in latent space using Gaussian Copula:
+        For s = 1 … N_sample:
+            u_s  = sample_uniform(0,1,K)                      // K independent uniform draws
+            z_s  = copula_transform(u_s, μ=z_pred_mean, Σ=z_pred_cov)
+            // copula_transform preserves correlation structure of latent space
+        // Now we have {z_s[1…K]} ≈ posterior samples of latent coefficients
+
+4.3  Decode each sampled latent vector to full spectrum:
+        For each s:
+            S_s = U · z_s
+        // S_s is a dense reflectance spectrum over wavelength grid
+
+4.4  Compute statistics of reconstructed spectrum:
+        S_rec(λ) = mean_{s}( S_s(λ) )
+        CI_lower(λ), CI_upper(λ) = percentile_{s}( S_s(λ), 2.5%, 97.5%)
+
+4.5  Predict taxonomy probabilities:
+        P_tax = Taxo_model.predict_proba(z_pred_mean)
+        // If classifier is not trained, set P_tax uniformly.
+
+--------------------------------------------------------------------
+STEP 5 – OUTPUT
+--------------------------------------------------------------------
+Return:
+    - Reconstructed spectrum S_rec(λ) with credible intervals
+    - Taxonomic probability vector P_tax
+END

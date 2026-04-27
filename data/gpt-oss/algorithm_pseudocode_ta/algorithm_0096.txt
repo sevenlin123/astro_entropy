@@ -1,0 +1,64 @@
+Inputs
+-------
+S          : Matrix of N_s spectra × N_λ wavelengths   (training spectra)
+T_j(λ)     : Transmission curve for each photometric filter j (j = 1…N_f)
+m_j        : Observed flux in filter j
+σ_j        : Measurement uncertainty in filter j
+K          : Number of principal components to retain
+M_samples  : Desired number of posterior samples
+
+Outputs
+-------
+samples_a  : M_samples × K array of posterior PC‑coefficient samples
+μ_recon(λ) : Posterior mean reconstructed spectrum
+CI95(λ)    : 95 % credible interval for reconstructed spectrum
+
+1.1   Compute mean spectrum μ(λ) = (1/N_s) Σ_{k=1}^{N_s} S_k(λ)
+1.2   Center data:  X_k(λ) = S_k(λ) – μ(λ)     for all k
+1.3   Compute covariance matrix C = (1/(N_s-1)) Xᵀ X
+1.4   Eigendecompose:  C = E Λ Eᵀ
+       where E = [e₁(λ), …, e_Ns(λ)]  (principal‑component vectors)
+             Λ = diag(λ₁ ≥ λ₂ ≥ … ≥ λ_Ns)
+1.5   Select first K columns of E → {e_i(λ)}_{i=1}^K
+1.6   Retain eigenvalues λ_i, i=1…K for later use
+
+For each filter j = 1 … N_f:
+    2.1   Compute mean filter flux of the mean spectrum:
+            μ_j = [∫ T_j(λ) μ(λ) dλ] / [∫ T_j(λ) dλ]
+    2.2   For each PC i = 1 … K:
+            B_{j,i} = [∫ T_j(λ) e_i(λ) dλ] / [∫ T_j(λ) dλ]
+
+Given a coefficient vector a = [a₁,…,a_K]:
+
+   For each filter j:
+       p_j(a) = μ_j + Σ_{i=1}^{K} a_i * B_{j,i}
+
+4.1   Likelihood (assuming independent Gaussian noise):
+       L(a) = Π_{j=1}^{N_f}  N( p_j(a) | m_j , σ_j² )
+
+4.2   Prior on PC coefficients (zero‑mean Gaussian with
+       variance from training set):
+       prior(a) = N( a | 0 , diag(λ₁,…,λ_K) )
+
+5.1   Define unnormalised posterior:
+        P(a | data) ∝ L(a) * prior(a)
+
+5.2   Initialise sampler (e.g., Hamiltonian Monte Carlo) at a₀ = 0
+
+5.3   Draw M_samples from P(a | data) using chosen MCMC algorithm
+        Store each draw as a^(s)   (s = 1 … M_samples)
+
+6.1   For each posterior sample a^(s):
+        Reconstruct full spectrum:
+           s^(s)(λ) = μ(λ) + Σ_{i=1}^{K} a_i^(s) * e_i(λ)
+
+6.2   Aggregate reconstructions:
+        μ_recon(λ) = (1/M_samples) Σ_{s=1}^{M_samples} s^(s)(λ)
+
+6.3   Compute 2.5th and 97.5th percentiles over the
+        ensemble {s^(s)(λ)} to obtain CI95(λ)
+
+Return:
+    samples_a  = {a^(s)}_{s=1}^{M_samples}
+    μ_recon(λ)  (posterior mean spectrum)
+    CI95(λ)     (95 % credible interval per wavelength)

@@ -1,0 +1,65 @@
+Input:
+  - Reference spectra S_ref = {S_i}   // i = 1…N_ref, high‑res reflectance vectors
+  - JWST filter transmission curves T_f for f = 1…F
+  - New photometry m_new = {m_f}      // measured reflectance in each filter
+  - Desired number of PCA components K (≤ 10)
+  - KDE bandwidth h (≈ 0.5)
+
+Output:
+  - Reconstructed high‑resolution spectrum S_rec
+  - Credible interval envelope [S_low, S_high]
+  - Taxonomy probability vector p_tax
+  - Optional: ensemble of sampled spectra {S_j}
+
+Procedure:
+
+1. **Principal Component Analysis (PCA)**
+   a. Center S_ref by subtracting mean spectrum μ_S.
+   b. Compute covariance matrix C = cov(S_ref).
+   c. Eigen‑decompose C → eigenvectors V = [v_1 … v_M], eigenvalues λ.
+   d. Select first K eigenvectors V_K = [v_1 … v_K].
+   e. Project each reference spectrum onto V_K:
+        a_i = V_Kᵀ (S_i – μ_S)    // latent coefficient vector (size K)
+
+2. **Kernel Density Estimation (KDE) in Latent Space**
+   a. Fit Gaussian KDE to {a_i} with bandwidth h.
+   b. Sample M_aug synthetic latent vectors {a*_j} from KDE.
+   c. For each a*_j, reconstruct synthetic spectrum:
+        S*_j = V_K a*_j + μ_S
+
+3. **Forward Modeling to Generate Synthetic Photometry**
+   For each synthetic spectrum S*_j:
+     For each filter f:
+       i. Convolve S*_j with transmission T_f to obtain noiseless photometry p_fj.
+     ii. Add Gaussian noise: m_fj = p_fj * (1 + ε_fj),
+         where ε_fj ~ Normal(0, σ_rel²), σ_rel ≈ 0.20.
+   Store pairs (m_j, a*_j).
+
+4. **Encoder Training (Photometry → Latent Coefficients)**
+   a. Assemble training set {(m_j, a*_j)}.
+   b. Train an AutoML regressor R (ensemble of GBDTs, etc.) to predict latent vector a from m.
+   c. Validate via cross‑validation (optional).
+
+5. **Classifier Training (Latent → Taxonomy)**
+   a. Assign taxonomy labels y_i to each reference spectrum S_i.
+   b. Train an AutoML classifier C on {(a_i, y_i)} to output class probabilities.
+
+6. **Inference on New Observation m_new**
+   a. Predict latent coefficient distribution:
+        i. Pass m_new through R to obtain predicted mean μ_a and covariance Σ_a
+           (e.g., via ensemble variance or Gaussian approximation).
+   b. Build Gaussian Copula with marginals from μ_a, Σ_a to preserve dependencies.
+   c. Sample N_sample latent vectors {â_k} from the Copula.
+   d. For each â_k, reconstruct spectrum:
+        Ŝ_k = V_K â_k + μ_S
+   e. Compute spectrum statistics:
+        - Mean spectrum S_mean = average of {Ŝ_k}
+        - Credible bounds (e.g., 2.5th and 97.5th percentiles) per wavelength.
+   f. Classify taxonomy:
+        - Feed μ_a into classifier C to obtain class probability vector p_tax.
+
+7. **Return Results**
+   - S_rec = S_mean
+   - [S_low, S_high] from credible bounds
+   - p_tax
+   - (Optional) Return ensemble {Ŝ_k}.

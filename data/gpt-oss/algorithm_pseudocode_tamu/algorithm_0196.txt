@@ -1,0 +1,103 @@
+pseudocode
+function TRAIN(SPECTRA, FILTERS, LABELS):
+    # ------------------------------------------------------------------
+    # 1.1  Principal‑Component Analysis (define the latent manifold)
+    # ------------------------------------------------------------------
+    μ_S   ← mean(SPECTRA)                     # vector of length L
+    S′    ← SPECTRA - μ_S                      # centered spectra
+    C_S   ← cov(S′)                            # L×L covariance matrix
+    (eig_vals, eig_vecs) ← eig(C_S)           # eigen‑decomposition
+    idx_K ← indices_of_top_K(eig_vals, K)
+    U_K   ← eig_vecs[:, idx_K]                # L×K matrix of PC loadings
+    
+    # Project training spectra to latent space
+    LATENT_TRAIN ← U_Kᵀ · (SPECTRA - μ_S)      # N×K matrix
+
+    # ------------------------------------------------------------------
+    # 1.2  Kernel Density Estimation (continuous prior)
+    # ------------------------------------------------------------------
+    KDE ← FIT_KDE(LATENT_TRAIN, bandwidth=H)   # non‑parametric density
+    LATENT_SYNTH ← SAMPLE(KDE, NSAMP_KDE)       # synthetic latent vectors
+    
+    # ------------------------------------------------------------------
+    # 1.3  Forward model synthetic spectra & photometry
+    # ------------------------------------------------------------------
+    SPEC_SYNTH ← U_K · LATENT_SYNTHᵀ + μ_S     # (N_synth × L)
+    PHOT_SYNTH ← FORWARD_MODEL(SPEC_SYNTH, FILTERS)  # (N_synth × M)
+    
+    # Add realistic photometric noise
+    PHOT_SYNTH_NOISY ← PHOT_SYNTH * (1 + NORM(0, SIGMA_NOISE, size=PHOT_SYNTH.shape))
+    
+    # ------------------------------------------------------------------
+    # 1.4  Train the Encoder (photometry → latent)
+    # ------------------------------------------------------------------
+    ENCODER ← AUTOML_REGRESSOR(PHOT_SYNTH_NOISY, LATENT_SYNTH)
+        # e.g. XGBoost, RandomForest, NeuralNet – automatically chosen
+    
+    # ------------------------------------------------------------------
+    # 1.5  Train the Taxonomy Classifier (latent → class)
+    # ------------------------------------------------------------------
+    CLASSIFIER ← AUTOML_CLASSIFIER(LATENT_TRAIN, LABELS)
+    
+    return (U_K, μ_S, ENCODER, CLASSIFIER)
+
+pseudocode
+FORWARD_MODEL(SPECTRA, FILTERS):
+    # Convolve each spectrum with each filter response curve
+    # Normalize by solar spectrum if needed; return reflectance
+    for each spectrum s in SPECTRA:
+        for each filter f in FILTERS:
+            flux_f ← ∫ s(λ) * f(λ) dλ
+            flux_sun_f ← ∫ S_sun(λ) * f(λ) dλ
+            reflectance_f ← flux_f / flux_sun_f
+            store reflectance_f
+    return array of reflectances
+
+pseudocode
+function RECONSTRUCT(m_obs, U_K, μ_S, ENCODER, CLASSIFIER):
+    # ------------------------------------------------------------------
+    # 2.1  Predict latent coefficient distribution from photometry
+    # ------------------------------------------------------------------
+    a_mean, a_cov  ← ENCODER.predict_distribution(m_obs)
+        # ENCODER returns a predictive mean vector (K) and covariance matrix (K×K)
+
+    # ------------------------------------------------------------------
+    # 2.2  Sample posterior latent vectors (Gaussian copula optional)
+    # ------------------------------------------------------------------
+    LATENT_SAMPLES ← SAMPLE_MULTIVARIATE_NORMAL(mean=a_mean,
+                                                cov=a_cov,
+                                                n=NSAMP_POSTERIOR)
+    
+    # ------------------------------------------------------------------
+    # 2.3  Decode samples to full spectra
+    # ------------------------------------------------------------------
+    SPEC_SAMPLES ← U_K · LATENT_SAMPLESᵀ + μ_S   # (NSAMP_POSTERIOR × L)
+
+    # ------------------------------------------------------------------
+    # 2.4  Compute summary statistics
+    # ------------------------------------------------------------------
+    SPEC_MEAN     ← mean(SPEC_SAMPLES, axis=0)      # expected spectrum
+    SPEC_CI_68    ← percentile(SPEC_SAMPLES, [16,84], axis=0)  # 68 % CI
+    SPEC_CI_95    ← percentile(SPEC_SAMPLES, [2.5,97.5], axis=0)# 95 % CI
+
+    # ------------------------------------------------------------------
+    # 2.5  Taxonomy prediction
+    # ------------------------------------------------------------------
+    TAXONOMY_PROBS ← CLASSIFIER.predict_proba(a_mean)   # vector of class probabilities
+
+    return {
+        "spectrum_mean": SPEC_MEAN,
+        "spectrum_cis": {"68": SPEC_CI_68, "95": SPEC_CI_95},
+        "taxonomy_probs": TAXONOMY_PROBS
+    }
+
+pseudocode
+# 3.1  Train on the reference spectral library
+(U_K, μ_S, ENCODER, CLASSIFIER) ← TRAIN(SPECTRA, FILTERS, LABELS)
+
+# 3.2  For each new object with measured photometry m_obs:
+results ← RECONSTRUCT(m_obs, U_K, μ_S, ENCODER, CLASSIFIER)
+
+# 3.3  results contains:
+#   - reconstructed spectrum (mean + confidence bands)
+#   - probability distribution over taxonomic classes

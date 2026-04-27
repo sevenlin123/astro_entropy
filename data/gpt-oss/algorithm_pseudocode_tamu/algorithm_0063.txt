@@ -1,0 +1,71 @@
+Inputs:
+    - RefSpectra   : array of N_ref high‑resolution reflectance spectra
+                      (shape [N_ref, N_wave])
+    - FilterCurves : dict of M photometric filter transmission curves
+                      (keys = filter names, values = arrays over wavelengths)
+    - Photometry   : new observation (array of M fluxes or magnitudes)
+
+Outputs:
+    - SpecPost      : posterior samples of reconstructed spectrum
+    - SpecMean      : mean reconstructed spectrum
+    - SpecCov       : covariance matrix of reconstructed spectrum
+    - TaxProb       : probability vector over taxonomy classes
+
+--------------------------------------------------------------------
+Pre‑processing & Training
+--------------------------------------------------------------------
+
+1.  # Principal Component Analysis (PCA)
+    P, L = PCA(RefSpectra, n_components = K)        # P: PCs (K × N_wave)
+                                                # L: scores (N_ref × K)
+
+2.  # Latent density estimation via Kernel Density Estimation (KDE)
+    kde = KDE(L, kernel='gaussian', bandwidth = h)   # h ≈ 0.5
+
+3.  # Generate synthetic latent vectors (S_lat)
+    S_lat = sample_from_kde(kde, n_samples = N_aug)   # shape (N_aug, K)
+
+4.  # Decode synthetic latents to spectra
+    S_syn = S_lat @ P                               # shape (N_aug, N_wave)
+
+5.  # Forward model: synthesize photometry for each synthetic spectrum
+    for i in 1 … N_aug:
+        for j in 1 … M:
+            m_i_j = integrate_over_filter(S_syn[i,:], FilterCurves[j])
+        Add Gaussian noise with σ = 0.20 * m_i_j
+        Store (m_i, S_lat[i,:]) as training pair
+
+6.  # Train AutoML regressor (Encoder) mapping photometry → PCA coeffs
+    encoder = AutoML_Regressor()
+    encoder.train(X = {m_i}, y = {S_lat[i,:]})
+
+7.  # Train AutoML classifier (Latent‑space taxonomist)
+    tax_labels = taxonomy_of(RefSpectra)           # known classes for N_ref
+    classifier = AutoML_Classifier()
+    classifier.train(X = L, y = tax_labels)
+
+--------------------------------------------------------------------
+Inference / Reconstruction
+--------------------------------------------------------------------
+
+function reconstruct(Photometry):
+    1.  # Predict latent coefficient distribution
+        mean_lat, cov_lat = encoder.predict_distribution(Photometry)
+        # mean_lat: K‑vector, cov_lat: K×K covariance
+
+    2.  # Sample posterior over latents using Gaussian Copula
+        samples_lat = gaussian_copula_sample(mean_lat, cov_lat,
+                                             n_samples = N_post)
+
+    3.  # Decode each sample to spectrum
+        samples_spec = samples_lat @ P               # shape (N_post, N_wave)
+
+    4.  # Compute posterior statistics
+        SpecMean = mean(samples_spec, axis=0)        # length N_wave
+        SpecCov  = covariance(samples_spec)          # N_wave × N_wave
+        SpecPost = samples_spec                      # all samples
+
+    5.  # Taxonomy probabilities
+        TaxProb = classifier.predict_probability(mean_lat)
+
+    6.  return SpecPost, SpecMean, SpecCov, TaxProb

@@ -1,0 +1,88 @@
+PROCEDURE RECONSTRUCT_SPECTRUM(
+    OBJECT_DATA,          # list of photometric measurements {filter, mag, err_mag}
+    BASE_LIBRARY,         # matrix of basis spectra B[k][λ]  (k = 1…K, λ = 1…L)
+    N_ITER,               # total MCMC iterations
+    BURN_IN,              # number of iterations to discard
+    STEP_SIZE,            # proposal standard deviation
+    ZERO_POINT            # photometric zero‑point for flux conversion
+):
+
+1. CONVERT OBSERVATIONS TO FLUX
+   FOR each filter i in OBJECT_DATA:
+       λ_i ← central_wavelength(filter_i)
+       F_obs[i]      ← 10^(-0.4 * (mag_i - ZERO_POINT))
+       σ_F_obs[i]    ← ln(10)/2.5 * 10^(-0.4 * (mag_i - ZERO_POINT)) * err_mag_i
+   END FOR
+
+2. INTERPOLATE BASIS SPECTRA TO FILTER WAVELENGTHS
+   FOR each basis k in 1…K:
+       B_k_interp[i] ← INTERPOLATE(BASE_LIBRARY[k], λ_i)   # linear interpolation
+   END FOR
+
+3. DEFINE LIKELIHOOD
+   FUNCTION LOG_LIKELIHOOD(w):
+       μ ← Σ_k w_k * B_k_interp      # model flux vector (length = number of filters)
+       RETURN Σ_i log( NORMAL_PDF(F_obs[i] | μ[i], σ_F_obs[i]) )
+   END FUNCTION
+
+4. DEFINE PRIOR (e.g., independent Uniform[0,1] for each weight)
+   FUNCTION LOG_PRIOR(w):
+       IF any w_k < 0 OR w_k > 1 THEN
+           RETURN -∞
+       ELSE
+           RETURN 0
+       END IF
+   END FUNCTION
+
+5. INITIALIZE SAMPLER
+   w_current ← RANDOM_UNIFORM(0, 1, size=K)
+   LOG_PROB_CURRENT ← LOG_LIKELIHOOD(w_current) + LOG_PRIOR(w_current)
+
+6. RUN MCMC (Metropolis–Hastings)
+   samples ← EMPTY_LIST
+   FOR t = 1 TO N_ITER:
+       # Propose new weights
+       w_proposed ← w_current + NORMAL(0, STEP_SIZE, size=K)
+
+       # Enforce bounds [0,1] by reflecting or rejecting
+       FOR each k:
+           IF w_proposed[k] < 0 OR w_proposed[k] > 1 THEN
+               w_proposed[k] ← w_current[k]        # reject bound violation
+           END IF
+       END FOR
+
+       LOG_PROB_PROPOSED ← LOG_LIKELIHOOD(w_proposed) + LOG_PRIOR(w_proposed)
+
+       # Acceptance probability
+       ACCEPT_LOG ← LOG_PROB_PROPOSED - LOG_PROB_CURRENT
+       IF log(U(0,1)) < ACCEPT_LOG THEN
+           w_current ← w_proposed
+           LOG_PROB_CURRENT ← LOG_PROB_PROPOSED
+       END IF
+
+       IF t > BURN_IN THEN
+           APPEND(samples, w_current)
+       END IF
+   END FOR
+
+7. ESTIMATE POSTERIOR MEAN WEIGHTS
+   w_mean ← MEAN(samples, axis=0)
+
+8. RECONSTRUCT SPECTRUM AT HIGH RESOLUTION
+   λ_grid ← LINEAR_SPACE(min(BASE_LIBRARY wavelengths),
+                         max(BASE_LIBRARY wavelengths),
+                         N_POINTS)
+   FOR each basis k:
+       B_k_full ← INTERPOLATE(BASE_LIBRARY[k], λ_grid)
+   END FOR
+   spectrum_reconstructed ← Σ_k w_mean[k] * B_k_full
+
+9. RETURN
+   {
+       "weights_posterior": samples,
+       "weights_mean": w_mean,
+       "reconstructed_spectrum": spectrum_reconstructed,
+       "wavelength_grid": λ_grid
+   }
+
+END PROCEDURE

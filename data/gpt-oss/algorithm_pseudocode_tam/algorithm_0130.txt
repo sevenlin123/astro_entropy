@@ -1,0 +1,95 @@
+text
+--------------------------------------------------------------------
+ALGORITHM TRAIN_RECONSTRUCTOR
+--------------------------------------------------------------------
+INPUT:
+    Spectra   :  N × L array   // N training spectra (L wavelength bins)
+    Filters   :  M × L array   // M instrument filter responses
+    Labels    :  N‑length vector of taxonomy labels
+    K         :  integer      // number of PCA components to keep
+    Maug      :  integer      // number of synthetic latent samples
+    h         :  float        // KDE bandwidth
+    NOISE     :  float (≈0.2) // relative photometric noise level
+
+OUTPUT:
+    μ_S       :  1 × L vector // mean spectrum
+    V         :  L × K array  // PCA basis (columns are eigenvectors)
+    R         :  regressor   // maps photometry → K‑dimensional latent coeffs
+    C          :  classifier // maps latent coeffs → taxonomy probabilities
+
+PROCEDURE:
+1. ---------- PCA on real spectra ----------
+   1.1 μ_S  ← mean(Spectra, axis=0)          // 1×L
+   1.2 S_c ← Spectra – μ_S                  // center spectra
+   1.3 [U, Σ, Wᵀ] ← SVD(S_c)                // SVD of centered data
+   1.4 V ← Wᵀ[0:K].T                       // L×K principal component matrix
+   1.5 C_real ← S_c · V                     // N×K matrix of latent coeffs
+
+2. ---------- Build continuous prior (KDE) ----------
+   2.1 Fit KDE to rows of C_real with bandwidth h
+   2.2 For i in 1 … Maug:
+           C_synth[i] ← sample_from_KDE()
+       end for
+
+3. ---------- Generate synthetic spectra & photometry ----------
+   3.1 For each i in 1 … Maug:
+           // Reconstruct high‑resolution spectrum
+           S_syn ← μ_S + V · C_synth[i]   // 1×L
+           // Forward‑model photometry
+           For each filter j in 1 … M:
+               num ← ∑_{λ} S_syn[λ] * Filters[j][λ]
+               den ← ∑_{λ} Filters[j][λ]
+               m_j ← num / den            // mean reflectance in filter j
+               σ_j ← NOISE * m_j          // assumed 20 % relative error
+               m_j_noisy ← m_j + Normal(0, σ_j)
+           end for
+           Train_X[i] ← [m_1_noisy, …, m_M_noisy]    // M‑dim photometry
+           Train_Y[i] ← C_synth[i]                   // K‑dim latent coeffs
+       end for
+
+4. ---------- Train photometry→latent regressor ----------
+   4.1 R ← AutoML_Regressor()        // e.g., Gradient‑Boosted Decision Trees
+   4.2 R.fit(Train_X, Train_Y)
+
+5. ---------- Train latent→taxonomy classifier ----------
+   5.1 Class_X ← C_real              // N×K latent coefficients of real spectra
+   5.2 Class_Y ← Labels             // taxonomy labels
+   5.3 C ← AutoML_Classifier()
+   5.4 C.fit(Class_X, Class_Y)
+
+RETURN  μ_S, V, R, C
+END ALGORITHM
+
+text
+--------------------------------------------------------------------
+ALGORITHM RECONSTRUCT_SPECTRUM
+--------------------------------------------------------------------
+INPUT:
+    μ_S, V   :  from TRAIN_RECONSTRUCTOR
+    R, C     :  trained regressor & classifier
+    m_obs    :  M‑dim photometric vector (observed reflectances)
+
+OUTPUT:
+    S_recon  :  estimated high‑resolution spectrum (1×L)
+    S_cov    :  covariance matrix of spectrum estimate (optional)
+    tax_prob :  taxonomy probability vector
+
+PROCEDURE:
+1. ---------- Predict latent coefficients ----------
+   1.1 (C_mean, C_std) ← R.predict_with_uncertainty(m_obs)
+       // many regressors provide a predictive mean and (diag) variance
+
+2. ---------- Optional Monte‑Carlo uncertainty ----------
+   2.1 For k in 1 … Nsample:
+           C_k ← C_mean + Normal(0, C_std)        // draw latent vector
+           S_k ← μ_S + V · C_k                    // reconstruct spectrum
+       end for
+   2.2 S_recon ← mean(S_k over k)
+   2.3 S_cov   ← cov(S_k over k)
+   // If Nsample==1, simply use C_mean to construct S_recon
+
+3. ---------- Taxonomy prediction ----------
+   3.1 tax_prob ← C.predict_proba(C_mean)        // probability per class
+
+RETURN  S_recon, S_cov, tax_prob
+END ALGORITHM

@@ -1,0 +1,108 @@
+S_train          : N_train × N_λ matrix of reference spectra (reflectance vs. wavelength)
+T_filters        : N_filt × N_λ matrix of instrument filter throughputs
+labels_train     : N_train taxonomy labels
+K                : number of PCA components to retain
+h_KDE            : KDE bandwidth
+N_synth          : number of synthetic latent samples to generate
+N_post           : number of posterior spectrum samples to draw
+σ_noise_rel      : relative photometric noise (default 0.20)
+
+μ_Spectrum       : mean reconstructed spectrum (N_λ array)
+CI_Lower, CI_Upper : per‑wavelength 95 % credible interval bounds
+TaxonomyProb     : probability vector over taxonomy classes
+
+PCA_fit(M, K):
+    mean_M   ← mean(M, axis=0)
+    centered ← M – mean_M
+    U, Σ, Vt ← SVD(centered)
+    V        ← Vt[:K, :]           # first K eigenvectors (rows)
+    return mean_M, V
+
+Project(S, mean_M, V):
+    return (S – mean_M) · Vᵀ
+
+InverseProject(a, mean_M, V):
+    return mean_M + a · V
+
+ForwardPhotometry(S):
+    for each filter k:
+        m_k ← ∫ S(λ) * T_filters[k, λ] dλ
+    return m_vector
+
+AddNoise(m_vec):
+    return m_vec + Normal(0, σ_noise_rel * m_vec)
+
+KDE_fit(samples, h):
+    return KDE object with Gaussian kernel and bandwidth h
+
+SampleFromKDE(KDE_obj, N):
+    return array of N latent vectors drawn from KDE_obj
+
+TrainRegressor(X, Y):
+    return fitted ensemble regressor (e.g., GBDT) that predicts mean & variance
+
+PredictLatent(regressor, m):
+    return μ_pred, Σ_pred   # posterior mean & covariance
+
+TrainClassifier(latent_vectors, labels):
+    return fitted classifier (e.g., GBDT)
+
+PredictClass(classifier, latent_vec):
+    return probability vector over classes
+
+# 4.1  PCA on reference spectra
+mean_spec, V_pca ← PCA_fit(S_train, K)
+
+# 4.2  Latent vectors of real spectra
+latent_real ← [ Project(S_train[i], mean_spec, V_pca) for i in 1…N_train ]
+
+# 4.3  KDE prior on latent space
+KDE_prior ← KDE_fit(latent_real, h_KDE)
+
+# 4.4  Synthetic latent samples
+latent_synth ← SampleFromKDE(KDE_prior, N_synth)
+
+# 4.5  Forward modelling and noisy photometry
+X_train ← []   # photometry
+Y_train ← []   # latent targets
+for a in latent_synth:
+    S_synth   ← InverseProject(a, mean_spec, V_pca)
+    m_syn     ← ForwardPhotometry(S_synth)
+    m_noisy   ← AddNoise(m_syn)
+    X_train.append(m_noisy)
+    Y_train.append(a)
+X_train ← array(X_train)
+Y_train ← array(Y_train)
+
+# 4.6  Fit regressor (encoder)
+regressor ← TrainRegressor(X_train, Y_train)
+
+# 4.7  Fit taxonomy classifier (in latent space)
+classifier ← TrainClassifier(latent_real, labels_train)
+
+# 5.1  Predict latent posterior
+μ_lat, Σ_lat ← PredictLatent(regressor, m_obs)
+
+# 5.2  Draw posterior samples of latent vector
+latent_samples ← []
+for s in 1…N_post:
+    a_s ← multivariate_normal(mean=μ_lat, cov=Σ_lat)
+    latent_samples.append(a_s)
+latent_samples ← array(latent_samples)
+
+# 5.3  Reconstruct spectra from latent samples
+spectrum_samples ← []
+for a in latent_samples:
+    S_rec ← InverseProject(a, mean_spec, V_pca)
+    spectrum_samples.append(S_rec)
+spectrum_samples ← array(spectrum_samples)    # shape (N_post, N_λ)
+
+# 5.4  Compute mean spectrum and 95 % credible intervals
+μ_Spectrum ← mean(spectrum_samples, axis=0)
+CI_Lower   ← percentile(spectrum_samples, 2.5, axis=0)
+CI_Upper   ← percentile(spectrum_samples, 97.5, axis=0)
+
+# 5.5  Taxonomy probability
+TaxonomyProb ← PredictClass(classifier, μ_lat)
+
+return μ_Spectrum, CI_Lower, CI_Upper, TaxonomyProb

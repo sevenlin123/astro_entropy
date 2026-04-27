@@ -1,0 +1,65 @@
+INPUT:  Seed spectra S_real[1…N]  // N ≈ 51, each spectrum is a vector of L wavelengths
+        W_eff[1…F]              // Effective transmission curves for F filters (e.g. JWST NIRCam)
+
+STEP 1.1  Compute mean spectrum μ_S  ←  average of S_real
+STEP 1.2  Center spectra:  X ← S_real – μ_S          // shape (N, L)
+STEP 1.3  Perform Singular Value Decomposition (SVD) on X  
+          => U, Σ, V^T  (Σ contains singular values)
+STEP 1.4  Choose K (≤10) principal components  
+          PC = V^T[1…K]           // each column is a PC eigenvector (length L)
+STEP 1.5  Project seed spectra onto PCs  
+          C_real[i,k] = PC_k · (S_real[i] – μ_S)      // coefficients, shape (N, K)
+
+INPUT:  C_real (N × K)          // latent coefficients of the seed spectra
+        h = 0.5                 // KDE bandwidth (chosen empirically)
+
+STEP 2.1  Estimate probability density p(C) with a multivariate KDE  
+          using bandwidth h (Gaussian kernel)
+
+STEP 2.2  Sample M synthetic latent vectors  
+          C_syn[1…M, 1…K]  ←  draw M draws from p(C)     // e.g. M = 5000
+
+FOR each synthetic latent vector C_syn[j]:
+    STEP 3.1  Reconstruct full‑resolution spectrum  
+              S_syn[j] = μ_S  +  Σ_k C_syn[j,k] * PC_k      // shape (L)
+    STEP 3.2  Convolve S_syn[j] with each filter curve  
+              m_syn[j,f] = ∫ S_syn[j]·W_eff[f] dλ / ∫ W_eff[f] dλ
+    STEP 3.3  Inject Gaussian noise (20 % relative uncertainty)  
+              σ = 0.20 * m_syn[j,f]  
+              m_noisy[j,f] = m_syn[j,f] + Normal(0, σ)
+END FOR
+
+DATASET_ENC  ←  { (x = m_noisy[j], y = C_syn[j]) | j = 1…M }
+
+TRAIN AutoML_Regressor on DATASET_ENC  
+// AutoML selects an ensemble of models (GBDT, NN, etc.) and tunes hyper‑parameters.
+// Output: Trained encoder E(x) → predicted latent coefficients ŷ (mean prediction).
+
+DATASET_CLF  ←  { (x = C_syn[j], y = Class[j]) | j = 1…M }  
+// Class[j] is the known taxonomy label for the seed spectrum from which C_syn[j] originates.
+
+TRAIN AutoML_Classifier on DATASET_CLF  
+// Output: Trained classifier T(y) → class probability vector P_class.
+
+INPUT:  Observed photometry m_obs[1…F]   // sparse, noisy measurement
+
+STEP 6.1  Predict latent coefficients  
+          Ŷ = E(m_obs)                    // vector of length K
+
+STEP 6.2  Classify taxonomy  
+          P_class = T(Ŷ)                  // probability distribution over classes
+
+STEP 6.3  Reconstruct full spectrum  
+          S_hat = μ_S  +  Σ_k Ŷ[k] * PC_k  // shape (L)
+
+OUTPUT:  S_hat            // reconstructed high‑resolution spectrum
+         P_class          // taxonomy probabilities
+
+FOR s = 1 … SAMPLES:
+    SAMPLE latent vector Ŷ_s from the predictive distribution of E(m_obs)  
+    // e.g., bootstrap, dropout, or sampling from ensemble predictions
+    RECONSTRUCT S_s = μ_S + Σ_k Ŷ_s[k] * PC_k
+END FOR
+
+COMPUTE per‑wavelength statistics (median, 16th/84th percentiles)  
+// Provides a calibrated credible interval for the spectrum.

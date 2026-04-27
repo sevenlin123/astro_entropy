@@ -1,0 +1,96 @@
+text
+INPUT:
+    S_train[1…N_spec]          # Near‑IR spectra (same wavelength grid λ)
+    F[1…N_filter]              # Filter transmission curves
+    y_obj[1…N_filter]          # Measured photometry of target object
+    σ_obj[1…N_filter]          # Measurement uncertainties
+
+PARAMETERS:
+    K            # Number of principal components to retain
+    N_iter       # Number of Monte‑Carlo iterations
+    N_burn       # Burn‑in length
+    prior_mean   # Vector of length K (typically 0)
+    prior_std    # Vector of length K (empirical std from training)
+
+--------------------------------------------------------------------
+STEP 1 – PCA on training spectra
+--------------------------------------------------------------------
+1.1   Compute mean spectrum:
+        μ_S(λ) = (1/N_spec) * Σ_i S_train[i](λ)
+
+1.2   Center spectra:
+        X[i](λ) = S_train[i](λ) – μ_S(λ)
+
+1.3   Compute covariance matrix C = (1/(N_spec-1)) * Σ_i X[i] ⊗ X[i]
+        (⊗ denotes outer product over λ)
+
+1.4   Eigendecompose C → {e_k(λ), λ_k}  (k = 1…N_wavelength)
+        Sort eigenvalues λ_k descending.
+
+1.5   Select first K eigenvectors:
+        PC[k](λ) = e_k(λ)   for k = 1…K
+
+--------------------------------------------------------------------
+STEP 2 – Prepare photometric projection matrices
+--------------------------------------------------------------------
+For each filter m = 1…N_filter:
+    2.1   Compute mean photometric response:
+            μ_F[m] = ∫ μ_S(λ) * R_m(λ) dλ / ∫ R_m(λ) dλ
+    2.2   For each component k = 1…K:
+            P[m,k] = ∫ PC[k](λ) * R_m(λ) dλ / ∫ R_m(λ) dλ
+
+Result:  
+    μ_F : vector length N_filter  
+    P   : N_filter × K matrix
+
+--------------------------------------------------------------------
+STEP 3 – Bayesian inference of latent coefficients
+--------------------------------------------------------------------
+Define:
+    c = [c_1 … c_K]^T      # Latent coefficients
+    μ_c = prior_mean
+    Σ_c = diag(prior_std^2)
+
+Likelihood:
+    y | c ~ Normal( μ_F + P * c ,  diag(σ_obj^2) )
+
+Prior:
+    c ~ Normal( μ_c , Σ_c )
+
+Posterior:
+    p(c | y) ∝ exp( -½ (y - μ_F - P*c)^T Σ_y^{-1} (y - μ_F - P*c) )
+               * exp( -½ (c - μ_c)^T Σ_c^{-1} (c - μ_c) )
+
+Sampling (Metropolis‑Hastings):
+    Initialize c_0 = μ_c
+    For t = 1 … N_iter:
+        Propose c' = c_{t-1} + ε,   ε ~ Normal(0, σ_prop^2 I_K)
+        Compute log‐posterior L' and L_{t-1}
+        Accept with probability min(1, exp(L'-L_{t-1}))
+        If accepted: c_t = c'
+        Else:         c_t = c_{t-1}
+
+After burn‑in (first N_burn samples discarded) collect remaining samples:
+    {c^(s)}_{s=1}^{N_post}
+
+--------------------------------------------------------------------
+STEP 4 – Spectrum reconstruction and uncertainty propagation
+--------------------------------------------------------------------
+4.1   Posterior mean coefficients:
+        c_bar = (1/N_post) Σ_s c^(s)
+
+4.2   Posterior standard deviations:
+        σ_c = sqrt( (1/(N_post-1)) Σ_s (c^(s)-c_bar)(c^(s)-c_bar)^T )
+
+4.3   Reconstructed spectrum (point estimate):
+        S_rec(λ) = μ_S(λ) + Σ_{k=1}^K c_bar[k] * PC[k](λ)
+
+4.4   Spectral uncertainty (per wavelength):
+        Var_S(λ) = Σ_{k=1}^K σ_c[k]^2 * PC[k](λ)^2
+        Std_S(λ) = sqrt(Var_S(λ))
+
+--------------------------------------------------------------------
+OUTPUT:
+    S_rec(λ)          # Reconstructed spectrum
+    Std_S(λ)          # 1‑σ uncertainty band
+    Posterior samples {c^(s)} for diagnostic purposes

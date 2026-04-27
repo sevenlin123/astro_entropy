@@ -1,0 +1,63 @@
+Input:
+  - Spectral library S = {s_j(λ)} for j = 1…N_spec   // high‑resolution near‑IR spectra
+  - Filter set F = {f_i(λ)} for i = 1…N_filter        // transmission curves
+  - Target photometry:  p = {p_i} with uncertainties σ_i
+  - Number of principal components to keep: K
+
+Output:
+  - Reconstructed spectrum Ŝ(λ)
+  - Posterior coefficient mean μ_c and covariance Σ_c
+  - Uncertainty band on Ŝ(λ)
+
+Algorithm:
+
+1. Pre‑processing of spectral library
+   a. Resample all spectra s_j to a common wavelength grid λ_k.
+   b. Normalize each spectrum (e.g., unit area or median value).
+   c. Compute the mean spectrum μ_s(λ) = (1/N_spec) Σ_j s_j(λ).
+   d. Center spectra: ȳ_j(λ) = s_j(λ) – μ_s(λ).
+
+2. Principal Component Analysis (PCA)
+   a. Construct data matrix Y where row j = ȳ_j(λ) vectorized.
+   b. Compute covariance matrix C = (1/(N_spec−1)) Yᵀ Y.
+   c. Eigen‑decompose C → eigenvectors U and eigenvalues Λ.
+   d. Select first K eigenvectors: U_K (columns = PC basis).
+   e. Store PCs: PC_k(λ) = column k of U_K.
+   f. Project each centered spectrum onto PCs:
+        a_jk = ⟨ȳ_j , PC_k⟩  for k = 1…K.
+   g. Build coefficient covariance matrix Σ_prior:
+        Σ_prior = diag(Λ_1…Λ_K)          // variance of each PC
+      (or use empirical covariance of a_jk if desired).
+
+3. Forward photometric model
+   For any candidate spectrum s(λ) = μ_s(λ) + Σ_{k=1}^K c_k PC_k(λ):
+     a. Convolve s(λ) with each filter f_i(λ) to predict flux:
+        m_i(c) = ∫ s(λ) f_i(λ) dλ   /  ∫ f_i(λ) dλ
+     b. Convert m_i(c) to photometric units consistent with p_i (e.g., magnitudes or fluxes).
+
+4. Bayesian inference of coefficients
+   a. Define likelihood:
+        L(c) ∝ exp( -½ Σ_i [(p_i − m_i(c))/σ_i]^2 )
+   b. Define prior on c:
+        π(c) ∝ exp( -½ cᵀ Σ_prior^{-1} c )
+   c. Since both likelihood and prior are Gaussian in c (m_i linear in c), the posterior is Gaussian:
+        Σ_post = (Aᵀ W A + Σ_prior^{-1})^{-1}
+        μ_post = Σ_post (Aᵀ W p + Σ_prior^{-1} 0)
+        where:
+          A_ik = ∂m_i/∂c_k  evaluated at c = 0
+          W = diag(1/σ_i^2)
+   d. Compute A analytically:
+        A_ik = ∫ PC_k(λ) f_i(λ) dλ / ∫ f_i(λ) dλ
+
+5. Spectrum reconstruction
+   a. Reconstructed spectrum:
+        Ŝ(λ) = μ_s(λ) + Σ_{k=1}^K μ_post,k * PC_k(λ)
+   b. Uncertainty on spectrum:
+        For each λ, variance:
+          Var(Ŝ(λ)) = Σ_{k,l} PC_k(λ) Σ_post,kl PC_l(λ)
+        Confidence interval: Ŝ(λ) ± 1.96 * sqrt(Var(Ŝ(λ)))
+
+6. Optional refinement (if desired)
+   - Iterate steps 3–5 with updated PCs using reconstructed spectra to improve accuracy.
+
+Return Ŝ(λ), μ_post, Σ_post, and uncertainty band.

@@ -1,0 +1,95 @@
+Inputs
+-------
+- Seed spectra S_real = {s_1 … s_N}   // N ≈ 50 high‑resolution TNO spectra
+- Filter transmission curves T_f = {T_1 … T_M}   // e.g., JWST NIRCam filters
+- Desired number of principal components K     // e.g., 5–10
+- KDE bandwidth h                               
+- Noise level σ_phot (relative, e.g., 20 %)
+
+Outputs
+--------
+- For any new photometry m_new = {m_1 … m_M} :
+    * Posterior distribution over latent coefficients c
+    * Reconstructed spectrum S_rec
+    * Taxonomic class probability vector p_cls
+
+--------------------------------------------------------------------
+Step 1 – Build the Latent Manifold (Prior)
+
+1.1 Normalize each seed spectrum s_i to reflectance (divide by solar spectrum).
+1.2 Create matrix X_real ∈ ℝ^(N × L) where L = number of spectral bins.
+1.3 Perform Principal Component Analysis on X_real:
+        • Compute mean μ_X and covariance Σ_X.
+        • Obtain eigenvectors V_K ∈ ℝ^(L × K) and eigenvalues λ_1…λ_K.
+1.4 Project seed spectra onto PCs:
+        c_i = V_Kᵀ · (s_i – μ_X)          // c_i ∈ ℝ^K
+1.5 Estimate PDF over latent space:
+        • Use Kernel Density Estimation (Gaussian kernels) with bandwidth h.
+        • Store KDE density function p_KDE(c).
+1.6 Sample synthetic latent vectors:
+        • Draw S_synth = {c_j} (j = 1 … N_synth, e.g., 5000) from p_KDE(c).
+
+--------------------------------------------------------------------
+Step 2 – Generate Augmented Training Data
+
+2.1 Decode synthetic latent vectors to spectra:
+        s_j = μ_X + V_K · c_j              // s_j ∈ ℝ^L
+2.2 Forward‑model photometry for each synthetic spectrum:
+        For each filter f:
+            m_f,j = ∫ s_j(λ) · T_f(λ) dλ / ∫ T_f(λ) dλ
+        // Resulting m_j ∈ ℝ^M
+2.3 Inject Gaussian noise:
+        For each photometric point m_f,j:
+            m_f,j_noisy = m_f,j + ε
+            ε ~ Normal(0, σ_phot · m_f,j)
+        Store noisy photometry m_j_noisy.
+
+--------------------------------------------------------------------
+Step 3 – Train Encoder (Photometry → Latent)
+
+3.1 Assemble training set:
+        X_train = {m_j_noisy}  // M‑dimensional inputs
+        Y_train = {c_j}        // K‑dimensional targets
+3.2 Use AutoML (e.g., AutoGluon) to train an ensemble regressor R_enc:
+        • Input: X_train
+        • Output: Predicted latent vector ŷ_c
+        • Loss: Mean‑squared error over K dimensions
+3.3 Validate convergence (hold‑out split or internal cross‑validation).
+
+--------------------------------------------------------------------
+Step 4 – Train Taxonomy Classifier (Latent → Class)
+
+4.1 Label each seed spectrum s_i with taxonomic class label y_i.
+4.2 For each labeled spectrum, retain its latent vector c_i.
+4.3 Assemble classification training set:
+        X_cls = {c_i}
+        Y_cls = {y_i}
+4.4 Train AutoML classifier C_cls (e.g., GBDT, random forest) on (X_cls, Y_cls).
+
+--------------------------------------------------------------------
+Step 5 – Inference on New Observation
+
+Given new photometry m_new = {m_1 … m_M}:
+
+5.1 Encoder prediction:
+        ŷ_c = R_enc(m_new)            // deterministic point estimate
+        Optionally, obtain prediction variance from ensemble members.
+5.2 Posterior over latent space:
+        Treat ŷ_c as mean of a multivariate Gaussian N(ŷ_c, Σ_pred)
+        (Σ_pred derived from ensemble spread or regressor uncertainty).
+5.3 Decode to spectrum:
+        S_rec = μ_X + V_K · ŷ_c        // reconstructed reflectance spectrum
+5.4 Taxonomy probability:
+        p_cls = C_cls.predict_proba(ŷ_c)
+5.5 Return ŷ_c, S_rec, p_cls (and optionally confidence intervals).
+
+--------------------------------------------------------------------
+Optional – Sampling Posterior for Uncertainty Estimation
+
+For i = 1 … N_samples:
+    Sample c_i ~ N(ŷ_c, Σ_pred)
+    S_i = μ_X + V_K · c_i
+Compute mean and credible intervals over {S_i} to provide uncertainty bands.
+
+--------------------------------------------------------------------
+End of Algorithm

@@ -1,0 +1,108 @@
+Input: 
+    S   = {s₁(λ), …, s_N(λ)}  // N reference near‑IR spectra sampled on common wavelength grid λ
+    K   = number of PCs to retain  (e.g., K = 8–10)
+
+Procedure:
+    1.1 Compute mean spectrum μ(λ) = (1/N) Σᵢ sᵢ(λ).
+    1.2 Center spectra:  Xᵢ(λ) = sᵢ(λ) – μ(λ)   for i = 1…N.
+    1.3 Construct data matrix X ∈ ℝ^{N×L} where L = |λ|.
+    1.4 Perform Singular Value Decomposition:  X = U Σ Vᵀ.
+    1.5 Retain first K right singular vectors (columns of V):  
+          PC₁(λ), PC₂(λ), …, PC_K(λ)  (each is a length‑L vector).
+    1.6 Store: 
+          - mean spectrum μ(λ),
+          - basis functions {PC_k(λ)},
+          - singular values σ₁,…,σ_K  (for later weighting).
+Output:
+    μ(λ), {PC_k(λ)}, σ₁,…,σ_K
+
+Input: 
+    Filter set  = {F₁, …, F_M}          // Each filter defined by transmission T_j(λ)
+    Coefficients c = [c₁,…,c_K]          // Latent variables
+
+Procedure:
+    2.1 Reconstruct continuous spectrum:  
+          S_recon(λ; c) = μ(λ) + Σ_{k=1}^{K} c_k * PC_k(λ).
+
+    2.2 For each filter j = 1…M:
+          Compute synthetic flux:
+              F_j(c) = ∫ S_recon(λ; c) * T_j(λ) dλ     // numerical integration over λ
+          Convert to magnitude (if needed):
+              m_j(c) = –2.5 log10(F_j(c)) + ZP_j
+Output:
+    Predicted magnitudes {m_j(c)} for current coefficient vector c
+
+Input:
+    Observed magnitudes y = [y₁,…,y_M]
+    Measurement uncertainties σ_y = [σ₁,…,σ_M]
+
+Procedure:
+    3.1 Evaluate predicted magnitudes m(c) using Procedure 2.
+    3.2 Compute residuals r_j = y_j – m_j(c).
+    3.3 Assume independent Gaussian errors:
+          L(c | y) ∝ Π_{j=1}^{M} exp[ –0.5 * (r_j/σ_j)² ] 
+    3.4 Log‑likelihood:  ln L(c | y) = –½ Σ_j (r_j/σ_j)²  + const
+Output:
+    ln L(c | y)
+
+Input:
+    Singular values σ_k (from PCA)
+
+Procedure:
+    4.1 Adopt zero‑mean Gaussian prior for each coefficient:
+          p(c_k) = N(0, τ_k²)
+    4.2 Set prior variances proportional to variance captured by each PC:
+          τ_k² = (σ_k / σ_max)² * τ_0²          // τ_0 is global scaling parameter
+    4.3 Prior over all coefficients:  p(c) = Π_k p(c_k)
+Output:
+    Prior density p(c)
+
+Input:
+    ln L(c | y)   // from Step 3
+    ln p(c)       // from Step 4
+
+Procedure:
+    5.1 Define log‑posterior: ln p(c | y) = ln L(c | y) + ln p(c) + const.
+    5.2 Initialize chain: choose starting coefficients c⁰ (e.g., zeros).
+    5.3 Run Markov Chain Monte Carlo (e.g., Metropolis‑Hastings, Hamiltonian MC):
+          for t = 1 … N_iter:
+              Propose new coefficients c* = c^{t‑1} + ε   // ε ~ N(0, Σ_prop)
+              Compute Δ = ln p(c* | y) – ln p(c^{t‑1} | y)
+              Accept with probability min(1, exp(Δ)); otherwise keep c^{t‑1}.
+    5.4 After burn‑in and thinning, obtain posterior samples {c^(s)}_{s=1}^{S}.
+Output:
+    Posterior samples of latent coefficients
+
+Input:
+    Posterior samples {c^(s)}, mean spectrum μ(λ), PCs {PC_k(λ)}
+
+Procedure:
+    6.1 For each sample s:
+          Reconstruct spectrum:  S^(s)(λ) = μ(λ) + Σ_k c_k^(s) * PC_k(λ).
+    6.2 Compute point estimate (posterior mean):
+          Ŝ(λ) = (1/S) Σ_s S^(s)(λ).
+    6.3 Estimate uncertainty band (e.g., 68% credible interval):
+          For each λ, compute percentiles of {S^(s)(λ)} (16th & 84th).
+Output:
+    Reconstructed spectrum Ŝ(λ) with credible intervals
+
+Input:
+    Reconstructed spectrum Ŝ(λ)
+    Reference taxonomy templates or clustering model in PC space
+
+Procedure:
+    7.1 Project Ŝ onto PC basis to obtain coefficient vector ĉ.
+    7.2 Compare ĉ to labeled clusters (e.g., via nearest‑neighbor or Gaussian mixture).
+    7.3 Assign taxonomy class with posterior probability derived from distance metrics.
+Output:
+    Taxonomic label and confidence
+
+For each TNO with sparse photometry:
+    1. Build PCA basis (once, using reference spectra).
+    2. Forward model photometry from latent coefficients.
+    3. Compute likelihood against observed magnitudes.
+    4. Combine with Gaussian prior on coefficients.
+    5. Sample posterior distribution of coefficients (MCMC).
+    6. Reconstruct full spectrum and propagate uncertainties.
+    7. Optionally classify taxonomically.
+End

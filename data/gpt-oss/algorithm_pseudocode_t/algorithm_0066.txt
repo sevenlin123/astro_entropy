@@ -1,0 +1,71 @@
+INPUTS:
+    TNO_list            // list of target TNO identifiers
+    Photometry          // table with columns: TNO, Filter, Magnitude, MagErr
+    FilterResponse      // dictionary mapping Filter → transmission curve R(λ)
+    BasisWavelengths    // array of N wavelength anchors λ_k for spectral basis
+    PriorMean θ0       // vector of length N (default flat or empirical)
+    PriorCovariance Σ0 // N×N covariance matrix for spectral parameters
+
+OUTPUT:
+    PosteriorSpectra   // dictionary: TNO → {Samples: array[M×N], MeanSpectrum: vector[N], CovSpectrum: matrix[N×N]}
+
+PROCEDURE:
+
+1. FOR each TNO in TNO_list DO
+2.     //--- 1. Gather photometry for this TNO ---------------------------------
+3.     Data_TNO ← SELECT rows FROM Photometry WHERE TNO == current TNO
+4.     Nobs ← number of rows in Data_TNO
+5.     FOR i = 1 TO Nobs DO
+6.         F_obs[i]   ← 10^(-0.4 * (Data_TNO.Magnitude[i] - ZP))   // convert magnitude to relative flux
+7.         σ_obs[i]   ← 0.4 * ln(10) * Data_TNO.MagErr[i] * F_obs[i] // propagate error to flux
+8.         Filter_i   ← Data_TNO.Filter[i]
+9.         R_i(λ)     ← FilterResponse[Filter_i]
+10.    END FOR
+11.    
+12.    //--- 2. Define forward model for flux prediction -----------------------
+13.    FUNCTION PredictFlux(θ):   // θ = [θ_1 … θ_N] reflectance values at BasisWavelengths
+14.        FOR j = 1 TO Nobs DO
+15.            // Interpolate reflectance at wavelengths sampled within filter
+16.            Reflect_j ← Σ_{k=1}^{N} θ_k * Kernel_k(λ_sampled_j)     // e.g., linear interpolation or basis function
+17.            // Convolve with filter transmission
+18.            FluxPred[j] ← ∫ Reflect_j(λ) * R_j(λ) dλ  / ∫ R_j(λ) dλ   // normalise by filter throughput
+19.        END FOR
+20.        RETURN FluxPred
+21.    END FUNCTION
+22.    
+23.    //--- 3. Set up Bayesian inference ----------------------------------------
+24.    Define logPrior(θ)  ← −0.5 * (θ − θ0)^T * Σ0⁻¹ * (θ − θ0)  // multivariate Gaussian
+25.    DEFINE logLikelihood(θ):
+26.        FluxPred ← PredictFlux(θ)
+27.        χ² ← Σ_{j=1}^{Nobs} (FluxPred[j] − F_obs[j])² / σ_obs[j]²
+28.        RETURN −0.5 * χ²
+29.    END DEFINE
+30.    
+31.    //--- 4. Sample posterior using Metropolis–Hastings ----------------------
+32.    Initialize θ_current ← θ0
+33.    Initialize chain ← empty list
+34.    FOR iter = 1 TO Nsamples + Nburnin DO
+35.        Propose θ_prop ← θ_current + Normal(0, ε² * I_N)   // ε tuned to acceptance ~0.234
+36.        Δlogp ← [logPrior(θ_prop)+logLikelihood(θ_prop)]
+37.                     − [logPrior(θ_current)+logLikelihood(θ_current)]
+38.        IF log(U(0,1)) < Δlogp THEN
+39.            θ_current ← θ_prop
+40.        END IF
+41.        IF iter > Nburnin THEN
+42.            Append θ_current to chain
+43.        END IF
+44.    END FOR
+45.    
+46.    //--- 5. Post‑processing --------------------------------------------------
+47.    Samples_TNO ← chain  // M × N array
+48.    MeanSpec   ← mean(Samples_TNO, axis=0)   // vector[N]
+49.    CovSpec    ← cov(Samples_TNO, rowvar=False)  // N×N matrix
+50.    
+51.    PosteriorSpectra[current TNO] ← {
+52.        "Samples": Samples_TNO,
+53.        "MeanSpectrum": MeanSpec,
+54.        "CovSpectrum": CovSpec
+55.    }
+56. END FOR
+
+RETURN PosteriorSpectra

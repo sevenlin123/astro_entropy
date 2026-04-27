@@ -1,0 +1,70 @@
+INPUT: Reference spectra S_ref = {s_i(λ)}  i = 1…N_ref
+       Filter transmission curves T_f(λ)  f = 1…F
+       Number of PCA components K (default 8–10)
+       KDE bandwidth h (default 0.5)
+
+FOR each spectrum s_i:
+    1.1  Normalize to unity at a reference wavelength λ₀  
+         → s_i_norm(λ) = s_i(λ)/s_i(λ₀)
+    1.2  Store normalized spectrum
+END FOR
+
+2.1  Arrange all normalized spectra into matrix M (N_ref × Lλ)
+     where Lλ = number of wavelength bins.
+2.2  Perform PCA on M:
+        - Compute mean spectrum μ_S
+        - Compute eigenvectors V_k (k = 1…K)
+        - Project spectra onto PCs → latent scores A_i ∈ ℝ^K
+          A_i = V^T · (s_i_norm – μ_S)
+2.3  Build a density model of {A_i}:
+        - Use Kernel Density Estimation (KDE) with bandwidth h
+        - Denote KDE density p_KDE(A)
+
+3.1  Draw N_syn samples {A_j} from p_KDE(A)  (e.g., N_syn = 5000)
+3.2  For each A_j:
+        3.2.1  Reconstruct synthetic spectrum:
+                s_j_syn = μ_S + V · A_j
+        3.2.2  Compute synthetic photometry m_j_syn:
+                FOR each filter f:
+                    m_j_f = ∬ s_j_syn(λ) · T_f(λ) dλ / ∬ T_f(λ) dλ
+                END FOR
+        3.2.3  Inject Gaussian noise to photometry:
+                σ_m = 0.20 * m_j_syn   (20 % relative error)
+                m_j_noisy = m_j_syn + N(0, σ_m)
+        3.2.4  Store pair (m_j_noisy, A_j)
+END FOR
+
+4.1  Assemble training set D_enc = {(m_j_noisy , A_j)} for j = 1…N_syn
+4.2  Use AutoML framework (e.g., AutoGluon Tabular):
+        - Input features: photometric fluxes in F filters
+        - Target: latent vector A (K outputs)
+        - Objective: minimize mean squared error (MSE)
+4.3  Fit encoder model E_enc
+4.4  Validate encoder on held‑out synthetic subset (optional)
+
+5.1  Assign taxonomy labels L_i to the original N_ref spectra
+5.2  Prepare training data D_cls = {(A_i , L_i)} for i = 1…N_ref
+5.3  Train classifier C_cls using AutoML (multi‑class, e.g., GBDT)
+5.4  Validate classifier accuracy on cross‑validation (optional)
+
+INPUT: New observed photometry m_obs = {m_f}  f = 1…F
+OUTPUT: Reconstructed spectrum s_rec(λ), taxonomy probabilities P(L)
+
+6.1  Predict latent vector:
+        A_pred = E_enc.predict(m_obs)          // point estimate
+        Optionally, generate uncertainty via Monte Carlo:
+            a. Sample n draws from predictive posterior of E_enc
+            b. Obtain {A_pred_k} k = 1…n
+6.2  Reconstruct spectrum(s):
+        FOR each sampled A_pred_k:
+            s_k(λ) = μ_S + V · A_pred_k
+        END FOR
+        Compute mean spectrum s_mean(λ) and credible interval
+6.3  Classify taxonomy:
+        P(L) = C_cls.predict_proba(A_pred)      // probability vector
+6.4  Return s_mean(λ), credible interval, P(L)
+
+7.1  Identify low‑probability regions in latent space:
+        Compute distance d_k = ||A_pred_k – μ_class|| for each class
+7.2  Flag observations where d_k > threshold for all classes
+7.3  Report as candidate rare or anomalous spectral type

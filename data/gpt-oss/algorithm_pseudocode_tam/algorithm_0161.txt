@@ -1,0 +1,86 @@
+INPUT:
+    - S_ref[1..N]   : Reference near‑IR spectra (flux vs. wavelength)
+    - W[1..M]       : Effective wavelength/throughput curves of M photometric filters
+    - K             : Desired number of principal components (e.g. 8–10)
+    - h             : KDE bandwidth (≈0.5)
+    - n_aug         : Number of synthetic latent samples to generate (e.g. 5 000)
+    - σ_noise       : Relative photometric uncertainty (e.g. 0.20)
+    - L             : New sparse photometry vector for a target object (length P ≤ M)
+
+OUTPUT:
+    - S_rec         : Reconstructed high‑resolution spectrum
+    - T_prob        : Taxonomy probability vector (H₂O, CO₂, Organic, Methanol)
+
+--------------------------------------------------------------------
+STEP 0 – Pre‑processing of Reference Spectra
+--------------------------------------------------------------------
+1.  Align all S_ref to common wavelength grid λ_common (e.g. 0.9–4.5 μm, Δλ = 0.01 μm).
+2.  Normalise each spectrum (e.g. divide by flux at 1.25 μm or integrate over full band).
+3.  Construct data matrix X_ref (N × D) where each row is a normalised spectrum.
+
+--------------------------------------------------------------------
+STEP 1 – Principal Component Analysis (PCA)
+--------------------------------------------------------------------
+4.  Compute mean spectrum μ_X = mean(X_ref, axis=0).
+5.  Center data: X_center = X_ref – μ_X.
+6.  Perform Singular Value Decomposition:
+        X_center = U Σ Vᵀ
+7.  Retain first K right‑singular vectors: V_K (D × K).
+8.  Project each spectrum onto PCs:
+        C_ref[i] = X_center[i] · V_K          // i = 1…N
+    (C_ref is N × K matrix of latent coefficients)
+
+--------------------------------------------------------------------
+STEP 2 – Construct Continuous Prior in Latent Space (KDE)
+--------------------------------------------------------------------
+9.  Fit a multivariate Kernel Density Estimate to {C_ref[i]} using bandwidth h:
+        kde_prior = KDE(C_ref, bandwidth=h)
+10. Draw n_aug latent vectors from kde_prior:
+        C_syn[j] ~ kde_prior                    // j = 1…n_aug
+11. For each C_syn[j], reconstruct full spectrum:
+        X_syn[j] = μ_X + C_syn[j] · V_Kᵀ         // inverse PCA
+    Store X_syn[j] as synthetic spectra.
+
+--------------------------------------------------------------------
+STEP 3 – Forward Model Synthetic Photometry
+--------------------------------------------------------------------
+12.  For each synthetic spectrum X_syn[j]:
+        For each filter k = 1…M:
+            m_syn[j,k] = ∫ X_syn[j](λ) * W_k(λ) dλ   // convolution
+        Add Gaussian noise:
+            m_noisy[j,k] = m_syn[j,k] * (1 + N(0, σ_noise²))
+    Result: Photometry matrix M_syn (n_aug × M).
+
+--------------------------------------------------------------------
+STEP 4 – Train AutoML Regressor (Encoder)
+--------------------------------------------------------------------
+13.  Split {C_syn, M_syn} into training / validation folds.
+14.  Configure AutoML regressor (e.g. AutoGluon Tabular with GBM+NN ensembles).
+15.  Train regressor to predict latent coefficients from photometry:
+        C_pred = Regressor.predict(M_syn)
+16.  Evaluate on validation fold to confirm reasonable error (< 10% of coefficient std).
+
+--------------------------------------------------------------------
+STEP 5 – Train AutoML Classifier (Latent‑Space Taxonomy)
+--------------------------------------------------------------------
+17.  Assign taxonomy labels to each C_ref[i] (from literature).
+18.  Train classifier on {C_ref, label} using AutoML (ensemble of tree & NN models).
+19.  Validate accuracy > 90% on withheld spectra.
+
+--------------------------------------------------------------------
+STEP 6 – Inference on New Object
+--------------------------------------------------------------------
+20.  Pre‑process L:
+        • Align with λ_common if needed.
+        • Normalise (divide by chosen reference flux or colour).
+21.  Predict latent coefficient distribution:
+        • Use regressor to obtain point estimate C_hat.
+        • Optionally sample multiple predictions (bootstrap / ensemble) to approximate posterior.
+22.  Reconstruct spectrum:
+        S_rec = μ_X + C_hat · V_Kᵀ
+23.  Classify taxonomy:
+        T_prob = Classifier.predict_proba(C_hat)
+
+--------------------------------------------------------------------
+RETURN:
+    S_rec , T_prob

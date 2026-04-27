@@ -1,0 +1,110 @@
+function ReconstructSpectrum(observations, basis_spectra, zero_points, filter_response, Nsamples):
+    # Step 1: Preprocess photometry
+    for obs in observations:
+        F[obs.id]   = mag_to_flux(obs.mag, zero_points[obs.filter])
+        errF[obs.id] = flux_error_from_mag_err(obs.mag_err, zero_points[obs.filter])
+
+    # Step 2: Compute template bandpasses
+    for k in range(len(basis_spectra)):
+        for f in filters:
+            T[k][f] = integrate( basis_spectra[k](λ) * filter_response[f](λ) dλ )
+
+    # Step 3: Set up Bayesian model
+    prior_w = Normal(mean=0, std=σ_prior)
+    # Optionally enforce positivity: use truncated normal
+
+    # Step 4: Define likelihood function
+    def log_likelihood(w):
+        ll = 0
+        for obs in observations:
+            μ = sum_k w[k]*T[k][obs.filter]
+            ll += -0.5*((F[obs.id]-μ)/errF[obs.id])**2 - log(errF[obs.id])*0.5
+        return ll
+
+    # Step 5: Sample posterior using Metropolis-Hastings
+    w_current = zeros(len(basis_spectra))
+    samples = []
+    for n in range(Nsamples):
+        w_proposal = w_current + random_normal(0, step_size, len(basis_spectra))
+        log_accept = log_likelihood(w_proposal) + log_prior(w_proposal) - \
+                     (log_likelihood(w_current) + log_prior(w_current))
+        if log_uniform() < log_accept:
+            w_current = w_proposal
+        samples.append(w_current.copy())
+
+    # Step 6: Construct reconstructed spectra
+    recon_spectra = []
+    for s in samples:
+        S = sum_k s[k]*basis_spectra[k](λ_grid)
+        recon_spectra.append(S)
+
+    return recon_spectra, samples
+
+text
+INPUT
+  O = { (filter_f, mag_m, err_m, time_t) }   // sparse photometry set
+  B = { b_k(λ) }                            // library of K normalized template spectra
+  Z = { z_f }                               // zero‑point fluxes for every filter
+  R_f(λ)                                   // spectral response of each filter
+  N   // number of posterior samples to draw
+  σ_prior // prior width for weight vector
+
+OUTPUT
+  W_samples = { w^(n) }                     // posterior samples of template weights
+  S_samples = { S^(n)(λ) }                  // corresponding reconstructed spectra
+
+--------------------------------------------------------------------
+STEP 1 : PRE‑PROCESS PHOTOMETRY
+--------------------------------------------------------------------
+  For each observation o ∈ O
+    Convert magnitude to flux density:
+      F_o  ← 10^( -0.4 * (o.mag - Z[o.filter]) )
+    Convert magnitude error to flux error:
+      errF_o ← 0.4 * ln(10) * F_o * o.err_mag
+  Store all F_o and errF_o in arrays F[ ] and errF[ ].
+
+--------------------------------------------------------------------
+STEP 2 : INTEGRATE TEMPLATE SPECTRA THROUGH FILTERS
+--------------------------------------------------------------------
+  For each template k = 1 … K
+    For each filter f
+      T[k,f] ← ∫_λ  b_k(λ) · R_f(λ) dλ         // numerically integrate
+  // T is a K × F matrix of template flux contributions per filter
+
+--------------------------------------------------------------------
+STEP 3 : DEFINE BAYESIAN MODEL
+--------------------------------------------------------------------
+  • Prior on weights w = (w₁,…,w_K):
+      w_k ~ Normal(0 , σ_prior)   // optionally truncated to w_k ≥ 0
+  • Likelihood for a single observation o with filter f(o):
+      μ_o(w) = Σ_k w_k · T[k, f(o)]                      // predicted flux
+      p(F_o | w) = Normal( μ_o(w) , errF_o^2 )
+  • Joint log‑likelihood over all observations:
+      logL(w) = Σ_o  [ -½ * ((F_o - μ_o(w)) / errF_o)^2
+                       - ½ * log(2π) - log(errF_o) ]
+
+--------------------------------------------------------------------
+STEP 4 : SAMPLE POSTERIOR (Metropolis–Hastings)
+--------------------------------------------------------------------
+  Initialize w⁰ = 0
+  For n = 1 to N
+      Propose w* = w^(n-1) + ε where ε ∼ Normal(0 , step²)
+      Compute Δ = logL(w*) - logL(w^(n-1))
+                + logPrior(w*) - logPrior(w^(n-1))
+      Accept w* with probability min(1, exp(Δ))
+          If accepted: w^(n) ← w*
+          Else       : w^(n) ← w^(n-1)
+      Store w^(n) into W_samples
+
+--------------------------------------------------------------------
+STEP 5 : RECONSTRUCT SPECTRA
+--------------------------------------------------------------------
+  For each stored weight vector w^(n) in W_samples
+      Construct spectral grid λ_grid spanning the desired range
+      For each λ in λ_grid
+          S^(n)(λ) = Σ_k w_k^(n) · b_k(λ)
+      Append S^(n)(λ) to S_samples
+
+--------------------------------------------------------------------
+RETURN
+  W_samples , S_samples
