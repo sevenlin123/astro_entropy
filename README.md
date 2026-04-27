@@ -17,8 +17,8 @@ We test how the semantic uncertainty (entropy) of a reconstructed algorithm decr
 ## Quantitative Metrics
 
 The project calculates several semantic metrics using `jina-embeddings-v2-base-code` and UMAP dimensionality reduction:
-- **Semantic Entropy {emb}(Y|X)*: Measures the uncertainty/diversity of algorithm generations within a single condition.
-- **Jensen-Shannon Divergence (JSD)**: Quantifies the semantic shift/information gain between states (e.g.,  \rightarrow TA$).
+- **Semantic Entropy $H_{emb}(Y|X)$**: Measures the uncertainty/diversity of algorithm generations within a single condition.
+- **Jensen-Shannon Divergence (JSD)**: Quantifies the semantic shift/information gain between states (e.g., $T \rightarrow TA$).
 - **Cosine Distance to Ground Truth**: Measures the alignment accuracy between LLM reconstructions and the actual paper logic.
 
 ## Repository Structure
@@ -26,7 +26,7 @@ The project calculates several semantic metrics using `jina-embeddings-v2-base-c
 ```text
 astro_entropy/
 ├── src/
-│   ├── generation/             # LLM pipelines (DeepSeek-R1) for algorithm & code extraction
+│   ├── generation/             # LLM pipelines (DeepSeek-R1) for algorithm extraction
 │   └── clustering/             # Information theory metrics, Bootstrapping, and UMAP visualization
 ├── data/
 │   ├── ground_truth/           # The reference algorithm for comparison
@@ -38,7 +38,7 @@ astro_entropy/
 
 ## Key Scripts
 
-- `src/generation/generate_codes.py`: Automated extraction loop using DeepSeek-R1.
+- `src/generation/generate_algo.py`: Automated algorithm extraction loop using DeepSeek-R1 (with MXFP4 quantization).
 - `src/clustering/cluster_algorithm_full.py`: Core analysis engine calculating Entropy, JSD, and generating Unified Semantic Space plots.
 
 ## Requirements
@@ -46,3 +46,4 @@ astro_entropy/
 - `transformers`, `sentence-transformers`
 - `umap-learn`, `scikit-learn`
 - `matplotlib`, `numpy`, `scipy`
+- `bitsandbytes` or `mxfp4` (for quantized LLM inference)
