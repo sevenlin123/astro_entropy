@@ -1,0 +1,54 @@
+```
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+- Training set of TNO spectra (S_true)
+- Photometric observations (m_obs)
+- Filter responses of target instrument (e.g., JWST NIRCam)
+
+Output:
+- Reconstructed spectrum (S_recon)
+- Latent coefficients (z_coeff)
+- Classification probabilities (C_probs)
+
+Steps:
+
+1. **Principal Component Analysis (PCA):**
+   - Decompose the training spectra (S_true) into principal components.
+   - Define the latent space with eigenvectors (PCs) and eigenvalues.
+
+2. **Kernel Density Estimation (KDE):**
+   - Project S_true onto latent space to get initial coefficients (z_true).
+   - Fit KDE with Gaussian kernel and bandwidth h = 0.5 to z_true to create smooth prior distribution.
+
+3. **Synthetic Data Generation:**
+   - Sample latent points (z_syn) from KDE.
+   - Forward model synthetic spectra to photometry (m_syn) using target instrument filters.
+   - Inject Gaussian noise (σ = 0.2) into m_syn to simulate real observations.
+
+4. **Automated Machine Learning (AutoML) Training:**
+   - Train AutoML regressor (e.g., XGBoost) on (m_syn, z_true).
+   - Optimize hyperparameters via nested cross-validation.
+
+5. **Leave-One-Out Cross-Validation (LOOCV):**
+   - For each held-out spectrum S_hold:
+     a. Remove S_hold from training set.
+     b. Recompute latent manifold and synthetic data.
+     c. Retrain AutoML regressor.
+     d. Predict z_hold from m_hold.
+     e. Reconstruct S_hold_recon using inverse PCA.
+
+6. **Uncertainty Quantification:**
+   - Sample posterior distribution of z using Gaussian Copula.
+   - Propagate uncertainties through inverse PCA to S_recon.
+
+7. **Taxonomic Classification:**
+   - Train secondary classifier on latent space.
+   - Predict class probabilities (C_probs) from z_recon.
+
+8. **Spectrum Reconstruction:**
+   - Apply inverse PCA to z_coeff to obtain S_recon.
+   - Return S_recon and classification results.
+
+End.
+```

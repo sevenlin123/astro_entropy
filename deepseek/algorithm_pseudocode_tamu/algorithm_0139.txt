@@ -1,0 +1,58 @@
+```pseudocode
+Algorithm Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+    - Training Spectra Set: S = {S_1, S_2, ..., S_N}
+    - Photometric Filters: F = {F_1, F_2, ..., F_M}
+    - Number of Principal Components K
+
+Output:
+    - Reconstructed Spectrum: S_reconstructed
+    - Latent Coefficients: z
+    - Taxonomic Classification: C
+
+1. Initialize Principal Component Analysis (PCA):
+    a. Compute PCA basis vectors from training spectra S.
+    b. Determine the number of principal components K based on variance explained and cross-validation.
+
+2. Construct Latent Space:
+    a. Project training spectra S onto PCA basis to get latent coefficients z_real.
+    b. Perform Kernel Density Estimation (KDE) on z_real to create a smooth probability distribution in latent space.
+
+3. Forward Modeling:
+    a. For each synthetic latent vector z_synthetic sampled from KDE:
+        i. Forward model through NIRCam filters to compute synthetic photometry m_synthetic.
+        ii. Add Gaussian noise to m_synthetic to simulate observational uncertainty.
+
+4. Train AutoML Regressor:
+    a. Use pairs of (m_synthetic, z_synthetic) to train an ensemble of gradient-boosted decision trees.
+    b. Optimize regressor to predict latent coefficients z from photometric inputs m.
+
+5. Cross-Validation:
+    a. Perform Leave-One-Out Cross-Validation (LOOCV):
+        i. For each held-out spectrum S_i:
+            A. Generate synthetic training data excluding S_i.
+            B. Retrain regressor and classifier on new synthetic data.
+            C. Predict latent coefficients z_hat for S_i's photometry.
+            D. Inverse PCA transform to get S_reconstructed.
+
+6. Evaluate Reconstruction:
+    a. Compare S_reconstructed with S_i using RMSE, Pearson correlation, and credible interval coverage.
+
+7. Taxonomic Classification:
+    a. Train classifier on latent coefficients to predict taxonomic labels (e.g., H2O, CO2, Organics, Methanol).
+
+8. Predict for New Object:
+    a. Obtain photometry m_new for the object.
+    b. Use trained regressor to predict latent coefficients z_new.
+    c. Inverse PCA transform to reconstruct S_reconstructed.
+    d. Use classifier to get taxonomic probabilities.
+
+9. Outlier Detection:
+    a. Flag objects if z_new falls outside high-probability regions or taxonomic confidence is low.
+
+10. Output Results:
+    a. Return S_reconstructed, z_new, and taxonomic classification C.
+```
+
+End of Algorithm

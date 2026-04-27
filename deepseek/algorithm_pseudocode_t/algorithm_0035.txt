@@ -1,0 +1,28 @@
+**Algorithm: Probabilistic Spectral Reconstruction Framework for Trans-Neptunian Objects**
+
+1. **Initialize Parameters**:
+   - Set up the Gaussian Process (GP) kernel with hyperparameters.
+   - Define the mixture of Gaussians (MoG) components for spectral clustering.
+   - Establish prior distributions for spectral parameters (e.g., albedo, phase function coefficients).
+
+2. **Model Setup**:
+   - For each TNO, construct the hierarchical Bayesian model linking observed magnitudes to fluxes via GP regression.
+   - Relate fluxes to the spectral energy distribution (SED) using physical constraints.
+
+3. **MCMC Sampling**:
+   - Use Markov Chain Monte Carlo (MCMC) to draw posterior samples of spectral parameters.
+   - Update GP hyperparameters alongside spectral parameters to capture uncertainty in SED modeling.
+
+4. **Outlier Detection**:
+   - Compute posterior probabilities for each spectral component in the MoG model.
+   - Flag TNOs with significantly lower posterior probabilities as potential outliers.
+
+5. **Spectral Clustering**:
+   - Group TNOs into spectral types based on their posterior probabilities in the MoG model.
+   - Assign each object to the most probable spectral cluster.
+
+6. **Output**:
+   - Generate posterior estimates of SEDs, spectral parameters, and cluster assignments.
+   - Provide confidence intervals for spectral parameters derived from MCMC samples.
+
+**End Algorithm**

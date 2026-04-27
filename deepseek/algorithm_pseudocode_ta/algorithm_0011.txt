@@ -1,0 +1,33 @@
+```
+Initialize
+TrainingSpectra = database of training spectra
+TestPhotometry = observed photometric data points for the test object
+
+ModelBuildingPhase:
+    Perform PCA on TrainingSpectra
+    Compute PrincipalComponents = result of PCA decomposition
+    Determine the number of leading PrincipalComponents needed for reliable spectral reconstruction (say, k components)
+
+InferencePhase:
+    Represent TestPhotometry in the PCA latent space
+        Convert photometric measurements into the latent space representation
+        Assuming each spectral feature can be expressed as a linear combination of the first k PrincipalComponents
+        Each TestPhotometry point is associated with a coefficient vector beta (length k)
+    Set up Bayesian Regression for inferring beta
+        Choose appropriate priors (e.g., Gaussian prior with zero mean and variance hyperparameters)
+    Define the likelihood function based on the relationship between photometric data and spectral components
+    Use MCMC to sample the posterior distribution of beta
+        Adaptive step size tuning
+        Check convergence criteria (e.g., Rhat < 1.1, effective sample size > 1000)
+    Extract posterior mean and covariance of beta
+
+ReconstructionPhase:
+    Project the posterior mean of beta back to the original spectral space
+        ReconstructedSpectrum = sum_{i=1 to k} (beta_mean_i * PC_i)
+    Compute confidence intervals (credible intervals) for the reconstructed spectrum
+        Using the posterior covariance matrix, compute standard deviations for each spectral pixel
+        Assemble into lower and upper bounds of confidence intervals
+
+Output:
+    Return ReconstructedSpectrum and confidence intervals
+```

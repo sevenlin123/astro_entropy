@@ -1,0 +1,20 @@
+\begin{algorithm}
+\caption{Probabilistic Spectral Reconstruction from Sparse Photometry}
+\begin{algorithmic}[1]
+\State \textbf{Inputs:} Reference spectra set $S_{\text{ref}}$, sparse photometric observations $\{m_i\}$, instrument response functions.
+\State \textbf{Outputs:} Reconstructed spectra $\{S_i\}$ and uncertainties.
+\State \textbf{1. Training Phase:}
+\State \quad \textbf{a.} Compute PCA basis $U$ from $S_{\text{ref}}$.
+\State \quad \textbf{b.} Project $S_{\text{ref}}$ onto $U$ to get latent coefficients $z_{\text{ref}}$.
+\State \quad \textbf{c.} Augment $z_{\text{ref}}$ using KDE to get $z_{\text{augmented}}$.
+\State \quad \textbf{d.} For each $z$ in $z_{\text{ref}} \cup z_{\text{augmented}}$, compute simulated photometry by convolving with instrument response, resulting in $m_{\text{sim}}$.
+\State \quad \textbf{e.} Add noise to $m_{\text{sim}}$.
+\State \quad \textbf{f.} Train AutoML regressor on $(m_{\text{sim}}, z)$ pairs.
+\State \textbf{2. Prediction Phase:}
+\State \quad \textbf{a.} For each observation $m_i$:
+\State \quad \quad \textbf{i.} Predict $z_i$ using the trained regressor.
+\State \quad \quad \textbf{ii.} Reconstruct $S_i = U^{-1} z_i$.
+\State \quad \quad \textbf{iii.} Compute uncertainties on $S_i$ considering photometric noise and regression uncertainty.
+\State \textbf{Return:} $\{S_i\}$ and their uncertainties.
+\end{algorithmic}
+\end{algorithm}

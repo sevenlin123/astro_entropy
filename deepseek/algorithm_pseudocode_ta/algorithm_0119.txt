@@ -1,0 +1,25 @@
+The algorithm outlines the core computational steps for Probabilistic Spectral Reconstruction (PSR), focusing on Bayesian inference in a PCA-derived latent space to reconstruct spectra from sparse photometric data.
+
+```pseudocode
+Algorithm: Probabilistic Spectral Reconstruction (PSR)
+
+// Training Phase
+1. Preprocess reference spectra:
+   a. Compute mean `m` of the training spectra.
+   b. Center the spectra by subtracting `m`.
+   c. Calculate the covariance matrix `C` from the centered data.
+   d. Decompose `C` into eigenvectors `V` (loadings) and eigenvalues.
+
+// Object Processing
+for each object:
+   a. Obtain sparse photometric data `F` and its uncertainties.
+   b. Normalize `F` to get feature vector.
+   c. Bayesian inference:
+      i. Posterior mean `c_hat = (V' * F) / sigma^2`
+      ii. Compute posterior covariance `Sigma_c = inverse(V * V' / sigma^2 + I / tau^2)`
+   d. Reconstruct spectrum `S = m + V * c_hat`
+   e. Compute uncertainty in `S`: `spectrum_uncertainty = sqrt(diag(V * Sigma_c * V'))`
+   f. Output `S` and `spectrum_uncertainty`
+
+Output: Reconstructed spectra and their uncertainties for each object.
+```

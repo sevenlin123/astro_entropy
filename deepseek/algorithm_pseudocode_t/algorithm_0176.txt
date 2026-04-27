@@ -1,0 +1,18 @@
+**Algorithm: Probabilistic Spectral Reconstruction**
+
+**Input**: Sparse photometric observations matrix D
+
+**Output**: Classified spectral components matrix C
+
+1. Compute the principal component analysis (PCA) of D to obtain a reduced-dimensional matrix D_pca.
+2. Decompose D_pca using non-negative matrix factorization (NMF) to obtain spectral components S.
+3. Cluster S using a Gaussian mixture model (GMM) to obtain classified components C.
+4. **Output** C.
+
+```pseudocode
+Algorithm ProbabilisticSpectralReconstruction(D):
+    D_pca = PCA(D)
+    S = NMF(D_pca)
+    C = GMM(S)
+    return C
+```

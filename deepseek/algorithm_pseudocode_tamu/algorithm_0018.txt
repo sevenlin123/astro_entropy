@@ -1,0 +1,49 @@
+```
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+    - Sparse photometric measurements m (vector of observed photometry)
+    - Training set of reference spectra S_train (matrix of known spectra)
+    - Filter response functions of the observation instrument (e.g., JWST/NIRCam)
+
+Output:
+    - Reconstructed spectrum S (high-resolution spectrum)
+    - Posterior distribution over latent coefficients z
+    - Probabilistic taxonomic classification
+
+Steps:
+
+1. Latent Space Definition:
+    a. Perform Principal Component Analysis (PCA) on S_train to obtain principal components U, variance explained vector Λ, and mean μ.
+    b. Project S_train onto U to get latent coefficients z_train = (S_train - μ) * U^T.
+
+2. Data Augmentation:
+    a. Apply Kernel Density Estimation (KDE) with Gaussian kernels on z_train to generate synthetic latent coefficients z_synthetic.
+    b. Smooth the latent space using bandwidth h ~ 0.5 to ensure physical plausibility.
+
+3. Forward Modeling:
+    a. Simulate synthetic photometry m_synthetic for each z in z_synthetic by convolving with filter responses and adding Gaussian noise (σ = 20%).
+
+4. Training:
+    a. Train an AutoML regressor (ensemble of gradient-boosted decision trees) to map m to latent coefficients z.
+    b. Retain K components (optimized K ≈ 8-10) to balance reconstruction fidelity and numerical stability.
+
+5. Inference:
+    a. Predict latent coefficients z_posterior from input photometry m using the trained regressor.
+    b. Sample from z_posterior using Gaussian Copula to preserve latent space correlations.
+    c. Project z_posterior through inverse PCA to reconstruct spectrum S = μ + z * U + noise.
+
+6. Classification:
+    a. Classify the latent coefficients into taxonomic groups (Water, CO2, Organic, Methanol) using a trained classifier.
+    b. Output the probability distribution over spectral types.
+
+7. Uncertainty Quantification:
+    a. Compute credible intervals for S based on the posterior distribution.
+    b. Validate coverage probability across wavelength bands.
+
+8. Applications:
+    a. Optimize photometric filters for future surveys by evaluating information content.
+    b. Detect outliers by identifying posterior distributions distant from the latent manifold core.
+
+End
+```

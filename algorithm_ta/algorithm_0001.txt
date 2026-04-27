@@ -1,0 +1,13 @@
+**Algorithm: Probabilistic Spectral Reconstruction Using PCA and Bayesian Inference**
+
+1. **Training Phase**:
+   - **Input**: Set of known trans-Neptunian object (TNO) near-infrared (near-IR) spectra.
+   - **Perform PCA**: Decompose the training spectra into principal components (PCs) to create a spectral manifold. The number of PCs (e.g., 4-5) is predetermined based on prior validation.
+
+2. **Spectral Reconstruction for Each Object**:
+   - **Input**: Photometric measurements and their uncertainties for the target TNO.
+   - **Mapping to PCA Space**: For each photometric band, express the flux measurement as a sum over the spectrum within the band's range. This creates a system of equations linking photometric fluxes to PCA coefficients.
+   - **Bayesian Inference**: Solve for the posterior distribution of the PCA coefficients given the photometric data, incorporating measurement uncertainties to find the most probable coefficients.
+   - **Reconstruct Spectrum**: Using the estimated coefficients, reconstruct the full spectrum by combining the PCA eigenvectors.
+
+**Output**: Reconstructed spectrum with uncertainty estimates for each TNO.

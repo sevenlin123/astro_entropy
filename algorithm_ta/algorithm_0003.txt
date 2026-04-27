@@ -1,0 +1,39 @@
+**Algorithm: Probabilistic Spectral Reconstruction via Principal Component Analysis**
+
+**Objective:**  
+Reconstruct the full spectrum of trans-Neptunian objects (TNOs) using sparse photometric measurements through a probabilistic approach leveraging Principal Component Analysis (PCA).
+
+**Steps:**
+
+1. **Training Phase (PCA Model):**
+   - **Input:** Collection of known near-infrared (NIR) spectra of TNOs.
+   - **Process:** Perform PCA on the reference spectra to derive principal components (PCs). The optimal number of PCs (k) is determined via Leave-One-Out Cross-Validation (LOOCV), typically found to be 4–5 for capturing essential spectral variability.
+   - **Output:** Trained PCA model with principal components.
+
+2. **Data Preparation:**
+   - **Input:** Observed sparse photometric measurements of the target TNO.
+   - **Process:** Normalize and preprocess the photometric data as necessary.
+
+3. **Latent Space Representation:**
+   - **Input:** Preprocessed photometric data.
+   - **Process:** Map the photometric data into the latent space defined by the PCA model.
+
+4. **Bayesian Inference:**
+   - **Input:** Latent space representation of the target object.
+   - **Process:** Perform Bayesian inference within the PCA space to estimate the most probable latent variables, accounting for measurement uncertainties.
+   - **Output:** Posterior distributions of latent variables.
+
+5. **Spectral Reconstruction:**
+   - **Input:** Estimated latent variables.
+   - **Process:** Reconstruct the full spectrum by combining the latent variables with the PCA basis vectors.
+   - **Output:** Reconstructed spectrum of the target TNO.
+
+6. **Uncertainty Propagation:**
+   - **Input:** Posterior distributions of latent variables.
+   - **Process:** Propagate the uncertainties through the PCA model to compute confidence intervals for each wavelength in the reconstructed spectrum.
+   - **Output:** Uncertainty estimates for the spectrum.
+
+7. **Output Generation:**
+   - **Output:** Final reconstructed spectrum, associated uncertainty estimates, and posterior distributions of latent variables.
+
+This algorithm effectively bridges sparse photometric data with spectral reconstruction, enabling robust characterization of TNOs' surface compositions.

@@ -1,0 +1,50 @@
+```pseudocode
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. **Preprocessing - Define Latent Space**
+   - Input: Reference spectra of TNOs
+   - Apply Principal Component Analysis (PCA) to obtain principal components (PCs).
+   - latent_space ← PCA(reference_spectra)
+
+2. **Generate Synthetic Training Data**
+   - For each spectrum in latent_space:
+     - Project spectrum to latent coefficients.
+     - Apply Kernel Density Estimation (KDE) to create a smooth manifold.
+     - synthetic_latents ← sample(KDE, num_samples=N_synthetic)
+
+3. **Forward Modeling with Noise**
+   - For each synthetic_latent in synthetic_latents:
+     - Project to full spectrum via inverse PCA.
+     - Simulate photometric measurements using JWST/NIRCam filter responses.
+     - Add Gaussian noise (σ = 0.2 relative reflectance) to simulate realistic photometry.
+     - synthetic_photometry ← forward_model(synthetic_latent)
+
+4. **Training - Regressor and Classifier**
+   - Split data into training and validation sets.
+   - Train AutoML regressor to map synthetic_photometry → synthetic_latents.
+   - Train AutoML classifier to map synthetic_latents → taxonomic_labels.
+   - Model: regressor = AutoMLRegressor(train_photometry, train_latents)
+   - Model: classifier = AutoMLClassifier(train_latents, train_labels)
+
+5. **Validation - LOOCV**
+   - For each object in reference_spectra:
+     - Remove object from training data.
+     - Generate synthetic data and retrain models.
+     - Validate reconstruction fidelity and uncertainty calibration.
+     - Compute reconstruction_error and credible_interval_coverage.
+
+6. **Reconstruction for New Object**
+   - Input: Observed photometry (m)
+   - Predict latent coefficients: latent_means, latent_covariances ← regressor.predict(m)
+   - Sample latent space using Gaussian Copula to preserve dependencies.
+   - Reconstruct spectrum: reconstructed_spectrum ← inverse_PCA(latent_sample)
+   - Compute uncertainty intervals: credible_intervals ← analyze(reconstructed_spectrum)
+
+7. **Optional - Taxonomy Classification**
+   - Input: Reconstructed latent means
+   - Classify taxonomic type: taxonomic_prediction ← classifier.predict(latent_means)
+   - Output probability distribution over taxonomic classes.
+
+8. **Output**
+   - Return reconstructed_spectrum, credible_intervals, and taxonomic_prediction (if applicable).
+```

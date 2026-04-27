@@ -1,0 +1,36 @@
+**Algorithm: Probabilistic Spectral Reconstruction of Trans-Neptunian Objects from Sparse Photometry**
+
+1. **Training Data Preparation**:
+   - Collect a sample of near-infrared (near-IR) spectra of Trans-Neptunian Objects (TNOs) as the training set.
+   - Exclude rare spectral types to focus on dominant taxonomic classes (e.g., Water-type, CO₂-type, Organics-type).
+
+2. **Principal Component Analysis (PCA)**:
+   - Perform PCA on the training spectra to derive a low-dimensional latent space representation.
+   - Determine the number of principal components (typically 4-10) that capture the majority of spectral variability relevant for classification and reconstruction.
+
+3. **Latent Space Augmentation**:
+   - Use Kernel Density Estimation (KDE) on the PCA-derived latent coefficients to create a smooth probability distribution, forming a continuous manifold.
+   - This augmented latent space serves as the prior for spectral reconstruction.
+
+4. **Synthetic Photometry Generation**:
+   - For each augmented spectrum, simulate photometric measurements by convolving with the instrumental response (e.g., JWST/NIRCam filters).
+   - Introduce noise (e.g., 20% relative reflectance uncertainty) to simulate real-world photometric uncertainties.
+
+5. **AutoML Model Training**:
+   - Train an ensemble of gradient-boosted decision trees (GBDTs) using the synthetic photometry as inputs and the corresponding latent coefficients as outputs.
+   - This regressor maps sparse photometric data to the latent space.
+
+6. **Bayesian Inference for Spectral Reconstruction**:
+   - Given new photometric observations, use the trained AutoML model to predict latent coefficients.
+   - Apply the inverse PCA transform to reconstruct the full spectrum, constrained by the learned spectral manifold.
+
+7. **Taxonomic Classification**:
+   - Train a secondary AutoML classifier on the latent space to predict the taxonomic type (e.g., Water, CO₂, Organic) of each object.
+   - The classifier operates on the latent coefficients to assign probabilities for each spectral type.
+
+8. **Validation and Applications**:
+   - Validate the framework using Leave-One-Out Cross-Validation (LOOCV) to assess reconstruction fidelity, uncertainty calibration, and taxonomic accuracy.
+   - Apply the framework to survey optimization by identifying optimal filter configurations for JWST/NIRCam.
+   - Detect outliers in the latent space to identify peculiar spectral types requiring further investigation.
+
+This structured approach enables efficient and statistically rigorous mapping of TNO compositional diversity from sparse photometric data, bridging the gap between photometry and spectroscopy.

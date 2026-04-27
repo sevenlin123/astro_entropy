@@ -1,0 +1,43 @@
+The algorithm to implement the core computational method involves several steps, focusing on probabilistic reconstruction of TNO spectra from sparse photometry. Here's the step-by-step breakdown:
+
+**Step 1: Prepare Reference Spectra**
+Load the reference TNO spectra dataset (e.g., DiSCo-TNO) to use as training data for the PCA.
+
+**Step 2: Perform Principal Component Analysis (PCA)**
+Apply PCA to the reference spectra to extract principal components, which will serve as the latent space.
+
+**Step 3: Non-Parametric Kernel Density Estimation (KDE)**
+Fit a KDE to the principal component coefficients to create a smooth distribution in the latent space.
+
+**Step 4: Synthetic Spectrum Generation**
+Sample from the fitted KDE to generate synthetic spectra, expanding the training data for the AutoML regressor.
+
+**Step 5: Simulate Observed Photometry**
+Convolve each synthetic spectrum with the instrumental response (e.g., JWST/NIRCam filters) and add Gaussian noise to simulate realistic photometric measurements.
+
+**Step 6: Split Data into Training and Validation**
+Divide the dataset into training and validation sets to evaluate the performance of the regressor.
+
+**Step 7: Train AutoML Regressor**
+Use the AutoML framework to train a model that maps the noisy photometry to the latent space variables.
+
+**Step 8: Validate the Model**
+Assess the model's accuracy using the validation set to ensure reliable spectral reconstruction.
+
+**Step 9: Predict Latent Variables for New Observations**
+For new photometric data, use the trained regressor to predict the corresponding latent space variables.
+
+**Step 10: Reconstruct Full Spectra**
+Apply the inverse PCA transformation to the predicted latent variables to obtain the full spectral energy distribution.
+
+**Step 11: Optional Taxonomic Classification**
+Use a pre-trained classifier on the latent variables to determine the taxonomic category probabilities.
+
+**Step 12: Compute Confidence Intervals**
+Perform Bayesian posterior sampling to calculate credible intervals on the reconstructed spectra, quantifying uncertainties.
+
+**Final Output:**
+- Reconstructed spectrum with credible intervals
+- Taxonomic classification probabilities and uncertainties
+
+This structured approach efficiently bridges the gap between sparse photometric data and detailed spectral reconstruction, providing a robust framework for TNO analysis.

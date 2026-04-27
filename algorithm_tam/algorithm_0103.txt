@@ -1,0 +1,22 @@
+### Core Computational Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. **Training Phase**:
+   - **Step 1**: Collect a reference dataset of known TNO near-infrared spectra.
+   - **Step 2**: Perform Principal Component Analysis (PCA) on the reference spectra to derive a set of principal components (latent space).
+   - **Step 3**: Use Kernel Density Estimation (KDE) on the PCA coefficients to create a continuous probability distribution representing the latent manifold.
+   - **Step 4**: Generate synthetic photometry by convolving the reference spectra with the NIRCam filter curves and adding Gaussian noise (e.g., 20% relative uncertainty).
+   - **Step 5**: Train an AutoML regressor (e.g., Gradient-Boosted Decision Trees) to map the noisy photometry to the latent PCA coefficients.
+   - **Step 6**: Train a separate AutoML classifier on the latent PCA coefficients to classify TNO spectral types (e.g., H₂O, CO₂, Organic, Methanol).
+
+2. **Reconstruction Phase**:
+   - **Step 1**: For new photometric observations, pass the photometry through the trained AutoML regressor to predict the latent PCA coefficients.
+   - **Step 2**: Project the predicted PCA coefficients back into the full spectral space using the inverse PCA transform to reconstruct the high-resolution spectrum.
+   - **Step 3**: Simultaneously classify the spectral type using the latent PCA coefficients and the trained classifier.
+
+3. **Validation and Application**:
+   - **Step 1**: Perform Leave-One-Out Cross-Validation (LOOCV) to assess reconstruction accuracy and credible interval coverage.
+   - **Step 2**: Evaluate taxonomic classification accuracy on held-out data.
+   - **Step 3**: Analyze the information content of NIRCam filters to optimize survey strategies.
+   - **Step 4**: Detect outliers by examining deviations in the posterior predictive distribution of latent states from the training distribution.
+
+This algorithm efficiently bridges sparse photometry to probabilistic spectral reconstruction, enabling large-scale surveys and accurate taxonomic classification of TNOs.

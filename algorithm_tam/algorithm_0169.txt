@@ -1,0 +1,41 @@
+**Algorithm: Probabilistic Spectral Reconstruction Framework**
+
+1. **Data Preparation**:
+   - Gather a reference dataset of TNO spectra classified into dominant taxonomic types (e.g., H₂O, CO₂, Organics).
+   - Exclude outlier and rare spectral types to maintain a clean training set.
+
+2. **Principal Component Analysis (PCA)**:
+   - Apply PCA to the reference spectra to extract principal components (PCs) representing major spectral variations.
+   - Use the top 4-5 PCs for classification and 8-10 for detailed reconstruction.
+
+3. **Density Estimation**:
+   - Perform Kernel Density Estimation (KDE) on the latent PC coefficients to create a continuous probability distribution.
+   - Set the bandwidth to 0.5 for optimal smoothing.
+
+4. **Synthetic Photometry Generation**:
+   - Forward model the reference spectra through the NIRCam filter set to simulate observed photometry.
+   - Add 20% Gaussian noise to the synthetic photometry to account for observational uncertainties.
+
+5. **Automated Machine Learning (AutoML) Training**:
+   - Train an ensemble of Gradient Boosted Decision Trees (GBDTs) using AutoML to regress the synthetic photometry to latent PC coefficients.
+   - Use the AutoML framework to automatically tune hyperparameters and select optimal models.
+
+6. **Taxonomy Classifier Training**:
+   - Train a secondary AutoML classifier on the latent PC coefficients to predict taxonomic classes (e.g., H₂O, CO₂, Organics, Methanol).
+
+7. **Reconstruction Pipeline**:
+   - For new photometric observations:
+     - Pass photometry through the trained AutoML regressor to predict latent PC coefficients.
+     - Project these coefficients back to the full spectrum using inverse PCA.
+     - Use the taxonomy classifier to determine the spectral type.
+
+8. **Validation**:
+   - Conduct leave-one-out cross-validation (LOOCV) to assess reconstruction accuracy and fidelity.
+   - Measure Normalized Root Mean Square Error (NRMSE) for each reconstruction.
+
+9. **Survey Optimization and Outlier Detection**:
+   - Evaluate different NIRCam filter configurations to identify optimal sets for spectral reconstruction.
+   - Flag objects with low posterior probabilities in the latent space as potential outliers.
+
+10. **Output**:
+    - Provide reconstructed spectra, taxonomic classifications, and outlier flags for each observation.

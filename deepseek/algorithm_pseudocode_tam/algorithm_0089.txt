@@ -1,0 +1,48 @@
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. **Initialize Principal Component Analysis (PCA):**
+   - Train PCA on a reference set of TNO spectra to define a latent space.
+   - Extract the top K principal components, where K is determined based on variance explained (~4-5 for taxonomic classification, ~8-10 for high fidelity reconstruction).
+
+2. **Generate Synthetic Training Data:**
+   - Project the reference spectra onto the PCA latent space to obtain latent coefficients.
+   - Use Kernel Density Estimation (KDE) to smooth and expand the latent distribution, creating a continuous manifold of possible spectral states.
+
+3. **Simulate Noisy Photometry:**
+   - For each augmented spectrum, compute the expected photometric measurements by convolving with instrument-specific filter curves (e.g., JWST/NIRCam).
+   - Add Gaussian noise with a relative uncertainty of ~20% to simulate realistic observational uncertainties.
+
+4. **Train AutoML Regressor (Encoder):**
+   - Use the noisy photometric measurements as input and train an ensemble model (e.g., Gradient Boosted Decision Trees) to predict latent coefficients from photometry.
+
+5. **Define Taxonomic Classifier:**
+   - Train another AutoML classifier on the latent space to predict taxonomic labels (e.g., H₂O, CO₂, Organic) based on the latent coefficients.
+
+6. **Inference Pipeline:**
+   - For a new photometric observation:
+     - Pass the sparse photometry through the trained encoder to obtain a posterior distribution over latent coefficients.
+     - Decode the latent coefficients using the inverse PCA transform to reconstruct the full spectrum.
+     - Apply the taxonomic classifier to determine the most probable spectral type.
+
+7. **Validation and Metrics:**
+   - Perform LOOCV to assess reconstruction accuracy and empirical credible-interval coverage.
+   - Compute metrics including reconstruction error, variability explained, and taxonomic classification accuracy.
+
+### Pseudocode Summary
+
+```
+Algorithm ProbabilisticSpectralReconstruction:
+    Input: Sparse photometric data, reference spectra, filter curves
+    Output: Reconstructed spectrum, taxonomic classification
+
+    1. Train PCA on reference spectra → PCA basis
+    2. Generate latent coefficients from reference spectra → latent_coeffs
+    3. Smooth latent space using KDE → latent_density
+    4. Simulate photometry for each spectrum → noisy_photometry
+    5. Train encoder (AutoML regressor) using noisy_photometry and latent_coeffs → encoder_model
+    6. Train classifier on latent_coeffs → classifier_model
+    7. For each new observation:
+        a. Use encoder_model to predict latent coefficients from photometry → predicted_latents
+        b. Decode predicted_latents using inverse PCA → reconstructed_spectrum
+        c. Classify using classifier_model → taxonomic_label
+```

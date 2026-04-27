@@ -1,0 +1,32 @@
+### Algorithm: Probabilistic Spectral Reconstruction of TNOs from Sparse Photometry
+
+1. **Data Collection**:
+   - Gather a set of reference TNO spectra.
+   - Obtain photometric measurements of TNOs using NIRCam filters.
+
+2. **Principal Component Analysis (PCA)**:
+   - Apply PCA to the reference spectra to extract principal components, defining a low-dimensional latent space.
+
+3. **Synthetic Data Generation**:
+   - Augment the reference spectra using Kernel Density Estimation (KDE) to create a continuous latent manifold.
+   - Forward model the augmented spectra through the NIRCam filter set to simulate photometric measurements.
+
+4. **Machine Learning Training**:
+   - Use an AutoML regressor (e.g., Gradient Boosted Decision Trees) to map sparse photometry to PCA latent coefficients.
+   - Train a classifier to categorize taxonomic types (e.g., H₂O, CO₂, Organics) using the latent space.
+
+5. **Spectral Reconstruction**:
+   - For new photometric observations, predict latent coefficients using the trained regressor.
+   - Reconstruct the full spectrum by transforming the predicted coefficients back through the PCA basis.
+
+6. **Validation and Error Propagation**:
+   - Perform Leave-One-Out Cross-Validation (LOOCV) to assess reconstruction accuracy.
+   - Quantify uncertainties in photometric measurements and propagate them through the model to determine credible intervals for reconstructed spectra.
+
+7. **Survey Optimization and Outlier Detection**:
+   - Evaluate different filter configurations to maximize spectral reconstruction fidelity.
+   - Identify rare spectral types by detecting anomalies in the latent space.
+
+8. **Output**:
+   - Provide reconstructed spectra, taxonomic classifications, and uncertainty estimates for each object.
+   - Use results for applications such as survey planning and identifying targets for spectroscopic follow-up.

@@ -1,0 +1,49 @@
+```python
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+    - Training Spectra: Set of reference TNO spectra
+    - Observed Photometry: Sparse photometric measurements for target object
+    - NIRCam Filter Set: Filter definitions for forward modeling
+
+Output:
+    - Reconstructed Spectrum
+    - Taxonomic Classification
+    - Uncertainty Quantification
+
+Steps:
+
+1. **Principal Component Analysis (PCA):**
+    a. Perform PCA on the Training Spectra to obtain principal components.
+    b. Determine optimal number of principal components (K) via LOOCV.
+
+2. **Kernel Density Estimation (KDE):**
+    a. Project training spectra onto PCA latent space.
+    b. Train KDE on latent space to model probability density.
+    c. Generate synthetic spectra by sampling KDE.
+
+3. **Forward Modeling:**
+    a. Simulate photometric measurements for each synthetic spectrum using NIRCam filter set.
+    b. Inject Gaussian noise (relative uncertainty ~20%) into simulated photometry.
+
+4. **Training AutoML Regressor:**
+    a. Combine real and synthetic photometry with corresponding PCA coefficients.
+    b. Train ensemble of gradient-boosted decision trees (e.g., XGBoost) to regress photometry to latent coefficients.
+
+5. **Reconstruct Spectrum:**
+    a. For target object, predict latent coefficients using trained regressor.
+    b. Apply inverse PCA transform to obtain full spectrum.
+
+6. **Uncertainty Quantification:**
+    a. Use Gaussian Copula to sample joint posterior of latent coefficients.
+    b. Calculate empirical credible intervals for each wavelength.
+
+7. **Taxonomic Classification:**
+    a. Train classifier on PCA coefficients using AutoML.
+    b. Classify target object's latent coefficients into taxonomic groups.
+
+8. **Output Results:**
+    a. Return reconstructed spectrum, credible intervals, and taxonomic probabilities.
+```
+
+```

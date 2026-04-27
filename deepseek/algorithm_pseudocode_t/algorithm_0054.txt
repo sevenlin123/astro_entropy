@@ -1,0 +1,11 @@
+**Algorithm: Probabilistic Spectral Reconstruction of TNOs**
+
+1. **Input Data**: Read sparse multi-band photometric data for each TNO object.
+2. **Define Physical Parameters**: Set up parameters (e.g., particle size, albedo, phase function) with their respective prior distributions.
+3. **Forward Model**: For each parameter combination, simulate expected fluxes using a physical model of light scattering on icy surfaces.
+4. **Compute Likelihood**: Calculate the probability of observing the data given the parameters.
+5. **Bayesian Inference**: Apply Bayes' theorem to derive posterior distributions of parameters using the likelihood and priors.
+6. **Posterior Sampling**: Use MCMC or variational inference to draw samples from the posterior distribution.
+7. **Reconstruct SED**: Using the sampled parameters, predict and reconstruct the spectral energy distribution.
+8. **Calculate Uncertainties**: Determine uncertainties in the SED from the posterior variances.
+9. **Output**: Return the reconstructed SEDs with associated uncertainties.

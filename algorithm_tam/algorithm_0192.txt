@@ -1,0 +1,39 @@
+### Algorithm for Probabilistic Spectral Reconstruction of Trans-Neptunian Objects from Sparse Photometry
+
+**Step 1: Data Preparation**
+- Collect a training set of reference TNO spectra.
+- Exclude outliers and rare spectral types to focus on dominant taxonomic classes.
+
+**Step 2: Principal Component Analysis (PCA)**
+- Perform PCA on the training spectra to identify principal components capturing dominant spectral variations.
+- Select 4-5 components for taxonomic classification and 8-10 for detailed reconstruction.
+
+**Step 3: Latent Space Definition**
+- Use Kernel Density Estimation (KDE) on PCA coefficients to create a continuous probability distribution representing valid spectra.
+
+**Step 4: Synthetic Photometry Generation**
+- Forward-model the spectra through JWST/NIRCam filters to simulate photometric observations.
+- Inject noise (~20% relative uncertainty) to account for observational uncertainties.
+
+**Step 5: AutoML Model Training**
+- Train an ensemble of gradient-boosted decision trees (AutoML) to regress sparse photometry onto PCA coefficients.
+- Augment training data using synthetic spectra derived from the latent manifold to improve model stability.
+
+**Step 6: Bayesian Inference**
+- For new photometric observations, predict latent coefficients using the trained AutoML model.
+- Apply inverse PCA to reconstruct the full spectrum, constrained by the learned manifold.
+
+**Step 7: Taxonomic Classification**
+- Use a secondary classifier trained on latent space to assign taxonomic labels (e.g., H₂O, CO₂, Organic) based on predicted coefficients.
+
+**Step 8: Outlier Detection**
+- Identify objects with high entropy in latent or taxonomic distributions as potential outliers.
+
+**Step 9: Performance Validation**
+- Conduct Leave-One-Out Cross-Validation (LOOCV) to assess reconstruction accuracy and uncertainty coverage.
+- Evaluate credible intervals and classification confidence for robustness.
+
+**Step 10: Application to Survey Optimization**
+- Assess various filter configurations for their ability to accurately reconstruct spectra and detect outliers, aiding in planning efficient photometric surveys.
+
+This algorithm systematically bridges sparse photometric data with detailed spectral analysis, enabling efficient and accurate reconstruction of TNO spectra for large-scale surveys.

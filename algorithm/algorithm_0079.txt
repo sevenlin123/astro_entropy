@@ -1,0 +1,12 @@
+**Algorithm: Probabilistic Spectral Reconstruction of TNOs from Sparse Photometry**
+
+1. **Input Data**: Sparse photometric observations of trans-neptunian objects (TNOs).
+2. **Parameter Space**: Define parameters including albedo, thermal inertia, and spectral reflectance properties.
+3. **Forward Model**: Simulate light absorption and emission using the defined parameters to generate expected photometric measurements.
+4. **Gaussian Process (GP)**: Employ a GP to model the relationship between the parameters and observed photometric data, capturing uncertainty and correlations.
+5. **Nested Sampling**: Use a nested sampling algorithm to explore the parameter space, computing posterior probabilities for each parameter configuration.
+6. **Posterior Distribution**: Calculate posterior probabilities for parameters and SEDs based on Bayesian inference.
+7. **Outlier Detection**: Identify objects with significantly low posterior probabilities as outliers.
+8. **Survey Optimization**: Predict detection probabilities for new observations to optimize future surveys.
+
+This algorithm reconstructs the SEDs of TNOs, quantifies uncertainties, identifies outliers, and optimizes surveys efficiently using probabilistic methods and Bayesian inference.

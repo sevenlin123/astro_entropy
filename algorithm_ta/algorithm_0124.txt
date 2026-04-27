@@ -1,0 +1,31 @@
+The algorithm is designed to reconstruct full spectra and classify trans-Neptunian objects using sparse photometric data by leveraging Bayesian inference in a reduced principal component space. Here’s the step-by-step breakdown:
+
+1. **Input**: Sparse photometric measurements, a training set of near-IR spectra, and NIRCam filter configurations.
+
+2. **Preprocessing**:
+   - **Normalization**: Adjust photometric data to account for variations in observation conditions.
+   - **Principal Component Analysis (PCA)**: Apply PCA to the training spectra to capture the main sources of variability, resulting in principal components (PCs).
+   - **Component Selection**: Choose a subset of PCs based on their contribution to variance (e.g., 4-5 for classification, 8-10 for detailed reconstruction).
+
+3. **Bayesian Inference**:
+   - **Model Construction**: Use the selected PCs to model the spectral manifold, capturing how spectra vary in the reduced space.
+   - **Posterior Estimation**: Perform Bayesian inference to estimate the posterior distribution of the underlying spectra given the photometric data, incorporating measurement uncertainties.
+
+4. **Spectral Reconstruction**:
+   - **Reconstruction**: Reconstruct the full spectrum from the posterior means of the PCs.
+   - **Uncertainty Assessment**: Calculate credible intervals to determine the confidence around the reconstructed spectra.
+
+5. **Outlier Detection**:
+   - **Intermediate Model Analysis**: Examine the posterior probabilities of different intermediate models.
+   - **Rare Types Identification**: Identify objects where photometry restricts the model to low-probability states, indicating rare spectral types.
+
+6. **Survey Optimization**:
+   - **Filter Evaluation**: Assess the information content of each NIRCam filter configuration.
+   - **Optimal Configuration**: Determine which filter setups best retain spectral information for accurate classification.
+
+7. **Output**:
+   - **Reconstructed Spectra**: Detailed spectra with uncertainty bounds.
+   - **Classification Results**: Taxonomic classes and outliers identified.
+   - **Survey Configurations**: Recommended filter settings for efficient data collection.
+
+This method effectively bridges sparse photometry and detailed spectroscopy, enabling robust analysis of TNO compositions even with limited data.

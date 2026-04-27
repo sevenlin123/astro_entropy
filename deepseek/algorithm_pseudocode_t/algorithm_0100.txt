@@ -1,0 +1,47 @@
+**Algorithm: Probabilistic Spectral Reconstruction of Trans-Neptunian Objects**
+
+**Input:**  
+- Sparse photometric data points for each TNO object  
+- Set of template SEDs representing typical spectral shapes  
+- Orbital period-color diagram positions for each TNO  
+
+**Output:**  
+- Reconstructed spectral energy distributions (SEDs) with quantified uncertainties  
+- Optimized survey predictions  
+- Outlier detection results  
+
+**Steps:**  
+
+1. **Initialize Data Structures:**  
+   - For each object, gather sparse photometric data from available surveys.  
+
+2. **Template SED Construction:**  
+   - Define a set of template SEDs that represent typical spectral shapes of TNOs.  
+   - Each template SED corresponds to a specific spectral class or archetype.  
+
+3. **Bayesian Inference Setup:**  
+   - Represent each object's SED as a weighted combination of the template SEDs.  
+   - Define prior distributions for the weights and spectral parameters.  
+
+4. **Forward Modeling:**  
+   - For each template, compute the expected fluxes across all filters based on its spectral shape and the object's orbital position.  
+   - Combine the flux contributions weighted by the inferred template weights to predict the observed fluxes.  
+
+5. **Posterior Computation:**  
+   - Use Bayesian inference to compute the posterior distribution of template weights given the observed data.  
+   - Quantify uncertainties in the reconstructed SED by sampling from the posterior distribution.  
+
+6. **Survey Optimization:**  
+   - For each template, predict fluxes across all potential survey filters based on the inferred spectral parameters.  
+   - Identify optimal filters and exposure times for detecting TNOs with high signal-to-noise ratios.  
+
+7. **Outlier Detection:**  
+   - Compute the goodness-of-fit between the observed photometric data and the inferred template SEDs.  
+   - Flag objects with significantly low goodness-of-fit as potential outliers.  
+
+8. **Output Results:**  
+   - Reconstructed SEDs with uncertainty estimates for each object.  
+   - Optimized survey strategies for future observations.  
+   - List of outlier candidates requiring further investigation.  
+
+**End Algorithm**

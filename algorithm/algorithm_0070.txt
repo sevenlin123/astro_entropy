@@ -1,0 +1,14 @@
+The algorithm consists of the following steps:
+
+1. **Data Preprocessing**: Clean the input data by removing obvious errors and interpolating missing values where possible.
+
+2. **Spectral Model Setup**:
+   - Define a Gaussian Process regression model with a custom kernel designed to capture the smoothness and variability typical of TNO spectra.
+
+3. **Bayesian Inference**:
+   - Use Markov Chain Monte Carlo (MCMC) to sample the posterior distribution of the spectral parameters, incorporating a hierarchical structure to account for population-wide characteristics while allowing individual variations.
+
+4. **Outlier Detection**:
+   - Identify spectra that are inconsistent with the model by evaluating high posterior probabilities of errors, marking them as outliers.
+
+This structured approach focuses on the core computational method required for spectral reconstruction, excluding validation and visualization steps.

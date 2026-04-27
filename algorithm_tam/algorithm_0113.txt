@@ -1,0 +1,39 @@
+**Algorithm Description: Probabilistic Spectral Reconstruction Framework**
+
+1. **Input Data Preparation**:
+   - Obtain sparse photometric measurements of TNOs.
+   - Use these measurements as inputs for the reconstruction process.
+
+2. **Principal Component Analysis (PCA) Training**:
+   - Train a PCA model on a reference set of near-infrared spectra of TNOs.
+   - This step defines a low-dimensional latent space that captures the major spectral variations of the training set.
+
+3. **Density Estimation of Latent Space**:
+   - Apply Kernel Density Estimation (KDE) on the PCA latent coefficients derived from the training spectra.
+   - This creates a smooth probability distribution over the latent space, enabling generation of synthetic spectra.
+
+4. **Synthetic Photometry Generation**:
+   - For each synthetic spectrum, compute the expected photometric values by convolving the spectrum with the instrumental filter responses (e.g., JWST/NIRCam filters).
+   - Inject noise (e.g., 20% relative uncertainty) into the synthetic photometry to simulate realistic observational conditions.
+
+5. **Training the AutoML Regressor**:
+   - Use the synthetic photometry and corresponding PCA latent coefficients as training data.
+   - Train an ensemble of gradient-boosted decision trees (AutoGluon framework) to map sparse photometry to latent space coordinates.
+
+6. **Reconstruction Process**:
+   - For new photometric observations, pass the measurements through the trained AutoML regressor to predict latent coefficients.
+   - Project these coefficients back into the high-dimensional spectral space using inverse PCA transformation to obtain the reconstructed spectrum.
+
+7. **Taxonomic Classification**:
+   - Utilize a secondary classifier trained on the latent space to predict the taxonomic type (e.g., H₂O, CO₂, Organics) of the object.
+   - This classification is based on the latent coefficients derived from the photometric data.
+
+8. **Uncertainty Propagation and Outlier Detection**:
+   - Compute uncertainties in the reconstructed spectra by analyzing the variability in the latent space predictions.
+   - Identify outliers by comparing the reconstructed spectra against the expected manifold defined by the training data.
+
+9. **Survey Optimization**:
+   - Evaluate different photometric filter configurations to determine their information content and effectiveness in spectral reconstruction.
+   - Select optimal filter combinations that maximize reconstruction fidelity for specific spectral features or taxonomic types.
+
+**Output**: Reconstructed high-resolution spectra, taxonomic classifications, and outlier detection for trans-Neptunian objects based on sparse photometric data.

@@ -1,0 +1,17 @@
+Algorithm: Probabilistic Spectral Reconstruction (PSR)
+
+Input: Sparse photometric measurements of TNOs, Training set of near-IR spectra
+
+Output: Reconstructed full spectra with uncertainty estimates
+
+Steps:
+
+1. Preprocess the training set of near-IR spectra using Principal Component Analysis (PCA) to obtain principal component representations.
+
+2. Train a probabilistic model based on these principal components, capturing the spectral manifold of TNOs.
+
+3. Perform Bayesian inference in the reduced PCA space to reconstruct full spectra from sparse photometric measurements.
+
+4. Propagate measurement uncertainties through the probabilistic model to estimate uncertainties in the reconstructed spectra.
+
+5. Output the reconstructed spectra along with their uncertainty intervals.

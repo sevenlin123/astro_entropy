@@ -1,0 +1,47 @@
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+**Input:**  
+- Sparse photometric measurements (e.g., fluxes in specific filters) for a trans-Neptunian object (TNO).  
+- Training dataset of reference TNO spectra and corresponding photometric measurements.  
+
+**Output:**  
+- Reconstructed full near-infrared spectrum with uncertainty quantification.  
+- Probabilistic classification of the TNO into predefined spectral taxonomic classes.  
+
+---
+
+#### **Step 1: Latent Space Definition**  
+1. Perform Principal Component Analysis (PCA) on a reference set of TNO spectra to obtain principal components (PCs).  
+2. Use Kernel Density Estimation (KDE) on the PCA coefficients of the reference spectra to define a continuous latent space prior.  
+
+---
+
+#### **Step 2: Training Phase**  
+1. Forward Model:  
+   - Simulate photometric measurements for each augmented spectrum by convolving the spectra with the filter transmission curves of the target instrument (e.g., JWST/NIRCam).  
+   - Inject Gaussian noise (relative reflectance uncertainty of ~20%) into the synthetic photometry to account for observational uncertainties.  
+2. Train an AutoML regressor (e.g., ensemble of Gradient Boosted Decision Trees) to map sparse photometry to latent space coordinates.  
+
+---
+
+#### **Step 3: Inference Phase**  
+1. **Encoder Step:**  
+   - Pass the sparse photometric measurements of the target object through the trained AutoML regressor to predict the latent space coordinates.  
+2. **Decoder Step:**  
+   - Apply the inverse PCA transformation to the predicted latent coefficients to reconstruct the full spectrum.  
+3. **Uncertainty Quantification:**  
+   - Sample the joint posterior distribution of the latent coefficients using a Gaussian Copula framework to generate an ensemble of reconstructed spectra.  
+   - Compute 95% credible intervals for each wavelength bin.  
+
+---
+
+#### **Step 4: Taxonomy Classification**  
+1. Project the predicted latent space coordinates into a taxonomic classifier trained on the reference spectra.  
+2. Output the probability distribution over spectral taxonomic classes (e.g., Water-type, CO$_2$-type, Organics-type).  
+
+---
+
+#### **Output Metrics**  
+- Root Mean Square Error (RMSE) between the reconstructed and true spectrum (normalized).  
+- Empirical coverage of 95% credible intervals.  
+- Probabilistic taxonomic classification scores.

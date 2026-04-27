@@ -1,0 +1,41 @@
+### Algorithm for Probabilistic Spectral Reconstruction of TNOs
+
+1. **Principal Component Analysis (PCA) Preparation**:
+   - Collect a reference set of near-infrared spectra of TNOs.
+   - Perform PCA on these spectra to reduce them into a set of principal components.
+   - Define a latent space using the principal components.
+
+2. **Data Augmentation**:
+   - Use Kernel Density Estimation (KDE) to generate synthetic latent vectors from the PCA-reduced reference spectra.
+   - This creates a continuous manifold that approximates the underlying spectral distribution.
+
+3. **Synthetic Photometry Generation**:
+   - Forward model the synthetic spectra through the JWST/NIRCam filter set to simulate observed photometric magnitudes.
+   - Introduce Gaussian noise (e.g., 20% relative uncertainty) to account for observational errors.
+
+4. **Automated Machine Learning (AutoML) Training**:
+   - Train an AutoML regressor to map the noisy synthetic photometry to the latent space coefficients.
+   - Additionally, train a classifier within the latent space to categorize spectra into taxonomic types.
+
+5. **Reconstruction Pipeline**:
+   - For new photometric observations, use the trained AutoML regressor to predict latent coefficients.
+   - Apply the inverse PCA transformation to reconstruct the full spectrum from the predicted latent coefficients.
+
+6. **Uncertainty Propagation**:
+   - Compute posterior variances for the latent coefficients and propagate them through the inverse PCA transform to obtain confidence intervals on the reconstructed spectrum.
+
+7. **Validation and Outlier Detection**:
+   - Use leave-one-out cross-validation to assess reconstruction accuracy and credible interval coverage.
+   - Identify outliers by comparing reconstruction errors against defined thresholds.
+
+8. **Taxonomic Classification**:
+   - Classify objects based on their latent space coordinates to determine their spectral type (e.g., H₂O, CO₂, Organics).
+   - Provide probabilistic labels for confident taxonomic identification.
+
+9. **Survey Optimization**:
+   - Analyze the information content of each filter by evaluating changes in reconstruction fidelity when filters are omitted.
+   - Optimize filter configurations for future surveys based on their impact on spectral reconstruction accuracy.
+
+10. **Application to Rare Spectral Types**:
+    - Detect unusual spectral morphologies by identifying points in the latent space outside the convex hull of known spectral types.
+    - Reconstruct and analyze these outliers for unique taxonomic features.

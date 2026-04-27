@@ -1,0 +1,21 @@
+1. **Obtain sparse photometric data** for the object of interest.
+
+2. **Preprocess the data**: Remove outliers and normalize the measurements.
+
+3. **Define the spectral energy distribution (SED)** as a linear combination of Gaussian mixture components.
+
+4. **Apply a wavelet transform** to the SED parameters to reduce dimensionality.
+
+5. **Set up the Bayesian inversion framework** using a nested sampling algorithm.
+
+6. **Construct the likelihood function** based on Gaussian process regression.
+
+7. **Define the prior distributions**: Incorporate the two-component prior (smoothness and reference template constraints).
+
+8. **Perform nested sampling** to explore the parameter space and compute the posterior probabilities.
+
+9. **Compute maximum a posteriori (MAP) estimates** for the spectral parameters.
+
+10. **Evaluate posterior probabilities** for each spectral class.
+
+11. **Assign the object** to the spectral class with the highest posterior probability.

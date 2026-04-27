@@ -1,0 +1,33 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+**Inputs:**  
+- Sparse photometric measurements of a TNO object  
+- Pre-trained PCA model (principal components derived from a training set of near-IR spectra)  
+
+**Outputs:**  
+- Reconstructed spectrum with uncertainties  
+
+**Steps:**  
+
+1. **Preprocess the photometric data:**  
+   - Handle missing values (e.g., interpolate or impute).  
+   - Normalize/standardize the measurements to match the scale of the PCA model.  
+
+2. **Project photometric data into PCA latent space:**  
+   - Map the normalized photometric measurements onto the principal components derived from the training set.  
+
+3. **Perform Bayesian inference in the latent space:**  
+   - Define a probabilistic model connecting the latent principal components to the observed photometric data.  
+   - Specify a prior distribution over the principal components.  
+   - Compute the posterior distribution of the principal components given the photometric data, incorporating measurement uncertainties.  
+
+4. **Reconstruct the full spectrum:**  
+   - Use the posterior mean (or mode) of the latent variables to invert the PCA transformation and reconstruct the original spectrum.  
+
+5. **Propagate uncertainties:**  
+   - Quantify the uncertainty in the reconstructed spectrum by propagating the uncertainties from the photometric measurements through the Bayesian inference process.  
+
+6. **Output the reconstructed spectrum and uncertainties:**  
+   - Provide the reconstructed spectrum along with its associated uncertainties.  
+
+**Note:** Preprocessing may include tasks like interpolation or scaling. Bayesian inference might employ MCMC or variational methods.

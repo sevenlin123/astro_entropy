@@ -1,0 +1,12 @@
+The computational algorithm for the probabilistic spectral reconstruction framework can be summarized as follows:
+
+1. **Principal Component Analysis (PCA) Training**: 
+   - Use a training dataset of near-infrared (near-IR) spectra to compute principal components. This captures the dominant modes of spectral variability relevant for taxonomic classification.
+
+2. **Bayesian Inference in Latent Space**:
+   - For each object, employ Bayesian methods to infer its position in the PCA-reduced latent space. This step uses the sparse photometric data and accounts for measurement uncertainties to determine the most probable latent variables.
+
+3. **Spectral Reconstruction**:
+   - Reconstruct the full near-IR spectrum from the inferred latent variables. This includes propagating the uncertainties from the photometric measurements to provide credible intervals for the reconstructed spectra.
+
+This framework effectively bridges the gap between sparse photometric data and detailed spectral information, enabling robust spectral reconstruction and classification of trans-Neptunian objects.

@@ -1,0 +1,21 @@
+```
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. Initialize the training set with reference TNO spectra (51 objects).
+2. Perform Principal Component Analysis (PCA) on the training spectra to derive principal components (up to 10 components for high fidelity).
+3. Augment the training set using Kernel Density Estimation (KDE) to create a smooth probability distribution in the latent space.
+4. Generate synthetic photometry for each augmented spectrum by convolving with instrument-specific filter responses (e.g., JWST/NIRCam).
+5. Inject Gaussian noise (20% relative uncertainty) into the synthetic photometry to simulate observational noise.
+6. Train an AutoML regressor (ensemble of gradient-boosted decision trees) to map sparse photometry to latent space coefficients.
+7. Validate the model using Leave-One-Out Cross-Validation (LOOCV):
+   a. For each held-out spectrum, remove it from the training set.
+   b. Resample the latent space using the updated training set.
+   c. Forward-model synthetic photometry from the resampled latent coefficients.
+   d. Predict latent coefficients for the synthetic photometry using the trained AutoML model.
+   e. Inverse transform the predicted latent coefficients to reconstruct the full spectrum.
+   f. Compare the reconstructed spectrum with the actual spectrum to compute RMSE, correlation, and credible interval coverage.
+8. For taxonomic classification:
+   a. Project the latent coefficients of new objects into the pre-trained latent space.
+   b. Classify the object based on the proximity to predefined spectral clusters (e.g., Water-type, CO2-type, Organics-type).
+9. Detect outliers by examining the probability distribution in the latent space; objects with probabilities significantly lower than others are flagged.
+```

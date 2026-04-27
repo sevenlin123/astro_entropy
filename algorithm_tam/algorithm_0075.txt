@@ -1,0 +1,34 @@
+### Algorithm: Probabilistic Spectral Reconstruction Framework
+
+1. **Training Phase**:
+   - **Data Preparation**: Collect a set of near-infrared spectra of trans-Neptunian objects (TNOs) categorized into known taxonomic types (e.g., Water-type, CO₂-type, Organics-type).
+   - **Principal Component Analysis (PCA)**:
+     - Apply PCA to the training spectra to derive a set of principal components (latent space).
+     - Use Kernel Density Estimation (KDE) to smooth the latent space, creating a continuous probability distribution of valid spectral morphologies.
+   - **Synthetic Data Generation**:
+     - Generate synthetic photometry by convolving the augmented spectra with the filter responses of the target instrument (e.g., JWST/NIRCam).
+     - Introduce Gaussian noise (e.g., 20% relative uncertainty) to simulate realistic photometric uncertainties.
+   - **Model Training**:
+     - Train an AutoML regressor (e.g., ensemble of gradient-boosted decision trees) to map sparse photometric inputs to PCA coefficients.
+     - Train a secondary classifier to partition the latent space into taxonomic categories.
+
+2. **Inference Phase**:
+   - **Input Photometry**: Provide new sparse photometric measurements of a TNO.
+   - **Latent Space Prediction**:
+     - Use the trained AutoML regressor to predict the PCA coefficients corresponding to the input photometry.
+   - **Spectral Reconstruction**:
+     - Apply the inverse PCA transform to the predicted coefficients to obtain the reconstructed spectrum.
+   - **Classification**:
+     - Classify the object into taxonomic categories based on the predicted latent coefficients.
+   - **Uncertainty Quantification**:
+     - Propagate uncertainties from photometric measurements to the reconstructed spectrum using the Bayesian framework.
+
+3. **Applications**:
+   - **Survey Optimization**: Evaluate different filter configurations to maximize spectral information content.
+   - **Outlier Detection**: Identify objects whose posterior probabilities in the latent space significantly deviate from the training distribution.
+
+4. **Validation**:
+   - Perform leave-one-out cross-validation to assess reconstruction accuracy and credible interval coverage.
+   - Validate the framework's performance using metrics such as RMSE and classification accuracy.
+
+This structured approach effectively bridges the gap between sparse photometric data and detailed spectral information, enabling robust analysis of trans-Neptunian objects.

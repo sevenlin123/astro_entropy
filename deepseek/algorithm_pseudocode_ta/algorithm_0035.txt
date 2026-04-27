@@ -1,0 +1,41 @@
+```
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. Initialize:
+   - TrainingSpectra = Set of near-infrared spectra for TNOs
+   - N = Number of spectral bands
+   - M = Number of training objects
+   - K = Number of principal components (e.g., 4-5 for classification, 8-10 for reconstruction)
+
+2. Preprocessing:
+   a. Normalize TrainingSpectra
+   b. Remove outliers from TrainingSpectra
+
+3. Principal Component Analysis (PCA):
+   a. Compute covariance matrix of TrainingSpectra
+   b. Perform eigen decomposition to obtain top K eigenvectors (Principal Components)
+   c. Transform TrainingSpectra into PCA space
+
+4. Probabilistic Latent-Space Model:
+   a. Define probability distribution over PCA latent space
+   b. Establish Bayesian inference framework in PCA space
+
+5. Spectral Reconstruction for Each Test Object:
+   a. Input: Photometric measurements of the test object
+   b. Propagate measurement uncertainties
+   c. Perform Bayesian inference in PCA space to reconstruct the full spectrum
+   d. Calculate uncertainties in reconstructed spectrum
+
+6. Validation (if ground truth available):
+   a. Compare reconstructed spectra with ground truth
+
+7. Outlier Detection:
+   a. Analyze intermediate models in the continuous topological manifold
+   b. Identify and constrain photometry of unusual spectral types
+
+8. Survey Optimization:
+   a. Evaluate information content of NIRCam filters (e.g., F090W, F115W, F410M, F460M)
+   b. Determine optimal filter configurations for future observations
+
+End Algorithm
+```

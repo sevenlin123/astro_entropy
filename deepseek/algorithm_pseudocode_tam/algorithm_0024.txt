@@ -1,0 +1,46 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+**Input:**  
+- `Photometry`: Sparse photometric measurements of a trans-Neptunian object.  
+- `TrainingSpectra`: Set of reference TNO spectra used for model training.  
+- `Filters`: NIRCam filter set definitions for generating synthetic photometry.  
+
+**Output:**  
+- `ReconstructedSpectrum`: High-resolution spectrum inferred from photometric data.  
+- `TaxonomicProbability`: Probabilities of the object belonging to predefined spectral classes.  
+
+**Steps:**  
+
+1. **Principal Component Analysis (PCA):**  
+   - Perform PCA on `TrainingSpectra` to extract principal components (PCs).  
+   - Determine the number of PCs (`K`) that best capture spectral variability (e.g., 4-10 components based on variance explained).  
+
+2. **Latent Space Definition:**  
+   - Project `TrainingSpectra` into the PCA latent space.  
+   - Augment the latent space using Kernel Density Estimation (KDE) to create a smooth probability distribution.  
+
+3. **Synthetic Photometry Generation:**  
+   - For each spectrum in the augmented latent space, compute the expected reflectance using NIRCam filter responses.  
+   - Add Gaussian noise with 20% relative reflectance uncertainty to simulate real photometric measurements.  
+
+4. **AutoML Regression Model Training:**  
+   - Train an ensemble of gradient-boosted decision trees (GBTs) to map noisy photometry to latent coefficients.  
+   - Ensure model generalization by applying cross-validation and appropriate regularization.  
+
+5. **Taxonomic Classifier Training:**  
+   - Train a second AutoML model to classify spectra into taxonomic classes (e.g., H₂O, CO₂, Organics) based on latent coordinates.  
+
+6. **Reconstruction Process:**  
+   - For a new object, input its photometric measurements into the trained AutoML regressor to predict latent coefficients.  
+   - Apply the inverse PCA transform to these coefficients to reconstruct the full spectrum.  
+
+7. **Taxonomic Classification:**  
+   - Use the latent coefficients from the reconstruction to predict the taxonomic probabilities.  
+
+8. **Uncertainty Quantification:**  
+   - Propagate photometric uncertainties through the model to estimate credible intervals for the reconstructed spectrum.  
+
+9. **Validation (Optional):**  
+   - Perform leave-one-out cross-validation to assess model fidelity by comparing reconstructed spectra to the ground truth.  
+
+**End.**

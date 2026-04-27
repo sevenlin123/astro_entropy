@@ -1,0 +1,21 @@
+```
+Initialize:
+    Load training spectra into dataset D_train
+    Perform PCA on D_train to obtain PCA basis V and mean vector μ
+    Set number of principal components k
+
+For each object:
+    Retrieve observed photometric magnitudes m_obs and their uncertainties σ
+    Create data structure S containing m_obs and σ
+    Project S into latent space using V:
+        Solve V * z ≈ S to obtain latent variable estimates z
+    Perform Bayesian inference on latent variables z:
+        Compute posterior distribution p(z | S, σ) considering measurement uncertainties
+    Reconstruct full spectrum:
+        f_hat = μ + V * E[z | S, σ]
+    Compute confidence intervals for f_hat:
+        For each wavelength λ, calculate the standard deviation of the posterior predictive distribution
+
+Output:
+    Reconstructed spectra f_hat and their confidence intervals for all objects
+```

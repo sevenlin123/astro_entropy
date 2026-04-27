@@ -1,0 +1,29 @@
+```
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input: Training spectral dataset S, photometric dataset P for test objects.
+
+Output: Reconstructed spectral dataset S_reconstructed, uncertainties U.
+
+1. Train PCA model on spectral data S:
+   a. Center S by subtracting the mean spectrum.
+   b. Compute covariance matrix C of the centered data.
+   c. Perform eigenvalue decomposition of C to get eigenvectors V and eigenvalues D.
+   d. Sort eigenvectors and eigenvalues in descending order of eigenvalues.
+   e. Select top K principal components (K ≈ 4-5).
+   f. Construct the PCA projection matrix W using the selected eigenvectors.
+   g. Store the mean spectrum and PCA model.
+
+2. For each object in P:
+   a. Extract photometric flux measurements F in NIRCam bands.
+   b. Convert F into a spectral representation vector, handling sparse data.
+   c. Project F into the PCA latent space using W to obtain latent variables z.
+   d. Perform Bayesian inference on z, incorporating measurement uncertainties in F.
+      i. Define a probabilistic model for z with appropriate priors.
+      ii. Use MCMC or variational methods to sample the posterior distribution of z.
+   e. Reconstruct the full spectrum S_hat from the posterior z.
+      i. S_hat = W * mean(z_posterior) + mean_spectrum.
+   f. Compute uncertainties U in S_hat by propagating the posterior uncertainties of z.
+
+3. Output S_reconstructed and U.
+```

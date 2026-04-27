@@ -1,0 +1,46 @@
+```plaintext
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+- Sparse photometric observations (m)
+- Pre-trained Principal Component Analysis (PCA) model with eigenvectors (U) and eigenvalues (Λ)
+- Number of principal components (K)
+- Synthetic training data generated from PCA and KDE augmentation
+
+Output:
+- Reconstructed spectrum (S)
+- Taxonomic classification probabilities
+- Uncertainty intervals for the reconstructed spectrum
+
+Steps:
+
+1. **Latent Space Definition**:
+   a. Project the observed photometric data (m) onto the pre-trained PCA model to obtain latent coefficients (z).
+      - z = U^T * m
+      - Retain only the first K principal components.
+
+2. **Reconstruct Spectrum**:
+   a. Apply the inverse PCA transformation using the latent coefficients (z) to reconstruct the full spectrum (S).
+      - S = U * z + mean_spectrum
+      - Ensure the reconstructed spectrum adheres to physical constraints.
+
+3. **Uncertainty Quantification**:
+   a. Sample the joint posterior distribution of the latent coefficients using Gaussian Copula.
+      - Draw multiple samples (z_ensemble) from the posterior distribution.
+      - For each sample, compute the corresponding spectrum (S_ensemble) using the inverse PCA transform.
+   
+   b. Calculate the mean reconstruction (S_mean) and 95% credible intervals (CI) across all ensemble members.
+      - S_mean = mean(S_ensemble, axis=0)
+      - CI_lower = percentile(2.5, S_ensemble, axis=0)
+      - CI_upper = percentile(97.5, S_ensemble, axis=0)
+
+4. **Taxonomic Classification**:
+   a. Pass the latent coefficients (z) through a pre-trained taxonomic classifier to obtain class probabilities.
+      - Class Probabilities = Classifier(z)
+      - Classes include H2O, CO2, Organics, Methanol.
+
+5. **Output**:
+   a. Return the reconstructed spectrum (S_mean), uncertainty intervals (CI_lower, CI_upper), and taxonomic classification probabilities.
+
+End Algorithm
+```

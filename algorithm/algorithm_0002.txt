@@ -1,0 +1,30 @@
+**Algorithm Description:**
+
+1. **Input:** Obtain sparse photometric data for each trans-Neptunian object (TNO), including magnitude measurements across various bands and associated uncertainties.
+
+2. **Preprocessing:** 
+   - Filter out or adjust measurements flagged with excessively high uncertainty.
+   - Remove data inconsistent with known physical constraints.
+
+3. **Training Phase:**
+   - Develop a probabilistic model using a subset of the data to create a spectral template.
+   - Parameterize the template based on physical properties (e.g., size, composition, distance).
+
+4. **Imputation:**
+   - Utilize the trained model to infer and fill missing or incomplete photometric measurements.
+   - Apply spectral template modeling to estimate missing data points.
+
+5. **Bayesian Inference:**
+   - Employ MCMC methods to perform Bayesian inference.
+   - Determine the most probable physical parameters (e.g., size, composition, distance) that align with the observed photometric measurements.
+
+6. **Outlier Detection:**
+   - Calculate posterior probabilities of inferred parameters.
+   - Identify objects with posterior probabilities significantly below expected thresholds, flagging them as outliers.
+
+7. **Output:**
+   - Generate reconstructed SED for each TNO.
+   - Provide confidence intervals for reconstructed SEDs.
+   - Include outlier flags for objects identified as inconsistent.
+
+**End of Algorithm.**

@@ -1,0 +1,18 @@
+**Probabilistic Spectral Reconstruction (PSR) Algorithm**
+
+1. **Initialization**: 
+   - Set initial spectral parameters for each Trans-Neptunian Object (TNO) based on sparse photometric data.
+
+2. **Iterative Refinement**:
+   - **Gaussian Process Update**: For each TNO, update spectral parameters using Gaussian Process Regression, leveraging correlations across all TNOs to improve estimates.
+   - **Expectation-Maximization Iteration**: Apply EM to refine spectral parameter estimates, maximizing the likelihood of observed data, while identifying and flagging outliers.
+
+3. **Convergence Check**:
+   - Repeat Gaussian Process and EM iterations until the change in parameters falls below a specified threshold (epsilon), ensuring stable estimates.
+
+4. **Output**:
+   - **Reconstructed Spectra**: Obtain refined spectral parameters for each TNO.
+   - **Taxonomic Classification**: Categorize TNOs based on their spectral similarity.
+   - **Survey Optimization**: Provide recommendations for future surveys based on reconstructed spectral features.
+
+5. **Termination**: Exit the algorithm upon convergence, yielding the final results.

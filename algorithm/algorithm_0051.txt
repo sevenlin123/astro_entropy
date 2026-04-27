@@ -1,0 +1,27 @@
+**Algorithm: Probabilistic Spectral Reconstruction of Trans-Neptunian Objects**
+
+1. **Initialization**: 
+   - Set prior distributions for spectral templates and mixing coefficients. Spectral templates are initialized with non-negative values, and mixing coefficients are initialized to enforce sparsity using a Dirichlet prior.
+
+2. **Likelihood Definition**: 
+   - Model observed photometric data as a linear combination of spectral templates with additive Gaussian noise. The forward model is defined as observed data = templates × coefficients + noise.
+
+3. **Prior Setup**: 
+   - Apply Dirichlet distribution to mixing coefficients to ensure sparsity. Use non-informative or physically constrained priors for spectral templates.
+
+4. **Bayesian Inference**: 
+   - Utilize a computational method such as Markov Chain Monte Carlo (MCMC) or variational inference to approximate the posterior distributions of the parameters.
+
+5. **Posterior Estimation**: 
+   - Extract point estimates (e.g., Maximum a Posteriori) and quantify uncertainties from the posterior samples.
+
+6. **Residual Calculation**: 
+   - Compute residuals by subtracting model-predicted photometry from observed data.
+
+7. **Outlier Detection**: 
+   - Identify outliers by thresholds on residuals or posterior probabilities.
+
+8. **Output**: 
+   - Reconstructed spectra and list of outliers for further analysis.
+
+**End of Algorithm**

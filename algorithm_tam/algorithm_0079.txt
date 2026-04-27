@@ -1,0 +1,19 @@
+**Algorithm for Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Training Phase:**
+   - **Step 1:** Collect a sample of reference TNO spectra (e.g., 51 spectra).
+   - **Step 2:** Perform Principal Component Analysis (PCA) on the reference spectra to extract principal components, capturing the main spectral variations.
+   - **Step 3:** Use Kernel Density Estimation (KDE) on the PCA coefficients to create a continuous latent space, augmenting the training data.
+   - **Step 4:** Simulate synthetic photometry by convolving the spectra with the instrument's filter curves (e.g., JWST/NIRCam) and adding noise (e.g., 20% relative uncertainty).
+   - **Step 5:** Train an AutoML regressor (e.g., Gradient-Boosted Decision Trees) to map the sparse photometric inputs to the latent coefficients.
+
+2. **Reconstruction Phase:**
+   - **Step 1:** For a new photometric observation, pass the photometric values through the trained AutoML regressor to predict latent coefficients.
+   - **Step 2:** Apply the inverse PCA transform to the predicted coefficients to reconstruct the full spectrum.
+   - **Step 3:** Optionally, sample the posterior distribution of latent coefficients to quantify uncertainties in the reconstructed spectrum.
+
+3. **Classification Phase:**
+   - **Step 1:** Use a secondary AutoML classifier trained on the latent space to predict the taxonomic class (e.g., H₂O, CO₂, Organic, Methanol) of the object.
+   - **Step 2:** Obtain probabilistic classification scores to assess confidence in the taxonomic assignment.
+
+**End Algorithm**

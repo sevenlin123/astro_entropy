@@ -1,0 +1,36 @@
+**Algorithm: Probabilistic Spectral Reconstruction Framework**
+
+1. **Initialize Training Data**:
+   - Collect a sample of 51 reference TNO spectra representing dominant taxonomic classes (e.g., Water-type, CO₂-type, Organics-type).
+   
+2. **Perform Principal Component Analysis (PCA)**:
+   - Compute PCA on the reference spectra to derive principal components (PCs).
+   - Select 4-5 PCs to capture dominant spectral variability for basic reconstruction, and up to 10 PCs for enhanced fidelity.
+
+3. **Generate Synthetic Training Data**:
+   - Project the reference spectra onto the PCA latent space.
+   - Use Kernel Density Estimation (KDE) to create a smooth probability distribution in the latent space, augmenting the training set.
+   - Ensure the bandwidth (h) is set to ~0.5 for stable manifold representation.
+
+4. **Create Synthetic Photometry**:
+   - Convolve each augmented spectrum with the throughput curves of the target instrument (e.g., JWST/NIRCam filters).
+   - Inject Gaussian noise (~20% relative uncertainty) into the synthetic photometry to simulate realistic observational noise.
+
+5. **Train AutoML Regressor**:
+   - Use an ensemble of Gradient-Boosted Decision Trees to map sparse photometric inputs to latent PCA coefficients.
+   - This regressor acts as the "encoder," converting photometry into the latent space.
+
+6. **Define Taxonomic Classifier**:
+   - Train a secondary AutoML classifier on the latent space to predict taxonomic categories (e.g., H₂O, CO₂, Organics, Methanol) based on the PCA coefficients.
+
+7. **Spectral Reconstruction Workflow**:
+   - For new photometric observations:
+     - Pass the photometry through the trained encoder to predict latent coefficients.
+     - Apply the inverse PCA transform to reconstruct the full spectrum.
+     - Obtain taxonomic probabilities from the classifier.
+
+8. **Validation and Metrics**:
+   - Perform Leave-One-Out Cross-Validation (LOOCV) to assess reconstruction fidelity.
+   - Metrics include Empirical Coverage, RMSE, Feature Consistency, and Taxonomic Accuracy.
+
+**End Algorithm**

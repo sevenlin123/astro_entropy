@@ -1,0 +1,40 @@
+### Algorithm: Probabilistic Spectral Reconstruction Framework
+
+1. **Training Data Preparation**:
+   - Collect and preprocess near-infrared (near-IR) spectra of trans-Neptunian objects (TNOs).
+   - Exclude rare spectral types and outliers to focus on dominant taxonomic classes.
+
+2. **Principal Component Analysis (PCA)**:
+   - Perform PCA on the preprocessed spectra to derive principal components.
+   - Determine the optimal number of principal components (4-5 for dominant variability, up to 10 for high fidelity).
+
+3. **Data Augmentation**:
+   - Use Kernel Density Estimation (KDE) to generate synthetic latent vectors, expanding the training dataset while maintaining physically plausible spectra.
+
+4. **Model Training**:
+   - Train an AutoML regressor (e.g., Gradient Boosted Decision Trees) to map sparse photometric inputs to latent PCA coefficients.
+   - Simulate photometric observations by convolving spectra with instrument filter curves and adding noise (e.g., 20% relative uncertainty).
+
+5. **Forward Inference Pipeline**:
+   - For new photometric observations:
+     - Predict latent coefficients using the trained AutoML model.
+     - Project these coefficients back to the full spectrum using inverse PCA transformation.
+
+6. **Taxonomic Classification**:
+   - Classify the object into predefined spectral types (e.g., Water-type, CO₂-type, Organics-type) based on latent space analysis.
+
+7. **Validation and Uncertainty Propagation**:
+   - Apply leave-one-out cross-validation (LOOCV) to assess reconstruction accuracy and empirical credible interval (ECI) coverage (~95%).
+   - Calculate RMSE and classification accuracy to evaluate model performance.
+
+8. **Outlier Detection**:
+   - Compute χ² statistic between observed and reconstructed photometry.
+   - Identify outliers with χ² exceeding a threshold (e.g., >12 for 3σ), indicating potential new spectral types or measurement issues.
+
+9. **Survey Optimization**:
+   - Evaluate information content of different photometric filter configurations.
+   - Optimize filter choices to maximize spectral reconstruction fidelity for future surveys.
+
+10. **Posterior Analysis**:
+    - Generate reconstructed spectra and taxonomic probabilities for each object.
+    - Provide confidence intervals and classification scores for scientific interpretation.

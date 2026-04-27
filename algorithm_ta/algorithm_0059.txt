@@ -1,0 +1,15 @@
+The algorithm is structured as follows:
+
+1. **Principal Component Analysis (PCA) Training**: Begin by training a PCA model on a dataset of near-infrared spectral measurements. This step captures the essential variability within the spectral data, reducing it to a set of principal components.
+
+2. **Photometric Data Input**: For each trans-Neptunian object, input its sparse photometric measurements.
+
+3. **Spectral Manifold Projection**: Project the photometric data into the pre-trained PCA space, obtaining latent variables that represent the object's spectral characteristics.
+
+4. **Bayesian Inference for Spectrum Reconstruction**: Utilize Bayesian methods within the PCA framework to reconstruct the full spectrum of the object, incorporating uncertainties from the photometric measurements.
+
+5. **Uncertainty Propagation**: Calculate and propagate the measurement uncertainties through the reconstructed spectrum to provide a measure of confidence in each spectral point.
+
+6. **Outlier Detection (Optional)**: Assess the probability of each spectral model; identify and flag objects with significantly low probabilities as potential outliers.
+
+This algorithm effectively transforms sparse photometric data into detailed spectral reconstructions, leveraging probabilistic methods and dimensionality reduction.

@@ -1,0 +1,38 @@
+To implement the core reconstruction framework described in the paper, follow these steps:
+
+1. **Prepare Training Data**: 
+   - Collect and preprocess a set of reference TNO spectra.
+   - Exclude rare spectral types and outliers to focus on the dominant taxonomic classes.
+
+2. **Principal Component Analysis (PCA)**:
+   - Perform PCA on the training spectra to reduce them into principal components.
+   - Determine the number of principal components (e.g., 4-5 for classification, 8-10 for high fidelity).
+
+3. **Kernel Density Estimation (KDE) for Latent Space**:
+   - Project the training spectra onto the PCA latent space.
+   - Use KDE to smooth the distribution of latent coefficients to form a continuous manifold.
+
+4. **Generate Synthetic Photometry**:
+   - Forward model the augmented spectra through the JWST/NIRCam filter set.
+   - Convolve each spectrum with the filter's throughput to obtain synthetic reflectances.
+   - Add Gaussian noise with 20% reflectance uncertainty to simulate real photometric measurements.
+
+5. **Train AutoML Regressor**:
+   - Use the synthetic photometry and corresponding latent coefficients to train an AutoML regressor (e.g., Gradient Boosted Decision Trees).
+   - The model maps sparse photometric inputs to latent space coordinates.
+
+6. **LOOCV Performance Evaluation**:
+   - For each object, remove its spectrum and photometry from the training set.
+   - Retrain the model and predict the latent coefficients using the removed photometry.
+   - Transform the predicted coefficients back to a spectrum and compare with the original.
+
+7. **Spectral Reconstruction and Classification**:
+   - For new observations, pass the photometry through the trained regressor to get latent coefficients.
+   - Decode the coefficients to obtain the reconstructed spectrum.
+   - Classify the latent state to determine the taxonomic type.
+
+8. **Survey Optimization and Outlier Detection**:
+   - Evaluate the information content of different filter configurations.
+   - Identify unusual spectral types by exploring the latent space beyond typical distributions.
+
+The algorithm provides a statistically rigorous method to reconstruct TNO spectra from sparse photometry, enabling detailed analysis of their surface composition and supporting future large-scale surveys.

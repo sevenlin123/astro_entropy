@@ -1,0 +1,24 @@
+The computational algorithm for probabilistic spectral reconstruction of trans-Neptunian objects from sparse photometry can be broken down into the following steps:
+
+1. **Data Preprocessing**: 
+   - Collect and preprocess near-infrared (NIR) spectra and corresponding photometric measurements of trans-Neptunian objects (TNOs).
+
+2. **Principal Component Analysis (PCA)**:
+   - Perform PCA on the NIR spectral dataset to derive principal components that capture the most significant variability in the spectra.
+
+3. **Model Training**:
+   - Train a probabilistic latent-space model using the principal components derived from PCA. This model captures the underlying structure of the spectral data.
+
+4. **Bayesian Inference**:
+   - Apply Bayesian inference in the reduced PCA space to estimate the latent variables (principal components) from the sparse photometric data, incorporating measurement uncertainties.
+
+5. **Spectral Reconstruction**:
+   - Reconstruct the full NIR spectra using the estimated latent variables from the Bayesian inference step.
+
+6. **Filter Information Content Evaluation**:
+   - Assess the information content of each NIRCam filter (e.g., F090W, F115W, etc.) to determine which configurations are most informative for spectral reconstruction and taxonomic classification.
+
+7. **Outlier Detection and Rare Spectral Types**:
+   - Identify outliers or rare spectral types by constraining photometric data and detecting anomalies in the reconstructed spectral models.
+
+This algorithm effectively leverages probabilistic methods and Bayesian inference to reconstruct high-fidelity spectra from sparse photometry, enabling taxonomic classification, survey optimization, and outlier detection in TNO studies.

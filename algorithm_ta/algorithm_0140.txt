@@ -1,0 +1,15 @@
+1. Input Data:
+   - Photometric measurements of trans-Neptunian objects (TNOs)
+   - Pre-trained Principal Component Analysis (PCA) model derived from a sample of near-infrared (near-IR) spectra
+
+2. Core Algorithm:
+   - Perform dimensionality reduction on the near-IR spectra using the pre-trained PCA model to obtain a latent-space representation
+   - Apply Bayesian inference in this reduced PCA space to estimate the posterior distribution of the latent variables given the photometric measurements
+   - Model the spectral manifold by considering the probabilistic relationships between the latent components and the original spectral data
+   - Propagate the uncertainties from the photometric measurements through the Bayesian model to quantify the uncertainty in the reconstructed spectra
+   - Use the posterior probabilities of the latent components to reconstruct the full spectral curves for each TNO
+
+3. Output:
+   - Reconstructed spectral curves for each TNO, representing the best estimate of their near-IR spectra
+   - Posterior probabilities over the principal components, capturing the uncertainty in the latent space representation
+   - Uncertainty estimates at each wavelength, providing a measure of confidence in the reconstructed spectra

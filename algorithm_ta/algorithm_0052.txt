@@ -1,0 +1,30 @@
+**Algorithm for Probabilistic Spectral Reconstruction of Trans-Neptunian Objects from Sparse Photometry**
+
+1. **Input**: Provide a set of reference near-infrared spectra and photometric measurements of the target TNOs.
+
+2. **Preprocessing**: Normalize and standardize the reference spectra to ensure uniformity.
+
+3. **Principal Component Analysis (PCA)**:
+   - Apply PCA to the normalized reference spectra.
+   - Extract principal components to capture the dominant modes of spectral variability.
+
+4. **Probabilistic Model Construction**:
+   - Develop a Bayesian model using the extracted principal components.
+   - Define prior distributions for the latent variables representing the spectral features.
+
+5. **Bayesian Inference for Each Target Object**:
+   - Project photometric measurements into the latent space defined by the PCA.
+   - Estimate posterior distributions of the latent variables given the photometric data.
+
+6. **Uncertainty Propagation**:
+   - Quantify measurement uncertainties from the photometric data.
+   - Propagate these uncertainties through the Bayesian model to determine the confidence in the spectral parameters.
+
+7. **Spectral Reconstruction**:
+   - Reconstruct the full spectrum using the posterior means of the latent variables.
+   - Apply uncertainty quantification, evaluating credible intervals for each wavelength.
+
+8. **Output**:
+   - Deliver the reconstructed spectra along with their associated uncertainties.
+
+This algorithm efficiently bridges sparse photometry and spectral reconstruction, leveraging Bayesian inference and PCA to provide robust spectral estimates for trans-Neptunian objects.

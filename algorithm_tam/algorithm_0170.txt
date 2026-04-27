@@ -1,0 +1,37 @@
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. **Data Preparation**:
+   - Gather a training set of reference TNO spectra.
+   - Select a seed population of 51 TNO spectra, excluding rare outliers.
+   
+2. **Principal Component Analysis (PCA)**:
+   - Perform PCA on the training spectra to extract principal components (eigenvectors).
+   - Determine the number of components (4-5 for classification, 8-10 for detailed reconstruction) based on explained variance.
+
+3. **Kernel Density Estimation (KDE)**:
+   - Project the training spectra onto the PCA latent space.
+   - Use KDE to create a smooth probability distribution over the latent space, augmenting the training data.
+
+4. **Synthetic Photometry Generation**:
+   - Forward model the augmented spectra through the NIRCam filter set to generate synthetic photometric measurements.
+   - Inject 20% Gaussian noise to simulate realistic photometric uncertainties.
+
+5. **AutoML Model Training**:
+   - Train an ensemble of Gradient Boosted Decision Trees (AutoGluon) to regress from photometric inputs to PCA latent coefficients.
+   - Simultaneously train a classifier to predict taxonomic labels using the latent space.
+
+6. **Reconstruction Pipeline**:
+   - For new photometric data, use the trained AutoML model to predict latent coefficients.
+   - Apply inverse PCA transformation to reconstruct the full spectrum.
+   - Classify the object into taxonomic categories based on posterior probabilities.
+
+7. **Validation and Uncertainty Propagation**:
+   - Use LOOCV to assess reconstruction accuracy and empirical credible interval coverage.
+   - Propagate photometric uncertainties into reconstructed spectra for confidence intervals.
+
+8. **Applications**:
+   - Optimize survey filter configurations for JWST/NIRCam.
+   - Detect outliers and peculiar spectral types by identifying deviations in latent space.
+   - Catalogue TNOs efficiently using reconstructed spectra.
+
+This algorithm enables the reconstruction of detailed near-IR spectra from sparse photometry, facilitating taxonomic classification and survey optimization for TNOs.

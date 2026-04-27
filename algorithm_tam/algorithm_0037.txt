@@ -1,0 +1,25 @@
+The algorithm involves a probabilistic framework using Bayesian inference and Principal Component Analysis (PCA) to reconstruct TNO spectra from sparse photometry. Here's the structured approach:
+
+1. **Training Phase**:
+   - **Seed Spectra Collection**: Gather a set of reference TNO spectra representing dominant taxonomic classes.
+   - **Principal Component Analysis (PCA)**: Apply PCA to the seed spectra to create a low-dimensional latent space.
+   - **Data Augmentation**: Use Kernel Density Estimation (KDE) to generate synthetic spectra, expanding the training dataset.
+   - **Forward Modeling**: Simulate photometric measurements for the augmented spectra using the target instrument's filters.
+
+2. **Model Training**:
+   - **AutoML Regression**: Train an ensemble of gradient-boosted decision trees (AutoML) to map photometric inputs to PCA coefficients.
+   - **Classifier Training**: Train another AutoML model to classify spectra into taxonomic types based on the latent space.
+
+3. **Inference Phase**:
+   - **Photometric Input**: Provide sparse photometric data.
+   - **Latent Space Prediction**: Use the trained regressor to predict latent coefficients.
+   - **Spectral Reconstruction**: Apply inverse PCA to obtain the full spectrum.
+   - **Taxonomic Classification**: Classify the spectrum using the trained classifier.
+   - **Uncertainty Quantification**: Compute posterior uncertainties and credible intervals for the reconstructed spectrum.
+
+4. **Validation and Applications**:
+   - **LOOCV Analysis**: Evaluate framework performance using leave-one-out cross-validation.
+   - **Survey Optimization**: Optimize filter configurations for future observations.
+   - **Outlier Detection**: Identify unusual spectral types by assessing probability in latent space.
+
+This method efficiently bridges the gap between sparse photometry and detailed spectroscopy, enabling robust spectral reconstruction and taxonomic classification of TNOs.

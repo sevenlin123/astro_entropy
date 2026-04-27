@@ -1,0 +1,35 @@
+### Algorithm: Probabilistic Spectral Reconstruction Framework for TNOs from Sparse Photometry
+
+1. **Input Data**: Sparse photometric measurements of trans-Neptunian objects (TNOs).
+
+2. **Preprocessing**:
+   - Normalize the photometric data.
+   - Convert photometric measurements into a numerical format suitable for analysis.
+
+3. **Principal Component Analysis (PCA)**:
+   - Train a PCA model using a sample of near-infrared (near-IR) spectra of TNOs.
+   - Extract principal components to capture the spectral variability.
+
+4. **Probabilistic Latent-Space Model**:
+   - Map the normalized photometric data into the latent space defined by the PCA.
+   - Use Bayesian inference to model the relationship between the latent space and the full spectra.
+
+5. **Spectral Reconstruction**:
+   - Reconstruct the full spectra from the latent space representation.
+   - Propagate measurement uncertainties through the Bayesian model.
+
+6. **Component Selection**:
+   - Use leave-one-out cross-validation to determine the optimal number of principal components (4-5 for taxonomic classification, 8-10 for improved fidelity).
+   - Retain these components for the final spectral reconstruction.
+
+7. **Survey Optimization**:
+   - Analyze the information content of JWST/NIRCam filters.
+   - Identify optimal filter configurations (e.g., F090W, F115W, F410M, F460M) for future observations.
+
+8. **Outlier Detection**:
+   - Apply the framework to detect rare spectral types by constraining photometry.
+   - Use the latent space to identify and reconstruct unusual spectral models.
+
+9. **Output**: Reconstructed spectra with uncertainty estimates, optimized survey configurations, and identified outliers.
+
+This structured approach efficiently bridges sparse photometry and spectroscopy, enabling robust analysis of TNO compositions in large-scale surveys.

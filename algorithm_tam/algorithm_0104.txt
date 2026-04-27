@@ -1,0 +1,44 @@
+### Pseudocode for the Core Reconstruction Framework
+
+1. **Data Preparation**:
+   - Collect a sample of reference TNO spectra.
+   - Exclude outliers and rare spectral types to focus on dominant taxonomic groups.
+
+2. **Principal Component Analysis (PCA)**:
+   - Perform PCA on the reference spectra to reduce the spectral dimensionality.
+   - Determine the number of principal components (K) that best capture the spectral variability (e.g., K=4-10 for TNOs).
+
+3. **Latent Space Definition**:
+   - Use Kernel Density Estimation (KDE) to create a continuous probability distribution in the PCA latent space.
+   - Augment the training data by sampling from this latent distribution to generate synthetic spectra.
+
+4. **Forward Modeling**:
+   - Simulate photometric measurements for each augmented spectrum by convolving with the instrument’s filter response curves (e.g., JWST/NIRCam).
+   - Inject noise (e.g., 20% relative reflectance uncertainty) to simulate realistic photometric observations.
+
+5. **Training the AutoML Regressor**:
+   - Train an ensemble of Gradient Boosted Decision Trees (GBDTs) using the synthetic photometry as input and the PCA latent coefficients as target outputs.
+
+6. **Reconstruction Pipeline**:
+   - For new photometric observations:
+     - Pass the photometry through the trained regressor to predict the latent coefficients.
+     - Apply the inverse PCA transform to these coefficients to reconstruct the full spectrum.
+
+7. **Taxonomic Classification**:
+   - Train a secondary classifier on the latent coefficients to predict the spectral type (e.g., H₂O, CO₂, Organic, Methanol).
+   - Use the predicted probabilities to assess confidence in the classification.
+
+8. **Validation and Uncertainty Quantification**:
+   - Validate the framework using leave-one-out cross-validation (LOOCV) to assess RMSE and credible interval coverage.
+   - Compute posterior probabilities for outlier detection based on the taxonomic classification.
+
+9. **Survey Optimization**:
+   - Test different filter configurations to determine the most informative combinations for spectral reconstruction and taxonomy.
+   - Optimize future observations by selecting filter sets that minimize RMSE and maximize coverage.
+
+10. **Applications**:
+    - Use the framework for taxonomic classification of faint or low-signal TNOs.
+    - Detect rare spectral types by identifying objects with unusual posterior distributions in the latent space.
+
+11. **Output**:
+    - For each object, produce a reconstructed spectrum, taxonomic classification, and confidence intervals.

@@ -1,0 +1,44 @@
+```python
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+- Observed photometric data (flux measurements in selected filters)
+- Pre-trained PCA basis derived from reference spectra
+- Kernel Density Estimate (KDE) of latent space
+- Training parameters for AutoML regressor
+
+Output:
+- Reconstructed spectrum
+- Uncertainty estimates
+- Taxonomic classification
+
+Steps:
+
+1. **Dimensionality Reduction**:
+   a. Project photometric data into the pre-trained PCA latent space to obtain initial latent coefficients.
+
+2. **Likelihood-Free Inference**:
+   a. Generate synthetic photometry for each augmented spectrum via forward modeling using the instrumental response functions (e.g., JWST/NIRCam filters).
+   b. Inject Gaussian noise into synthetic photometry to simulate real-world uncertainties.
+
+3. **Training of AutoML Regressor**:
+   a. Use the synthetic photometry and corresponding PCA latent coefficients to train an ensemble of gradient-boosted decision trees.
+   b. Optimize hyperparameters to ensure robust prediction of latent coefficients from sparse photometry.
+
+4. **Reconstruction of Latent Space**:
+   a. Apply the trained regressor to the observed photometric data to predict latent coefficients.
+   b. Sample the joint posterior distribution of latent coefficients using a Gaussian Copula to account for physical dependencies.
+
+5. **Spectral Reconstruction**:
+   a. Apply inverse PCA transformation to the sampled latent coefficients to reconstruct the full spectrum.
+   b. Compute uncertainties by propagating the variance from the posterior samples through the inverse PCA.
+
+6. **Taxonomic Classification**:
+   a. Project the reconstructed latent coefficients into a pre-trained classifier to determine the probability distribution over taxonomic classes.
+
+7. **Validation and Output**:
+   a. Compare reconstructed spectra with ground truth (if available) to assess fidelity and uncertainty calibration.
+   b. Provide reconstructed spectrum, uncertainty intervals, and taxonomic probabilities as output.
+
+End.
+```

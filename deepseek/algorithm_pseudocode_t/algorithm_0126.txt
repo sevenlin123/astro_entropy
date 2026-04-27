@@ -1,0 +1,19 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Input**: Observed sparse flux measurements of trans-Neptunian objects.
+2. **Initialize**: 
+   - Define the partial differential equation (PDE) representing the light curve dynamics.
+   - Establish a sparse sampling operator linking the true light curve to the observations.
+3. **Define Gaussian Priors**: 
+   - Set prior distributions for parameters controlling spectral features to enforce smooth temporal variations.
+4. **Solve the Inverse Problem**:
+   - Apply a numerical method, such as the Gauss-Markov-Kolmogorov (GMK) filter, to solve the PDE with the given priors.
+5. **Reconstruct Light Curve**:
+   - Generate the continuous light curve from the solution of the PDE.
+6. **Extract Features**:
+   - Identify variability patterns and spectral characteristics from the reconstructed light curve.
+7. **Detect Outliers**:
+   - Compare observed flux measurements against the reconstructed light curve to identify significant deviations.
+8. **Output**: Reconstructed light curves and identified outliers.
+
+**End of Algorithm**

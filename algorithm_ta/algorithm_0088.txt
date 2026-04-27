@@ -1,0 +1,8 @@
+1. **PCA Model Training**: Train a Principal Component Analysis (PCA) model using a dataset of known near-infrared spectra.
+2. **Latent Space Representation**: Use the trained PCA model to represent the spectral manifold of trans-Neptunian objects (TNOs) in a reduced latent space.
+3. **Bayesian Inference**: Perform Bayesian inference in this latent space using the photometric data to estimate the underlying spectral parameters.
+4. **Spectral Reconstruction**: Reconstruct the full spectrum of each TNO by mapping the inferred parameters back into the original spectral space.
+5. **Uncertainty Propagation**: Calculate and propagate the measurement uncertainties through the reconstruction process to quantify the uncertainty in the reconstructed spectra.
+6. **Component Selection**: Determine the optimal number of principal components (e.g., 8–10) to balance spectral fidelity and uncertainty calibration.
+7. **Survey Optimization Analysis**: Evaluate the information content of different JWST/NIRCam filter configurations to optimize future surveys for TNO taxonomy.
+8. **Outlier Detection**: Apply the framework to identify and reconstruct rare spectral types by constraining photometric data to select low-probability models within the spectral manifold.

@@ -1,0 +1,18 @@
+```python
+Algorithm: Probabilistic Spectral Reconstruction from Photometry
+
+1. Preprocess reference spectra:
+   a. Collect near-infrared spectra, S_train.
+   b. Perform PCA on S_train to obtain principal components, V.
+
+2. For each object:
+   a. Input photometric measurements, P_obs.
+   b. Project P_obs onto PCA basis V.
+   c. Perform Bayesian inference in PCA space to estimate latent variables, z.
+   d. Reconstruct spectrum S_hat using z.
+   e. Propagate uncertainties from P_obs to S_hat.
+
+3. Output S_hat and uncertainties for each object.
+```
+
+This algorithm outlines the core steps of the reconstruction framework, focusing on the PCA-based Bayesian inference approach.

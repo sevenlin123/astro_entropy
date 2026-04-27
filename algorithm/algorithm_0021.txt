@@ -1,0 +1,30 @@
+Algorithm:
+
+1. Preprocessing:
+   - Clean the sparse photometric data by addressing outliers and gaps.
+   - Normalize data considering observing conditions (e.g., exposure time, telescope gain).
+   - Resample data to a uniform time grid.
+
+2. Probabilistic Modeling:
+   - Define a probabilistic model representing spectral variability.
+   - Use Bayesian inference with prior knowledge about TNO spectral features.
+   - Quantify uncertainties in parameter estimates.
+
+3. Component Decomposition:
+   - Decompose spectral variability into orthogonal components (e.g., PCA/ICA).
+   - Interpret components based on known TNO spectra.
+
+4. Reconstruct Spectral Features:
+   - Combine decomposed components with estimated weights.
+   - Apply smoothing/denoising techniques.
+
+5. Outlier Detection:
+   - Identify TNOs deviating significantly from expected patterns.
+   - Flag outliers for investigation.
+
+6. Final Processing:
+   - Compile spectral reconstructions into a dataset.
+   - Perform consistency checks.
+   - Generate a taxonomy of TNOs based on spectral features.
+
+Output: A consistent set of spectral reconstructions for TNO taxonomy.

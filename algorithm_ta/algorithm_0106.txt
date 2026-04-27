@@ -1,0 +1,18 @@
+**Algorithm Steps:**
+
+1. **Principal Component Analysis Training:**
+   - Train a Principal Component Analysis (PCA) model using a set of reference near-infrared spectra of trans-Neptunian objects (TNOs). This step identifies the major modes of spectral variability, typically capturing 4 to 5 principal components for classification and up to 10 for improved reconstruction.
+
+2. **Sparse Photometric Data Processing:**
+   - For each TNO, obtain its sparse photometric measurements and associated uncertainties.
+
+3. **Bayesian Inference in PCA Space:**
+   - Utilize the PCA basis to perform Bayesian inference. This involves establishing a probabilistic model that links the photometric data to the latent PCA coefficients, considering both the data and prior distributions of the coefficients.
+
+4. **Spectral Reconstruction:**
+   - Reconstruct the full spectrum of the TNO using the inferred PCA coefficients and the precomputed PCA basis vectors.
+
+5. **Uncertainty Propagation:**
+   - Calculate the uncertainties on the reconstructed spectrum by propagating the uncertainties from the photometric data through the Bayesian inference process.
+
+This structured approach efficiently reconstructs full spectra from sparse photometry while quantifying uncertainties, enabling insights into the compositional structure of TNOs.

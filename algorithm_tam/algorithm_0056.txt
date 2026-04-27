@@ -1,0 +1,30 @@
+**Algorithm for Probabilistic Spectral Reconstruction of Trans-Neptunian Objects from Sparse Photometry**
+
+**Objective:** Reconstruct full near-infrared spectra and classify taxonomic types of TNOs using sparse photometric data.
+
+**Steps:**
+
+1. **Data Collection:** Gather near-infrared spectral data of TNOs along with associated photometric measurements.
+
+2. **Principal Component Analysis (PCA):**
+   - Normalize the spectral data.
+   - Decompose the normalized spectra into principal components to capture variance in the data.
+   - Identify the number of principal components (e.g., 4-5 for classification, 8-10 for accurate reconstruction).
+
+3. **Training Data Augmentation:**
+   - Apply Kernel Density Estimation (KDE) to the latent space of PCA coefficients to generate synthetic spectra, expanding the training set while maintaining physical plausibility.
+
+4. **Model Training:**
+   - **Encoder Model:** Train an AutoML regressor (e.g., Gradient-Boosted Decision Trees) to map photometric inputs to PCA coefficients using synthetic and real photometric data.
+   - **Classifier Model:** Train another AutoML classifier to map PCA coefficients to taxonomic classes (e.g., H₂O, CO₂, Organic, Methanol).
+
+5. **Forward Inference:**
+   - For new photometric observations:
+     - Use the encoder model to predict PCA coefficients.
+     - Reconstruct the full spectrum by applying inverse PCA to the predicted coefficients.
+     - Classify the taxonomic type using the classifier model.
+
+6. **Error Propagation and Uncertainty Quantification:**
+   - Propagate photometric uncertainties through the models to assess uncertainty in spectral reconstruction and classification.
+
+**Output:** Reconstructed spectra, taxonomic classification, and uncertainty estimates for each object.

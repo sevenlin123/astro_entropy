@@ -1,0 +1,31 @@
+**Algorithm for Probabilistic Spectral Reconstruction**
+
+1. **Preprocessing**: 
+   - Standardize and handle missing values in the photometric data.
+
+2. **Initialization**:
+   - For each object, initialize spectral parameters based on prior knowledge.
+
+3. **Forward Model Simulation**:
+   - Simulate expected observed magnitudes using the current spectral parameters.
+
+4. **Likelihood Calculation**:
+   - Compute the likelihood score between simulated and actual observed data.
+
+5. **Parameter Adjustment**:
+   - Optimize spectral parameters to maximize data likelihood, considering measurement uncertainties.
+
+6. **Convergence Check**:
+   - Repeat simulation, likelihood calculation, and parameter adjustment until convergence using MCMC or variational inference.
+
+7. **Posterior Distribution**:
+   - Characterize the object's SED using the posterior distribution of spectral parameters.
+
+8. **Clustering for Classification**:
+   - Cluster objects with similar SEDs for taxonomic classification.
+
+9. **Survey Optimization**:
+   - Use inferred SEDs to determine optimal observation strategies.
+
+10. **Outlier Detection**:
+    - Identify objects with significantly different SEDs as outliers.

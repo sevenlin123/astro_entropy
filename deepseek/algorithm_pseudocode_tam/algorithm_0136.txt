@@ -1,0 +1,32 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+**Step-by-Step Computational Steps:**
+
+1. **Prepare Reference Spectra**: Collect and preprocess the reference set of TNO spectra, ensuring they are normalized and formatted appropriately.
+
+2. **Principal Component Analysis (PCA)**:
+   - Compute the PCA of the reference spectra to extract principal component (PC) coefficients and eigenvectors.
+   - Determine the number of significant PCs (4-5 for classification, 8-10 for detailed reconstruction).
+
+3. **Kernel Density Estimation (KDE) for Latent Space**:
+   - Apply non-parametric KDE to the PC coefficients of the reference spectra to construct a smooth probability distribution in the latent space.
+
+4. **Synthetic Photometry Generation**:
+   - For each synthetic latent spectrum, convolve it with the instrument's (e.g., JWST NIRCam) filter functions to compute the expected reflectance in each filter band.
+
+5. **Noise Injection**:
+   - Add Gaussian noise with a 20% relative uncertainty to the synthetic photometry to simulate realistic observational uncertainties.
+
+6. **AutoML Regressor Training**:
+   - Train an ensemble AutoML regressor (e.g., Gradient-Boosted Decision Trees) to map the sparse photometry (band fluxes) to the latent PCA coefficients.
+
+7. **Predict Latent Coefficients**:
+   - Use the trained regressor to predict latent coefficients from new photometric observations.
+
+8. **Reconstruct Full Spectra**:
+   - Apply the inverse PCA transformation to the predicted latent coefficients to obtain the full spectral representation.
+
+9. **Output and Uncertainty Propagation**:
+   - Output the reconstructed spectrum along with propagated uncertainties derived from the posterior distribution of latent coefficients.
+
+**End of Algorithm**

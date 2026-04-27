@@ -1,0 +1,91 @@
+### Pseudocode for Core Computational Algorithm
+
+```python
+function ProbabilisticSpectralReconstruction(PhotometryInputs):
+    // Step 1: Preprocess photometric inputs
+    inputs_normalized = normalize(PhotometryInputs)
+
+    // Step 2: Predict latent space coefficients using AutoML regressor
+    latent_coeffs_prediction = regressor.predict(inputs_normalized)
+
+    // Step 3: Sample from posterior distribution of latent coefficients
+    samples = generate_posterior_samples(latent_coeffs_prediction)
+
+    // Step 4: Project latent samples to full spectral space via inverse PCA
+    reconstructed_spectra = inverse_pca_transform(samples)
+
+    // Step 5: Compute credible intervals
+    credible_intervals = calculate_credible_intervals(reconstructed_spectra)
+
+    return reconstructed_spectra, credible_intervals
+```
+
+### Explicit Steps in Detail:
+
+1. **Preprocess Photometric Inputs**:
+   - Normalize the input photometric data to a standard range, typically z-score normalization, to ensure consistent input scales for the regressor.
+
+2. **Predict Latent Coefficients**:
+   - Pass the normalized photometric inputs through the trained AutoML regressor to obtain predicted latent coefficients. These coefficients represent the object's position in the learned low-dimensional spectral manifold.
+
+3. **Sample Posterior Distribution**:
+   - Generate multiple samples from the posterior distribution of the latent coefficients using the Gaussian Copula framework. This step accounts for uncertainties in the photometric measurements and the physical constraints of the spectral manifold.
+
+4. **Inverse PCA Transformation**:
+   - Convert each sample of latent coefficients back into a full-resolution spectral space using the inverse PCA transformation. This reconstructs the complete spectrum for each sample.
+
+5. **Compute Credible Intervals**:
+   - Calculate credible intervals for the reconstructed spectra by determining quantiles from the posterior samples. This provides uncertainty estimates for the spectral reconstruction.
+
+### Key Function Descriptions:
+
+```python
+function normalize(inputs):
+    // Z-score normalization
+    mean = mean(inputs, axis=0)
+    std = std(inputs, axis=0)
+    return (inputs - mean) / std
+
+function regressor.predict(normalized_inputs):
+    // Use trained AutoML regressor to predict latent coefficients
+    return regressor.predict(normalized_inputs)
+
+function generate_posterior_samples(prediction):
+    // Sample from posterior using Gaussian Copula
+    samples = []
+    for i in range(num_samples):
+        sample = copula.sample(prediction)
+        samples.append(sample)
+    return samples
+
+function inverse_pca_transform(samples):
+    // Transform latent samples back to spectral space
+    reconstructed = pca.inverse_transform(samples)
+    return reconstructed
+
+function calculate_credible_intervals(reconstructed_spectra):
+    // Compute credible intervals for each wavelength
+    lower = np.percentile(reconstructed_spectra, 2.5, axis=0)
+    upper = np.percentile(reconstructed_spectra, 97.5, axis=0)
+    return lower, upper
+```
+
+### Variables and Parameters:
+
+- `num_samples`: Number of posterior samples to generate (default: 1000).
+- `regressor`: Trained AutoML regressor model.
+- `copula`: Gaussian Copula model capturing latent space dependencies.
+- `pca`: PCA model trained on reference spectra.
+
+### Input Format:
+
+- `PhotometryInputs`: Array of shape (n_objects, n_filters) containing photometric measurements.
+
+### Output Format:
+
+- `reconstructed_spectra`: Array of shape (n_objects, n_wavelengths) containing full spectral reconstructions.
+- `credible_intervals`: Tuple of arrays (lower, upper) each of shape (n_wavelengths) containing credible interval bounds.
+
+### Algorithm Overview:
+
+The algorithm takes sparse photometric measurements and reconstructs full spectra by leveraging a probabilistic latent space model. It normalizes the inputs, predicts latent coefficients, samples from the posterior, and transforms back to the spectral domain. The result includes the reconstructed spectra and their uncertainties.

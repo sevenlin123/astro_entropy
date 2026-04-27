@@ -1,0 +1,40 @@
+### Core Reconstruction Framework Algorithm
+
+1. **Preprocessing**:
+   - **Input Data**: Sparse photometric measurements of TNOs.
+   - **Normalization**: Normalize the photometric data to account for observation biases and instrument-specific noise.
+
+2. **Latent Space Definition**:
+   - **Principal Component Analysis (PCA)**: Apply PCA on a reference set of TNO spectra to derive principal components. These components capture the major spectral variations relevant to taxonomic classification.
+   - **Dimension Reduction**: Use the top K principal components (e.g., 4-5 for classification, 8-10 for detailed reconstruction) to form a low-dimensional latent space.
+
+3. **Data Augmentation**:
+   - **Kernel Density Estimation (KDE)**: Generate synthetic latent vectors to augment the training data, ensuring a smooth and continuous manifold for Bayesian inference.
+   - **Noise Injection**: Add Gaussian noise (e.g., 20% relative uncertainty) to synthetic photometric data to simulate real-world observational uncertainties.
+
+4. **Model Training**:
+   - **AutoML Regression**: Train an ensemble of Gradient-Boosted Decision Trees (GBDTs) using AutoML to map sparse photometry to latent coefficients.
+   - **Classifier Training**: Train a secondary classifier within the latent space to predict taxonomic classes.
+
+5. **Forward Modeling**:
+   - **Likelihood Construction**: Simulate photometric measurements using reference spectra convolved with instrument response functions (e.g., JWST/NIRCam filters).
+   - **Bayesian Inference**: Use the trained AutoML model to predict latent coefficients from new photometric data, then apply inverse PCA to reconstruct high-resolution spectra.
+
+6. **Validation and Uncertainty Quantification**:
+   - **Leave-One-Out Cross-Validation (LOOCV)**: Evaluate reconstruction accuracy and credible interval coverage across the spectrum.
+   - **Uncertainty Propagation**: Calculate posterior uncertainties using MCMC sampling to assess the reliability of spectral reconstructions.
+
+7. **Posterior Processing**:
+   - **Spectral Reconstruction**: Convert predicted latent coefficients into full spectra using inverse PCA.
+   - **Taxonomic Classification**: Classify objects based on latent space projections to identify spectral types.
+
+8. **Applications**:
+   - **Survey Optimization**: Analyze filter configurations to maximize information content for TNO taxonomy.
+   - **Outlier Detection**: Flag objects with posterior probabilities significantly diverging from the manifold as potential outliers.
+
+9. **Output**:
+   - **Reconstructed Spectra**: High-resolution spectra derived from sparse photometry.
+   - **Taxonomic Classifications**: Probabilistic assignments of spectral types.
+   - **Outlier Flags**: Identification of unusual spectral types or anomalies.
+
+This algorithm efficiently bridges sparse photometric data with detailed spectral analysis, enabling systematic exploration of TNO compositional diversity in large-scale surveys.

@@ -1,0 +1,19 @@
+**Final Answer:**
+
+1. **Preprocess the spectral data**: Normalize the near-infrared spectra and apply Principal Component Analysis (PCA) to reduce dimensionality, creating a spectral manifold based on a training set.
+
+2. **Project photometric measurements**: Map observed photometric fluxes into the reduced PCA space to obtain latent space representations.
+
+3. **Bayesian inference with Gaussian process prior**: Use a Gaussian process with a kernel capturing spectral smoothness and correlation structure to model the latent variables.
+
+4. **Markov Chain Monte Carlo (MCMC) sampling**: Estimate the posterior distributions of the latent variables given the photometric data.
+
+5. **Reconstruct full spectra**: Invert the PCA transformation using the MCMC-sampled latent variables to obtain the reconstructed spectra, quantifying uncertainties via the posterior variances.
+
+**Answer:**
+
+1. Preprocess the spectral data using PCA to create a spectral manifold.
+2. Project photometric measurements into the PCA latent space.
+3. Apply Bayesian inference with a Gaussian process prior.
+4. Use MCMC to estimate the posterior of latent variables.
+5. Reconstruct spectra and quantify uncertainties from the posterior distributions.

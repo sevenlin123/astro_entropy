@@ -1,0 +1,13 @@
+**Algorithm: Probabilistic Spectral Reconstruction**
+
+1. **Initialization**: Set initial values for the parameters of the mixture of Gaussian components, including means, variances, and mixing coefficients.
+
+2. **Prior Distributions**: Assign prior distributions to all model parameters.
+
+3. **MCMC Sampling**: Perform Markov Chain Monte Carlo (MCMC) sampling to explore the posterior distribution of the parameters.
+
+4. **Maximum Posterior Estimation (MPE)**: Compute the maximum posterior estimate of the parameters to obtain the most probable configuration.
+
+5. **Model Fitting**: For each trans-Neptunian object, fit the mixture of Gaussian (MoG) model to the observed flux data.
+
+6. **SED Reconstruction**: Reconstruct the spectral energy distribution (SED) by summing the contributions from all Gaussian components across the spectrum.

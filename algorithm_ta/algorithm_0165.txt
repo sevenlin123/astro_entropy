@@ -1,0 +1,41 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Input Data**: Sparse photometric measurements of trans-Neptunian objects (TNOs).
+
+2. **Preprocessing**:
+   - Normalize photometric data to account for measurement uncertainties.
+   - Convert photometric measurements into a common spectral resolution.
+
+3. **Principal Component Analysis (PCA)**:
+   - Train PCA on a sample of near-infrared (near-IR) spectra of TNOs.
+   - Extract principal components (PCs) to represent the spectral manifold.
+
+4. **Bayesian Inference**:
+   - Represent the spectral manifold using the extracted PCs.
+   - Perform Bayesian inference in the reduced PCA space to reconstruct full spectra from the sparse photometric data.
+   - Propagate measurement uncertainties through the Bayesian model.
+
+5. **Model Selection**:
+   - Use LOOCV to determine the optimal number of principal components for spectral reconstruction (typically 4–5 for taxonomic classification and 8–10 for higher fidelity).
+   - Select the number of components that provide the best balance between model complexity and spectral reconstruction accuracy.
+
+6. **Spectral Reconstruction**:
+   - Project the photometric data onto the selected PCA basis.
+   - Reconstruct the full near-IR spectrum using the Bayesian model, incorporating prior distributions based on the training data.
+   - Quantify uncertainties in the reconstructed spectra.
+
+7. **Outlier Detection**:
+   - Analyze the probability distribution of intermediate models in the PCA space.
+   - Identify and reconstruct rare spectral types by constraining photometry to select low-probability intermediate models.
+   - Detect peculiar objects like Neptune Trojans by their deviation from the typical spectral manifold.
+
+8. **Survey Optimization**:
+   - Apply the framework to assess the information content of different JWST/NIRCam filters.
+   - Determine optimal filter configurations for future observations to maximize the retention of spectral information for TNO taxonomy.
+
+9. **Output**:
+   - Reconstructed full near-IR spectra for each object.
+   - Uncertainty estimates for each wavelength.
+   - Optimally recommended filter configurations for survey design.
+
+This algorithm bridges the gap between sparse photometric data and detailed spectral information, enabling accurate taxonomic classification and efficient survey planning for minor planets.

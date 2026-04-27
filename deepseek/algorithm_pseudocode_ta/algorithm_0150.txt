@@ -1,0 +1,27 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Initialize:**
+   - **Input:** Collection of near-IR spectra (spectralData)
+   - **Output:** ReconstructedSpectra, Uncertainties
+
+2. **Training Phase:**
+   a. Center and scale spectralData.
+   b. Compute Principal Component Analysis (PCA) on spectralData:
+      - **Result:** eigenvectors (principal components), eigenvalues, explained variance.
+
+3. **Processing Each Object:**
+   a. For each object:
+      i. Obtain sparse photometric measurements (photometryData).
+      ii. Map photometryData into the latent PCA space:
+          - Compute scores by projecting photometryData onto PCA eigenvectors.
+      iii. Perform Bayesian inference in the PCA space:
+          - Define priors for the latent variables.
+          - Update priors with photometryData to get posteriors.
+      iv. Reconstruct full spectrum using the posterior latent variables:
+          - Invert the PCA transformation using the posterior means of the scores.
+      v. Compute credible intervals for the reconstructed spectrum based on posterior distributions.
+
+4. **Output:**
+   - Save **ReconstructedSpectra** and **Uncertainties**.
+
+This pseudocode outlines the core steps of the probabilistic spectral reconstruction framework, focusing on the PCA-based Bayesian approach.

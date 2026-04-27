@@ -1,0 +1,54 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+**Step 1: Define the Training Spectral Library**
+- **Input**: Reference TNO spectra (e.g., 51 observed spectra).
+- **Process**: Use Principal Component Analysis (PCA) to compute principal components.
+- **Output**: Set of principal components (latent space basis vectors).
+
+**Step 2: Construct the Latent Space**
+- **Input**: Principal components from Step 1.
+- **Process**: Apply Kernel Density Estimation (KDE) to estimate the probability distribution of latent coefficients.
+- **Output**: Smoothed probability distribution in the latent space.
+
+**Step 3: Generate Synthetic Photometry**
+- **Input**: Augmented latent vectors from Step 2.
+- **Process**: Forward model the spectra through JWST NIRCam filter curves to compute expected reflectance in each band.
+- **Output**: Synthetic photometric measurements.
+
+**Step 4: Inject Noise into Synthetic Photometry**
+- **Input**: Synthetic photometric measurements.
+- **Process**: Add Gaussian noise with 20% relative uncertainty.
+- **Output**: Noisy photometric data for training.
+
+**Step 5: Train AutoML Regressor**
+- **Input**: Noisy photometric data and corresponding latent coefficients.
+- **Process**: Use AutoGluon to train an ensemble of gradient-boosted decision trees.
+- **Output**: Trained encoder model mapping photometry to latent space.
+
+**Step 6: Perform Leave-One-Out Cross-Validation (LOOCV)**
+- **Input**: Each of the 51 seed spectra.
+- **Process**:
+  1. Hold out one spectrum.
+  2. Forward model its photometry.
+  3. Inject noise.
+  4. Pass through the trained encoder.
+  5. Project latent coefficients through inverse PCA to reconstruct spectrum.
+- **Output**: Reconstructed spectra and classification probabilities.
+
+**Step 7: Evaluate Performance Metrics**
+- **Metrics**:
+  - Pearson correlation between reconstructed and true spectra.
+  - Coverage of 1σ credible intervals across wavelengths.
+  - LOOCV classification accuracy.
+
+**Step 8: Optimize Filters for Information Content**
+- **Input**: Filter contributions to latent coefficients.
+- **Process**: Rank filters based on information gain.
+- **Output**: Optimally selected filter configurations.
+
+**Step 9: Detect Outliers**
+- **Input**: Predicted latent states and true labels.
+- **Process**: Identify deviations from the latent manifold.
+- **Output**: Anomalies in spectral types.
+
+**End Algorithm**

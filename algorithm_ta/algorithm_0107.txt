@@ -1,0 +1,27 @@
+**Computational Algorithm for Spectral Reconstruction of Trans-Neptunian Objects**
+
+1. **Training Set Generation**:
+   - Collect a sample of near-infrared (near-IR) spectra of trans-Neptunian objects (TNOs) with known taxonomic classifications and compositions.
+   - Transform each spectrum into its principal component (PC) representation using a technique like Principal Component Analysis (PCA).
+   - The number of significant principal components (approx. 4-5 for taxonomic classification, 8-10 for higher fidelity) is determined based on the explained variance and cross-validation results.
+
+2. **Forward Modeling**:
+   - For each object, input the photometric flux measurements obtained from sparse photometric observations.
+   - Map these photometric measurements into the latent space of principal components using a probabilistic model that incorporates measurement uncertainties.
+   - The forward model estimates the probability distribution over the latent (principal component) space given the observed photometric data.
+
+3. **Bayesian Inference**:
+   - Initialize the prior distribution over the latent space based on the PCA representation of the training set.
+   - Compute the likelihood of the observed photometric data given the latent variables using the forward model.
+   - Apply Bayes' theorem to derive the posterior distribution over the latent space: \( P(\text{Latent}|\text{Photometry}) = \frac{P(\text{Photometry}|\text{Latent}) \times P(\text{Latent})}{P(\text{Photometry})} \).
+
+4. **Spectral Reconstruction**:
+   - Use the posterior distribution of the latent space to reconstruct the original spectral space.
+   - This involves mapping the latent variables back to the spectral domain using the inverse transformation of the PCA (e.g., through linear combinations of the principal components).
+   - Propagate the uncertainties from the latent space to the reconstructed spectra, ensuring that the empirical credible-interval coverage is achieved (e.g., ~95%).
+
+5. **Survey Optimization and Outlier Detection**:
+   - Evaluate the information content of different JWST/NIRCam filter configurations to identify optimal photometric bands for TNO taxonomy.
+   - Enhance the detection of rare spectral types by constraining photometry to select low-probability intermediate models within the continuous spectral manifold.
+
+This algorithm effectively bridges the gap between sparse photometric data and detailed spectral analysis, enabling robust spectral reconstruction and taxonomic classification of TNOs.

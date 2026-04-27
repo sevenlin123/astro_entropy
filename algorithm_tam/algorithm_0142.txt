@@ -1,0 +1,34 @@
+### Algorithm Description
+
+1. **Principal Component Analysis (PCA) Training**:
+   - Train PCA on a set of reference TNO spectra to create a low-dimensional latent space.
+   - Use the eigenvectors as the basis for spectral reconstruction.
+
+2. **Data Augmentation**:
+   - Generate synthetic latent vectors using Kernel Density Estimation (KDE) to create a smooth manifold.
+   - Inject Gaussian noise (20% uncertainty) into synthetic photometry to simulate real-world observational noise.
+
+3. **Automated Machine Learning (AutoML) Training**:
+   - Train an AutoML regressor (e.g., Gradient Boosted Decision Trees) to map photometric data to latent coefficients.
+   - Train a secondary AutoML classifier to predict taxonomic labels from latent coefficients.
+
+4. **Forward Modeling**:
+   - Convert spectra through PCA for latent space encoding.
+   - Simulate photometric responses using JWST/NIRCam filter throughput curves.
+
+5. **Spectral Reconstruction**:
+   - For new photometric observations, predict latent coefficients using the trained regressor.
+   - Reconstruct the full spectrum by applying the inverse PCA transform.
+
+6. **Validation and Performance Metrics**:
+   - Perform Leave-One-Out Cross-Validation (LOOCV) to assess RMSE and credible interval coverage.
+   - Calculate Fisher information to evaluate filter configurations for survey optimization.
+
+7. **Outlier Detection**:
+   - Identify objects with low posterior probabilities or high Mahalanobis distances in latent space.
+
+8. **Taxonomic Classification**:
+   - Use posterior probabilities from the classifier to determine the most likely spectral type.
+
+9. **Survey Optimization**:
+   - Evaluate filter configurations to minimize RMSE and maximize information content for optimal survey design.

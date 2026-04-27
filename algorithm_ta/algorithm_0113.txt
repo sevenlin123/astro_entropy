@@ -1,0 +1,34 @@
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. **Training Data Preparation**:
+   - Gather a sample of near-infrared (near-IR) spectra of trans-Neptunian objects (TNOs) that have been previously analyzed and characterized.
+
+2. **Principal Component Analysis (PCA)**:
+   - Perform PCA on the training spectra to obtain a set of principal components (PCs) that represent the main modes of spectral variability.
+   - The number of PCs is determined based on cross-validation results, typically around 4-5 for taxonomic classification and up to 8-10 for improved reconstruction fidelity.
+
+3. **Bayesian Inference Setup**:
+   - Construct a probabilistic model in the reduced PCA space.
+   - Define a prior distribution over the latent variables corresponding to the selected PCs.
+
+4. **Likelihood Modeling**:
+   - Model the relationship between the observed photometric measurements and the underlying spectral features using the PCA representation.
+   - Include measurement uncertainties in the model to propagate them during reconstruction.
+
+5. **Reconstruction Process**:
+   - For each object, use the observed sparse photometry as input to the Bayesian model.
+   - Perform Bayesian inference to estimate the posterior distribution of the latent variables and, consequently, the full spectrum.
+
+6. **Uncertainty Propagation**:
+   - Calculate the uncertainties associated with the reconstructed spectra by evaluating the variance in the posterior distributions of the latent variables.
+
+7. **Model Evaluation**:
+   - Validate the reconstructed spectra against independent data or through cross-validation metrics (e.g., credible interval coverage).
+
+8. **Survey Optimization**:
+   - Apply the framework to determine the optimal filter configurations for future observations by quantifying the information content of different filter combinations.
+
+9. **Outlier Detection**:
+   - Use the framework to identify unusual spectral types by constraining photometry and checking for low-probability intermediate models.
+
+This algorithm bridges the gap between sparse photometric data and detailed spectral reconstruction, enabling robust taxonomic classification and survey planning for trans-Neptunian objects.

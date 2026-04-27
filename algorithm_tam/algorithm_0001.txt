@@ -1,0 +1,41 @@
+### Core Reconstruction Algorithm
+
+1. **Data Preprocessing**:
+   - Gather a set of near-infrared spectra of TNOs (approximately 51 objects).
+   - Exclude outliers and rare spectral types to focus on dominant taxonomic classes (Water-type, CO₂-type, Organics-type).
+
+2. **Principal Component Analysis (PCA)**:
+   - Perform PCA on the preprocessed spectra to reduce dimensionality.
+   - Determine the number of principal components (≈4-5 for classification, 8-10 for high-fidelity reconstruction).
+
+3. **Kernel Density Estimation (KDE) Augmentation**:
+   - Project the PCA coefficients of the training spectra onto a latent space.
+   - Use KDE to smooth and expand the latent space, creating a continuous manifold that interpolates between spectra.
+
+4. **Synthetic Photometry Generation**:
+   - Simulate photometric measurements for each augmented spectrum using the NIRCam filter set.
+   - Introduce noise (e.g., 20% relative uncertainty) to simulate real-world observational conditions.
+
+5. **AutoMLRegressor Training**:
+   - Train an ensemble of gradient-boosted decision trees (AutoML) to map noisy photometry to PCA latent coefficients.
+   - The model learns the relationship between sparse photometric inputs and the latent space representation.
+
+6. **Inverse PCA Transformation**:
+   - Use the trained AutoML regressor to predict latent coefficients for new photometric observations.
+   - Apply the inverse PCA transformation to reconstruct the full high-resolution spectrum.
+
+7. **Taxonomic Classification**:
+   - Project the predicted latent coefficients into a taxonomic classifier trained on the PCA manifold.
+   - Output a probability distribution over spectral types (e.g., Water, CO₂, Organic, Methanol).
+
+8. **Performance Evaluation**:
+   - Conduct Leave-One-Out Cross-Validation (LOOCV) on the training set.
+   - Measure reconstruction accuracy using RMSE, feature detection accuracy, and credible interval coverage.
+
+9. **Applications**:
+   - **Survey Optimization**: Identify optimal NIRCam filters for maximizing information retention.
+   - **Outlier Detection**: Detect unusual spectral types by comparing reconstructed spectra with known taxonomic groups.
+   - **Rapid Classification**: Classify new TNOs quickly using sparse photometry.
+
+10. **Iterative Refinement**:
+    - Continuously refine the model by incorporating additional spectral types and improving the generative model for better handling of rare morphologies.

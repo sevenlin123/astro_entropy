@@ -1,0 +1,15 @@
+Algorithm: Bayesian_GP_Spectral_Reconstruction
+
+For each object:
+    Construct the feature matrix X and covariance matrix K.
+    Compute log-likelihood contributions.
+    Estimate kernel hyperparameters θ.
+    Determine posterior mean μ* and variance σ²*.
+    Generate synthetic photometry m' from posterior predictive.
+    For each m*:
+        Compute P(m' = m | D, θ).
+        If P < threshold, flag as outlier.
+    Reconstruct SED using m', calculate confidence intervals.
+    Output SED, uncertainties, and outlier flags.
+
+End for each object.

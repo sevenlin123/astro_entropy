@@ -1,0 +1,34 @@
+```plaintext
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. Initialize:
+   - Input: Training set of near-infrared spectra, sparse photometric measurements
+   - Output: Reconstructed full spectra, uncertainty estimates
+
+2. Perform Principal Component Analysis (PCA):
+   - Transform the training set into a principal component representation
+   - Determine the number of principal components (PCA dimensions) based on the spectral variability captured (e.g., 4-5 for taxonomic classification, 8-10 for improved reconstruction)
+
+3. Bayesian Inference in Latent Space:
+   - Model the spectral manifold using the PCA-reduced space
+   - Perform Bayesian inference to reconstruct the full spectrum from the sparse photometric data
+   - Propagate measurement uncertainties through the reconstruction process
+
+4. Spectral Reconstruction:
+   - Use the trained PCA model to project photometric data into the latent space
+   - Apply Bayesian inference to obtain posterior distributions of spectral parameters
+   - Reconstruct the full spectrum by mapping the posterior distributions back from the latent space to the original spectral space
+
+5. Uncertainty Calibration:
+   - Quantify the uncertainties associated with each spectral feature based on the Bayesian posterior
+   - Validate the uncertainty estimates by comparing with empirical credible intervals
+
+6. Dimensionality Analysis:
+   - Assess the dimensionality of the spectral manifold using the chosen number of PCA components
+   - Ensure the model captures the essential spectral variability for taxonomic classification and reconstruction fidelity
+
+7. Output:
+   - Reconstructed spectra
+   - Associated uncertainty estimates
+   - Information content metrics for survey optimization (e.g., filter configuration rankings)
+```

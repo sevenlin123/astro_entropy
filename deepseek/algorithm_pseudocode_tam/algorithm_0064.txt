@@ -1,0 +1,19 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Training Phase:**
+   - Train PCA on reference spectra to obtain principal components.
+     - Input: Reference spectra.
+     - Output: PCA basis (principal components).
+
+2. **Model Training:**
+   - Train an AutoML regressor to map sparse photometric inputs to PCA latent coefficients.
+     - Input: Sparse photometric data.
+     - Output: Trained AutoML regressor (mapping photometry to latent coefficients).
+
+3. **Reconstruction Phase:**
+   - For each new photometric observation:
+     - Use the trained AutoML regressor to predict latent coefficients.
+     - Apply inverse PCA transformation to the latent coefficients.
+     - Output: Reconstructed spectrum.
+
+**End of Algorithm**

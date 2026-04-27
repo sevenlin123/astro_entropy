@@ -1,0 +1,41 @@
+```pseudocode
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+    - Photometric observations (sparse multi-band measurements)
+    - Training set of reference TNO spectra
+    - Number of principal components (K)
+
+Output:
+    - Reconstructed full spectrum
+    - Uncertainty estimates
+    - Taxonomic classification
+
+1. Preprocessing:
+    a. Normalize photometric observations to reflectance or flux densities.
+    b. Apply noise injection (20% relative uncertainty) to simulate realistic photometric errors.
+
+2. Latent Space Definition:
+    a. Perform Principal Component Analysis (PCA) on the training spectra to extract top K principal components.
+    b. Construct a latent space where each spectrum is represented by its coefficients in the PCA basis.
+
+3. Data Augmentation (Optional):
+    a. Generate synthetic spectra using Kernel Density Estimation (KDE) on the latent space to create a smooth manifold.
+    b. Convert synthetic spectra to photometric observations using forward modeling with target instrument filters.
+
+4. Model Training:
+    a. Train an AutoML regressor (e.g., Gradient Boosted Decision Trees) to map sparse photometry to latent space coefficients using synthetic and real training data.
+    b. Train a separate classifier to assign taxonomic labels based on latent space coordinates.
+
+5. Inference:
+    a. For new photometric observations:
+        i. Predict latent coefficients using the trained regressor.
+        ii. Project predicted coefficients back to full spectrum using inverse PCA.
+    b. Perform uncertainty quantification using Gaussian Copula sampling of the latent space posterior.
+
+6. Post-Processing:
+    a. Classify the spectrum into taxonomic groups using the latent space classifier.
+    b. Validate reconstruction accuracy and credible interval coverage (if validation data available).
+
+End Algorithm
+```

@@ -1,0 +1,17 @@
+The core computational algorithm for reconstructing the near-infrared spectra of trans-Neptunian objects from sparse photometric data involves the following steps:
+
+1. **Preprocess the Data**: Collect and normalize the multiband photometric measurements of the trans-Neptunian objects to ensure uniformity and eliminate biases.
+
+2. **Principal Component Analysis (PCA)**: Apply PCA to a dataset of known near-infrared spectra to derive a set of principal components, capturing the main sources of spectral variability.
+
+3. **Probabilistic Model Construction**: Develop a probabilistic model, such as a Gaussian Process, within the PCA-reduced latent space to represent the spectral manifold of the objects.
+
+4. **Bayesian Inference**: Utilize Bayesian methods to estimate the spectral components of each object based on their photometric measurements, updating the model with observed data.
+
+5. **Spectral Reconstruction**: Reconstruct the full near-infrared spectrum by combining the estimated components, leveraging the probabilistic model to incorporate uncertainties.
+
+6. **Uncertainty Propagation**: Calculate how uncertainties in the photometric measurements influence the reconstructed spectrum, ensuring accurate uncertainty estimates.
+
+7. **Output the Results**: Present the reconstructed spectrum along with confidence intervals derived from the propagated uncertainties.
+
+This algorithm efficiently processes large datasets, enabling the statistical reconstruction of spectra and their uncertainties for numerous objects.

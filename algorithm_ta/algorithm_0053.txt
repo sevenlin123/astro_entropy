@@ -1,0 +1,27 @@
+**Algorithm: Probabilistic Spectral Reconstruction via Latent Space Inference**
+
+1. **Training Phase**:
+   - Train a principal component analysis (PCA) model using a dataset of near-infrared (near-IR) spectra of trans-Neptunian objects (TNOs).
+   - Determine the optimal number of principal components (K) based on the application, where K=4-5 captures taxonomic classification, and K=8-10 improves spectral fidelity and uncertainty.
+   
+2. **Data Preprocessing**:
+   - Obtain sparse photometric measurements of the target TNO from near-IR surveys.
+   - Normalize and preprocess the photometric data to account for measurement noise and instrument characteristics.
+
+3. **Latent Space Mapping**:
+   - Represent the spectral manifold of TNOs in a reduced-dimensional space using the pre-trained PCA model.
+   - Map the sparse photometric measurements into this latent space.
+
+4. **Bayesian Inference**:
+   - Perform Bayesian inference in the latent space to reconstruct the full spectrum.
+   - Propagate measurement uncertainties through the model to quantify reconstruction uncertainties.
+
+5. **Spectral Reconstruction**:
+   - Project the inferred latent space parameters back to the original spectral space.
+   - Obtain the reconstructed spectrum, ensuring credible-interval coverage (~95%).
+
+6. **Outlier Detection and Rare Type Reconstruction**:
+   - Apply constraints to photometric measurements to identify and reconstruct rare spectral types by sampling low-probability intermediate models.
+   - Detect outliers by evaluating the probability of the inferred models against the spectral manifold.
+
+This structured approach efficiently bridges sparse photometric data with detailed spectral reconstruction, enabling robust taxonomic classification and outlier detection for TNOs.

@@ -1,0 +1,29 @@
+```
+Algorithm: Probabilistic Spectral Reconstruction Framework for TNOs
+
+Input:
+- Sparse photometric measurements (P)
+- Pre-trained Principal Component Analysis (PCA) model (trained on near-IR spectra)
+- Number of principal components (k)
+- Bayesian inference parameters
+
+Output:
+- Reconstructed spectrum (S)
+- Measurement uncertainties (U)
+
+1. Load sparse photometric data P for each object.
+2. Transform photometric data P into the PCA latent space using pre-trained model.
+   - Compute latent variables z ∈ ℝᵏ by projecting P onto PCA basis.
+3. Perform Bayesian inference in the PCA latent space:
+   - Define prior distribution over latent variables (e.g., multivariate normal).
+   - Model likelihood based on the relationship between latent variables and spectral features.
+   - Use Markov Chain Monte Carlo (MCMC) or variational inference to sample posterior distribution.
+4. Reconstruct full spectrum S from sampled latent variables:
+   - Project latent samples back into spectral space using PCA basis vectors.
+5. Calculate measurement uncertainties U by propagating photometric uncertainties through the PCA model and Bayesian inference.
+6. Output reconstructed spectrum S and associated uncertainties U.
+
+End Algorithm
+``` 
+
+This pseudocode captures the core computational steps of the probabilistic spectral reconstruction framework described in the paper. It focuses on the main reconstruction process without including validation or visualization steps. The algorithm assumes access to a pre-trained PCA model and uses Bayesian inference in the latent space to reconstruct full spectra from sparse photometry.

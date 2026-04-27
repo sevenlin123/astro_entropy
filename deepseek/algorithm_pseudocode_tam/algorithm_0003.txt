@@ -1,0 +1,28 @@
+```
+algorithm probabilistic spectral reconstruction from sparse photometry:
+    input: sparse photometric observations of TNOs
+    output: reconstructed spectra and taxonomic classification
+    
+    begin
+    
+    phase 1: training and latent space preparation
+        1. collect reference spectra from TNO sample (n = 51)
+        2. perform PCA on reference spectra to obtain principal components (k <=10)
+        3. project reference spectra into latent space using PCA coefficients
+        4. apply kernel density estimation (KDE) with smoothing factor h=0.5 to create continuous latent manifold
+        
+    phase 2: forward modeling and autoML training
+        1. simulate photometric measurements for each augmented spectrum
+            a. convolve spectra with NIRCam filter responses
+            b. add 20% gaussian noise to simulate observational uncertainty
+        2. pair simulated photometry with latent coefficients as training data
+        3. train AutoML regressor (ensemble of GBDTs and neural networks) to map photometry to latent space
+            
+    phase 3: inference and reconstruction
+        1. for new photometric observations:
+            a. use AutoML regressor to predict latent coefficients
+            b. apply inverse PCA transform to reconstruct full spectrum
+            c. classify taxonomic type using latent space classifier
+        
+    end
+```

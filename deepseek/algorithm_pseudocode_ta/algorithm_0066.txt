@@ -1,0 +1,32 @@
+**Pseudocode Algorithm for Probabilistic Spectral Reconstruction**
+
+1. **Data Preprocessing**
+   - Initialize dataset `spectral_data` containing normalized near-IR spectra.
+   
+2. **Principal Component Analysis (PCA)**
+   - Apply PCA to `spectral_data`.
+   - Determine the number of principal components (N) to retain, e.g., 4-5 for classification, 8-10 for reconstruction.
+   - Extract top N principal components (`principal_components`).
+
+3. **Latent-Space Model Construction**
+   - Construct a probabilistic model using `principal_components`.
+
+4. **Bayesian Inference**
+   - For each object:
+     - Use available photometric measurements.
+     - Perform Bayesian inference in the latent space to infer latent variables.
+     - Propagate photometric uncertainties to spectral reconstructions.
+
+5. **Spectral Reconstruction**
+   - Reconstruct full spectra for each object using inferred latent variables.
+
+6. **Post-Reconstruction Analysis**
+   - If original spectra are available, validate reconstructed spectra.
+   - Compute credible intervals and check coverage.
+   - Evaluate information content of NIRCam filters (e.g., F090W, F115W, F410M, F460M) for survey optimization.
+
+7. **Outlier Detection**
+   - Identify objects with spectral types mismatched by the learned manifold.
+   - Reconstruct their spectra by sampling from the full manifold without latent constraints.
+
+**End of Algorithm**

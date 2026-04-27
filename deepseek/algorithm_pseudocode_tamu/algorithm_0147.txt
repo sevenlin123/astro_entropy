@@ -1,0 +1,58 @@
+```python
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+    - Training Spectra: Set of near-IR spectra of TNOs (N = 51)
+    - Photometric Filters: Bandpasses of JWST/NIRCam (F090W, F115W, F410M, F460M)
+    - Observed Photometry: Sparse multi-band photometric measurements of TNOs
+    - Uncertainty Levels: Relative reflectance uncertainties (e.g., 20%)
+
+Output:
+    - Reconstructed Spectra: High-resolution spectral estimates for each object
+    - Taxonomic Classifications: Probabilistic assignments to spectral types
+    - Credible Intervals: Uncertainty bounds on reconstructed spectra
+
+Steps:
+
+1. **Principal Component Analysis (PCA):**
+    a. Perform PCA on the training spectra to extract principal components (PCs).
+    b. Determine the number of PCs (K) that capture spectral variability (4-5 for classification, 8-10 for fidelity).
+    c. Project training spectra onto the PCA basis to get latent coefficients.
+
+2. **Data Augmentation with KDE:**
+    a. Apply Kernel Density Estimation (KDE) with Gaussian kernels to the latent coefficients.
+    b. Bandwidth (h) optimized for smoothness and fidelity (~0.5).
+    c. Generate synthetic latent vectors to augment training data.
+
+3. **Forward Modeling Synthetic Photometry:**
+    a. Convolve each augmented spectrum with photometric filter responses.
+    b. Inject Gaussian noise (e.g., 20% relative uncertainty) into synthetic photometry.
+
+4. **AutoML Regression Training:**
+    a. Use AutoGluon's TabularPredictor to train a model mapping synthetic photometry to latent coefficients.
+    b. Enable automated feature engineering and hyperparameter tuning.
+    c. Validate using LOOCV, ensuring held-out data is excluded during training.
+
+5. **Inverse PCA Transformation:**
+    a. For new photometric observations, predict latent coefficients using the trained regressor.
+    b. Apply inverse PCA to reconstruct the full spectrum.
+
+6. **Uncertainty Sampling with Gaussian Copula:**
+    a. Sample the joint posterior of latent coefficients.
+    b. Preserve physical dependencies between PCs using a structured correlation matrix.
+    c. Generate an ensemble of reconstructed spectra and compute credible intervals.
+
+7. **Taxonomic Classification:**
+    a. Train a classifier on the PCA latent space to predict spectral types.
+    b. Assign probabilities to each taxonomic class for new observations.
+
+8. **LOOCV Validation Metrics:**
+    a. Compute RMSE, MAE, Pearson correlation, and credible interval coverage for each held-out object.
+    b. Assess taxonomic confidence and outlier detection capabilities.
+
+9. **Filter Information Content Analysis:**
+    a. Evaluate different filter combinations using reconstruction fidelity metrics.
+    b. Identify optimal configurations for future surveys.
+
+End.
+```

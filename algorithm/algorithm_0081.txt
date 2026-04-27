@@ -1,0 +1,54 @@
+### Algorithm Description
+
+#### 1. **Data Processing**
+   - **Input**: Sparse photometric data files of Trans-Neptunian Objects (TNOs)
+   - **Steps**:
+     - Read and parse the photometric data for each TNO.
+     - Preprocess the data by removing outliers and correcting for instrumental artifacts.
+   - **Output**: Cleaned photometric data ready for forward modeling.
+
+#### 2. **Forward Modeling**
+   - **Input**: Cleaned photometric data
+   - **Steps**:
+     - Parameterize the SED components using a small set of parameters, such as emission line strengths, continuum levels, and temperature-dependent broadening factors.
+     - For each TNO, simulate synthetic photometric magnitudes by convolving the SED with the instrument's spectral response and adding realistic noise.
+   - **Output**: Synthetic photometric magnitudes for each TNO.
+
+#### 3. **Bayesian Inference**
+   - **Input**: Observed photometric data and synthetic magnitudes
+   - **Steps**:
+     - Construct the likelihood function based on the forward model and observed data.
+     - Define prior distributions for the SED parameters, incorporating physical constraints.
+     - Perform Markov Chain Monte Carlo (MCMC) sampling to explore the posterior distribution of parameters.
+     - Diagnose convergence and assess mixing of chains.
+     - Extract parameter uncertainties from the posterior samples.
+   - **Output**: Posterior distributions of SED parameters and their uncertainties.
+
+#### 4. **Probabilistic Classification**
+   - **Input**: Posterior parameter distributions
+   - **Steps**:
+     - Predefine a set of spectral templates corresponding to different spectral types.
+     - For each template, calculate the probability that the object's posterior parameter distribution matches the template.
+     - Classify the object into the spectral type with the highest posterior probability.
+   - **Output**: Spectral classification and associated confidence metrics.
+
+#### 5. **Outlier Detection**
+   - **Input**: Posterior distributions of SED parameters
+   - **Steps**:
+     - Compare the object's spectral posterior distributions with those of typical objects in its spectral class.
+     - Identify discrepancies or unusual deviations indicating outliers.
+   - **Output**: Outlier flags for peculiar objects.
+
+#### 6. **Survey Optimization**
+   - **Input**: Posterior parameter uncertainties and observing conditions
+   - **Steps**:
+     - Analyze how observing conditions (e.g., exposure time, wavelength coverage) affect the information gain about SED parameters.
+     - Optimize future observations by selecting parameters that minimize expected parameter uncertainties.
+   - **Output**: Optimized observing strategies for maximum information gain.
+
+### Outputs
+- **Reconstructed SEDs**: Detailed spectral energy distributions for each TNO.
+- **Posterior Probabilities**: Probabilities associated with each spectral type classification.
+- **Spectral Classifications**: Assigned spectral types with confidence metrics.
+- **Outlier Flags**: Identification of peculiar objects requiring further investigation.
+- **Optimized Observation Parameters**: Strategies for efficient future observations.

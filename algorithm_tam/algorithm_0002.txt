@@ -1,0 +1,44 @@
+### Algorithm Description
+
+1. **Data Preparation**:
+   - **Input**: Sparse photometric measurements of Trans-Neptunian Objects (TNOs).
+   - **Output**: Ready-for-processing photometric data with associated uncertainties.
+
+2. **Principal Component Analysis (PCA)**:
+   - **Input**: Reference near-IR spectra of TNOs.
+   - **Output**: Low-dimensional latent space (principal components) capturing the main spectral variations.
+
+3. **Density Estimation**:
+   - **Input**: Latent coefficients from PCA.
+   - **Output**: Continuous probability distribution of the latent space using Kernel Density Estimation (KDE) for smooth interpolation.
+
+4. **Synthetic Data Generation**:
+   - **Input**: Augmented latent vectors.
+   - **Output**: Simulated photometry by convolving spectra with instrument filters, introducing noise to simulate real observations.
+
+5. **Model Training**:
+   - **Inputs**: Synthetic and real photometric data with associated labels.
+   - **Outputs**: Trained AutoML regressor (for latent coefficient prediction) and classifier (for taxonomic classification).
+
+6. **Reconstruction and Classification**:
+   - **Inputs**: New photometric observations.
+   - **Process**: 
+     - Use the trained regressor to predict latent coefficients.
+     - Apply inverse PCA to reconstruct the full spectrum.
+     - Use the classifier to determine the taxonomic classification probabilities.
+
+7. **Leave-One-Out Cross-Validation (LOOCV)**:
+   - **Input**: Excluded object from training set.
+   - **Output**: Metrics including reconstruction error, credible interval coverage, and classification accuracy to assess framework performance.
+
+8. **Survey Optimization**:
+   - **Inputs**: Filter configurations and their information contributions.
+   - **Output**: Optimally informative filter sets identified for maximizing spectral reconstruction fidelity.
+
+9. **Outlier Detection**:
+   - **Inputs**: Predicted latent states and classification probabilities.
+   - **Output**: Identification of objects with unusual spectral types or high reconstruction uncertainty for prioritized follow-up.
+
+### Final Answer
+
+The algorithm systematically transforms sparse photometric data into reconstructed spectra and taxonomic classifications by leveraging PCA, AutoML regression, and Bayesian inference. It enables efficient survey planning and outlier detection, bridging the gap between photometry and detailed spectral analysis.

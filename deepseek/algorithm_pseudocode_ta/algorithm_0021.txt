@@ -1,0 +1,43 @@
+**Algorithm for Probabilistic Spectral Reconstruction of TNOs from Sparse Photometry**
+
+1. **Training Data Preparation:**
+   - Compile a dataset of near-IR spectra of trans-Neptunian objects (TNOs).
+   - Normalize and preprocess the spectra to ensure consistency.
+
+2. **Principal Component Analysis (PCA):**
+   - Perform PCA on the preprocessed spectral dataset.
+   - Determine the number of principal components (PCs) to retain. Use 4-5 PCs for taxonomic classification and 8-10 PCs for high-fidelity reconstruction based on cross-validation results.
+
+3. **Latent Space Construction:**
+   - Represent each TNO's spectrum in the reduced PCA latent space.
+   - Each point in this space corresponds to a linear combination of the selected principal components.
+
+4. **Bayesian Inference Setup:**
+   - Define the prior distribution over the latent variables based on the PCA model.
+   - Establish the likelihood function that relates the latent space representation to the observed sparse photometric measurements.
+
+5. **Sparse Photometric Data Input:**
+   - Obtain sparse photometric data for the target TNO.
+   - This data consists of measurements at specific wavelengths with associated uncertainties.
+
+6. **Bayesian Inference for Spectral Reconstruction:**
+   - Perform Bayesian inference in the PCA latent space using the observed photometric data.
+   - Update the latent variables to best match the photometric observations while propagating measurement uncertainties.
+   - Use Markov Chain Monte Carlo (MCMC) or variational inference methods to sample the posterior distribution of the latent variables.
+
+7. **Spectral Parameter Estimation:**
+   - Reconstruct the full spectrum from the inferred latent variables.
+   - Compute the uncertainty in the reconstructed spectrum by propagating the uncertainties from the latent space.
+
+8. **Validation and Uncertainty Calibration:**
+   - Assess the empirical credible interval coverage of the reconstructed spectra across wavelengths.
+   - Adjust the uncertainty estimates if necessary to ensure accurate coverage.
+
+9. **Outlier Detection and Rare Spectral Type Identification:**
+   - Analyze the posterior distributions of the latent variables to identify unusual objects.
+   - Apply techniques like anomaly detection or mode selection to constrain photometry and reconstruct rare spectral types.
+
+10. **Output the Reconstructed Spectra and Uncertainties:**
+    - Generate the reconstructed spectra along with their associated uncertainties for further analysis.
+
+**End Algorithm**

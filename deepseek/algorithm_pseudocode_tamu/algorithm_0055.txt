@@ -1,0 +1,57 @@
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+```python
+Algorithm Probabilistic Spectral Reconstruction (PSR)
+
+Inputs:
+- Sparse photometric measurements (m)
+- Training set of reference spectra (S_train)
+- Principal Component Analysis (PCA) parameters
+
+Outputs:
+- Reconstructed spectrum (S_reconstructed)
+- Posterior distribution of latent coefficients (z_posterior)
+
+1. **Training Phase:**
+   a. Perform PCA on S_train to obtain principal components (PCs) and eigenvectors.
+   b. Use Kernel Density Estimation (KDE) on PCA coefficients of S_train to construct the prior distribution over latent space.
+   c. Generate synthetic training data by sampling from the KDE prior.
+   d. Train an AutoML regressor (e.g., Gradient Boosted Decision Trees) to map sparse photometry to latent coefficients (z).
+   e. Retain the trained PCA and AutoML regressor for inference.
+
+2. **Inference Phase:**
+   a. For a new photometric observation m:
+      i. Pass m through the trained AutoML regressor to obtain predicted latent coefficients z_hat.
+      ii. Propagate z_hat through the inverse PCA transform to reconstruct the spectrum S_reconstructed.
+      iii. Optionally, sample from the posterior distribution of z_hat using Gaussian Copula to generate an ensemble of reconstructions.
+
+3. **Uncertainty Quantification:**
+   a. For each inferred S_reconstructed, compute empirical credible intervals based on the ensemble of reconstructions.
+   b. Assess the calibration of uncertainties using validation metrics.
+
+4. **Taxonomic Classification:**
+   a. Train a secondary classifier on the PCA coefficients of S_train.
+   b. For a new m, predict the taxonomic class using the latent coefficients derived from the AutoML regressor.
+
+5. **Survey Optimization:**
+   a. Evaluate the Fisher information content of different filter configurations.
+   b. Select optimal filters to maximize the information yield for spectral reconstruction.
+
+End Algorithm
+```
+
+### Key Steps:
+
+1. **PCA Training:** Extract principal components from reference spectra to define the spectral manifold.
+2. **Prior Construction:** Use KDE to model the latent distribution of PCA coefficients.
+3. **Synthetic Data Augmentation:** Generate additional training data to stabilize the regressor.
+4. **AutoML Regression:** Learn the mapping from photometry to latent space.
+5. **Inverse Transform:** Reconstruct the full spectrum using the inverse PCA mapping.
+6. **Posterior Sampling:** Use Gaussian Copula to generate probabilistic reconstructions.
+7. **Classification and Survey Design:** Extend the framework for taxonomic classification and optimal observation planning.
+
+### Notes:
+
+- Focus on core reconstruction steps; validation and visualization steps omitted.
+- The algorithm assumes pre-trained models and PCA components as part of the setup.
+- Emphasizes probabilistic reconstruction with uncertainty quantification.

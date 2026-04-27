@@ -1,0 +1,19 @@
+**Algorithm Steps:**
+
+1. **Principal Component Analysis (PCA) Training:**
+   - Train a PCA model on a dataset of near-infrared (near-IR) spectra of trans-Neptunian objects (TNOs).
+   - The PCA captures the dominant modes of spectral variability, reducing the dimensionality of the spectra.
+
+2. **Bayesian Inference in Latent Space:**
+   - Perform Bayesian inference using the PCA-reduced spectral manifold.
+   - Reconstruct full spectra from sparse photometric measurements by propagating measurement uncertainties through the Bayesian framework.
+
+3. **Survey Optimization:**
+   - Evaluate the information content of different photometric filter configurations (e.g., JWST/NIRCam filters).
+   - Identify optimal filter combinations that maximize spectral reconstruction fidelity and taxonomic classification accuracy.
+
+4. **Outlier Detection and Rare Spectral Type Reconstruction:**
+   - Allow exploration of the latent spectral manifold to constrain photometry for rare or peculiar spectral types.
+   - Detect and reconstruct rare types by identifying low-probability intermediate models within the continuous manifold.
+
+This algorithm effectively bridges sparse photometry and spectroscopy, enabling robust reconstruction and analysis of TNO compositions.

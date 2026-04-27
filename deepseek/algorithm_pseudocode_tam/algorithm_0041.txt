@@ -1,0 +1,49 @@
+**Algorithm: Probabilistic Spectral Reconstruction Framework**
+
+**Step-by-Step Computational Steps:**
+
+1. **Data Preparation:**
+   - Gather the reference near-infrared spectra of TNOs.
+   - Convert these spectra into a matrix format for PCA analysis.
+
+2. **Principal Component Analysis (PCA):**
+   - Perform PCA on the matrix of spectra to extract principal components (PCs).
+   - Determine the number of PCs (e.g., 4-5 for taxonomic classification, 8-10 for detailed reconstruction).
+
+3. **Kernel Density Estimation (KDE):**
+   - Project the reference spectra onto the PCA latent space.
+   - Use KDE to create a smooth probability distribution over the latent space.
+
+4. **Synthetic Data Generation:**
+   - Generate synthetic spectra by sampling the latent space using the KDE model.
+   - Convolve these synthetic spectra with the instrumental response (e.g., JWST/NIRCam filters) to simulate observed photometry.
+   - Add Gaussian noise (e.g., 20% uncertainty) to the simulated photometry.
+
+5. **Training the AutoML Regressor:**
+   - Train an ensemble of gradient-boosted decision trees (AutoGluon) to map noisy photometry to latent coefficients.
+   - Use the synthetic photometry and corresponding latent coefficients as training data.
+
+6. **Inverse PCA Transformation:**
+   - Implement the inverse PCA transform to convert predicted latent coefficients back into full spectra.
+
+7. **Spectral Reconstruction:**
+   - For new photometric observations, use the trained AutoML regressor to predict latent coefficients.
+   - Apply the inverse PCA transform to obtain the reconstructed spectrum.
+
+8. **Taxonomic Classification:**
+   - Project the predicted latent coefficients into the latent space.
+   - Classify the spectrum using a pre-trained classifier that operates on the latent space.
+
+9. **Uncertainty Propagation:**
+   - Calculate credible intervals for the reconstructed spectra by propagating photometric uncertainties through the model.
+
+10. **Leave-One-Out Cross-Validation (LOOCV):**
+    - Validate the model by iteratively removing each spectrum from the training set, recalculating PCA, retraining the regressor, and assessing reconstruction accuracy.
+
+11. **Survey Optimization:**
+    - Evaluate different NIR photometric filters to determine the optimal set for high-fidelity spectral reconstruction using the framework.
+
+12. **Outlier Detection:**
+    - Identify objects whose reconstructed spectra deviate significantly from the expected latent distribution, indicating rare or unusual spectral types.
+
+**End of Algorithm**

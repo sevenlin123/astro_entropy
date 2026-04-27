@@ -1,0 +1,21 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Preprocess Training Spectra**: Gather and prepare the reference TNO spectra for analysis.
+
+2. **Principal Component Analysis (PCA)**: Apply PCA to the training spectra to extract principal components, establishing a latent space.
+
+3. **Project Spectra into Latent Space**: Convert each training spectrum into latent space to obtain latent coefficients.
+
+4. **Kernel Density Estimation (KDE)**: Smooth the distribution of latent coefficients using KDE to create a continuous probability distribution.
+
+5. **Generate Synthetic Latent Points**: Sample from the KDE distribution to create synthetic latent points, expanding the training dataset.
+
+6. **Forward Modeling**: Simulate photometric measurements by forward modeling the synthetic spectra through the instrument's filters, introducing noise to reflect photometric uncertainties.
+
+7. **Train AutoML Regressor**: Develop an AutoML model (e.g., AutoGluon) using the synthetic photometry and latent coefficients to map observed photometry to latent coefficients.
+
+8. **Predict Latent Coefficients**: For new objects, utilize the trained regressor to forecast latent coefficients from their observed photometry.
+
+9. **Reconstruct Spectrum**: Apply inverse PCA to the predicted latent coefficients to generate the full reconstructed spectrum.
+
+10. **Compute Credible Intervals**: Determine the credible intervals for the reconstructed spectrum, providing probabilistic constraints on the spectral features.

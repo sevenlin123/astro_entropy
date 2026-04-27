@@ -1,0 +1,27 @@
+### Algorithm Steps
+
+Step 1: [Training Phase]
+- Train a Principal Component Analysis (PCA) model on a sample of near-infrared (near-IR) spectra of known TNOs.
+
+Step 2: [Bayesian Inference]
+- Use the trained PCA model to represent the spectral manifold of TNOs in a lower-dimensional latent space.
+- Perform Bayesian inference in this latent space to reconstruct full spectra from photometric measurements while considering measurement uncertainties.
+- The number of principal components used is selected based on cross-validation, with 4–5 components capturing the essential taxonomic information and 8–10 improving reconstruction fidelity and uncertainty estimation.
+
+Step 3: [Survey Optimization]
+- Apply the probabilistic framework to evaluate the information content of different photometric filters (e.g., JWST/NIRCam filters).
+- Identify optimal filter configurations for maximizing the retention of spectral information, aiding in the taxonomic classification of TNOs.
+
+Step 4: [Outlier Detection and Rare Spectral Types]
+- Use the probabilistic framework to detect outliers by constraining photometric measurements and identifying low-probability intermediate models within the spectral manifold.
+- Reconstruct rare spectral types like the peculiar Neptune Trojans by allowing the selection of low-probability models that match specific photometric data.
+
+Step 5: [Output the Reconstructed Spectra]
+- Generate the full reconstructed spectra along with their associated uncertainties for each object.
+- Ensure the credible-interval coverage is evaluated to validate the accuracy of the spectral reconstructions.
+
+---
+
+### Notes
+
+The algorithm incorporates a probabilistic approach in the latent space, Bayesian inference, and dimensionality reduction techniques. It leverages PCA for spectral representation and Bayesian methods for uncertainty propagation, making it suitable for handling sparse photometric data and enabling both standard taxonomic analysis and outlier detection in TNO studies.

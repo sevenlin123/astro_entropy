@@ -1,0 +1,11 @@
+```plaintext
+algorithm probabilistic_spectral_reconstruction:
+    input: sparse_photometric_data
+    output: reconstructed_spectrum
+
+    1. Read sparse_photometric_data
+    2. Initialize probabilistic_model with specified number of segments (K)
+    3. Compute optimal_segmentation by maximizing the likelihood of sparse_photometric_data under the model
+    4. Reconstruct intrinsic_spectrum using the computed optimal_segmentation
+    5. Output reconstructed_spectrum
+```

@@ -1,0 +1,10 @@
+```pseudocode
+1. Initialize dataset D containing N spectra S_i of TNOs.
+2. For each spectrum S_i in D:
+    a. Preprocess S_i to remove noise and outliers → S'_i
+3. Compute Principal Component Analysis (PCA) on preprocessed spectra {S'_i} to obtain principal components P_j.
+4. For each object:
+    a. Use available photometric data to perform Bayesian inference, obtaining posterior distribution Q_i of principal components P_j.
+    b. Reconstruct spectrum R_i from Q_i by mapping back to the original spectral space.
+5. Output all reconstructed spectra R_i.
+```

@@ -1,0 +1,43 @@
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+**Objective:**  
+Reconstruct high-resolution near-infrared spectra of trans-Neptunian objects (TNOs) from sparse photometric measurements using a Bayesian framework and Principal Component Analysis (PCA).
+
+**Steps:**
+
+1. **Precompute Principal Components (PCA):**
+   - Train PCA on a reference set of near-IR spectra (51 TNOs) to derive principal components (PCs).
+   - Select the optimal number of PCs (K ≈ 8–10) based on LOOCV to balance reconstruction fidelity and uncertainty calibration.
+
+2. **Data Augmentation with Kernel Density Estimation (KDE):**
+   - Project seed spectra onto PCA latent space.
+   - Use non-parametric KDE with Gaussian kernel (bandwidth h ≈ 0.5) to generate synthetic latent vectors, filling gaps in the latent space for robust regression training.
+
+3. **Forward Modeling Synthetic Photometry:**
+   - Convert each augmented spectrum to synthetic photometry using JWST/NIRCam filter responses.
+   - Inject Gaussian noise (20% relative reflectance uncertainty) to simulate real-world photometric uncertainties.
+
+4. **Train AutoML Regressor:**
+   - Use synthetic photometry and corresponding latent coefficients as training data.
+   - Train an ensemble of gradient-boosted decision trees (e.g., XGBoost) to regress from photometry to latent space.
+
+5. **LOOCV Validation:**
+   - For each held-out spectrum:
+     a. Generate true photometry.
+     b. Predict latent coefficients using the trained regressor.
+     c. Reconstruct spectrum via inverse PCA transform.
+     d. Sample joint posterior using Gaussian Copula to quantify uncertainties.
+     e. Validate reconstruction accuracy and credible interval coverage.
+
+6. **Taxonomic Classification:**
+   - Train a secondary classifier on latent mean coefficients to predict taxonomic labels (Water, CO₂, Organic, Methanol).
+   - Provide classification probabilities for each new observation.
+
+7. **Uncertainty Quantification:**
+   - Generate 100 reconstructions from posterior samples to compute credible intervals and assess uncertainty propagation.
+
+8. **Output:**
+   - Reconstructed spectrum with uncertainties.
+   - Probabilistic taxonomic classification.
+
+**Note:** Steps 1 and 2 are performed once during model preparation. Steps 4–7 are part of the training/validation loop. Step 8 is executed for each new photometric observation during inference.

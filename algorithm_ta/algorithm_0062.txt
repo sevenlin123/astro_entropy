@@ -1,0 +1,21 @@
+The computational algorithm implementing the core reconstruction framework can be structured as follows:
+
+1. **Precompute PCA Basis Functions**
+   - Train a PCA model on a dataset of near-IR spectra of TNOs to create low-dimensional basis functions.
+
+2. **Input Sparse Photometric Observations**
+   - For each target object, input the available sparse photometric measurements along with their uncertainties.
+
+3. **Bayesian Inversion with Gaussian Process Regression (GPR)**
+   - Perform Bayesian inversion in the PCA space using GPR to predict the most probable spectral parameters based on the observed photometric data.
+
+4. **Uncertainty Propagation**
+   - Calculate uncertainties on the reconstructed spectra by propagating the uncertainties from the photometric measurements.
+
+5. **Nested-Sampling Posterior Exploration**
+   - Use a nested-sampling approach within the Bayesian framework to explore the posterior distribution of possible spectral reconstructions.
+
+6. **Outlier Detection**
+   - Identify unusual spectral types or outliers by constraining photometry to select low-probability intermediate models from the continuous topological manifold.
+
+This algorithm effectively reconstructs full spectra from sparse photometry while quantifying uncertainties and detecting outliers.

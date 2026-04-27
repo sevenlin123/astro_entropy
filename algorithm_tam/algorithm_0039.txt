@@ -1,0 +1,33 @@
+The algorithm implements a probabilistic spectral reconstruction framework for Trans-Neptunian Objects (TNOs) using sparse photometry. Here's the structured steps:
+
+1. **Principal Component Analysis (PCA) Setup**:
+   - Apply PCA on a reference set of TNO spectra to create a low-dimensional latent space (e.g., 4-5 principal components).
+   
+2. **Data Augmentation**:
+   - Use Kernel Density Estimation (KDE) to generate synthetic latent vectors, creating a continuous manifold that interpolates between observed spectra.
+
+3. **Forward Modeling**:
+   - Simulate photometric observations by convolving synthetic spectra with instrument filter curves (e.g., JWST/NIRCam).
+   - Add noise (e.g., 20% uncertainty) to simulate realistic photometric measurements.
+
+4. **Automated Machine Learning (AutoML) Training**:
+   - Train an AutoML regressor (e.g., Gradient Boosted Decision Trees) to map sparse photometry to latent coefficients.
+   - Use the combined training set (original and synthetic data) to enhance model robustness.
+
+5. **Reconstruction Pipeline**:
+   - For new photometric data, use the trained AutoML model to predict latent coefficients.
+   - Transform these coefficients back to full spectra using inverse PCA.
+
+6. **Uncertainty Propagation**:
+   - Propagate uncertainty from photometric noise through the AutoML model to the latent space, then to the reconstructed spectra.
+
+7. **Taxonomic Classification**:
+   - Classify the object's spectral type by evaluating its position in the latent space against predefined taxonomic groups.
+
+8. **Survey Optimization**:
+   - Select optimal filter combinations by evaluating their contribution to reducing uncertainty in latent space.
+
+9. **Outlier Detection**:
+   - Flag objects whose latent positions fall outside the typical manifold, indicating unusual spectral types.
+
+This method bridges sparse photometry and detailed spectral analysis, enabling efficient exploration of TNO diversity in large-scale surveys.

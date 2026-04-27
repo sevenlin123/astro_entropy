@@ -1,0 +1,26 @@
+**Algorithm: Probabilistic Spectral Reconstruction of Trans-Neptunian Objects**
+
+1. **Initialization**:
+   - Define the spectral energy distribution (SED) parameters based on prior knowledge of TNOs, incorporating physical constraints (e.g., possible emission features).
+
+2. **Bayesian Model Setup**:
+   - Construct a probabilistic model using Bayesian inference where the SED parameters are treated as random variables.
+   - The model includes the likelihood function based on observed photometric fluxes and the prior distributions informed by physical constraints.
+
+3. **Markov Chain Monte Carlo (MCMC) Sampling**:
+   - Utilize an MCMC sampler to explore the parameter space, generating samples from the posterior distribution of SED parameters given the observed data.
+   - The MCMC process ensures efficient traversal of the parameter space, accounting for correlations between parameters.
+
+4. **Outlier Detection**:
+   - Implement mechanisms to identify unusual observations that may bias the SED reconstruction.
+   - Adjust the model or exclude identified outliers to improve the accuracy of the reconstruction.
+
+5. **Probabilistic Photometric Redshift Estimation**:
+   - Estimate the photometric redshift for each object by considering the probabilistic nature of flux measurements.
+   - Use the estimated redshift to account for distance-related brightness variations in the SED reconstruction.
+
+6. **Output**:
+   - Reconstruct the SED using the sampled posterior distribution.
+   - Provide uncertainties on the SED parameters and identify outliers in the dataset.
+
+**End of Algorithm**

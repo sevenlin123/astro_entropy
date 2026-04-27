@@ -1,0 +1,42 @@
+**Algorithm for Probabilistic Spectral Reconstruction of Trans-Neptunian Objects from Sparse Photometry**
+
+1. **Data Preparation:**
+   - Collect a sample of TNO near-infrared spectra, focusing on dominant taxonomic types (e.g., Water, CO₂, Organics).
+   - Exclude rare or singular spectral types to avoid skewing PCA eigenvectors.
+
+2. **Principal Component Analysis (PCA):**
+   - Apply PCA to the collected spectra to extract principal components (latent space).
+   - Determine the number of principal components (e.g., 4-5 for classification, 8-10 for high-fidelity reconstruction).
+
+3. **Training Data Augmentation:**
+   - Use Kernel Density Estimation (KDE) on the PCA coefficients to create synthetic latent vectors, ensuring a smooth and continuous manifold.
+
+4. **Synthetic Photometry Generation:**
+   - Forward model the synthetic spectra through the target instrument's filters (e.g., JWST/NIRCam) to obtain simulated photometric measurements.
+   - Inject Gaussian noise (e.g., 20% uncertainty) to simulate real-world observational uncertainties.
+
+5. **AutoML Regression Training:**
+   - Train an ensemble of gradient-boosted decision trees using the augmented latent data and synthetic photometry.
+   - The model maps sparse photometry to PCA latent coefficients.
+
+6. **Inverse PCA Transformation:**
+   - Use the trained PCA model to reconstruct full spectra from predicted latent coefficients.
+   - Ensure the reconstructed spectra inherit physical smoothness and absorption features from the training data.
+
+7. **Taxonomic Classification:**
+   - Train a secondary AutoML classifier on the latent space to predict taxonomic categories (e.g., H₂O, CO₂, Organics, Methanol).
+   - Classify new objects based on their latent coordinates.
+
+8. **Reconstruction and Validation:**
+   - Perform leave-one-out cross-validation to assess RMSE and credible interval coverage.
+   - Evaluate the impact of each photometric filter on spectral reconstruction accuracy.
+
+9. **Outlier Detection:**
+   - Identify objects whose photometric data or reconstructed spectra deviate significantly from the expected manifold.
+   - Flag outliers for potential spectroscopic follow-up.
+
+10. **Survey Optimization:**
+    - Analyze filter configurations to prioritize those with high information content for TNO spectral reconstruction.
+    - Optimize survey designs to balance accuracy and observation efficiency.
+
+**End of Algorithm**

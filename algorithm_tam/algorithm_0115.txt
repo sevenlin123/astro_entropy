@@ -1,0 +1,39 @@
+### Core Reconstruction Algorithm
+
+1. **Training Data Preparation**:
+   - Gather a curated sample of near-infrared spectra from TNOs, focusing on dominant taxonomic classes (e.g., H₂O, CO₂, Organics).
+   - Exclude outliers and rare spectral types to ensure a "clean" training set.
+
+2. **Principal Component Analysis (PCA)**:
+   - Perform PCA on the training spectra to identify the dominant modes of spectral variability.
+   - Determine the optimal number of principal components (K) that capture the majority of spectral diversity (e.g., K = 4–5 for taxonomic classification, K = 8–10 for high-fidelity reconstruction).
+
+3. **Latent Space Construction**:
+   - Use the PCA coefficients as a low-dimensional latent space representation.
+   - Augment this space using Kernel Density Estimation (KDE) to create a smooth probability distribution, enabling interpolation between training examples.
+
+4. **Synthetic Photometry Generation**:
+   - Forward-model the synthetic photometric measurements by convolving the spectra with the instrument's filter throughput curves (e.g., JWST/NIRCam).
+   - Introduce Gaussian noise (e.g., 20% relative uncertainty) to simulate realistic photometric observations.
+
+5. **AutoMLRegressor Training**:
+   - Train an ensemble of gradient-boosted decision trees (AutoML) to regress from sparse photometry to the latent PCA coefficients.
+   - The model learns the mapping from photometric inputs to the latent space, incorporating the noise and uncertainty in the data.
+
+6. **Reconstruction Pipeline**:
+   - For new photometric observations, use the trained AutoML model to predict the latent coefficients.
+   - Project these coefficients back to the full spectral space using the inverse PCA transformation to reconstruct the high-resolution spectrum.
+
+7. **Classification and Outlier Detection**:
+   - Classify the latent coefficients into predefined taxonomic groups using a secondary classifier.
+   - Identify outliers by detecting points in the latent space that lie beyond the typical manifold structure.
+
+8. **Validation and Uncertainty Quantification**:
+   - Validate the framework through leave-one-out cross-validation (LOOCV) to assess reconstruction accuracy and credible interval coverage.
+   - Propagate photometric uncertainties through the model to provide probabilistic constraints on the reconstructed spectra.
+
+9. **Survey Optimization**:
+   - Evaluate the information content of different filter configurations by simulating photometric measurements and assessing their ability to constrain the latent space.
+
+10. **Outlier Detection**:
+    - Flag objects whose latent representations fall outside the dense regions of the training manifold for detailed spectroscopic follow-up.

@@ -1,0 +1,40 @@
+### Algorithm for Probabilistic Spectral Reconstruction of TNOs
+
+1. **Training Data Preparation**:
+   - Collect a sample of near-infrared spectra of trans-Neptunian objects (TNOs).
+   - Exclude rare and peculiar spectral types to focus on dominant taxonomic classes (e.g., Water-type, CO₂-type, Organics-type).
+
+2. **Principal Component Analysis (PCA)**:
+   - Apply PCA to the collected spectra to reduce dimensionality.
+   - Determine the number of principal components (K) that capture the major spectral variations (typically 4-5 for classification, up to 10 for high-fidelity reconstruction).
+
+3. **Latent Space Definition**:
+   - Use Kernel Density Estimation (KDE) to create a smooth probability distribution in the PCA-derived latent space.
+   - Augment the training data by sampling from this distribution to generate synthetic spectra, ensuring a continuous manifold.
+
+4. **Forward Modeling and Data Augmentation**:
+   - Simulate photometric measurements by convolving the synthetic spectra with instrument-specific filter responses (e.g., JWST/NIRCam).
+   - Inject Gaussian noise (~20% relative uncertainty) into the synthetic photometry to simulate real observational conditions.
+
+5. **AutoML Regression Model Training**:
+   - Train an ensemble of gradient-boosted decision trees using AutoML frameworks (e.g., AutoGluon) to map sparse photometry to latent space coordinates.
+   - Perform K-fold cross-validation to avoid overfitting and ensure model generalizability.
+
+6. **Taxonomic Classifier Integration**:
+   - Train a secondary AutoML classifier on the latent coordinates to predict taxonomic labels (e.g., H₂O, CO₂, Organic, Methanol).
+   - Use the trained classifier to assign probabilities to spectral types for each inferred latent state.
+
+7. **Spectral Reconstruction**:
+   - For new photometric observations, use the trained AutoML regressor to predict latent coefficients.
+   - Project these coefficients back to the full spectral space via inverse PCA transformation to obtain reconstructed spectra.
+
+8. **Uncertainty Quantification and Validation**:
+   - Compute posterior distributions of latent coefficients and project them to derive credible intervals for the reconstructed spectra.
+   - Validate performance using leave-one-out cross-validation (LOOCV) to assess reconstruction accuracy and uncertainty coverage.
+
+9. **Application and Outlier Detection**:
+   - Optimize photometric surveys by evaluating the information content of different filter configurations.
+   - Detect outliers by identifying objects with high reconstruction uncertainty or posterior probabilities inconsistent with the learned manifold.
+
+10. **Iterative Refinement**:
+    - Periodically update the latent manifold and AutoML models as new spectral data becomes available to enhance generative capacity and model accuracy.

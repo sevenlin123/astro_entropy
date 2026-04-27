@@ -1,0 +1,59 @@
+The algorithm presented is a probabilistic framework that uses a combination of Principal Component Analysis (PCA) and automated machine learning (AutoML) regression to reconstruct near-infrared spectra of trans-Neptunian objects (TNOs) from sparse photometric data. Here is a structured outline of the algorithm:
+
+### Algorithm Steps:
+
+1. **Data Collection and Preprocessing:**
+   - Gather a set of near-IR spectra of TNOs, focusing on dominant taxonomic classes (e.g., Water-type, CO2-type, Organics-type).
+   - Exclude rare or unusual objects (e.g., outliers, Haumea family members) to ensure the PCA captures the main spectral variations.
+
+2. **Principal Component Analysis (PCA):**
+   - Apply PCA to the collected spectra to reduce dimensionality. Typically, 4-5 principal components capture the essential spectral features for taxonomic classification.
+   - Use the PCA scores as a low-dimensional latent space representation of the spectra.
+
+3. **Data Augmentation with Kernel Density Estimation (KDE):**
+   - Project the PCA scores of the training spectra onto a latent space.
+   - Use non-parametric KDE to generate synthetic latent vectors, effectively creating a continuous manifold that fills gaps between the observed spectra.
+   - Set the KDE bandwidth (e.g., h ~ 0.5) to balance local fidelity and global smoothness, avoiding overly fragmented or oversmoothed distributions.
+
+4. **Synthetic Photometry Generation:**
+   - Convolve each augmented spectrum with the instrument's response functions (e.g., JWST/NIRCam filters) to produce synthetic photometric measurements.
+   - Add noise (e.g., 20% relative uncertainty) to these synthetic measurements to simulate real-world observational uncertainties.
+
+5. **Automated Machine Learning (AutoML) Training:**
+   - Train an AutoML regressor (e.g., using Gradient Boosted Decision Trees) to map the synthetic photometry to the latent PCA coefficients.
+   - Simultaneously, train an AutoML classifier to predict taxonomic labels (e.g., H2O, CO2, Organic) from the latent space representations.
+
+6. **Reconstruction and Classification Pipeline:**
+   - For new photometric observations, pass the photometry through the trained regressor to obtain predicted latent coefficients.
+   - Use these coefficients with the inverse PCA transform to reconstruct the full near-IR spectrum.
+   - Pass the latent coefficients to the classifier to determine the taxonomic classification and assess confidence.
+
+7. **Validation and Posterior Analysis:**
+   - Validate the model using leave-one-out cross-validation (LOOCV), removing one spectrum at a time and testing reconstruction accuracy.
+   - Compute metrics like RMSE and correlation coefficients to evaluate reconstruction fidelity.
+   - Generate multiple posterior samples of latent vectors to analyze credible intervals and assess uncertainty calibration.
+
+8. **Outlier Detection:**
+   - Examine posterior distributions of latent vectors for new observations.
+   - Identify objects with posterior distributions inconsistent with the training manifold as outliers or peculiar cases.
+
+### Key Features:
+
+- **Dimensionality Reduction:** PCA reduces spectral data to a manageable number of components (4-5 for classification, up to ~10 for high-fidelity reconstruction), making the inverse problem tractable.
+- **Probabilistic Framework:** The approach treats the reconstruction as a Bayesian inference problem, incorporating uncertainties and providing credible intervals.
+- **Manifold Learning:** The use of KDE creates a smooth, continuous latent space that allows for interpolation between observed spectra, improving robustness to sparse data.
+- **AutoML Integration:** Automated machine learning techniques simplify model tuning and ensure focus on leveraging spectral information rather than architectural choices.
+
+### Applications:
+
+- **Survey Optimization:** Identifies optimal filter configurations for JWST/NIRCam to maximize information content for TNO taxonomy.
+- **Outlier Detection:** Flags unusual objects based on discrepancies in their posterior distributions.
+- **Spectral Classification:** Provides probabilistic taxonomic assignments for TNOs based on their reconstructed spectra.
+
+### Limitations:
+
+- **Dependency on Training Data:** Performance is influenced by the representativeness of the training set, particularly for rare spectral types.
+- **Instrument-Specific Design:** The model is tailored to specific instruments (e.g., JWST/NIRCam), requiring retraining for other setups.
+- **Computational Resources:** Training and running the model require significant computational resources due to the complexity of AutoML and PCA processing.
+
+This algorithm provides a robust statistical tool for mapping the compositional structure of TNOs using sparse photometric data, enabling efficient and cost-effective surveys in the outer Solar System.

@@ -1,0 +1,28 @@
+ALGORITHM: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. **Input:** Sparse photometric measurements of TNOs, precomputed PCA basis
+
+2. **Initialize:**
+   - Let N = number of objects
+   - Let D = dimensionality of photometric measurements
+   - Let P = number of principal components (e.g., 4-10)
+   - Σ = covariance matrix of photometric measurements
+   - W = weight matrix for Bayesian inference
+
+3. **Preprocessing:**
+   - Normalize photometric data
+
+4. **Dimensionality Reduction:**
+   - Project photometric measurements into the PCA latent space
+
+5. **Bayesian Inference:**
+   - Define prior distributions (e.g., Gaussian)
+   - Define likelihood function linking latent features to photometric measurements
+   - Perform MCMC sampling to infer posterior distributions of latent features
+
+6. **Spectral Reconstruction:**
+   - Reconstruct original spectra from posterior latent features
+   - Compute uncertainties using covariance matrices from MCMC sampling
+
+7. **Output:**
+   - Reconstructed spectra and associated uncertainties

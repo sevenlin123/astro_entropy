@@ -1,0 +1,5 @@
+- Train Principal Component Analysis (PCA) on a sample of TNO spectra to establish a latent space.
+- Apply Kernel Density Estimation (KDE) to the latent space to create a smooth probability distribution.
+- Generate synthetic photometric measurements by convolving synthetic spectra with instrumental filters and adding noise.
+- Train an AutoML regressor to predict latent coefficients from the sparse photometric data.
+- For new observations, use the regressor to predict latent coefficients and invert PCA to obtain the reconstructed spectrum.

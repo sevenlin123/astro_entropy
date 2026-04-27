@@ -1,0 +1,13 @@
+The extracted algorithm can be summarized in a step-by-step procedure:
+
+1. Preprocess the spectral data, including normalization and noise reduction.
+2. Perform Principal Component Analysis (PCA) on a training set of near-infrared spectra to obtain principal components that capture the essential spectral variability.
+3. Establish a probabilistic model within the PCA latent space to enable Bayesian inference.
+4. For each object under study:
+   - Utilize the available photometric measurements to compute the posterior distribution of the latent variables in the PCA space.
+   - Employ these posterior distributions to reconstruct the full spectrum, taking into account the measurement uncertainties.
+5. Determine the optimal number of principal components through leave-one-out cross-validation, optimizing for either taxonomic classification (~4-5 components) or high-fidelity spectral reconstruction (~8-10 components).
+6. Use the trained model to reconstruct spectra for new objects, identifying outliers by examining deviations in their latent representations.
+7. Apply the reconstructed spectra for taxonomic classification and optimize survey strategies, focusing on JWST/NIRCam filters to maximize information content for TNO studies.
+
+This algorithm effectively bridges the gap between sparse photometric data and detailed spectral information, enabling robust spectral reconstruction and facilitating scientific advancements in understanding the compositional diversity of trans-Neptunian objects.

@@ -1,0 +1,65 @@
+### Pseudocode for the Core Computational Algorithm
+
+```python
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+    - Training Spectra: Set of reference TNO spectra (S_1, ..., S_N)
+    - Photometric Observations: Sparse multi-band photometry (m)
+    - NIRCam Filter Set: Predefined set of filters for forward modeling
+    - Number of Latent Dimensions (K): Typically 8-10 components
+
+Output:
+    - Reconstructed Spectra: High-resolution spectrum estimates (S_recon)
+    - Probabilistic Taxonomy Classification: Posterior probabilities over spectral types
+    - Uncertainty Quantification: Empirical credible intervals for spectral features
+
+Steps:
+
+1. **Principal Component Analysis (PCA)**
+    1.1. Normalize and center the training spectra.
+    1.2. Compute the covariance matrix of the spectra.
+    1.3. Perform eigenvalue decomposition to obtain principal components (eigenvectors) and their explained variance.
+    1.4. Select the top K eigenvectors to form the latent space basis.
+
+2. **Kernel Density Estimation (KDE)**
+    2.1. Project the training spectra onto the K-dimensional latent space.
+    2.2. Fit a Gaussian KDE to the latent coordinates to create a continuous manifold.
+    2.3. Validate the KDE bandwidth (h) empirically to ensure manifold smoothness and fidelity.
+
+3. **Synthetic Data Generation**
+    3.1. Sample synthetic latent vectors from the KDE-defined manifold.
+    3.2. Forward model these latent vectors through the NIRCam filter set to simulate sparse photometry.
+    3.3. Inject Gaussian noise (relative reflectance uncertainty ~20%) into the synthetic photometry.
+
+4. **AutoML Regressor Training**
+    4.1. Split the synthetic data into training and validation sets.
+    4.2. Train an ensemble of gradient-boosted decision trees (e.g., XGBoost) to map synthetic photometry to latent coefficients.
+    4.3. Validate the regressor using out-of-sample metrics (e.g., RMSE, Pearson correlation).
+
+5. **Leave-One-Out Cross-Validation (LOOCV)**
+    5.1. For each held-out spectrum:
+        5.1.1. Remove the spectrum from the training set.
+        5.1.2. Rebuild the latent manifold and synthetic photometry without the held-out spectrum.
+        5.1.3. Retrain the regressor on the updated synthetic data.
+        5.1.4. Predict the latent coefficients of the held-out spectrum using its observed photometry.
+        5.1.5. Transform the predicted latent coefficients back to a full spectrum via inverse PCA.
+        5.1.6. Compute reconstruction metrics (RMSE, Pearson correlation) and uncertainty intervals.
+
+6. **Reconstruction and Uncertainty Propagation**
+    6.1. For new photometric observations:
+        6.1.1. Pass the photometry through the trained regressor to obtain posterior latent coefficients.
+        6.1.2. Apply Gaussian Copula sampling to generate an ensemble of reconstructions.
+        6.1.3. Compute empirical credible intervals for the reconstructed spectrum features.
+
+7. **Taxonomic Classification**
+    7.1. Train a secondary classifier on the latent space to predict taxonomic groups (e.g., H2O, CO2, Organics, Methanol).
+    7.2. For each reconstructed spectrum, output posterior probabilities over spectral types.
+
+8. **Survey Optimization and Outlier Detection**
+    8.1. Compute mutual information or Fisher Information Matrix for each filter configuration.
+    8.2. Identify optimal filter combinations that maximize spectral information content.
+    8.3. Detect outliers by analyzing posterior probabilities in the latent space.
+```
+
+This pseudocode outlines the core computational steps of the probabilistic spectral reconstruction framework described in the paper.

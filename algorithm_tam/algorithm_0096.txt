@@ -1,0 +1,42 @@
+### Core Reconstruction Algorithm for Probabilistic Spectral Recovery
+
+1. **Data Preparation**:
+   - **Input Data**: Sparse photometric measurements of TNOs.
+   - **Reference Spectra**: Use a set of manually classified near-infrared (NIR) spectra as the training set.
+
+2. **Latent Space Definition**:
+   - **Principal Component Analysis (PCA)**:
+     - Train PCA on the reference spectra to capture spectral variability in a low-dimensional space.
+     - Determine the optimal number of principal components (K) that best represent the spectral diversity (e.g., 4-5 for taxonomy, 8-10 for detailed reconstruction).
+
+3. **Prior Construction**:
+   - **Kernel Density Estimation (KDE)**:
+     - Augment the PCA latent space using KDE to create a smooth probability distribution, enabling the generation of synthetic spectra.
+     - Adjust KDE bandwidth to balance smoothness and fidelity to original data.
+
+4. **Forward Modeling**:
+   - Simulate photometric measurements for each augmented spectrum using the effective filter profiles of the target instrument (e.g., JWST/NIRCam).
+   - Add noise (e.g., 20% relative uncertainty) to simulate realistic photometric uncertainties.
+
+5. **Training the AutoML Regressor**:
+   - Use the synthetic photometry and corresponding PCA coefficients to train an ensemble model (e.g., Gradient-Boosted Decision Trees) to predict latent coefficients from sparse photometry.
+   - Ensure model regularization to prevent overfitting in the low-data regime.
+
+6. **Spectral Reconstruction**:
+   - For new photometric observations, use the trained regressor to predict latent coefficients.
+   - Project these coefficients back to the full spectrum using inverse PCA transformation.
+
+7. **Uncertainty Propagation**:
+   - Compute the posterior distribution of the latent coefficients and project uncertainty to the full spectrum.
+   - Validate credible interval coverage (e.g., 95% coverage) through leave-one-out cross-validation.
+
+8. **Taxonomic Classification**:
+   - Classify the object's taxonomic group (e.g., H2O, CO2, Organic) by evaluating the probability distribution of latent coefficients.
+
+9. **Outlier Detection**:
+   - Identify objects whose spectral probabilities significantly diverge from the manifold, indicating unusual spectral types.
+
+10. **Iterative Refinement**:
+    - Optionally refine the latent space and models using additional data or improved filter configurations.
+
+**Output**: Reconstructed spectra, taxonomic classifications, and outlier detection for each TNO, along with quantitative measures of reconstruction fidelity and uncertainty.

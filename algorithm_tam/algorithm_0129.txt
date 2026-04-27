@@ -1,0 +1,42 @@
+### Algorithm Description
+
+1. **Training Data Preparation**:
+   - Collect and preprocess reference TNO spectra.
+   - Exclude rare spectral types and outliers to focus on dominant taxonomic classes.
+
+2. **Principal Component Analysis (PCA)**:
+   - Perform PCA on the preprocessed spectra to extract principal components.
+   - Use the top 4-5 components for initial reconstruction, and 8-10 for enhanced fidelity.
+
+3. **Synthetic Data Augmentation**:
+   - Apply Kernel Density Estimation (KDE) on the PCA latent space to generate synthetic data, creating a smooth manifold.
+
+4. **Model Training**:
+   - Train an AutoML regressor (e.g., Gradient-Boosted Decision Trees) to map photometric inputs to PCA coefficients.
+   - Simultaneously train a classifier within the latent space for taxonomic prediction.
+
+5. **Forward Modeling**:
+   - Convolve the spectra with target instrument filters (e.g., JWST/NIRCam) to compute synthetic photometry.
+   - Inject Gaussian noise (e.g., 20% relative uncertainty) to simulate realistic photometric uncertainties.
+
+6. **Reconstruction Process**:
+   - For new photometric observations, use the trained AutoML model to predict latent coefficients.
+   - Project these coefficients back to full spectra using inverse PCA.
+
+7. **Uncertainty Propagation**:
+   - Quantify uncertainty in reconstructed spectra by sampling from the posterior distribution of latent coefficients.
+
+8. **Taxonomic Classification**:
+   - Classify spectra into predefined types (e.g., Water, CO₂, Organic) based on latent space projections.
+
+9. **Outlier Detection**:
+   - Flag objects with low posterior probabilities as potential outliers for follow-up study.
+
+10. **Survey Optimization**:
+    - Evaluate information content of different filter combinations to optimize observing strategies.
+
+11. **Performance Validation**:
+    - Use leave-one-out cross-validation to assess reconstruction fidelity and uncertainty calibration.
+
+12. **Applications**:
+    - Apply the framework to optimize filter configurations and detect rare spectral types in new observations.

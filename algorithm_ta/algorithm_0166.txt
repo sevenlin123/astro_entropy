@@ -1,0 +1,16 @@
+The computational algorithm to implement the core reconstruction framework involves the following steps:
+
+1. **Preprocessing**:
+   - **Training Data Collection**: Aggregate a reference library of near-infrared (NIR) spectra of trans-Neptunian objects (TNOs) from existing studies.
+   - **Principal Component Analysis (PCA)**: Apply PCA to the collected spectra to derive the optimal basis for spectral representation, reducing the data into principal components.
+
+2. **Probabilistic Modeling**:
+   - **Generative Model Construction**: Utilize Gaussian Processes to build a generative model in the latent (reduced) space. This model captures the manifold structure of the spectral data.
+   - **Mapping Definition**: Establish a mapping from the latent features to the observed photometric measurements using Bayesian Linear Regression. This step connects the reduced representation with the photometric data.
+   - **Bayesian Inference**: Employ Markov Chain Monte Carlo (MCMC) sampling to infer posterior distributions over the latent parameters, enabling probabilistic reconstruction of the spectra from sparse photometry.
+
+3. **Postprocessing**:
+   - **Uncertainty Quantification**: Assess the robustness of the reconstructed spectra through bootstrapping techniques.
+   - **Credible Intervals Calculation**: Compute credible intervals to evaluate the uncertainty associated with each spectral reconstruction, ensuring the reliability of the results.
+
+This structured approach effectively integrates dimensionality reduction and Bayesian inference to reconstruct high-fidelity spectra from sparse photometric data, bridging the gap between available photometric measurements and detailed spectroscopic analysis.

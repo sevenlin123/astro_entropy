@@ -1,0 +1,57 @@
+```python
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+- Reference Spectra: Collection of N reference TNO spectra
+- Instrument Filters: Set of photometric filters used for forward modeling
+- Noise Level: Relative reflectance uncertainty (e.g., 20%)
+
+Output:
+- Trained AutoML Regressor: Maps photometry to latent coefficients
+- Trained Classifier: Classifies taxonomic labels from latent space
+- PCA Model: Eigenvectors and eigenvalues derived from reference spectra
+
+Training Phase:
+1. Compute PCA:
+   a. Center and scale the reference spectra.
+   b. Perform PCA to obtain principal component matrix (eigenvectors) and scores (eigenvalues).
+
+2. Project Spectra into PCA Space:
+   a. Express each reference spectrum as a linear combination of PCA eigenvectors, yielding latent coefficients.
+
+3. Generate Synthetic Latent Vectors:
+   a. Apply Kernel Density Estimation (KDE) to the latent coefficients of the reference spectra to create a smooth distribution.
+
+4. Forward Model to Photometry:
+   a. For each synthetic spectrum, convolve it with the instrument's filter response curves to obtain predicted photometric magnitudes.
+   b. Add Gaussian noise with standard deviation proportional to the noise level to simulate realistic photometric measurements.
+
+5. Train AutoML Regressor:
+   a. Input features: Noisy photometric measurements
+   b. Target: Latent coefficients from the original reference spectra
+   c. Train an ensemble of Gradient Boosted Decision Trees using AutoGluon to map photometry to latent coefficients.
+
+6. Train Taxonomic Classifier:
+   a. Input features: Latent coefficients of reference spectra
+   b. Target: Taxonomic labels (e.g., H2O, CO2, Organic, Methanol)
+   c. Train an ensemble classifier using AutoGluon to assign taxonomic labels based on latent space coordinates.
+
+Inference Phase (for a new object):
+1. Obtain Observed Photometry:
+   a. Measure the object's fluxes through the instrument's filters.
+
+2. Predict Latent Coefficients:
+   a. Use the trained AutoML regressor to predict the latent coefficients given the observed photometry.
+
+3. Reconstruct Spectrum:
+   a. Apply the inverse PCA transformation to the predicted latent coefficients to obtain the full spectral energy distribution.
+
+4. Classify Taxonomic Label:
+   a. Use the trained classifier to determine the taxonomic label based on the latent coefficients.
+
+Output:
+- Reconstructed Spectrum: High-resolution spectral energy distribution
+- Taxonomic Classification: Probabilistic assignment of spectral type
+```
+
+```

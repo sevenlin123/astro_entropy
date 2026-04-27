@@ -1,0 +1,63 @@
+```
+Algorithm: Probabilistic Spectral Reconstruction of TNOs from Sparse Photometry
+
+Input:
+- Reference spectra of TNOs
+- Photometric observations of target objects
+- NIRCam filter definitions
+- Training set of 51 observed spectra
+
+Output:
+- Reconstructed spectra
+- Taxonomic classification probabilities
+
+Training Phase:
+1. Preprocess reference spectra:
+   a. Normalize and align spectra to a common wavelength grid.
+   
+2. Perform Principal Component Analysis (PCA):
+   a. Compute PCA on the normalized reference spectra.
+   b. Determine top K principal components (e.g., K=10).
+   
+3. Generate latent coefficients:
+   a. Project reference spectra onto PCA basis to obtain latent coefficients.
+   
+4. Data augmentation using Kernel Density Estimation (KDE):
+   a. Fit KDE to latent coefficient distributions.
+   b. Sample synthetic latent coefficients from KDE.
+   
+5. Simulate photometric data:
+   a. Convolve synthetic spectra with NIRCam filter responses.
+   b. Add 20% Gaussian noise to simulate photometric uncertainties.
+   
+6. Prepare training data:
+   a. Pair synthetic photometric data with corresponding latent coefficients.
+   
+7. Train AutoML regressor:
+   a. Use ensemble of Gradient-Boosted Decision Trees.
+   b. Input: photometric data; Output: latent coefficients.
+   
+8. Train taxonomic classifier:
+   a. Use AutoML to classify latent coefficients into taxonomic groups.
+   
+9. Validate models:
+   a. Perform Leave-One-Out Cross-Validation (LOOCV).
+   b. Evaluate reconstruction accuracy and taxonomic classification.
+   
+Inference Phase:
+1. For each target object:
+   a. Extract photometric observations.
+   
+2. Predict latent coefficients:
+   a. Pass photometric data through trained AutoML regressor.
+   
+3. Reconstruct spectrum:
+   a. Apply inverse PCA transform to latent coefficients.
+   
+4. Classify taxonomic type:
+   a. Use latent coefficients in taxonomic classifier.
+   b. Obtain probability distribution over taxonomic classes.
+   
+5. Output results:
+   a. Display reconstructed spectrum and taxonomic classification probabilities.
+```

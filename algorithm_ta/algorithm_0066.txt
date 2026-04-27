@@ -1,0 +1,31 @@
+### Algorithm: Probabilistic Spectral Reconstruction Framework
+
+1. **Preprocessing**:
+   - Obtain a dataset of near-infrared (near-IR) spectra of trans-Neptunian objects (TNOs).
+
+2. **Principal Component Analysis (PCA)**:
+   - Perform PCA on the training set of near-IR spectra to create a latent-space representation.
+   - Retain 4-5 principal components for taxonomic classification; consider 8-10 components for improved spectral reconstruction and uncertainty calibration.
+
+3. **Bayesian Inference**:
+   - Use the reduced PCA space to model the spectral manifold of TNOs.
+   - Perform Bayesian inference in this reduced space to reconstruct full spectra from sparse photometric measurements.
+   - Propagate measurement uncertainties through the reconstruction process.
+
+4. **Reconstruction**:
+   - For each object, use the trained PCA model to reconstruct its full spectrum based on available photometric data.
+   - Quantify the uncertainty in the reconstructed spectrum by examining the posterior distribution in the PCA space.
+
+5. **Survey Optimization**:
+   - Evaluate the information content of different JWST/NIRCam filters (e.g., F090W, F115W, F410M, F460M).
+   - Select filter configurations that maximize the retained spectral information for accurate taxonomic classification.
+
+6. **Outlier Detection**:
+   - Compute the model likelihood for each reconstructed spectrum.
+   - Identify outliers by detecting objects with significantly low model likelihoods, indicating peculiar spectral types or anomalies.
+
+7. **Output**:
+   - Provide reconstructed spectra with associated uncertainties.
+   - Highlight outlier objects requiring further investigation.
+
+This algorithm efficiently bridges the gap between sparse photometry and detailed spectral analysis, enabling robust characterization of TNO surfaces in large-scale surveys.

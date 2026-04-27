@@ -1,0 +1,18 @@
+**Core Algorithm Steps:**
+
+1. **Principal Component Analysis (PCA) Training**  
+   - **Input:** A collection of near-infrared spectra of TNOs.  
+   - **Process:** Perform PCA to reduce the spectral data into principal components. The number of components (e.g., 4-5) is determined based on cross-validation to capture the main spectral variations.  
+   - **Output:** A trained PCA model representing the spectral manifold.
+
+2. **Probabilistic Latent-Space Representation**  
+   - **Input:** The PCA model.  
+   - **Process:** Construct a probabilistic model in the latent space defined by the PCA components, mapping photometric data to probability distributions over these components.  
+   - **Output:** A probabilistic model enabling Bayesian inference.
+
+3. **Bayesian Spectrum Reconstruction**  
+   - **Input:** Sparse photometric measurements of a TNO and the probabilistic model.  
+   - **Process:** For each object, use the sparse photometric data to perform Bayesian inference in the latent space, estimating the latent variables (principal components) and reconstructing the full spectrum while accounting for measurement uncertainties.  
+   - **Output:** Reconstructed spectrum with uncertainty estimates.
+
+This algorithm efficiently reconstructs full spectra from sparse photometric data, leveraging PCA and Bayesian inference to propagate uncertainties and capture spectral variations.

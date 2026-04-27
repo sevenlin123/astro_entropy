@@ -1,0 +1,33 @@
+### Core Computational Algorithm: Probabilistic Spectral Reconstruction Framework
+
+1. **Principal Component Analysis (PCA):**
+   - Train PCA on a set of reference TNO spectra to define a low-dimensional latent space.
+   - Determine the number of principal components (e.g., 4-5 for classification, 8-10 for detailed reconstruction).
+   - Use the eigenvectors to represent the latent space, capturing the main spectral variations.
+
+2. **Data Augmentation:**
+   - Generate synthetic spectra by projecting the PCA basis and applying Kernel Density Estimation (KDE) to smooth the latent distribution.
+   - Inject Gaussian noise (e.g., 20% relative reflectance uncertainty) to simulate realistic photometric uncertainties.
+
+3. **Forward Modeling:**
+   - Convolve synthetic spectra with the instrument's filter curves (e.g., JWST/NIRCam) to compute the expected photometric measurements.
+   - Use these noisy photometric values as inputs for training the machine learning model.
+
+4. **Automated Machine Learning (AutoML):**
+   - Train an ensemble regressor (e.g., AutoGluon) to map noisy photometry to PCA latent coefficients.
+   - Simultaneously train a classifier to partition the latent space into taxonomic classes.
+
+5. **Reconstruction and Classification:**
+   - For new photometric observations, predict the latent coefficients using the trained regressor.
+   - Project these coefficients back through the inverse PCA transform to reconstruct the full spectrum.
+   - Classify the spectrum into taxonomic types based on the latent space partitioning.
+
+6. **Validation and Evaluation:**
+   - Perform leave-one-out cross-validation (LOOCV) to assess reconstruction accuracy and classification performance.
+   - Compute metrics like RMSE, Pearson correlation, and classification success rates.
+
+7. **Survey Optimization and Outlier Detection:**
+   - Evaluate different filter configurations to determine their information content and impact on reconstruction fidelity.
+   - Detect outliers by identifying latent coefficients outside the expected manifold, indicating unusual spectral types.
+
+This algorithm efficiently transforms sparse photometric data into high-fidelity spectral reconstructions, enabling taxonomic classification, survey optimization, and the detection of rare spectral types.

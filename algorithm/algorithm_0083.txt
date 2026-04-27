@@ -1,0 +1,26 @@
+1. **Initialize Parameters:**  
+   - Set prior distributions for all model parameters, including those of the Gaussian process kernel.  
+
+2. **Training Phase:**  
+   - Fit the Gaussian process to the training data, adjusting hyperparameters to maximize the likelihood.  
+
+3. **Forward Model Construction:**  
+   - Define the radiometric transformation functions that convert the SED into photometric magnitudes across different bands.  
+
+4. **Bayesian Inference:**  
+   - Use a nested sampling algorithm to explore the parameter space, computing posterior probabilities for each SED configuration.  
+
+5. **Gaussian Process Modeling:**  
+   - Construct the Gaussian process model using the trained kernel, capturing the smoothness and covariance structure of the SED.  
+
+6. **Nested Sampling Algorithm:**  
+   - Perform nested sampling to calculate the Bayesian evidence and obtain posterior distributions of the SED parameters.  
+
+7. **Posterior Analysis:**  
+   - Summarize the posterior distributions to find the most probable SED, calculate credible intervals, and assess the uncertainty.  
+
+8. **Applications:**  
+   - Apply the reconstructed SEDs to classify TNOs, optimize survey strategies by identifying optimal bands, and detect outliers in datasets.  
+
+9. **Output:**  
+   - Provide outputs including the reconstructed SED, uncertainty estimates, classification results, optimized survey design, and identified outliers.

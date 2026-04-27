@@ -1,0 +1,54 @@
+The computational algorithm to implement the core reconstruction framework is as follows:
+
+1. **Training Set Preparation**: Gather a set of N reference TNO spectra for training.
+
+2. **Principal Component Analysis (PCA)**:
+   - Compute PCA on the training spectra to extract principal components.
+   - Select K components (e.g., 4-5 for classification, 8-10 for detailed reconstruction) that best capture the spectral variability.
+
+3. **Kernel Density Estimation (KDE)**:
+   - Apply KDE on the PCA coefficients of the reference spectra to create a continuous latent space manifold.
+
+4. **Synthetic Spectrum Generation**:
+   - Use the KDE model to generate synthetic spectra, expanding the training data.
+
+5. **Forward Modeling and Noise Injection**:
+   - Convolve each synthetic and real spectrum with instrument-specific filter functions to compute photometric magnitudes.
+   - Add Gaussian noise (e.g., 20% uncertainty) to simulate realistic photometric measurements.
+
+6. **AutoMLRegressor Training**:
+   - Train an AutoML regressor (e.g., using AutoGluon) to map the noisy photometry to latent coefficients.
+
+7. **Reconstruction and Classification**:
+   - For new observations, use the regressor to predict latent coefficients from photometry.
+   - Reconstruct the full spectrum using inverse PCA.
+   - Classify the latent coefficients to determine taxonomic type (e.g., H2O, CO2, Organic, Methanol).
+
+8. **Validation**:
+   - Assess the reconstructed spectra using metrics like credible interval coverage and RMSE.
+
+9. **Survey Optimization and Outlier Detection**:
+   - Evaluate filter configurations for information content.
+   - Identify outliers by detecting unusual latent states in the manifold.
+
+The algorithm combines PCA, KDE, and AutoML to probabilistically reconstruct spectra from sparse photometry, enabling taxonomic classification and outlier detection.
+
+\boxed{
+\begin{algorithm}[H]
+\caption{Probabilistic Spectral Reconstruction Algorithm}
+\begin{algorithmic}[1]
+\State \textbf{Input:} Training set of N reference TNO spectra
+\State \textbf{Output:} Reconstructed spectra and taxonomic classifications from sparse photometry
+
+\State 1. \textbf{PCA Computation}: Compute PCA on the training spectra to derive principal components.
+\State 2. \textbf{KDE Construction}: Apply KDE on the PCA coefficients to create a continuous latent manifold.
+\State 3. \textbf{Synthetic Data Generation}: Sample the latent manifold to generate synthetic spectra.
+\State 4. \textbf{Forward Modeling}: Convolve spectra with instrument filters and add noise to simulate photometry.
+\State 5. \textbf{AutoML Training}: Train a regressor to map photometry to latent coefficients.
+\State 6. \textbf{Reconstruction}: For new photometry, predict latent coefficients and reconstruct spectra via inverse PCA.
+\State 7. \textbf{Classification}: Classify latent states to determine taxonomic types.
+\State 8. \textbf{Validation}: Check credible intervals and RMSE for accuracy.
+\State 9. \textbf{Applications}: Optimize surveys and detect outliers using the framework.
+\end{algorithmic}
+\end{algorithm}
+}

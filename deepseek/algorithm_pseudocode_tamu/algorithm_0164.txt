@@ -1,0 +1,46 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+**Step-by-Step Pseudocode:**
+
+1. **Data Preprocessing:**
+   - **Input:** Sparse photometric observations (fluxes in multiple bands) for a set of trans-Neptunian objects (TNOs).
+   - **Training Spectra:** Obtain a reference set of near-infrared spectra for TNOs (e.g., DiSCo-TNO sample).
+   
+2. **Principal Component Analysis (PCA):**
+   - **Objective:** Reduce spectral dimensionality while retaining key variability.
+   - **Process:**
+     1. Normalize and center the reference spectra.
+     2. Compute PCA to extract principal components (PCs).
+     3. Determine the optimal number of PCs (e.g., 8–10) based on reconstruction fidelity and cross-validation.
+   
+3. **Latent Space Definition:**
+   - **Method:** Use the PCA coefficients as the latent space representation.
+   - **Augmentation:** Apply Kernel Density Estimation (KDE) to the latent space to create a continuous probability distribution.
+   
+4. **Forward Modeling:**
+   - **Simulate Photometry:** For each augmented spectrum, compute the expected photometric fluxes through the target instrument's filters (e.g., JWST/NIRCam).
+   - **Add Noise:** Inject Gaussian noise with a specified relative uncertainty (e.g., 20%) to simulate observational errors.
+   
+5. **Training the AutoML Regressor:**
+   - **Encoder:** Train an ensemble of gradient-boosted decision trees to map sparse photometry to latent coefficients.
+   - **Features:** Use the noisy simulated photometry as training inputs and the corresponding latent coefficients as targets.
+   
+6. **Leave-One-Out Cross-Validation (LOOCV):**
+   - **Procedure:**
+     1. For each test object, remove its original spectrum from the training set.
+     2. Reconstruct its latent space representation using the trained AutoML model.
+     3. Project the latent coefficients back to the full spectrum using inverse PCA.
+     4. Evaluate reconstruction fidelity and uncertainty coverage.
+   
+7. **Spectral Reconstruction:**
+   - **Input:** New sparse photometric observations.
+   - **Process:**
+     1. Predict latent coefficients using the trained AutoML model.
+     2. Apply inverse PCA to reconstruct the full spectrum.
+     3. Sample the posterior distribution using a Gaussian Copula to generate uncertainty intervals.
+   
+8. **Taxonomic Classification:**
+   - **Classifier:** Train another AutoML model on the latent space to classify TNO spectra into predefined taxonomic groups (e.g., H₂O, CO₂, Organic).
+   - **Output:** Probabilistic classification of the test object's spectral type.
+
+**End of Algorithm**

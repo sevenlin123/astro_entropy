@@ -1,0 +1,15 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Training Phase:**
+   - **Input:** Collection of near-infrared (NIR) spectra of trans-Neptunian objects (TNOs).
+   - **Step 1:** Preprocess the spectral data (e.g., normalization, standardization).
+   - **Step 2:** Compute Principal Component Analysis (PCA) on the preprocessed spectra to extract latent components. Retain 8-10 components for improved reconstruction fidelity.
+   
+2. **Processing Each Object:**
+   - **For each TNO's photometric data:**
+     - **Step 1:** Project the photometric measurements onto the precomputed PCA basis.
+     - **Step 2:** Perform Bayesian inference within the PCA space to estimate the underlying spectral components, incorporating measurement uncertainties.
+     - **Step 3:** Reconstruct the full spectrum using the estimated PCA components.
+     - **Step 4:** Propagate the uncertainties from photometric measurements to quantify the uncertainty in the reconstructed spectrum.
+
+This algorithm efficiently reconstructs full spectra from sparse photometry by leveraging a probabilistic approach in a reduced PCA space, enabling accurate spectral analysis for TNOs.

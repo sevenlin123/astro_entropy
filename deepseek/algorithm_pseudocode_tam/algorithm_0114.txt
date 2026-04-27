@@ -1,0 +1,37 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+**1. Define the Latent Space (Prior):**
+   - **Step 1.1:** Collect a set of reference TNO spectra (e.g., 51 spectra).
+   - **Step 1.2:** Perform Principal Component Analysis (PCA) on the reference spectra to extract principal components (PCs). Retain 4-5 PCs for taxonomic classification and up to 10 PCs for spectral fidelity.
+   - **Step 1.3:** Use Kernel Density Estimation (KDE) on the PCA coefficients to create a continuous probability distribution representing the latent manifold.
+
+**2. Generate Synthetic Photometry:**
+   - **Step 2.1:** For each spectrum in the latent space, convolve it with the filter transmission curves of the target instrument (e.g., JWST/NIRCam).
+   - **Step 2.2:** Add Gaussian noise (e.g., 20% relative reflectance uncertainty) to simulate realistic photometric measurements.
+
+**3. Train the AutoML Regressor:**
+   - **Step 3.1:** Use the synthetic photometry as input features and the PCA coefficients as target outputs.
+   - **Step 3.2:** Train an ensemble of Gradient-Boosted Decision Trees (GBDTs) using AutoML framework (e.g., AutoGluon) to learn the mapping from photometry to latent coefficients.
+
+**4. Validate Using Leave-One-Out Cross-Validation (LOOCV):**
+   - **Step 4.1:** For each held-out spectrum, predict its latent coefficients using the trained regressor.
+   - **Step 4.2:** Apply the inverse PCA transform to recover the full spectrum.
+   - **Step 4.3:** Compute metrics such as RMSE, credible interval coverage, and taxonomic classification accuracy.
+
+**5. Reconstruct Spectra for New Observations:**
+   - **Step 5.1:** For new sparse photometric data, use the trained regressor to predict the latent coefficients.
+   - **Step 5.2:** Project the predicted coefficients through the inverse PCA transform to obtain the reconstructed spectrum.
+
+**6. Taxonomic Classification:**
+   - **Step 6.1:** Train a secondary classifier on the PCA coefficients to assign spectral types (e.g., Water-type, CO₂-type, Organics-type).
+   - **Step 6.2:** For each reconstructed spectrum, derive a probability distribution over taxonomic classes.
+
+**7. Identify Outliers and Rare Spectral Types:**
+   - **Step 7.1:** Assess the posterior distribution of latent coefficients for new objects.
+   - **Step 7.2:** Flag objects with coefficients significantly deviating from the training distribution as potential outliers or novel spectral types.
+
+**8. Optimize Survey Filters:**
+   - **Step 8.1:** Simulate different filter configurations using the framework.
+   - **Step 8.2:** Evaluate which filter sets maximize information content for spectral reconstruction and taxonomic classification.
+
+This algorithm systematically transforms sparse photometric data into high-fidelity reconstructed spectra, enabling detailed analysis of TNO surface compositions and supporting large-scale surveys with limited spectroscopic observations.

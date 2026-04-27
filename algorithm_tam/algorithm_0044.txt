@@ -1,0 +1,30 @@
+**Computational Algorithm for Probabilistic Spectral Reconstruction**
+
+1. **Preprocessing:**
+   - Obtain a set of reference TNO spectra from the DiSCo-TNO sample, excluding outliers and rare types.
+   - Perform Principal Component Analysis (PCA) on these spectra to extract principal components, defining a low-dimensional latent space.
+
+2. **Data Augmentation:**
+   - Use Kernel Density Estimation (KDE) to create a continuous probability distribution in the latent space, generating synthetic latent vectors for training stability.
+
+3. **Forward Modeling:**
+   - Simulate photometric observations by convolving the spectra with NIRCam filter throughput curves, introducing Gaussian noise (e.g., 20% uncertainty) to account for observational uncertainties.
+
+4. **Training:**
+   - Train an AutoML regressor (e.g., Gradient Boosted Decision Trees) to map the sparse photometric inputs to the latent coefficients.
+   - Simultaneously train a probabilistic classifier within the latent space to categorize taxonomic types.
+
+5. **Inference:**
+   - For new photometric observations:
+     - Use the trained regressor to predict latent coefficients.
+     - Apply the inverse PCA transform to reconstruct the full spectrum.
+     - Classify the object into taxonomic categories based on the latent space.
+
+6. **Validation:**
+   - Perform Leave-One-Out Cross-Validation (LOOCV) to assess reconstruction accuracy and taxonomic classification, ensuring the model generalizes well.
+
+7. **Applications:**
+   - Optimize photometric filter configurations for maximum spectral information.
+   - Detect outliers by constraining the latent space to extreme values, identifying rare spectral types.
+
+**Output:** Reconstructed high-fidelity spectra and taxonomic classifications from sparse photometry, with uncertainty propagation.

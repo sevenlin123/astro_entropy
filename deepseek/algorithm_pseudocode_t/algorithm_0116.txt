@@ -1,0 +1,21 @@
+**Algorithm: Probabilistic Spectral Reconstruction Framework**
+
+1. **Initialization:**
+   - Initialize Gaussian Mixture Model (GMM) with `K` components.
+   - Initialize Variational Autoencoder (VAE) with encoder and decoder networks.
+
+2. **Training Phase:**
+   - Train GMM on the sparse multi-band photometric data.
+   - Train VAE on the same sparse photometric data, learning latent representations.
+
+3. **Reconstruction:**
+   - Use GMM to cluster data points into spectral components.
+   - Use VAE to decode observed photometric data into complete SEDs.
+
+4. **Fusion:**
+   - Combine GMM-based and VAE-based reconstructions to obtain final SED estimates.
+
+5. **Anomaly Detection:**
+   - Apply unsupervised anomaly detection to flag outliers as candidates for follow-up.
+
+**Output:** Reconstructed SEDs and outlier flags.

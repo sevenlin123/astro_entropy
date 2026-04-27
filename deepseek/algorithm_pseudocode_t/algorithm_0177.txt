@@ -1,0 +1,19 @@
+**Algorithm: Probabilistic Spectral Reconstruction of Trans-Neptunian Objects**
+
+1. **Input Data**: Read sparse photometric observations of TNOs across multiple wavelengths.
+2. **Preprocess Data**: Normalize and format observations for Gaussian Process (GP) modeling.
+3. **Construct Covariance Matrices**:
+   - Compute kernel matrices for the full dataset and inducing points.
+4. **Define Priors**:
+   - Set hierarchical prior distributions for spectral features.
+   - Assign hyperparameters controlling smoothness and variance.
+5. **Set Up HMC Parameters**:
+   - Configure Hamiltonian Monte Carlo settings, including step size and number of iterations.
+6. **Run HMC Inference**:
+   - Use NUTS sampler to explore posterior distributions of SED coefficients.
+7. **Infer Posterior SEDs**:
+   - Extract mean and variance of inferred spectral energy distributions.
+8. **Output Results**:
+   - Provide reconstructed SEDs and associated uncertainties.
+
+**End Algorithm**

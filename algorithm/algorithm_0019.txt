@@ -1,0 +1,33 @@
+**Algorithm Description:**
+
+1. **Define the Forward Model:**
+   - Establish a parametric probabilistic model linking photometric observations to spectral parameters.
+   - Incorporate photon counting noise and background fluctuations.
+   - Mathematically formulate the relationship between observed fluxes and spectral parameters.
+
+2. **Set Up the Bayesian Inversion Scheme:**
+   - Formulate the problem using Bayesian statistics, where the goal is to infer posterior distributions of spectral parameters given observed data.
+   - Define a prior distribution over spectral parameters using a mixture of Gaussians to capture uncertainty and flexibility in spectral shapes.
+
+3. **Compute the Likelihood Function:**
+   - Use an adaptive kernel density estimation technique based on observed fluxes to calculate the likelihood function.
+   - This step transforms observed photometric data into a probability distribution representation.
+
+4. **Perform Bayesian Inference:**
+   - Combine the prior distribution and likelihood function to compute the posterior distribution of spectral parameters.
+   - Utilize Markov Chain Monte Carlo (MCMC) methods or other sampling techniques to estimate the posterior distributions.
+
+5. **Hierarchical Clustering with Gaussian Mixture Models (GMM):**
+   - Organize spectral parameters into clusters, each represented by a GMM.
+   - Classify objects into predefined spectral classes using their inferred spectral parameters.
+   - This step enables robust classification even when dealing with incomplete or noisy data.
+
+6. **Outlier Detection:**
+   - Analyze residuals or posterior probabilities to identify outliers in the dataset.
+   - Flag objects that significantly deviate from expected spectral patterns.
+
+7. **Output Posterior Distributions and Classifications:**
+   - Provide the posterior distributions of spectral parameters for further analysis.
+   - Deliver classified spectral types based on the GMM clustering.
+
+This structured algorithm effectively captures the core computational method described in the paper, focusing on Bayesian inversion, probabilistic modeling, and hierarchical classification.

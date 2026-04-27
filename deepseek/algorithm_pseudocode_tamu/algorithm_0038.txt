@@ -1,0 +1,93 @@
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+**Objective**: Reconstruct high-resolution near-infrared spectra of TNOs from sparse photometric measurements using a Bayesian framework.
+
+**Input**:
+- Observed photometric flux measurements (sparse multi-band photometry).
+- Pretrained Principal Component Analysis (PCA) model derived from reference spectra.
+
+**Output**:
+- Reconstructed spectrum with uncertainty quantification.
+- Probabilistic taxonomic classification.
+
+**Steps**:
+
+1. **Initialize PCA Basis**:
+   - Preprocess reference spectra using PCA to obtain principal components.
+   - Define latent space dimensions (e.g., 8–10 principal components).
+
+2. **Forward Model Training**:
+   - Generate synthetic photometry for each reference spectrum by convolving with filter transmission curves (e.g., JWST NIRCam filters).
+   - Inject Gaussian noise (e.g., 20% relative reflectance uncertainty) to simulate real photometric uncertainties.
+   - Use AutoML regressor (e.g., Gradient Boosted Decision Trees) to train mapping from synthetic photometry to latent PCA coefficients.
+
+3. **Data Augmentation**:
+   - Apply Kernel Density Estimation (KDE) on latent space of reference spectra to create smooth probability distribution.
+   - Sample synthetic latent vectors to augment training data for the regressor.
+
+4. **Leave-One-Out Cross-Validation (LOOCV)**:
+   - For each held-out spectrum:
+     - Remove it from the training set.
+     - Rebuild latent space using remaining spectra.
+     - Train regressor on augmented data.
+     - Predict latent coefficients for held-out spectrum.
+     - Project predicted coefficients back to full spectrum via inverse PCA.
+
+5. **Posterior Sampling**:
+   - Use Gaussian Copula to sample joint posterior distribution of latent coefficients.
+   - Reconstruct spectrum from each sample and compute credible intervals.
+
+6. **Taxonomic Classification**:
+   - Train secondary classifier on latent space to predict taxonomic categories (e.g., H₂O, CO₂, Organics).
+   - Output probabilities for each category.
+
+7. **Output**:
+   - Return reconstructed spectrum with uncertainties.
+   - Provide taxonomic classification probabilities.
+
+---
+
+### Pseudocode:
+
+```
+Algorithm: Probabilistic_Spectral_Reconstruction(photometry, pca_model)
+    Input:
+        photometry: Sparse multi-band photometric measurements.
+        pca_model: Trained PCA model with principal components.
+
+    Output:
+        reconstructed_spectrum: High-resolution spectrum.
+        uncertainties: Error bounds on spectral features.
+        taxonomy: Probabilistic taxonomic classification.
+
+    Process:
+        1. Forward_Model_Training:
+            a. Simulate photometry for reference spectra using filter curves.
+            b. Add noise to simulated photometry.
+            c. Train regressor to map noisy photometry to latent PCA coefficients.
+
+        2. Data_Augmentation:
+            a. Compute KDE on latent space of reference spectra.
+            b. Sample synthetic latent vectors to augment training data.
+
+        3. LOOCV_Evaluation:
+            a. For each held-out spectrum:
+                i. Exclude from training set.
+                ii. Rebuild latent space with remaining data.
+                iii. Train regressor on augmented data.
+                iv. Predict latent coefficients for held-out spectrum.
+                v. Reconstruct spectrum using inverse PCA.
+
+        4. Posterior_Sampling:
+            a. Use Gaussian Copula to sample joint posterior of latent coefficients.
+            b. Reconstruct multiple spectra and compute credible intervals.
+
+        5. Taxonomic_Classification:
+            a. Train classifier on latent space.
+            b. Predict taxonomy probabilities for new photometry.
+
+        6. Output Results:
+            a. Return reconstructed_spectrum, uncertainties, taxonomy.
+
+    End
+```

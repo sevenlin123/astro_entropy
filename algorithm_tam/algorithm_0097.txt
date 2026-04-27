@@ -1,0 +1,29 @@
+The computational algorithm is structured to reconstruct full spectra and classify trans-Neptunian objects (TNOs) using sparse photometric data. Here's a breakdown of the steps:
+
+1. **Principal Component Analysis (PCA):**
+   - Train a PCA model on a reference set of TNO spectra to create a low-dimensional latent space. This space captures the main variations in surface composition.
+
+2. **Data Augmentation:**
+   - Use Kernel Density Estimation (KDE) to generate synthetic latent vectors, creating a smooth manifold for regularization during regression.
+
+3. **Forward Modeling Photometry:**
+   - Simulate photometric measurements by convolving the spectra with instrument-specific filter responses (e.g., JWST/NIRCam).
+   - Inject noise (20% relative uncertainty) to simulate realistic photometric uncertainties.
+
+4. **AutoML Regression (Encoder):**
+   - Train an ensemble of Gradient Boosted Decision Trees (GBDTs) using synthetic photometry and latent coefficients as input. This maps sparse photometry to latent space coordinates.
+
+5. **Spectral Reconstruction:**
+   - Apply the inverse PCA transform to the predicted latent coefficients to obtain full spectra, leveraging the learned manifold for regularization.
+
+6. **Taxonomic Classification:**
+   - Train another AutoML classifier on the latent space to predict taxonomic classes (e.g., Water-type, CO₂-type, Organics-type) based on the latent coefficients.
+
+7. **Reconstruction and Validation:**
+   - Perform leave-one-out cross-validation to assess reconstruction accuracy and credible interval coverage.
+
+8. **Application Scenarios:**
+   - Use the framework for survey optimization by evaluating filter configurations.
+   - Detect rare spectral types by constraining photometry to identify unusual objects.
+
+The algorithm integrates dimensionality reduction, probabilistic modeling, and machine learning to bridge sparse photometry with detailed spectral analysis, enabling robust TNO population studies.

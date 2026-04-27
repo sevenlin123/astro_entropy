@@ -1,0 +1,21 @@
+1. Perform Principal Component Analysis (PCA) on the reference TNO spectra to derive the principal components.
+
+2. Project the reference spectra onto the selected principal components to obtain latent coefficients.
+
+3. Apply Kernel Density Estimation (KDE) to the latent coefficients to create a continuous probability distribution.
+
+4. Generate synthetic latent vectors by sampling from the KDE.
+
+5. Convert these synthetic latent vectors back into spectra using the inverse PCA transformation.
+
+6. Simulate photometric observations by convolving the synthetic spectra with the JWST/NIRCam filter responses and adding noise.
+
+7. Train an automated machine learning regressor using the synthetic photometry and corresponding latent coefficients.
+
+8. Use the trained regressor to predict latent coefficients from new photometric data.
+
+9. Reconstruct the full spectrum from the predicted latent coefficients via inverse PCA transformation.
+
+10. Optionally, classify the spectral type by training a classifier on the latent coefficients of the reference spectra.
+
+Final Output: Reconstructed spectrum and spectral classification (if applicable).

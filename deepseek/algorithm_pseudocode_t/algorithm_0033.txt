@@ -1,0 +1,28 @@
+```pseudocode
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. Initialize Gaussian Process (GP):
+   - Define kernel K(x, x') with parameters (e.g., length scale, variance).
+   - Set mean function m(x) = 0.
+
+2. Define likelihood function:
+   - Incorporate Gaussian noise σ² and Poisson noise λ.
+   - Compute observed flux F against modeled flux f using the likelihood P(F|f).
+
+3. Construct posterior distribution:
+   - Posterior = P(spectral parameters | F, K, σ², λ) ∝ P(F|f, K, σ², λ) * P(f, K, σ², λ).
+
+4. Run Markov Chain Monte Carlo (MCMC):
+   - Sample from posterior distribution using, e.g., Metropolis-Hastings or Hamiltonian Monte Carlo.
+   - Obtain N samples of spectral parameters and GP hyperparameters.
+
+5. Generate synthetic spectra:
+   - For each MCMC sample, compute f_i using the GP.
+   - Collect all synthetic spectra {f_1, f_2, ..., f_N}.
+
+6. Reconstruct the spectrum:
+   - Compute mean spectrum μ(x) = mean(f_i(x)) for all i.
+   - Compute variance σ²(x) = var(f_i(x)) for all i.
+
+Return the reconstructed spectrum μ(x) and its uncertainty σ²(x).
+```

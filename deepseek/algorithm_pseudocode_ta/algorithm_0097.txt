@@ -1,0 +1,25 @@
+**Algorithm: Probabilistic Spectral Reconstruction Framework**
+
+1. **Training PCA Model**:
+   - Train a Principal Component Analysis (PCA) model on a reference dataset of near-infrared ( NIR ) spectra of trans-Neptunian objects ( TNOs ).
+   - Identify the principal components ( latent features ) that capture the majority of the spectral variability relevant for taxonomic classification.
+   - Determine the optimal number of principal components ( e.g., 4-5 for classification, 8-10 for improved reconstruction fidelity ).
+
+2. **Project Observed Photometry into Latent Space**:
+   - For each observed object, project its sparse photometric measurements into the pre-trained PCA latent space.
+   - This involves mapping the photometric data through the inverse transformation of the PCA model to obtain estimates of the latent variables.
+
+3. **Bayesian Inference in the Latent Space**:
+   - Perform Bayesian inference to estimate the latent variables corresponding to the principal components.
+   - Incorporate prior knowledge about the spectral manifold of TNOs if available.
+   - Use Markov Chain Monte Carlo ( MCMC ) or other sampling methods to explore the posterior distribution of the latent variables given the observed photometric data.
+
+4. **Uncertainty Propagation**:
+   - Propagate the uncertainties from the posterior distribution of the latent variables back to the photometric bands.
+   - Quantify the measurement uncertainties associated with each inferred component.
+
+5. **Reconstruct Full Spectra**:
+   - Using the posterior distribution of the latent variables, reconstruct the full near-infrared spectra.
+   - Apply the trained PCA model to transform the latent variable estimates back into the original spectral space.
+
+**End Algorithm**

@@ -1,0 +1,24 @@
+The computational algorithm for the core reconstruction framework involves the following steps:
+
+1. **Principal Component Analysis (PCA) Training**: 
+   - Perform PCA on a set of reference TNO spectra to create a low-dimensional latent space. This space captures the main variations in spectral data, serving as the prior distribution for spectral reconstruction.
+
+2. **Data Augmentation**:
+   - Use Kernel Density Estimation (KDE) to generate synthetic spectra from the PCA-derived latent space. This expands the training dataset, enabling robust regression despite limited real spectra.
+
+3. **Forward Modeling**:
+   - Simulate photometric measurements by convolving the synthetic spectra with NIRCam filter responses and adding Gaussian noise to reflect observational uncertainties.
+
+4. **AutoML Regression Training**:
+   - Train an ensemble of Gradient-Boosted Decision Trees (GBDTs) using the synthetic photometry and corresponding latent coefficients. This model maps sparse photometric inputs to the latent space.
+
+5. **Inverse PCA Transformation**:
+   - For new photometric observations, use the trained AutoML model to predict latent coefficients. Apply the inverse PCA transformation to reconstruct high-resolution spectra.
+
+6. **Taxonomic Classification**:
+   - Train a secondary classifier on the latent space to predict taxonomic labels (e.g., Water-type, CO₂-type, Organics-type) for each object.
+
+7. **Reconstruction and Validation**:
+   - Reconstruct full spectra from photometry and validate using metrics like RMSE and PCC. Use LOOCV to assess the framework's reliability.
+
+This algorithm efficiently bridges sparse photometry and detailed spectroscopy, enabling accurate reconstruction and taxonomic classification of TNOs.

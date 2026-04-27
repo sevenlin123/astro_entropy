@@ -1,0 +1,23 @@
+**Core Computational Algorithm: Probabilistic Spectral Reconstruction Framework**
+
+1. **Principal Component Analysis (PCA):**
+   - Train a PCA model on a dataset of near-infrared (near-IR) spectra to create a spectral manifold representation.
+   - Determine the optimal number of principal components (e.g., 4-5 for taxonomic classification; 8-10 for improved reconstruction fidelity).
+
+2. **Bayesian Inference in Reduced Space:**
+   - Perform Bayesian inference using the reduced PCA space to reconstruct full spectra from sparse photometric measurements.
+   - Propagate measurement uncertainties through the model to quantify reconstruction uncertainties.
+
+3. **Spectral Reconstruction:**
+   - For each object, use the trained PCA model to infer latent variables corresponding to its photometric data.
+   - Reconstruct the full spectrum by mapping the inferred latent variables back to the original spectral space.
+
+4. **Survey Optimization:**
+   - Evaluate the information content of different observation configurations (e.g., JWST/NIRCam filters).
+   - Select filter combinations that maximize spectral reconstruction fidelity and taxonomic classification accuracy.
+
+5. **Outlier Detection:**
+   - Apply the framework to detect unusual spectral types by identifying cases where photometric constraints lead to low-probability intermediate models.
+   - Use this capability to highlight rare objects like peculiar Neptune Trojans.
+
+**Result:** The algorithm effectively bridges sparse photometry and spectroscopy, enabling statistically rigorous spectral reconstruction and analysis for TNOs, facilitating taxonomic studies and optimizing future surveys.

@@ -1,0 +1,23 @@
+### Algorithm: Probabilistic Spectral Reconstruction of TNOs from Sparse Photometry
+
+1. **Data Preprocessing**  
+   - Extract light curves and flux measurements from sparse photometric data of Trans-Neptunian Objects (TNOs).
+
+2. **Spectral Parameterization**  
+   - Represent each object’s spectral energy distribution as a linear combination of basis spectra derived from a training set.
+
+3. **Bayesian Inference**  
+   - Use Markov Chain Monte Carlo (MCMC) methods to estimate posterior distributions of weights and parameters, incorporating measurement noise and intrinsic variability.
+
+4. **Posterior Analysis**  
+   - Generate synthetic light curves by sampling from the posterior distributions to assess consistency with observed data.
+
+5. **MCMC Diagnostics**  
+   - Evaluate convergence and reliability of MCMC chains through statistical checks (e.g., effective sample size, R-hat).
+
+6. **Result Aggregation**  
+   - Compute best estimates of spectral parameters and associated uncertainties by combining posterior samples.
+
+---
+
+This algorithm outlines the core computational steps for reconstructing the spectral properties of TNOs from sparse photometric data, focusing on Bayesian modeling and MCMC analysis.

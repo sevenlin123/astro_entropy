@@ -1,0 +1,47 @@
+```pseudocode
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+    - Training Spectra: Set of near-IR spectra of TNOs
+    - Photometric Data: Sparse photometric measurements of a target TNO
+    - JWST/NIRCam Filter Set: Filter transmission curves for forward modeling
+
+Output:
+    - Reconstructed Spectrum: High-resolution spectral reconstruction
+    - Taxonomic Classification: Probabilistic assignment to spectral types
+    - Uncertainty Quantification: Empirical credible intervals
+
+Steps:
+
+1. Preprocessing:
+    a. Normalize training spectra and photometric data.
+    b. Extract wavelength features and filter responses.
+
+2. Latent Space Definition:
+    a. Perform Principal Component Analysis (PCA) on training spectra.
+    b. Determine optimal number of principal components (K) via cross-validation.
+    c. Construct latent manifold using Kernel Density Estimation (KDE) on PCA coefficients.
+
+3. Training Phase:
+    a. Generate synthetic photometry by forward modeling PCA-derived spectra through NIRCam filters.
+    b. Augment training data with synthetic photometry to stabilize regression.
+    c. Train AutoML regressor (ensemble of gradient-boosted trees) to map photometric data to latent PCA coefficients.
+
+4. Inference Phase:
+    a. For target object:
+        i. Use AutoML regressor to predict latent coefficients from photometric data.
+        ii. Propagate uncertainties through the model using Gaussian Copula.
+    b. Reconstruct high-resolution spectrum via inverse PCA transformation.
+    c. Classify spectral type using latent space classifier.
+
+5. Validation:
+    a. Compute reconstruction error using weighted RMSE.
+    b. Assess credible interval coverage.
+    c. Evaluate taxonomic classification accuracy.
+
+6. Applications:
+    a. Optimize filter configurations based on information content.
+    b. Detect outliers using posterior entropy scores.
+
+End Algorithm
+```

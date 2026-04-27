@@ -1,0 +1,21 @@
+**Final Answer:**
+
+**Algorithm Steps for Probabilistic Spectral Reconstruction of TNOs:**
+
+1. **Data Collection**: For each trans-Neptunian object (TNO), gather all available sparse photometric measurements across various observation bands.
+
+2. **Reddening Model Application**: Apply the interstellar reddening model using the observed color excess and the object's distance to adjust the photometric data.
+
+3. **Spectral Smoothness Prior Definition**: Establish a spectral smoothness prior based on known TNO taxonomic classes to inform the reconstruction process.
+
+4. **Bayesian Inference**: Combine the photometric data, reddening model, and spectral smoothness prior using Bayesian inference to reconstruct the spectral energy distribution (SED).
+
+5. **Posterior Distribution Calculation**: Determine the posterior distributions of the SED parameters to capture the uncertainty in the reconstruction.
+
+6. **Physical Property Derivation**: Propagate the uncertainty from the posterior distributions to calculate physical properties such as effective temperature, albedo, and radius.
+
+7. **Outlier Detection**: Identify outliers by comparing the reconstructed SEDs against the expected spectral shapes of known taxonomic classes.
+
+8. **Survey Optimization**: Analyze which wavelength bands provide the most information to reduce reconstruction uncertainty, optimizing future observations.
+
+This structured approach ensures a comprehensive and probabilistic reconstruction of TNO spectra from sparse photometric data, enabling accurate classification, outlier detection, and optimal survey strategies.

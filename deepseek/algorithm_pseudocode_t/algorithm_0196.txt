@@ -1,0 +1,38 @@
+**Algorithm: Probabilistic Spectral Reconstruction of Trans-Neptunian Objects**
+
+**1. Initialize Parameters:**
+   - Input: Observed light curves for each TNO object.
+   - For each object:
+     - Set initial knot points for the piecewise linear function.
+
+**2. Fit Piecewise Linear Functions:**
+   - For each object's light curve:
+     - Use a variable number of knot points.
+     - Fit the light curve using a piecewise linear function with automatic knot selection.
+     - Record the coefficients of the fitted function.
+
+**3. Reconstruct Spectra:**
+   - For each object:
+     - Formulate an underdetermined linear system based on the fitted light curve coefficients.
+     - Apply basis pursuit to find the sparse solution.
+     - Output the reconstructed spectrum.
+
+**4. Statistical Model Construction:**
+   - For each object:
+     - Define a multivariate normal distribution.
+     - Construct a covariance matrix based on spectral dependencies between bands.
+     - Set the mean vector according to the reconstructed spectrum.
+
+**5. Gibbs Sampling:**
+   - Initialize all parameters for all objects.
+   - Iteratively sample from the joint posterior distribution:
+     - Update light curve coefficients using the current spectrum.
+     - Update spectrum parameters using the current light curve coefficients.
+     - Adjust knot points if necessary.
+   - Continue until convergence criteria are met.
+
+**6. Output Inferred Configurations:**
+   - Extract the most probable parameters for each light curve and spectrum.
+   - Save the reconstructed spectra and light curves.
+
+**End Algorithm**

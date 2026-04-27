@@ -1,0 +1,28 @@
+**Algorithm: Probabilistic SED Reconstruction via Gaussian Processes and MCMC**
+
+1. **Initialize Parameters**
+   - Set prior distributions for SED parameters (e.g., amplitude, spectral index).
+   - Define Gaussian process hyperparameters (amplitude, length scale).
+
+2. **Set Up Gaussian Process Model**
+   - Specify the covariance matrix using a spectral kernel (e.g., Matern kernel).
+   - Apply smoothness constraints based on known spectral properties of TNOs.
+
+3. **Forward Model Implementation**
+   - Relate observed flux measurements to the SED using the probabilistic forward model.
+   - Incorporate observation geometry and instrument characteristics.
+
+4. **Define Likelihood Function**
+   - Express the probability of observed fluxes given the SED parameters.
+   - Include measurement uncertainties and noise characterization.
+
+5. **MCMC Sampling**
+   - Use MCMC (e.g., Metropolis-Hastings) to draw samples from the posterior distribution.
+   - Update SED parameters based on the forward model and observed data.
+   - Adjust hyperparameters to maintain physical plausibility.
+
+6. **Posterior Analysis**
+   - Extract converged posterior distributions of SED parameters.
+   - Analyze the uncertainty quantification for downstream tasks.
+
+**End of Algorithm**

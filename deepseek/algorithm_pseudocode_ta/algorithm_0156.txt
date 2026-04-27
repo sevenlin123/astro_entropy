@@ -1,0 +1,26 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Precompute Principal Component Analysis (PCA):**
+   - Train PCA on a sample of near-IR spectra to obtain principal components and loadings.
+
+2. **For Each Object:**
+   - **Input:** Photometric measurements of the object.
+   - **Express Photometry in PCA Space:**
+     - Project photometric data onto PCA loadings to form an observation vector in the latent space.
+   
+   - **Bayesian Inference:**
+     - Define a likelihood function relating latent variables (principal components) to photometric data.
+     - Incorporate measurement uncertainties from photometric data into the likelihood.
+     - Perform MCMC or Bayesian sampling to obtain posterior distributions of latent variables.
+   
+   - **Reconstruct Spectrum:**
+     - Use posterior means of latent variables and PCA loadings to reconstruct the full spectrum.
+   
+   - **Uncertainty Propagation:**
+     - Calculate uncertainties in the reconstructed spectrum using the variance in the posterior distributions of latent variables.
+   
+   - **Output:** Reconstructed spectrum with propagated uncertainties.
+
+**End For Each Object**
+
+**Note:** This algorithm assumes precomputed PCA and processes each object independently.

@@ -1,0 +1,17 @@
+Algorithm: Probabilistic Spectral Reconstruction Framework
+
+Inputs:
+- Sparse photometric measurements of TNOs
+- Pre-trained PCA model from near-IR spectra
+
+Outputs:
+- Reconstructed full spectrum for each object
+- Uncertainty estimates for the spectrum
+- Probabilities of spectral types
+
+Steps:
+1. For each TNO:
+   a. Project the sparse photometric data into the latent space using the pre-trained PCA model.
+   b. Perform Bayesian inference in the latent space to estimate the spectral components.
+   c. Propagate measurement uncertainties using the PCA model's variance-covariance matrix to obtain uncertainty estimates for the reconstructed spectrum.
+2. Calculate the probability of each object belonging to different spectral types based on posterior probabilities from Bayesian inference.

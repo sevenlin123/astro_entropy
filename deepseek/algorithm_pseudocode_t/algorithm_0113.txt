@@ -1,0 +1,21 @@
+**Algorithm: Probabilistic Spectral Reconstruction of Trans-Neptunian Objects**
+
+**Step 1: Initialize Gaussian Process Regression (GPR) for each object**
+- For each TNO, model observed flux measurements using GPR with a squared exponential kernel.
+- Apply ARD to handle varying importance across photometric bands.
+- Obtain predicted fluxes and associated uncertainties across all bands.
+
+**Step 2: Cluster Spectra using Dirichlet Process Mixture Model (DPMM)**
+- Input the predicted fluxes into a DPMM with a stick-breaking representation.
+- The model infers an unknown number of clusters, capturing spectral diversity.
+- Each cluster's spectral shape is represented by a Gaussian process.
+
+**Step 3: Perform Bayesian Inference**
+- Integrate GPR and DPMM within a Bayesian framework.
+- Compute posterior distributions over spectral parameters and cluster assignments.
+
+**Step 4: Extract Most Probable Components**
+- Identify the most probable spectral features and cluster assignments from posterior distributions.
+- Output reconstructed SEDs and cluster memberships.
+
+**End Algorithm**

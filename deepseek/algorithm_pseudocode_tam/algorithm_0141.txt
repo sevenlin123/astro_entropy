@@ -1,0 +1,75 @@
+To implement the probabilistic spectral reconstruction framework for Trans-Neptunian Objects (TNOs) from sparse photometry, the algorithm is structured as follows:
+
+1. **Training Data Preparation**:
+   - Acquire a set of reference TNO spectra.
+   - Apply Principal Component Analysis (PCA) to extract principal components that represent spectral variability.
+
+2. **Latent Space Definition**:
+   - Use Kernel Density Estimation (KDE) to create a smooth probability distribution in the PCA latent space.
+   - Augment the training data by sampling from this latent distribution to generate synthetic spectra.
+
+3. **Synthetic Photometry Generation**:
+   - Convolve the synthetic spectra with filter transmission curves (e.g., JWST/NIRCam) to generate synthetic photometric measurements.
+   - Add Gaussian noise to simulate realistic photometric uncertainties.
+
+4. **Model Training**:
+   - Train an AutoML regressor to map photometric measurements to PCA latent coefficients.
+   - Optionally, train a classifier to predict spectral types using the latent coefficients.
+
+5. **Inference**:
+   - For new photometric data, use the trained regressor to predict latent coefficients.
+   - Project the latent coefficients through inverse PCA to reconstruct the full spectrum.
+   - Calculate uncertainties by propagating photometric uncertainties through the model.
+
+6. **Validation**:
+   - Perform leave-one-out cross-validation to assess reconstruction accuracy and credible interval coverage.
+
+7. **Applications**:
+   - Use the framework for survey optimization by analyzing feature importance.
+   - Detect spectral outliers by comparing reconstructed spectra to true spectra.
+
+Here is the pseudocode for the core algorithm:
+
+```python
+Algorithm: Probabilistic Spectral Reconstruction of TNOs from Sparse Photometry
+
+Input:
+- Reference spectra (training_set)
+- Filter transmission curves (filters)
+- Number of components (K)
+
+Output:
+- Reconstructed spectra from photometric data
+
+Steps:
+
+1. Preprocess Training Data:
+   a. Perform PCA on training_set to get principal components (PCs).
+   b. Extract latent coefficients for each spectrum.
+
+2. Define Latent Space:
+   a. Apply KDE to the latent coefficients to create a smooth distribution.
+   b. Generate synthetic spectra by sampling from this distribution.
+
+3. Generate Synthetic Photometry:
+   a. Convolve synthetic spectra with filter transmission curves to obtain photometric measurements.
+   b. Add Gaussian noise to simulate photometric uncertainties.
+
+4. Train AutoML Regressor:
+   a. Fit regressor to map noisy photometry to latent coefficients.
+   b. (Optional) Train classifier for spectral type prediction using latent coefficients.
+
+5. Reconstruct Spectra:
+   a. For new photometry, use regressor to predict latent coefficients.
+   b. Apply inverse PCA to latent coefficients to get full spectrum.
+   c. Propagate uncertainties to calculate credible intervals.
+
+6. Validate:
+   a. Perform LOOCV to evaluate reconstruction accuracy and uncertainty calibration.
+
+7. Applications:
+   a. Analyze feature importance to optimize surveys.
+   b. Compare reconstructed spectra to true spectra for outlier detection.
+```
+
+This algorithm provides a systematic approach to reconstructing high-resolution spectra from sparse photometry, enabling efficient taxonomic classification and survey optimization for TNOs.

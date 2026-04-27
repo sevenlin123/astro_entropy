@@ -1,0 +1,44 @@
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. **Input Data**:  
+   - Training Spectra: A set of reference TNO spectra (e.g., 51 spectra).  
+   - Photometric Observations: Sparse multi-band photometric measurements for objects of interest.  
+
+2. **Preprocessing**:  
+   - Convert photometric observations to reflectance (or equivalent) in the relevant wavelength range.  
+   - Normalize and preprocess training spectra (e.g., remove noise, align wavelength ranges).  
+
+3. **Principal Component Analysis (PCA)**:  
+   - Train PCA on the normalized training spectra to derive principal components (PCs).  
+   - Select the number of PCs (e.g., 4-10) based on cross-validation and reconstruction fidelity.  
+
+4. **Latent Space Construction**:  
+   - Project the training spectra onto the PCA basis to obtain latent coefficients.  
+   - Perform Kernel Density Estimation (KDE) on the latent coefficients to create a smooth probability distribution in the latent space.  
+
+5. **Data Augmentation**:  
+   - Generate synthetic latent vectors using the KDE to augment the training dataset.  
+   - Inject Gaussian noise (e.g., 20%) into the synthetic photometric data to simulate observational uncertainties.  
+
+6. **Model Training**:  
+   - Use AutoML (e.g., XGBoost) to train a regressor mapping sparse photometry to latent coefficients.  
+   - Ensure the model captures the underlying relationship between photometry and spectral structure.  
+
+7. **Forward Modeling**:  
+   - Simulate photometric measurements for each latent vector using the NIRCam filter set.  
+   - Use these simulations to establish the implicit likelihood mapping.  
+
+8. **Reconstruction Pipeline**:  
+   - For new photometric observations:  
+     - Predict latent coefficients using the trained regressor.  
+     - Apply inverse PCA to reconstruct the full spectrum.  
+     - Sample from the posterior distribution using Gaussian Copula to quantify uncertainties.  
+
+9. **Taxonomic Classification**:  
+   - Train a separate classifier on the latent space to predict taxonomic categories (e.g., H₂O, CO₂, Organic, Methanol).  
+   - Use the predicted probabilities to assign spectral types.  
+
+10. **Output**:  
+    - Reconstructed spectrum with uncertainties.  
+    - Probabilistic taxonomic classification.  
+    - Metrics: RMSE, PCC, Reconstruction Uncertainty, Fractional Agreement.

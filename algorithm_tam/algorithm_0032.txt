@@ -1,0 +1,28 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+**Input:**  
+- Sparse photometric measurements (e.g., magnitudes) of a trans-Neptunian object in NIRCam filters.  
+- Pre-trained Principal Component Analysis (PCA) model derived from a reference set of near-IR TNO spectra.  
+- Pre-trained AutoML regressor mapping photometric inputs to PCA latent coefficients.  
+- Pre-trained taxonomic classifier operating on PCA coefficients.  
+
+**Output:**  
+- Reconstructed full near-IR spectrum.  
+- Probabilistic classification of spectral type (e.g., Water-type, CO₂-type, Organics-type).  
+
+**Steps:**  
+
+1. **Data Preparation:**  
+   - Obtain sparse photometric measurements for the target object.  
+
+2. **Latent Space Prediction:**  
+   - Use the AutoML regressor to predict the latent PCA coefficients corresponding to the object's photometric measurements.  
+
+3. **Spectrum Reconstruction:**  
+   - Apply the inverse PCA transformation to the predicted latent coefficients to obtain the reconstructed full near-IR spectrum.  
+
+4. **Taxonomic Classification:**  
+   - Pass the PCA coefficients to the taxonomic classifier to obtain a probability distribution over spectral types.  
+
+5. **Output:**  
+   - Provide the reconstructed spectrum and the taxonomic probabilities for further analysis.

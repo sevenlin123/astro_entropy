@@ -1,0 +1,19 @@
+**Algorithm: Probabilistic Spectral Reconstruction of TNOs**
+
+1. **Initialization:**
+   - Define prior distributions for spectral energy distribution (SED) parameters and rotational periods.
+   
+2. **Bayesian Inference Loop:**
+   - For each observed photometric data point:
+     - Update the SED parameters and rotational period using the likelihood function based on observed data and noise characteristics.
+   
+3. **SED Reconstruction:**
+   - Reconstruct the SEDs using the updated parameters from the posterior distributions.
+   
+4. **Uncertainty Quantification:**
+   - Compute confidence intervals for each reconstructed SED.
+   
+5. **Outlier Detection:**
+   - Compare reconstructed SEDs against those of known taxonomic classes to identify outliers.
+
+This algorithm outlines the core computational steps for reconstructing SEDs and identifying outliers in TNOs using a Bayesian framework.

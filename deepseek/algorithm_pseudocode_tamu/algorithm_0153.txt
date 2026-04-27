@@ -1,0 +1,48 @@
+```python
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+    - Training Spectra: Set of reference near-IR spectra (S_1, ..., S_N)
+    - Photometric Observations: Sparse photometry measurements (m_1, ..., m_P)
+    - NIRCam Filter Set: Defined filter transmission curves
+
+Output:
+    - Reconstructed Spectra: Full spectral energy distribution for each object
+    - Probabilistic Taxonomy Classification: Posterior probabilities for each spectral type
+
+Steps:
+
+1. Preprocessing:
+    a. Normalize all training spectra to unit reflectance.
+    b. Extract wavelength grid for spectral reconstruction.
+
+2. Latent Space Definition:
+    a. Perform Principal Component Analysis (PCA) on training spectra to obtain principal components (PCs).
+    b. Determine the number of PCs (K) based on explained variance and cross-validation.
+    c. Construct a continuous latent space using Kernel Density Estimation (KDE) on the PCA coefficients.
+
+3. Forward Modeling:
+    a. Simulate photometric measurements for each training spectrum by convolving with NIRCam filter curves.
+    b. Inject Gaussian noise (20% relative reflectance uncertainty) into simulated photometry to account for observational errors.
+
+4. Training Phase:
+    a. Train an AutoML regressor (e.g., Gradient Boosted Decision Trees) to map sparse photometry to PCA coefficients.
+    b. Augment training data using synthetic latent vectors generated from KDE to improve model generalization.
+
+5. Validation:
+    a. Perform Leave-One-Out Cross-Validation (LOOCV) to assess reconstruction fidelity and uncertainty calibration.
+    b. Calculate metrics: Root Mean Square Error (RMSE), Reconstruction Fidelity (F), and Coverage (C).
+
+6. Inference:
+    a. For new photometric observations:
+        i. Predict latent coefficients using the trained regressor.
+        ii. Project latent coefficients through inverse PCA to reconstruct full spectra.
+        iii. Sample posterior distributions using Gaussian Copula to quantify uncertainties.
+    b. Classify spectral type by evaluating posterior probabilities in latent space.
+
+7. Applications:
+    a. Optimize NIRCam filter configurations by evaluating information content for survey design.
+    b. Detect outliers and rare spectral types by analyzing posterior probabilities and latent space positions.
+```
+
+```

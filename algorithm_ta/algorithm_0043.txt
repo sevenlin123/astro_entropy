@@ -1,0 +1,23 @@
+**Algorithm: Probabilistic Spectral Reconstruction via Latent Space Inference**
+
+1. **Principal Component Analysis (PCA):** 
+   - Apply PCA to a dataset of near-infrared spectra to capture the primary modes of spectral variability.
+   - Determine the optimal number of principal components (e.g., 4-5 for classification, 8-10 for detailed reconstruction) through cross-validation.
+
+2. **Latent Space Model Construction:** 
+   - Construct a latent-space model using the identified principal components.
+   - This model represents the spectral manifold of trans-Neptunian objects (TNOs).
+
+3. **Bayesian Inference in Reduced Space:**
+   - Perform Bayesian inference within the latent space to reconstruct full spectra from sparse photometric data.
+   - Use probabilistic methods to quantify uncertainties and propagate them through the model.
+
+4. **Spectral Reconstruction and Uncertainty Propagation:**
+   - Reconstruct full spectra by mapping photometric data into the learned latent space.
+   - Quantify the uncertainties associated with each reconstructed spectrum, ensuring accurate uncertainty calibration.
+
+5. **Survey Optimization and Outlier Detection:**
+   - Evaluate the information content of different observational filter configurations (e.g., JWST/NIRCam filters) to optimize future surveys.
+   - Detect rare or peculiar spectral types by identifying and constraining low-probability intermediate models within the spectral manifold.
+
+This structured approach efficiently bridges sparse photometry and detailed spectral analysis, enabling robust compositional studies of minor planets.

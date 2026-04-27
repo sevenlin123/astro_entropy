@@ -1,0 +1,13 @@
+The computational algorithm consists of the following steps:
+
+1. **Preprocess Near-IR Spectra Data**: Normalize and align the spectral data of TNOs.
+
+2. **Principal Component Analysis (PCA)**: Reduce the dimensionality using PCA to capture main spectral variations.
+
+3. **Model Spectral Manifold**: Create a lower-dimensional latent space with PCA components.
+
+4. **Bayesian Inference**: Perform Bayesian inference using photometric data, defining a likelihood function and prior distributions.
+
+5. **Reconstruct Full Spectra**: Reconstruct spectra from inferred PCA coefficients.
+
+6. **Uncertainty Propagation**: Quantify uncertainties in the reconstructed spectra.

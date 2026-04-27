@@ -1,0 +1,33 @@
+### Algorithm: Probabilistic Spectral Reconstruction Framework for Trans-Neptunian Objects
+
+1. **Training Data Preparation**:
+   - Collect a sample of near-infrared spectra of TNOs (e.g., 51 spectra).
+   - Perform Principal Component Analysis (PCA) on these spectra to define a low-dimensional latent space (e.g., 4-5 principal components for classification, 8-10 for detailed reconstruction).
+
+2. **Data Augmentation**:
+   - Use Kernel Density Estimation (KDE) to smooth the latent space distribution of the PCA coefficients, generating synthetic latent vectors.
+   - Inject Gaussian noise (e.g., 20% relative uncertainty) into synthetic photometric data derived from the augmented spectra.
+
+3. **Model Training**:
+   - Train an AutoML regressor (e.g., Gradient Boosted Decision Trees) to map sparse photometric inputs to latent coefficients.
+   - Train a secondary classifier to assign taxonomic labels (e.g., H₂O, CO₂, Organic) based on the latent space.
+
+4. **Forward Inference**:
+   - For new photometric observations:
+     - Predict latent coefficients using the trained regressor.
+     - Project these coefficients through the inverse PCA transform to reconstruct the full spectrum.
+     - Classify the object into a taxonomic category based on the latent space.
+
+5. **Cross-Validation**:
+   - Perform Leave-One-Out Cross-Validation (LOOCV) to assess model performance, ensuring unbiased evaluation of reconstruction accuracy and classification success.
+
+6. **Survey Optimization**:
+   - Evaluate filter configurations for JWST/NIRCam to maximize information yield, prioritizing bands that enhance spectral separation of taxonomic groups.
+
+7. **Outlier Detection**:
+   - Identify objects with low posterior probability in the latent space, indicating unusual spectral types, such as peculiar Neptune Trojans.
+
+8. **Applications**:
+   - Utilize the framework for efficient taxonomic classification, spectral reconstruction, and outlier detection in large-scale surveys.
+
+This algorithm leverages Bayesian inference in a reduced-dimensional latent space, enabling accurate spectral reconstruction and taxonomic analysis from sparse photometric data.

@@ -1,0 +1,35 @@
+The algorithm consists of the following steps:
+
+1. **Data Preprocessing**:
+   - Input sparse multi-band photometric data of trans-Neptunian objects (TNOs).
+   - Normalize and preprocess the data to handle missing or noisy measurements.
+
+2. **Spectral Basis Construction**:
+   - Construct a novel spectral basis that captures the variability in TNO colors.
+   - This basis is derived to enable SED reconstruction from a limited number of photometric bands.
+
+3. **Model Initialization**:
+   - Initialize Gaussian processes to model the spectral energy distributions (SEDs).
+   - Set up mixture models to capture the probabilistic nature of TNO classifications.
+
+4. **Probabilistic Inference**:
+   - Use Gaussian processes to infer the underlying SEDs from sparse photometric data.
+   - Apply mixture models to determine the probability of each object belonging to a specific spectral class.
+
+5. **Reconstruction of SEDs**:
+   - Reconstruct the spectral energy distributions for each TNO using the inferred probabilities.
+   - This step leverages the constructed spectral basis for accurate reconstruction even with limited data.
+
+6. **Classification Probabilities**:
+   - Compute the probability of each object being assigned to a particular spectral class using the mixture models.
+   - These probabilities aid in taxonomic assignments and outlier detection.
+
+7. **Uncertainty Estimation**:
+   - Calculate uncertainty estimates for both the reconstructed SEDs and classification probabilities.
+   - These uncertainties are crucial for assessing the reliability of the results.
+
+8. **Outlier Detection and Survey Optimization**:
+   - Identify outliers based on the uncertainty estimates and classification probabilities.
+   - Use the results to optimize future astronomical surveys by highlighting areas needing more data or refining observational strategies.
+
+By following these steps, the algorithm effectively reconstructs the SEDs of TNOs from sparse photometric data, providing a robust framework for taxonomy, survey optimization, and outlier detection.

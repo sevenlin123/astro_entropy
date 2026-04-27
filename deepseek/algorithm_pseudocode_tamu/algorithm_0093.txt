@@ -1,0 +1,79 @@
+```plaintext
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. Initialize:
+   - Obtain a sample of reference TNO near-IR spectra.
+   
+2. Perform Principal Component Analysis (PCA):
+   - Compute principal components (PCs) from the reference spectra, capturing dominant spectral variations.
+   
+3. Construct Latent Space:
+   - Use PCA to project reference spectra into a low-dimensional latent space.
+   - Augment the latent space using Kernel Density Estimation (KDE) to create a continuous probability distribution.
+   
+4. Generate Synthetic Training Data:
+   - Forward model synthetic photometry by convolving spectra with instrumental filter responses (e.g., JWST/NIRCam).
+   - Add Gaussian noise (relative uncertainty ~20%) to simulate observational uncertainties.
+   
+5. Train AutoML Regressor:
+   - Use an ensemble of gradient-boosted decision trees to map sparse photometry to latent space coefficients.
+   
+6. Validate via Leave-One-Out Cross-Validation (LOOCV):
+   - For each held-out spectrum, compute RMSE, credible interval coverage, and taxonomic classification accuracy.
+   
+7. Reconstruct Spectra:
+   - For new photometric observations, predict latent coefficients using the trained regressor.
+   - Apply inverse PCA transformation to obtain full spectrum reconstruction.
+   - Sample posterior distributions using Gaussian Copula to quantify uncertainties.
+   
+8. Perform Taxonomic Classification:
+   - Classify objects based on latent coefficients to determine spectral type probabilities.
+   
+9. Applications:
+   a. Identify optimal filter configurations for future surveys using Fisher Information Matrix.
+   b. Detect outliers by assessing deviations from the learned spectral manifold.
+```
+
+```plaintext
+Pseudocode:
+
+Initialize reference_spectra = [spectra of TNOs]
+Compute PCs = PCA(reference_spectra)
+project reference_spectra onto PCs to get latent_coefficients
+augment_latent_space(latent_coefficients, KDE)
+
+Generate synthetic_photometry:
+    For each spectrum in reference_spectra:
+        simulate photometry by convolving with filter responses
+        add Gaussian noise
+
+Train regressor:
+    regressor.fit(sparse_photometry, latent_coefficients)
+
+LOOCV:
+    For i in 1..n:
+        remove spectrum i
+        compute synthetic_photometry for remaining
+        validate regressor performance
+
+Reconstruct_spectrum:
+    Input photometry
+    latent_prediction = regressor.predict(photometry)
+    full_spectrum = inverse_PCA(latent_prediction)
+    sample posterior using Gaussian Copula
+    Output full_spectrum and credible intervals
+
+Classify_taxonomic:
+    classify latent_prediction into taxonomic groups
+    Output classification probabilities
+
+Survey_optimization:
+    Compute FIM for each filter combination
+    Select optimal filters for highest information content
+
+Detect_outliers:
+    Compare posterior probabilities of new observations
+    Flag deviations from learned manifold
+
+End
+```

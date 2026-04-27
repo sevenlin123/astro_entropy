@@ -1,0 +1,15 @@
+**Algorithm: Probabilistic Spectral Reconstruction Framework**
+
+1. **Preprocess Reference Spectra**: Train a Principal Component Analysis (PCA) model on a sample of near-infrared (near-IR) spectra from TNOs to derive basis vectors representing the spectral manifold.
+
+2. **Express Spectra as Linear Combinations**: Model each TNO's spectrum as a linear combination of the basis vectors obtained from the PCA.
+
+3. **Project Photometric Data**: Express photometric observations in terms of the same basis vectors through projection onto the latent spectral manifold.
+
+4. **Bayesian Inference**: Perform Bayesian inference in the reduced space to determine the posterior distribution of the coefficients of the linear expansion, incorporating measurement uncertainties.
+
+5. **Spectral Reconstruction**: Use the posterior distributions to reconstruct full spectra from photometric data, including uncertainty propagation.
+
+6. **Dimensionality Consideration**: Employ approximately 4-5 principal components for taxonomic classification and 8-10 components for improved spectral reconstruction fidelity.
+
+This algorithm focuses on reconstructing spectra from sparse photometry using a probabilistic approach in a reduced spectral space, enabling classification and outlier detection.

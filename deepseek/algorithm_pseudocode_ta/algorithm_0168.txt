@@ -1,0 +1,26 @@
+```pseudocode
+Algorithm: Probabilistic Spectral Reconstruction Framework
+
+Input: Sparse photometric measurements of TNOs
+Output: Reconstructed spectra with propagated uncertainties
+
+1. Preprocessing:
+   a. Normalize photometric measurements to unit variance.
+   b. Train Principal Component Analysis (PCA) on a reference spectral library of TNOs to obtain Principal Components (PCs).
+
+2. Bayesian Inference in Latent Space:
+   a. Represent spectral variability using the obtained PCs.
+   b. Perform Bayesian regression where photometric data informs the latent PC coefficients, incorporating photometric uncertainties as priors.
+   c. Sample the posterior distribution of PC coefficients to estimate their uncertainties.
+
+3. Spectral Reconstruction:
+   a. For each TNO, project the inferred PC coefficients back onto the original spectral basis.
+   b. Combine contributions from all PCs to reconstruct the full spectrum.
+   c. Calculate uncertainties for each wavelength by propagating the uncertainties in PC coefficients.
+
+4. Outlier Detection and Rare Type Identification:
+   a. Compute posterior probabilities of each object within the latent space manifold.
+   b. Identify objects with significantly low posterior probabilities as potential outliers or unique spectral types.
+
+Return: Reconstructed spectra and their uncertainties for all TNOs.
+```

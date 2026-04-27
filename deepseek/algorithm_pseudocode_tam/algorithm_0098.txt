@@ -1,0 +1,40 @@
+```plaintext
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. Initialize the training set with observed TNO spectra from the DiSCo-TNO sample (total N = 51).
+
+2. Perform Principal Component Analysis (PCA) on the training spectra to derive a low-dimensional latent space representation:
+   a. Compute principal components (PCs) capturing dominant spectral variations.
+   b. Select top K PCs (e.g., K = 4-5 for taxonomic classification, up to K = 8-10 for enhanced reconstruction fidelity).
+
+3. Augment the latent space using Kernel Density Estimation (KDE):
+   a. Project the training spectra onto the selected PCs.
+   b. Estimate the probability density of the latent coefficients using KDE with an optimal bandwidth (h ≈ 0.5).
+   c. Sample synthetic latent vectors from the KDE to create a continuous manifold.
+
+4. Generate synthetic photometry for each augmented spectrum:
+   a. Convolve the spectra with the filter responses of the target instrument (e.g., JWST NIRCam).
+   b. Calculate reflectance in each band.
+   c. Inject Gaussian noise with 20% relative reflectance uncertainty.
+
+5. Train an AutoML regressor (ensemble of gradient-boosted decision trees) to map sparse photometry to latent coefficients:
+   a. Use the synthetic photometry with noise as inputs.
+   b. Regress against the corresponding latent coefficients derived from the augmented manifold.
+
+6. Validate the model using leave-one-out cross-validation (LOOCV):
+   a. For each held-out spectrum:
+      i. Remove it from the training set.
+      ii. Rebuild the latent space and synthetic photometry.
+      iii. Test the regressor's prediction accuracy.
+
+7. For spectral reconstruction:
+   a. Given new sparse photometric observations, use the trained regressor to predict latent coefficients.
+   b. Apply the inverse PCA transform to obtain the reconstructed high-resolution spectrum.
+
+8. For taxonomic classification:
+   a. Use the latent coefficients from the reconstructed spectrum.
+   b. Classify using a pre-trained AutoML classifier on the latent manifold to determine spectral type probabilities.
+   c. Output the reconstructed spectrum and taxonomic classification.
+
+End Algorithm
+```

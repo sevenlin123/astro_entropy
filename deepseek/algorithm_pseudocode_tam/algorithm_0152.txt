@@ -1,0 +1,102 @@
+The algorithm described in the paper involves using a probabilistic framework to reconstruct the spectra of trans-Neptunian objects (TNOs) from sparse photometric data. Here's a step-by-step breakdown of the computational steps involved in the core reconstruction framework:
+
+### Algorithm Steps:
+
+1. **Data Preparation**:
+   - Gather a set of reference TNO spectra (e.g., 51 spectra).
+   - Extract a subset of these spectra to serve as the training set.
+
+2. **Principal Component Analysis (PCA)**:
+   - Perform PCA on the training spectra to identify the principal components that explain the majority of the spectral variability.
+   - Determine the number of principal components (e.g., 4-5 for basic classification, 8-10 for improved fidelity).
+
+3. **Latent Space Definition**:
+   - Use the identified principal components to define a low-dimensional latent space.
+   - Apply Kernel Density Estimation (KDE) on the latent coordinates derived from the PCA to create a smooth probability distribution representing the possible states of the latent space.
+
+4. **Synthetic Data Generation**:
+   - Generate synthetic photometric data by forward modeling the spectra through the target instrument's filters (e.g., JWST/NIRCam).
+   - Inject Gaussian noise (e.g., 20% relative reflectance uncertainty) into the synthetic photometry to simulate realistic observational uncertainties.
+
+5. **Model Training**:
+   - Train an AutoML regressor (e.g., using AutoGluon) to map the sparse photometric inputs to the latent space coordinates.
+   - Additionally, train a classifier within the latent space to predict taxonomic labels (e.g., H₂O, CO₂, Organics, Methanol).
+
+6. **Forward Inference**:
+   - For new photometric observations, pass the sparse data through the trained regressor to predict the latent coordinates.
+   - Use the predicted latent coordinates to project back into the full spectral domain via inverse PCA transformation.
+
+7. **Posterior Processing**:
+   - Calculate the posterior distribution of the reconstructed spectrum.
+   - Compute credible intervals (e.g., 16th, 50th, 84th percentiles) to assess the uncertainty and coverage of the reconstruction.
+   - Evaluate the taxonomic classification probabilities to identify the spectral type.
+
+8. **Validation and Applications**:
+   - Perform leave-one-out cross-validation (LOOCV) to assess the model's generalization performance.
+   - Use the framework for survey optimization by evaluating different filter configurations.
+   - Detect outliers by analyzing the posterior distributions and their deviation from the expected manifold.
+
+### Pseudocode Representation:
+
+```python
+def spectral_reconstruction_framework():
+    # Data Preparation
+    reference_spectra = load_reference_spectra()
+    training_set = select_subset(reference_spectra)
+
+    # PCA Analysis
+    pca_model = perform_PCA(training_set)
+    principal_components = pca_model.explained_variance()
+
+    # Latent Space Definition
+    latent_space = define_latent_space(principal_components)
+    perform_KDE(latent_space)
+
+    # Synthetic Data Generation
+    synthetic_photometry = generate_synthetic_photometry(reference_spectra)
+    add_gaussian_noise(synthetic_photometry, noise_level=0.2)
+
+    # Model Training
+    regressor = train_auto_mlRegressor(synthetic_photometry, latent_space)
+    classifier = train_classifier(latent_space, taxonomic_labels)
+
+    # Forward Inference for New Observations
+    def reconstruct_spectrum(new_photometry):
+        latent_coords = regressor.predict(new_photometry)
+        reconstructed_spectrum = inverse_pca(latent_coords, pca_model)
+        return reconstructed_spectrum
+
+    # Posterior Processing
+    def compute_credible_intervals(reconstructed_spec):
+        percentiles = [16, 50, 84]
+        credible_intervals = calculate_percentiles(reconstructed_spec)
+        return credible_intervals
+
+    # Taxonomic Classification
+    def classify_spectral_type(latent_state):
+        taxonomic_probabilities = classifier.predict(latent_state)
+        return taxonomic_probabilities
+
+    # Validation and Applications
+    def validate_model():
+        performance_metrics = []
+        for held_out_spectrum in reference_spectra:
+            predict_photometry = forward_model(held_out_spectrum)
+            latent_estimate = regressor.predict(predict_photometry)
+            reconstructed_spec = inverse_pca(latent_estimate)
+            compute_reconstruction_error(held_out_spectrum, reconstructed_spec)
+            compute_taxonomic_accuracy(held_out_spectrum, classify_spectral_type(latent_estimate))
+            performance_metrics.append(compute_metrics())
+        return average(performance_metrics)
+
+    # Example Usage
+    example_photometry = load_example_photometry()
+    reconstructed_spec = reconstruct_spectrum(example_photometry)
+    credible_intervals = compute_credible_intervals(reconstructed_spec)
+    taxonomic_prediction = classify_spectral_type(reconstructed_spec.latent_coords)
+    return reconstructed_spec, credible_intervals, taxonomic_prediction
+
+spectral_reconstruction_framework()
+```
+
+This pseudocode outlines the core steps of the probabilistic framework for spectral reconstruction, focusing on the computational aspects without detailed explanations or code.

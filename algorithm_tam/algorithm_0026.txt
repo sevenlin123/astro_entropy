@@ -1,0 +1,43 @@
+### Probabilistic Spectral Reconstruction Algorithm
+
+1. **Data Preparation**:
+   - Gather a set of reference TNO spectra for training.
+   - Exclude rare or outlier spectral types to focus on dominant taxonomic classes.
+
+2. **Principal Component Analysis (PCA)**:
+   - Perform PCA on the reference spectra to reduce dimensionality.
+   - Determine the number of principal components (4-5 for classification, 8-10 for accurate reconstruction).
+
+3. **Kernel Density Estimation (KDE)**:
+   - Use PCA-derived latent coordinates to create a continuous probability distribution.
+   - Augment training data with synthetic spectra using the estimated latent manifold.
+
+4. **AutoML Model Training**:
+   - Train an ensemble of gradient-boosted decision trees (AutoGluon) to regress photometric inputs to latent space coefficients.
+   - Inject Gaussian noise (20% relative uncertainty) into synthetic photometry to simulate real-world observational noise.
+
+5. **Forward Modeling**:
+   - Convolve reconstructed spectra with instrument-specific filter responses to generate synthetic photometry for training.
+
+6. **Bayesian Inference**:
+   - For new photometric observations, predict latent coefficients using the trained AutoML model.
+   - Project these coefficients back to the full spectral space via inverse PCA.
+
+7. **Spectral Reconstruction**:
+   - Combine the inverse PCA transform with uncertainty propagation to produce a posterior distribution of reconstructed spectra.
+
+8. **Taxonomic Classification**:
+   - Classify the object into predefined spectral types based on latent manifold coordinates.
+   - Provide probability distributions for each taxonomic category.
+
+9. **Validation and Outlier Detection**:
+   - Apply LOOCV to assess reconstruction accuracy and classification confidence.
+   - Identify outliers by analyzing reconstruction uncertainty and taxonomic probability distributions.
+
+10. **Survey Optimization**:
+    - Evaluate different filter configurations using the framework to determine optimal settings for spectral information content.
+    - Rank filter combinations based on their ability to improve spectral reconstruction fidelity.
+
+11. **Information Content Analysis**:
+    - Quantify the mutual information between photometric measurements and spectral features to prioritize filter configurations.
+    - Optimize survey design to maximize scientific return with minimal observing time.

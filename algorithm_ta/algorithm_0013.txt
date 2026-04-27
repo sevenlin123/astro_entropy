@@ -1,0 +1,9 @@
+Algorithm:
+
+1. Train a PCA model on the reference near-infrared spectra.
+
+2. For each object:
+   a. Acquire the sparse photometric data.
+   b. Project the photometric data into the PCA space to estimate the initial coefficients.
+   c. Perform Bayesian inference using the photometric data and the PCA model to refine the coefficients.
+   d. Reconstruct the full spectrum by combining the refined coefficients with the PCA eigenvectors.

@@ -1,0 +1,14 @@
+Algorithm:
+1. Precompute PCA from training spectra
+   a. Read training spectra S
+   b. Center S
+   c. Compute covariance matrix C of S
+   d. Diagonalize C to get eigenvalues λ and eigenvectors v
+   e. Sort λ and v by descending order of λ
+   f. Select top k eigenvectors and eigenvalues
+
+2. For each object:
+   a. Read photometric data P
+   b. Perform Bayesian inference to estimate coefficients c using P and precomputed PCA
+   c. Reconstruct spectrum R = mean(S) + sum(c_j * PCA_j)
+   d. Output R

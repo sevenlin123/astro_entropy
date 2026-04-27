@@ -1,0 +1,90 @@
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. **Input Data Preparation**:
+   - Obtain sparse photometric measurements (e.g., from JWST/NIRCam filters) for a target TNO object.
+
+2. **Principal Component Analysis (PCA)**:
+   - Preprocess a reference dataset of TNO near-IR spectra to extract principal components (PCs).
+   - Compute PCA to define a low-dimensional latent space.
+
+3. **Kernel Density Estimation (KDE)**:
+   - Construct a continuous probability distribution in the latent space using non-parametric KDE.
+   - Augment the training data by sampling synthetic latent vectors from this distribution.
+
+4. **Forward Modeling**:
+   - Simulate synthetic photometric measurements for each augmented spectrum by convolving with instrument-specific filter responses (e.g., JWST/NIRCam).
+   - Inject Gaussian noise (relative uncertainty ~20%) into the synthetic photometry to account for observational uncertainties.
+
+5. **Automated Machine Learning (AutoML) Regression**:
+   - Train an ensemble of gradient-boosted decision trees (e.g., XGBoost) to regress from sparse photometry to latent PCA coefficients.
+   - Use the synthetic dataset created in steps 3 and 4 for training.
+
+6. **Posterior Sampling**:
+   - For the target object, predict the latent coefficients by passing its sparse photometry through the trained AutoML regressor.
+   - Sample the joint posterior distribution of the latent coefficients using a Gaussian Copula framework to preserve physical dependencies.
+
+7. **Inverse PCA Transform**:
+   - Apply the inverse PCA transform to the sampled latent coefficients to reconstruct the full high-resolution spectrum.
+   - Generate an ensemble of reconstructed spectra to quantify uncertainties.
+
+8. **Output**:
+   - Provide the reconstructed spectrum, uncertainty estimates, and optionally, taxonomic classification probabilities derived from the latent space.
+
+### Pseudocode:
+
+```pseudocode
+Algorithm ProbabilisticSpectralReconstruction(photometry):
+    // Step 1: Input Data Preparation
+    target_photometry = photometry
+    
+    // Step 2: PCA Initialization
+    reference_spectra = load_reference_spectra()
+    pca_model = PCA(reference_spectra)
+    latent_dimension = determine_optimal_dimension(pca_model, reference_spectra)
+    
+    // Step 3: KDE Augmentation
+    seed_latents = pca_model.transform(reference_spectra)
+    kde_model = KDE(seed_latents, bandwidth=0.5)
+    augmented_latents = kde_sample(kde_model, num_samples=10000)
+    
+    // Step 4: Forward Modeling
+    simulated_photometry = []
+    for latent in augmented_latents:
+        spectrum = pca_model.inverse_transform(latent)
+        obs_phot = forward_model(spectrum, instrument='JWST/NIRCam')
+        add_noise(obs_phot, noise_level=0.2)
+        simulated_photometry.append(obs_phot)
+    
+    // Step 5: AutoML Training
+    regressor = AutoMLRegressor()
+    regressor.train(simulated_photometry, augmented_latents)
+    
+    // Step 6: Posterior Sampling
+    predicted_latents = regressor.predict(target_photometry)
+    posterior_samples = gaussian_copula_sample(predicted_latents, correlations)
+    
+    // Step 7: Inverse PCA Transform
+    reconstructed_spectra = []
+    for sample in posterior_samples:
+        spectrum = pca_model.inverse_transform(sample)
+        reconstructed_spectra.append(spectrum)
+    
+    // Step 8: Output
+    return reconstructed_spectra, calculate_uncertainties(reconstructed_spectra)
+```
+
+### Explanation:
+
+- **PCA Initialization**: Reduces the spectral data into a manageable number of principal components, capturing the most significant variations in the reference dataset.
+  
+- **KDE Augmentation**: Creates a smooth, continuous manifold in the latent space, enhancing the robustness of the regression model by preventing overfitting to discrete examples.
+
+- **Forward Modeling**: Simulates realistic photometric measurements from the augmented spectra, accounting for instrumental response and noise, which trains the model to handle real-world data.
+
+- **AutoML Training**: Employs advanced machine learning algorithms to map sparse photometric inputs to latent space coordinates efficiently.
+
+- **Posterior Sampling**: Generates multiple plausible reconstructions considering uncertainties, ensuring reliable confidence intervals.
+
+- **Inverse PCA Transform**: Converts the latent coordinates back into full spectral representations, leveraging the physical structure learned during PCA initialization.
+
+This algorithm effectively bridges the gap between sparse photometric observations and detailed spectral reconstruction, enabling statistically rigorous characterization of TNO surface compositions.

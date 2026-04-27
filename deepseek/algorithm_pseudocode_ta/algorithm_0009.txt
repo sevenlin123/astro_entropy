@@ -1,0 +1,40 @@
+**Algorithm: Probabilistic Spectral Reconstruction Framework**
+
+1. **Training of Dimensionality-Reduction Model**
+   - Input: Set of near-IR spectra (training data)
+   - Output: Principal Component (PC) model
+     ```plaintext
+     Initialize PCA model with training spectra.
+     Perform PCA decomposition to obtain principal components.
+     ```
+
+2. **Bayesian Inference in Reduced Space**
+   - Input: Photometric measurements, PC model
+   - Output: Reconstructed spectra, uncertainties
+     ```plaintext
+     For each object:
+       Use photometric measurements as input features.
+       Perform Bayesian inference in the PCA-reduced space.
+       Reconstruct full spectrum using posterior estimates.
+       Propagate measurement uncertainties to reconstructed spectrum.
+     ```
+
+3. **Determine Optimal Number of Components**
+   - Input: Cross-validation results, fidelity metrics
+   - Output: Optimal number of components
+     ```plaintext
+     Evaluate reconstruction fidelity for varying number of components (4–5 for classification, 8–10 for high fidelity).
+     Select optimal number based on highest fidelity without overfitting.
+     ```
+
+4. **Apply Model to Photometric Data**
+   - Input: Complete set of photometric measurements
+   - Output: Taxonomic classifications, outlier detection
+     ```plaintext
+     For each object:
+       Use photometric data to reconstruct spectrum via trained model.
+       Classify into spectral types based on proximity to known classes.
+       Detect outliers by comparing reconstructed probabilities.
+     ```
+
+**End Algorithm**

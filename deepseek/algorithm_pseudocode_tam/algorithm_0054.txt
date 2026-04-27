@@ -1,0 +1,24 @@
+```python
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input: Observed photometric data (sparse measurements), Instrument response functions (e.g., JWST/NIRCam filters), Training reference spectra (TNO sample)
+
+Output: Reconstructed spectrum, Uncertainty estimates, Taxonomic probabilities
+
+Training Phase:
+1. Compute Principal Component Analysis (PCA) on the training reference spectra to derive principal components (PCs).
+2. Construct a Kernel Density Estimate (KDE) of the latent PCA coefficients using the training data, establishing the prior distribution.
+3. Simulate synthetic photometry by convolving the reference spectra with the instrument response functions and adding Gaussian noise (e.g., 20% relative uncertainty).
+4. Train an AutoML regressor (e.g., Gradient-Boosted Decision Trees) to map noisy photometric inputs to latent PCA coefficients.
+5. Train a secondary classifier on the latent manifold to predict taxonomic labels (e.g., Water-type, CO₂-type, Organics-type).
+
+Inference Phase:
+1. For new photometric observations:
+   a. Apply the trained regressor to predict the latent PCA coefficients.
+   b. Project the predicted coefficients through the inverse PCA transformation to reconstruct the full spectrum.
+   c. Use the taxonomic classifier to determine the probability distribution of spectral types.
+   d. Quantify uncertainties in the reconstructed spectrum by evaluating the posterior variance in the latent space.
+2. Return the reconstructed spectrum, associated uncertainties, and taxonomic classification probabilities.
+
+End Algorithm
+```

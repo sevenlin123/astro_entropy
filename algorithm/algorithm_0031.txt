@@ -1,0 +1,19 @@
+1. Initialize the spectral parameters, taxonomic classification labels, and hyperparameters of the Dirichlet process mixture model based on prior knowledge and sparse photometric data.
+
+2. Set up the Bayesian model to jointly infer the spectral energy distribution (SED) and taxonomic classification of trans-Neptunian objects (TNOs).
+
+3. Use a Markov Chain Monte Carlo (MCMC) method with an Adaptive Metropolis Hastings (AMH) sampler to explore the joint posterior distribution of the spectral parameters, classification labels, and mixture model hyperparameters.
+
+4. Iteratively update the spectral parameters by sampling from their posterior distributions given the current classification labels and photometric data.
+
+5. Update the taxonomic classification labels by determining the most probable class for each object based on the current mixture model and observed photometry.
+
+6. Adjust the hyperparameters of the Dirichlet process mixture model to better represent the underlying population structure as informed by the data.
+
+7. Quantify uncertainties in the reconstructed spectra and classification probabilities by examining the posterior distributions.
+
+8. Check for convergence of the MCMC chains and iterative improvements in parameter estimates.
+
+9. Stop the algorithm when convergence criteria are met, retaining the final inferred SEDs, taxonomic classifications, and associated uncertainties.
+
+This describes the core computational algorithm for probabilistic spectral reconstruction and taxonomic classification of trans-Neptunian objects.

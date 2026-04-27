@@ -1,0 +1,29 @@
+**Algorithm: Probabilistic Spectral Reconstruction**
+
+1. **Principal Component Analysis (PCA) Training**
+   - Input: Set of near-infrared (near-IR) spectra of trans-Neptunian objects (TNOs).
+   - Compute principal components (PCs) to represent the spectral manifold of TNOs.
+   
+2. **Bayesian Inference in Reduced Space**
+   - Construct a probabilistic model using the trained PCA.
+   - Perform Bayesian inference to estimate the latent variables (principal components) given the sparse photometric measurements.
+   
+3. **Spectral Reconstruction**
+   - Reconstruct the full spectrum for each TNO using the inferred principal components.
+   
+4. **Uncertainty Propagation**
+   - Calculate the uncertainty associated with each reconstructed spectrum by propagating the uncertainties from the photometric measurements through the probabilistic model.
+   
+5. **Determine Optimal Number of Principal Components**
+   - Use leave-one-out cross-validation (LOOCV) to find the optimal number of principal components (approximately 4-5 for taxonomic classification, 8-10 for higher fidelity reconstruction).
+   
+6. **Survey Optimization**
+   - Evaluate the information content of different JWST/NIRCam filters.
+   - Identify optimally informative filter combinations for future observations.
+   
+7. **Reconstruction of Rare Spectral Types**
+   - Allow flexible modeling to constrain photometry and detect low-probability intermediate models.
+   - Reconstruct even peculiar or rare spectral types by leveraging the continuous topological manifold of the latent space.
+   
+8. **Output the Reconstructed Spectra**
+   - Provide the reconstructed spectra along with their associated uncertainties for each TNO.

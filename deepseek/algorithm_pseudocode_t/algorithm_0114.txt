@@ -1,0 +1,28 @@
+**Algorithm: Probabilistic Spectral Reconstruction Framework**
+
+1. **Precompute Basis Templates**
+   - Collect known spectral types of trans-Neptunian objects.
+   - Generate a set of basis templates representing these spectral types.
+
+2. **Karhunen-Loève Transform**
+   - Decompose the basis templates into an orthogonal basis using the Karhunen-Loève transform.
+   - This step reduces dimensionality and ensures orthogonality.
+
+3. **Bayesian Inference for Template Weights**
+   - For each observed object, express its spectral energy distribution (SED) as a linear combination of the orthogonal basis templates.
+   - Determine the posterior distribution of the weights using Bayesian inference, constrained by observed flux measurements.
+   - Model the weights with a Dirichlet distribution.
+
+4. **Gaussian Mixture Model Training**
+   - Train a Gaussian Mixture Model (GMM) on the posterior weight distributions obtained from Bayesian inference.
+   - Each GMM component corresponds to a spectral type, capturing variability within that type.
+
+5. **Assign Spectral Types**
+   - For each object, calculate the probability of belonging to each GMM component.
+   - Assign the object to the GMM component with the highest probability, determining its most probable spectral type.
+
+6. **Identify Outliers**
+   - Calculate the probability that an object belongs to any GMM component.
+   - Identify outliers as objects with significantly low probability across all components.
+
+This algorithm efficiently reconstructs spectral types, accounts for uncertainty, and identifies outliers through Bayesian inference and Gaussian Mixture Modeling.

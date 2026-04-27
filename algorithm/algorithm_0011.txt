@@ -1,0 +1,17 @@
+The computational algorithm for spectral reconstruction can be outlined as follows:
+
+1. **Initialize Gaussian Process Model**: Set up a Gaussian Process with a covariance function that enforces smoothness across the entire spectrum, incorporating prior knowledge about typical spectral features of TNOs.
+
+2. **Integrate Multiple Bands**: Use all available photometric bands to simultaneously estimate both the underlying spectral energy distribution (SED) and interstellar extinction.
+
+3. **Account for Measurement Uncertainties**: Model the flux measurement uncertainties within the GP framework, allowing for Bayesian inference to estimate the posterior distribution of the SED.
+
+4. **Perform Bayesian Inference**: Utilize Bayesian methods to compute the posterior distribution of the SED, considering the integrated bands and uncertainties.
+
+5. **Incorporate Spectral Priors**: Integrate prior knowledge about typical albedos and spectral slopes of TNOs into the model to inform the reconstruction process.
+
+6. **Detect Outliers**: Analyze the posterior probabilities to identify spectra that significantly deviate from the modeled distribution, marking them as outliers.
+
+7. **Optimize Survey Strategy**: Based on the derived posterior probabilities, determine optimal bands and strategies for future observations to maximize the detection of specific spectral features.
+
+This structured approach ensures the core computational method is implemented efficiently, focusing solely on the reconstruction framework.

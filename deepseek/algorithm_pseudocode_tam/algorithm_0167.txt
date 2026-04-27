@@ -1,0 +1,53 @@
+```
+Algorithm: Probabilistic Spectral Reconstruction Framework
+
+1. Input:
+   - Observed photometric measurements (sparse multi-band data)
+   - Pre-trained Principal Component Analysis (PCA) model derived from a reference spectral dataset
+   - Known spectral taxonomic classifications (optional)
+
+2. Initialize:
+   - Load the PCA model which includes:
+     - Principal Component (PC) coefficients for reference spectra
+     - Probability distribution (Kernel Density Estimate) in the latent PC space
+   - Define the mapping from photometric bands to the latent spectral manifold
+
+3. Forward Modeling:
+   - Simulate synthetic photometry for each augmented spectrum using:
+     - Filter response curves of the target instrument (e.g., JWST NIRCam)
+     - Convolve spectra with filter curves to compute band responses
+     - Inject noise (relative reflectance uncertainty ~20%)
+
+4. Data Augmentation:
+   - Generate synthetic latent vectors using Kernel Density Estimation (KDE)
+   - Smooth the latent space to interpolate between real spectra and create a continuous manifold
+
+5. Training:
+   - Use AutoML (e.g., AutoGluon) to train two models:
+     - Regressor: Maps sparse photometry to latent PCA coefficients
+     - Classifier: Classifies latent vectors into taxonomic groups
+
+6. Inference:
+   - For new photometric data:
+     a. Pass photometry through the regressor to predict latent coefficients
+     b. Project latent coefficients through inverse PCA transform to reconstruct spectrum
+     c. Apply classifier to latent coefficients for taxonomic prediction
+     d. Assess uncertainty and validate against known metrics
+
+7. Output:
+   - Reconstructed spectrum with uncertainty estimates
+   - Probabilistic taxonomic classification
+   - Information content assessment of used filters
+   - Outlier detection flags
+
+8. Performance Metrics:
+   - Root Mean Square Error (RMSE) between true and reconstructed spectra
+   - Empirical credible interval coverage
+   - Classification accuracy on held-out data
+   - Filter information content ranking
+
+9. Applications:
+   - Optimize filter configurations for future surveys
+   - Detect spectral outliers for targeted spectroscopy
+   - Bridge sparse photometry and detailed spectroscopy
+```

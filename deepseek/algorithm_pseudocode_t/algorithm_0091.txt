@@ -1,0 +1,27 @@
+**Algorithm: Probabilistic SED Reconstruction Framework**
+
+1. **Initialization**
+   - Read sparse photometric data (magnitudes and associated uncertainties).
+   - Set prior distributions for parameters: effective temperature (Teff), surface gravity (g), albedo (A), and basis coefficients (β).
+
+2. **Define Bayesian Model**
+   - Represent SED as linear combination of basis functions: SED(λ) = Σ β_i * φ_i(λ).
+   - Link photometric magnitudes to SED via model: m_j ~ PSEDSED(SED(λ_j), noise, extinction).
+   - Incorporate prior distributions: Teff ~ Prior(Teff), g ~ Prior(g), A ~ Prior(A), β ~ Prior(β).
+
+3. **Markov Chain Monte Carlo (MCMC) Sampling**
+   - Initialize MCMC with starting values for Teff, g, A, β.
+   - For each iteration:
+     - Propose new values for parameters.
+     - Compute log posterior probability: log_posterior = log(PSEDSED | β, φ) + log(Priors).
+     - Accept/Reject proposal based on Metropolis criterion.
+
+4. **Process Posterior Samples**
+   - Compute posterior mean SED.
+   - Calculate credible intervals for SED components.
+
+5. **Anomaly Detection**
+   - For each object, compute anomaly score: score = (posterior deviance) / (prior variance).
+   - Flag as outlier if score exceeds threshold.
+
+**End Algorithm**

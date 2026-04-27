@@ -1,0 +1,21 @@
+The core computational algorithm involves several key steps:
+
+1. **Training a Principal Component Analysis (PCA) Model**  
+   - Train a PCA model on a dataset of near-infrared spectra to capture the principal components representing the dominant modes of spectral variability.
+
+2. **Project Photometric Data into the Latent Space**  
+   - Use the trained PCA model to project the sparse photometric measurements of each TNO into the reduced latent space.
+
+3. **Perform Bayesian Inference in the Latent Space**  
+   - Conduct Bayesian inference in the PCA-reduced space to estimate the posterior distribution of the latent variables, considering the uncertainties in the photometric measurements.
+
+4. **Reconstruct Full Spectra**  
+   - Reconstruct the full near-infrared spectra from the estimated latent variables, incorporating the propagated uncertainties to assess the credibility of the reconstructed spectra.
+
+5. **Determine Optimal Filters for Future Surveys**  
+   - Apply the framework to evaluate the information content of different filter combinations to optimize future observations for TNO taxonomy.
+
+6. **Detect and Reconstruct Rare Spectral Types**  
+   - Utilize the probabilistic framework to identify and constrain unusual spectral types by allowing exploration of low-probability intermediate models on the spectral manifold.
+
+This method effectively bridges sparse photometry and detailed spectral analysis, enabling robust reconstruction and classification of TNO spectra.

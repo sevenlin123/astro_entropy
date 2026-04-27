@@ -1,0 +1,132 @@
+### Pseudocode for the Core Reconstruction Framework
+
+```python
+function TrainAndValidateFramework(seedSpectra, filterSet, nComponents):
+    // Initialize variables
+    N = size(seedSpectra, 1)  // Number of training spectra
+    nFilters = size(filterSet, 1)  // Number of photometric filters
+
+    // Step 1: Perform Principal Component Analysis (PCA) on the seed spectra
+    [coefficients, eigenvalues, explainedVar] = PCA(seedSpectra, nComponents)
+    
+    // Step 2: Construct the latent space using Kernel Density Estimation (KDE)
+    h = 0.5  // Bandwidth determined through experimentation
+    latentDensity = KDE(coefficients(:, 1:nComponents), h)
+    
+    // Step 3: Generate synthetic training data by sampling from the latent density
+    syntheticCoefficients = Sample(latentDensity, 10000)
+    
+    // Step 4: Forward model the synthetic spectra through the photometric filters
+    syntheticPhotometry = ForwardModel(syntheticCoefficients, filterSet)
+    
+    // Step 5: Augment the synthetic photometry with noise
+    noiseLevel = 0.2  // 20% relative reflectance uncertainty
+    noisyPhotometry = AddNoise(syntheticPhotometry, noiseLevel)
+    
+    // Step 6: Train the AutoML regressor using the noisy photometry and synthetic coefficients
+    regressor = AutoGluonRegressor(noisyPhotometry, syntheticCoefficients, nComponents)
+    
+    // Step 7: Perform Leave-One-Out Cross-Validation (LOOCV)
+    for k = 1:N:
+        // Remove the k-th spectrum from the training set
+        trainSpectra = seedSpectra(k:end, :) 
+        trainSpectra(k:end, :) = trainSpectra(k+1:end, :)
+        
+        // Retrain the latent density and regressor
+        [~, ~, ~] = PCA(trainSpectra, nComponents)
+        h = 0.5
+        latentDensity = KDE(trainSpectra(:, 1:nComponents), h)
+        syntheticCoeffs = Sample(latentDensity, 10000)
+        syntheticPhot = ForwardModel(syntheticCoeffs, filterSet)
+        noisySynthPhot = AddNoise(syntheticPhot, noiseLevel)
+        regressor = AutoGluonRegressor(noisySynthPhot, syntheticCoeffs, nComponents)
+        
+        // Test the k-th spectrum
+        testPhot = GetPhotometry(seedSpectra(k, :), filterSet)
+        predictedCoeffs = regressor.Predict(testPhot)
+        reconstructedSpectrum = InversePCA(predictedCoeffs, eigenvalues)
+        
+        // Evaluate reconstruction
+        MRE = CalculateMRE(seedSpectra(k, :), reconstructedSpectrum)
+        [coverage, classificationConfidence] = ValidateReconstruction(seedSpectra(k, :], reconstructedSpectrum, nComponents)
+        RecordResults(k, MRE, coverage, classificationConfidence)
+    end
+    
+    return results
+end
+
+function PCA(data, nComponents):
+    // Perform Principal Component Analysis
+    [coefficients, eigenvalues, ~] = princomp(data, 'num', nComponents)
+    return coefficients, eigenvalues, varargout
+end
+
+function KDE(samples, bandwidth):
+    // Non-parametric Kernel Density Estimation
+    kde = ksdensity(samples, 'Bandwidth', bandwidth)
+    return kde
+end
+
+function ForwardModel(coefficients, filterCurves):
+    // Simulate photometric measurements by convolving spectra with filter curves
+    photometry = zeros(size(coefficients, 1), size(filterCurves, 1))
+    for i = 1:size(filterCurves, 1):
+        photometry(:, i) = Integral(coefficients * filterCurves{i, :})
+    end
+    return photometry
+end
+
+function AddNoise(photometry, noiseLevel):
+    // Inject Gaussian noise into photometric measurements
+    noise = noiseLevel .* randn(size(photometry, 1), size(photometry, 2))
+    noisyPhotometry = photometry + noise
+    return noisyPhotometry
+end
+
+function AutoGluonRegressor(trainPhot, trainCoeffs, nComponents):
+    // Train an AutoML regressor using the provided photometry and coefficients
+    regressor = TabularPredictor(trainPhot, trainCoeffs, 'numClasses', nComponents)
+    regressor = regressor.fit()
+    return regressor
+end
+
+function InversePCA(coefficients, eigenvalues):
+    // Reconstruct the full spectrum from PCA coefficients
+    reconstructed = coefficients * eigenvalues'
+    return reconstructed
+end
+
+function CalculateMRE(trueSpectrum, reconstructedSpectrum):
+    // Compute the Mean Relative Error
+    mre = mean(abs((reconstructedSpectrum - trueSpectrum) ./ trueSpectrum)) * 100
+    return mre
+end
+
+function ValidateReconstruction(trueSpectrum, reconstructedSpectrum, nComponents):
+    // Assess credibility interval coverage and taxonomic classification
+    // Implementation details omitted for brevity
+    return coverage, classificationConfidence
+end
+```
+
+### Explanation of the Algorithm
+
+1. **Principal Component Analysis (PCA):**  
+   The training spectra are decomposed into principal components to capture the most significant variations in spectral shape. This reduces the high-dimensional spectral data into a low-dimensional latent space.
+
+2. **Kernel Density Estimation (KDE):**  
+   A non-parametric density estimate is created from the PCA coefficients to define a smooth probability distribution over the latent space, allowing for the generation of synthetic training data.
+
+3. **Forward Modeling:**  
+   Synthetic photometric measurements are generated by convolving the synthetic spectra with the filter transmission curves of the target instrument (e.g., JWST/NIRCam). Noise is added to simulate real-world observational uncertainties.
+
+4. **Automated Machine Learning (AutoML):**  
+   An AutoML regressor is trained to map the noisy photometric measurements to the PCA coefficients. This step uses gradient-boosted decision trees to handle the non-linear relationship between photometry and spectral features.
+
+5. **Leave-One-Out Cross-Validation (LOOCV):**  
+   Each spectrum is iteratively excluded from the training set, and the model's ability to reconstruct the excluded spectrum is evaluated. This ensures robust validation of the framework's performance.
+
+6. **Spectral Reconstruction:**  
+   For each test spectrum, the model predicts the PCA coefficients, which are then inverted to reconstruct the full spectrum. Uncertainty quantification and taxonomic classification are performed to assess the reliability of the reconstruction.
+
+This framework efficiently bridges the gap between sparse photometric data and detailed spectral reconstruction, enabling insights into the compositional diversity of trans-Neptunian objects.

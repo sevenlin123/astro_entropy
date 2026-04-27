@@ -1,0 +1,27 @@
+**Core Computational Steps of the Spectral Reconstruction Method**
+
+1. **Preprocess Training Data**  
+   - Clean and prepare the near-infrared TNO spectra.  
+   - Select dominant spectral types (e.g., Water, CO2, Organics) and exclude rare or singular objects.
+
+2. **Principal Component Analysis (PCA)**  
+   - Apply PCA to the preprocessed spectra to capture the main variations.  
+   - Retain approximately 4-5 components for core reconstruction, up to 10 for higher fidelity.
+
+3. **Latent Space Representation**  
+   - Construct a latent space using the PCA components.  
+   - Utilize Kernel Density Estimation (KDE) to estimate the probability distribution within this space.
+
+4. **Generate Synthetic Photometry**  
+   - Simulate photometric data by convolving reference spectra with instrument filters (e.g., JWST NIRCam).  
+   - Add Gaussian noise (e.g., 20% uncertainty) to account for realistic photometric measurements.
+
+5. **Train AutoML Regressor**  
+   - Use an ensemble of gradient-boosted decision trees to map synthetic photometry to latent coefficients.
+
+6. **Reconstruct Spectra for Test Objects**  
+   - For each object, input observed photometry into the regressor to predict latent coefficients.  
+   - Apply inverse PCA transform to obtain the full reconstructed spectrum.  
+   - Classify taxonomic type using a secondary latent-space classifier.
+
+This algorithm efficiently transforms sparse photometric data into detailed spectral information, leveraging Bayesian principles and PCA for robust reconstruction.

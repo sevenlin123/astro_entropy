@@ -1,0 +1,33 @@
+**Algorithm Description: Probabilistic Spectral Reconstruction Framework**
+
+1. **Data Preparation:**
+   - **Training Spectra:** Collect a sample of near-infrared TNO spectra from reliable sources (e.g., DiSCo-TNO dataset).
+   - **Filter Response:** Define the photometric filters of interest (e.g., JWST/NIRCam filters).
+
+2. **Principal Component Analysis (PCA):**
+   - Perform PCA on the training spectra to extract principal components (latent space representation).
+   - Determine the number of significant components (4-5 for taxonomy, 8-10 for high-fidelity reconstruction).
+
+3. **Density Estimation:**
+   - Apply Kernel Density Estimation (KDE) to the latent space to create a continuous probability distribution.
+   - Use an appropriate bandwidth (e.g., h ~ 0.5) to balance local fidelity and global smoothness.
+
+4. **Synthetic Data Generation:**
+   - Generate synthetic spectra by sampling from the latent space using the KDE model.
+   - Forward model these synthetic spectra through the photometric filters to produce synthetic photometry with added noise (e.g., 20% relative uncertainty).
+
+5. **Model Training:**
+   - Train an AutoML regressor (e.g., using AutoGluon) to map sparse photometry to latent coefficients.
+   - Simultaneously train a classifier on the latent space to predict taxonomic categories.
+
+6. **Forward Inference Pipeline:**
+   - For new photometric observations:
+     - Use the trained regressor to predict latent coefficients.
+     - Project these coefficients back to the full spectral space via inverse PCA transformation to reconstruct the spectrum.
+     - Apply the classifier to determine the taxonomic category.
+
+7. **Validation and Application:**
+   - Perform LOOCV to assess reconstruction accuracy and uncertainty propagation.
+   - Use the framework for survey optimization and outlier detection by evaluating filter configurations and identifying rare spectral types.
+
+This structured approach efficiently bridges the gap between sparse photometry and detailed spectral reconstruction, enabling robust analysis of TNO surface compositions.

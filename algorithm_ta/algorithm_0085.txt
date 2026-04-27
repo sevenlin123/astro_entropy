@@ -1,0 +1,23 @@
+The algorithm outlines the steps to reconstruct the spectrum of trans-Neptunian objects from sparse photometry using a probabilistic framework. Here's the structured description:
+
+1. **Preprocess Training Spectra**: Align and normalize the wavelengths and flux values of the training set of near-infrared spectra.
+
+2. **Principal Component Analysis (PCA)**: Apply PCA to the preprocessed spectra to extract orthogonal basis vectors that capture the major modes of spectral variability.
+
+3. **Bayesian Model Setup**: For each TNO, express its spectrum as a linear combination of the PCA components plus an intercept term.
+
+4. **Forward Model Definition**: Create a forward model that projects the PCA coefficients into the photometric bands.
+
+5. **Likelihood Function**: Define a likelihood function to measure the discrepancy between the projected photometric fluxes and the observed data.
+
+6. **Prior Distributions**: Assign prior distributions to the PCA coefficients based on the explained variance from PCA.
+
+7. **Markov Chain Monte Carlo (MCMC) Sampling**: Use MCMC to explore the posterior distribution of the PCA coefficients given the observed photometric data.
+
+8. **Posterior Processing**: Compute the posterior mean and standard deviation of the PCA coefficients from the MCMC samples.
+
+9. **Spectrum Reconstruction**: Reconstruct the full spectrum by combining the mean coefficients with the PCA basis vectors.
+
+10. **Uncertainty Propagation**: Calculate uncertainties in the reconstructed spectrum by propagating the standard deviations of the posterior coefficients through the linear combination.
+
+This algorithm efficiently reconstructs spectra from sparse photometry, leveraging PCA and Bayesian inference to quantify uncertainties.

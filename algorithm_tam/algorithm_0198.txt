@@ -1,0 +1,43 @@
+### Core Computational Algorithm for Probabilistic Spectral Reconstruction
+
+**Step-by-Step Algorithm:**
+
+1. **Data Collection and Preprocessing**:
+   - Gather near-infrared spectra of TNOs.
+   - Remove outliers and rare spectral types to focus on dominant taxonomic groups.
+
+2. **Principal Component Analysis (PCA)**:
+   - Perform PCA on the preprocessed spectra.
+   - Extract principal eigenvectors to form the latent space.
+   - Select the number of components (K) that best capture spectral variability.
+
+3. **Latent Space Augmentation**:
+   - Apply Kernel Density Estimation (KDE) to the latent space to create a smooth probability distribution.
+   - Generate synthetic latent vectors to augment the training data.
+
+4. **Forward Modeling**:
+   - Simulate photometric measurements for each synthetic spectrum using instrument-specific filters (e.g., JWST/NIRCam).
+   - Introduce noise to account for observational uncertainties.
+
+5. **Model Training**:
+   - Train an AutoML regressor to map noisy photometry to latent space coordinates.
+   - Train a separate AutoML classifier to map latent coordinates to taxonomic labels.
+
+6. **Cross-Validation**:
+   - Use Leave-One-Out Cross-Validation to assess model performance.
+   - Validate reconstruction accuracy and classification success.
+
+7. **Reconstruction and Classification**:
+   - For new photometric observations, predict latent coordinates using the regressor.
+   - Reconstruct full spectra via inverse PCA transformation.
+   - Classify spectral types using the trained classifier.
+
+8. **Survey Optimization and Outlier Detection**:
+   - Evaluate filter combinations to optimize photometric surveys.
+   - Identify outliers by detecting deviations from the latent manifold.
+
+**Output**:
+- Reconstructed spectra from sparse photometry.
+- Probabilistic taxonomic classification.
+- Optimized filter configurations for surveys.
+- Identified outliers with unusual spectral types.

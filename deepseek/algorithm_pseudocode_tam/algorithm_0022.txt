@@ -1,0 +1,43 @@
+\begin{algorithm}[h]
+\caption{Probabilistic Spectral Reconstruction from Sparse Photometry}
+\begin{algorithmic}[1]
+
+% Preparation steps
+\State \texttt{Prepare\_Latent\_Space():}
+\State Read and normalize the DiSCo-TNO spectra.
+\State Perform PCA decomposition to extract the principal components.
+\State Project each spectrum into the PCA latent space.
+\State Apply KDE with bandwidth $h=0.5$ to compute the latent PDF.
+
+% Generate synthetic training data
+\State \texttt{Generate\_Synthetic\_Data():}
+\State For i from 1 to 10,000:
+\State Sample a latent vector from the KDE-defined PDF.
+\State Project the sampled vector back to spectral space using inverse PCA.
+\State Convolve with JWST/NIRCam filter responses to compute synthetic photometry.
+\State Add Gaussian noise with 20\% relative uncertainty to the synthetic photometry.
+
+% Train encoder (photometry to latent)
+\State \texttt{Train\_Encoder():}
+\State Split the dataset (original + synthetic) into training and validation sets.
+\State Use AutoGluon to train a regressor from synthetic photometry to latent coefficients.
+\State Optimize hyperparameters on the validation set.
+
+% Train taxonomic classifier (latent to label)
+\State \texttt{Train\_Classifier():}
+\State For each spectrum in the original set, project to latent.
+\State For each synthetic spectrum, find the nearest original spectrum and assign its label.
+\State Use AutoGluon to train a classifier from latent coefficients to taxonomic labels.
+\State Optimize hyperparameters on the validation set.
+
+% Test the model
+\State \texttt{Apply\_Model():}
+\For each new photometric observation m:
+\State Pass m through the trained encoder to get latent coefficients.
+\State Use inverse PCA to reconstruct the spectrum S.
+\State Pass latent coefficients to the classifier to get the taxonomic probabilities.
+
+\EndFor
+
+\end{algorithmic}
+\end{algorithm}

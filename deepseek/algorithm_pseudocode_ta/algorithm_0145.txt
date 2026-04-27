@@ -1,0 +1,28 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Principal Component Analysis (PCA) Training**:
+   - Train PCA on a sample of near-infrared (near-IR) spectra of trans-Neptunian objects (TNOs).
+   - Identify principal components that capture dominant spectral variability:
+     - Retain 4-5 principal components for taxonomic classification.
+     - Retain 8-10 principal components for high-fidelity spectral reconstruction.
+
+2. **Probabilistic Latent-Space Model Construction**:
+   - Represent the spectral manifold of TNOs in the reduced PCA space.
+   - Establish a probabilistic framework for modeling spectral information in sparse photometric measurements.
+   - Define a Bayesian inference procedure to reconstruct full spectra from photometry.
+
+3. **Bayesian Inference in Reduced Space**:
+   - Perform Bayesian inference using the trained PCA model.
+   - Propagate measurement uncertainties through the inference process.
+   - Reconstruct the full spectrum for each object using the probabilistic model.
+
+4. **Credible Interval Validation**:
+   - Compute empirical credible-interval coverage across the reconstructed spectra.
+   - Ensure that credible intervals achieve approximately 95% coverage across wavelengths.
+
+5. **Spectral Reconstruction and Uncertainty Calibration**:
+   - Use the reconstructed spectra and propagated uncertainties for further analyses:
+     - **Survey Optimization**: Quantify information content of JWST/NIRCam filters (e.g., F090W, F115W, F410M, F460M) to identify optimal configurations for future observations.
+     - **Outlier Detection**: Apply the framework to detect and reconstruct rare spectral types, such as peculiar Neptune Trojans (e.g., 2006~RJ$_{103}$ and 2011~SO$_{277}$), by constraining photometry to select low-probability intermediate models from the continuous topological manifold.
+
+This algorithm provides a computationally efficient and statistically rigorous method to bridge the gap between sparse photometry and detailed spectral reconstruction, enabling comprehensive analysis of TNO spectral diversity.

@@ -1,0 +1,31 @@
+**Algorithm: Probabilistic Spectral Reconstruction (PSR)**
+
+**Input:** Sparse photometric data of a TNO, specifying measured magnitudes and associated uncertainties, and a list of possible wavelengths for SED representation.
+
+**Output:** Reconstructed SED as a piecewise-linear function with breakpoints and fluxes at specified wavelengths.
+
+1. **Initialize the SED model**  
+   - Set a prior distribution for the number of breakpoints, favoring a minimal number unless data complexity suggests otherwise.
+
+2. **Transform observed magnitudes to fluxes**  
+   - Convert measured magnitudes to fluxes using the magnitude equation.
+   - Propagate uncertainties to flux measurements.
+
+3. **Set up the probabilistic model**  
+   a. **Define the SED structure**: Represent the SED as a piecewise-linear function with a variable number of breakpoints.
+   b. **Assign priors**: Define prior distributions for flux parameters at each wavelength and breakpoint positions.
+   c. **Noise model**: Incorporate measurement uncertainties and SED representation variability.
+
+4. **Perform Bayesian inference**  
+   a. **MCMC setup**: Use an MCMC method with multiple independent chains.
+   b. **Burn-in period**: Discard initial samples to avoid bias from non-converged states.
+   c. **Tune MCMC parameters**: Adjust step size and proposal distributions for efficient mixing and convergence.
+
+5. **Posterior analysis**  
+   a. **Compute medians**: Determine the median of the posterior distribution for each flux parameter to get the best SED estimate.
+   b. **Calculate confidence intervals**: Use posterior quantiles to assess uncertainty in SED estimation.
+
+6. **Output the SED**  
+   - Present the reconstructed SED as a piecewise-linear function with identified breakpoints and flux values.
+
+**End Algorithm**

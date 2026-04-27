@@ -1,0 +1,39 @@
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+**Step-by-Step Description:**
+
+1. **Data Collection**: Gather sparse photometric measurements of TNOs, such as those obtained from JWST/NIRCam filters.
+
+2. **Principal Component Analysis (PCA)**:
+   - Train PCA on a reference set of TNO spectra to create a low-dimensional latent space.
+   - Use the principal components to represent the dominant spectral variations.
+
+3. **Density Estimation**:
+   - Perform Kernel Density Estimation (KDE) on the latent coefficients derived from the reference spectra to create a continuous probability distribution in the latent space.
+
+4. **Synthetic Photometry Generation**:
+   - Convolve the reference spectra with the instrument's filter throughput curves to simulate observed photometry.
+   - Inject Gaussian noise to account for photometric uncertainties.
+
+5. **Model Training**:
+   - Use an AutoML regressor (e.g., Gradient-Boosted Decision Trees) to map the sparse photometric inputs to the latent space coordinates.
+   - Train a secondary classifier within the latent space to predict taxonomic categories.
+
+6. **Forward Inference**:
+   - For new photometric observations, use the trained AutoML model to predict latent coefficients.
+   - Apply the inverse PCA transform to reconstruct the full spectrum.
+   - Optionally, classify the spectrum into predefined taxonomic categories.
+
+7. **Validation**:
+   - Perform leave-one-out cross-validation to assess reconstruction accuracy and uncertainty calibration.
+   - Evaluate the framework's ability to detect outliers and rare spectral types by constraining photometric inputs to low-probability intermediate models.
+
+8. **Output**:
+   - Generate reconstructed spectra and associated uncertainties.
+   - Provide taxonomic classifications if applicable.
+
+**Key Features**:
+- Uses sparse photometry to reconstruct full spectra probabilistically.
+- Combines dimensionality reduction (PCA) and probabilistic modeling for robust inference.
+- Includes a classifier for taxonomic identification within the latent space.
+- Propagates measurement uncertainties through the reconstruction process.

@@ -1,0 +1,29 @@
+**Algorithm Description: Core Reconstruction Framework for Trans-Neptunian Object SED Analysis**
+
+1. **Input Data Collection**: 
+   - Gather all available multi-band photometric observations for each trans-Neptunian object.
+
+2. **Flux Modeling**:
+   - For each photometric band, model the flux density using a Gaussian mixture distribution. Each Gaussian component represents potential flux values, accounting for measurement uncertainties.
+
+3. **MCMC Sampling**:
+   - Utilize Markov Chain Monte Carlo (MCMC) methods to estimate the posterior distribution of SED parameters, providing best estimates and confidence intervals for the spectral energy distribution.
+
+4. **Quality Metric Calculation**:
+   - Compute a quality metric by evaluating the agreement between the reconstructed SED and observed photometric data, assessing the reliability of the SED reconstruction.
+
+5. **Bayesian Outlier Detection**:
+   - Apply Bayesian model selection to determine if each object is an outlier. Compare the Bayesian evidence of two models: one assuming the object is typical, and another explicitly modeling it as an outlier.
+
+6. **Population-level Analysis**:
+   - Aggregate per-object SED reconstructions, quality metrics, and outlier statuses.
+   - Compute statistical summaries for the entire population of TNOs to identify trends and anomalies.
+
+7. **Survey Optimization**:
+   - Simulate hypothetical survey datasets and apply the SED reconstruction framework.
+   - Evaluate survey designs using quality metrics and outlier detection results to optimize detection efficiency and minimize false positives/negatives.
+
+8. **Output Generation**:
+   - Provide reconstructed SEDs, reliability metrics, outlier flags, population statistics, and optimized survey designs for each TNO.
+
+This structured approach efficiently reconstructs the SED of TNOs, assesses data reliability, detects outliers, and optimizes survey strategies.

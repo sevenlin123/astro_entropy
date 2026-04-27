@@ -1,0 +1,21 @@
+### Algorithm Steps:
+
+1. **Preprocessing**:
+   - **Data Collection**: Collect reference TNO spectra, focusing on dominant taxonomic types (e.g., Water, CO₂, Organics) while excluding rarer types.
+   - **Principal Component Analysis (PCA)**: Apply PCA to the reference spectra to derive principal components. Retain 4–5 components for taxonomic classification and up to 10 for detailed spectral reconstruction.
+   - **Synthetic Data Generation**: Use non-parametric Kernel Density Estimation (KDE) on the PCA scores to generate synthetic latent variables, creating a smooth manifold.
+   - **Filter Convolution**: Convolve each synthetic spectrum with the effective filter curves of the target instrument (e.g., JWST/NIRCam) to compute synthetic photometry.
+   - **Noise Addition**: Add Gaussian noise with a relative uncertainty of 20% to the synthetic photometry to simulate observational noise.
+
+2. **Model Training**:
+   - **Training Data Preparation**: Use the noisy synthetic photometry as input features.
+   - **Regressor Training**: Train an ensemble of AutoML models (Gradient-Boosted Decision Trees and Neural Networks) to regress from the noisy photometry to the latent PCA coefficients.
+   - **Classifier Training**: Simultaneously train a classifier to partition the latent space into discrete taxonomic categories (e.g., H₂O, CO₂, Organics).
+
+3. **Inference**:
+   - **Input Processing**: For new photometric observations, pass the observed magnitudes through the trained regressor.
+   - **Latent Coefficients Prediction**: Obtain predicted latent coefficients from the regressor.
+   - **Spectrum Reconstruction**: Project the latent coefficients through the inverse PCA transformation to reconstruct the full spectrum.
+   - **Taxonomic Classification**: Use the classifier to predict the taxonomic category probabilities.
+
+This structured approach efficiently reconstructs spectra and classifies TNOs using sparse photometric data, leveraging PCA and AutoML for robust and accurate results.

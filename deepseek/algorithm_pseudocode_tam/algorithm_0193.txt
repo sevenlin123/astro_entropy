@@ -1,0 +1,42 @@
+To implement the core reconstruction framework described in the paper, the following steps are performed:
+
+1. **Preprocess the Spectral Dataset**: 
+   - Collect reference TNO spectra.
+   - Normalize each spectrum to unit variance.
+
+2. **Principal Component Analysis (PCA)**:
+   - Compute the covariance matrix of the preprocessed spectral dataset.
+   - Perform eigenvalue decomposition to obtain principal components.
+   - Project each spectrum into the PCA space to get latent coefficients.
+
+3. **Kernel Density Estimation (KDE) Augmentation**:
+   - Use non-parametric KDE to create a continuous probability distribution in the latent space.
+   - Optimize the bandwidth to balance bias and variance.
+
+4. **Synthetic Photometry Generation**:
+   - Convolve each augmented spectrum with JWST/NIRCam filter transmission curves to simulate photometric measurements.
+   - Add Gaussian noise with 20% standard deviation to simulate observational uncertainties.
+
+5. **Train the AutoML Regressor (Encoder)**:
+   - Use AutoGluon framework to train a model that maps noisy photometry to latent coefficients.
+   - Perform hyperparameter tuning and model selection to minimize validation error.
+
+6. **Inverse PCA Transformation**:
+   - Transform predicted latent coefficients back to full spectrum using inverse PCA.
+
+7. **Leave-One-Out Cross-Validation (LOOCV)**:
+   - Validate the framework by iteratively holding out each spectrum and assessing reconstruction accuracy.
+
+8. **Uncertainty Quantification**:
+   - Propagate uncertainties from latent coefficients to reconstructed spectra.
+   - Calculate confidence intervals for each wavelength.
+
+9. **Taxonomic Classification**:
+   - Train a classifier on the latent space to predict spectral types.
+   - Use predicted latent coefficients for taxonomic assignment.
+
+10. **Survey Optimization and Outlier Detection**:
+    - Evaluate different filter configurations for optimal spectral information.
+    - Detect outliers by identifying spectra that cannot be adequately reconstructed.
+
+This algorithm effectively bridges the gap between sparse photometric data and detailed spectral analysis, enabling the study of TNOs' compositional diversity.

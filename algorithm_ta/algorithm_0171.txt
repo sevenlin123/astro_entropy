@@ -1,0 +1,7 @@
+1. **Principal Component Analysis (PCA)**: Perform PCA on a sample of near-IR spectra to capture the spectral manifold of TNOs.
+2. **Bayesian Inference**: Use a probabilistic model in the reduced PCA space to infer the full spectra from photometric measurements.
+3. **Cross-Validation**: Apply leave-one-out cross-validation to determine the optimal number of principal components for accurate reconstruction.
+4. **Posterior Sampling**: Utilize Bayesian methods with Markov Chain Monte Carlo (MCMC) to sample posterior distributions of spectral parameters.
+5. **Spectral Reconstruction**: Reconstruct full spectra from photometric data while propagating measurement uncertainties.
+6. **Survey Optimization**: Evaluate filter configurations for JWST/NIRCam to maximize information content for TNO taxonomy.
+7. **Outlier Detection**: Identify rare spectral types by constraining photometry to select low-probability intermediate models.

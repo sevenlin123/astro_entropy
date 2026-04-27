@@ -1,0 +1,85 @@
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+#### Inputs:
+- **Sparse Photometry**: A vector of photometric measurements in selected filters.
+- **Training Spectra**: Reference near-IR spectra used to train the model.
+- **Filter Responses**: Throughput curves of the photometric filters used.
+
+#### Outputs:
+- **Reconstructed Spectrum**: A high-resolution spectrum estimated from the photometric input.
+- **Taxonomic Classification**: Probabilistic assignment of the object to predefined spectral types.
+- **Uncertainty Estimates**: Credible intervals for the reconstructed spectrum.
+
+---
+
+### Step-by-Step Pseudocode:
+
+```python
+Initialize the Principal Component Analysis (PCA) model using the training spectra.
+
+Train the AutoML regressor (Encoder) to map photometric inputs to PCA coefficients:
+    For each spectrum in the training set:
+        Convert the spectrum into sparse photometry using the filter responses.
+        Label the photometry with the corresponding PCA coefficients.
+        Augment the training data using synthetic spectra generated via forward modeling with added noise.
+    Use the augmented data to train the AutoML regressor.
+
+Train the Taxonomic Classifier:
+    Project the training spectra onto the PCA basis to get their latent coefficients.
+    Train the classifier to predict taxonomic labels from these latent coefficients.
+
+Define the Gaussian kernel for Kernel Density Estimation (KDE) to smooth the latent space.
+
+Perform Leave-One-Out Cross-Validation (LOOCV):
+    For each held-out spectrum:
+        Remove the held-out spectrum from the training set.
+        Generate synthetic training data using the remaining spectra and forward modeling.
+        Retrain the AutoML regressor and classifier on the updated data.
+        Process the held-out photometry through the regressor to obtain latent coefficients.
+        Use the classifier to assign a taxonomic probability distribution.
+        Reconstruct the spectrum by applying the inverse PCA transform to the latent coefficients.
+        Sample the posterior distribution of the latent coefficients using the Gaussian Copula to generate credible intervals.
+
+Evaluate reconstruction accuracy:
+    Compute RMSE between reconstructed and true spectra.
+    Calculate Empirical Coverage of the credible intervals.
+
+Identify optimal photometric filter configurations:
+    Compute mutual information between photometric bands and latent spectral coefficients.
+    Select filters that maximize information content.
+
+Detect spectral outliers:
+    Analyze deviations in latent space to identify objects inconsistent with the training manifold.
+
+Output the reconstructed spectra, taxonomic classifications, and uncertainty estimates.
+```
+
+---
+
+### Key Steps:
+
+1. **PCA Initialization**: 
+   - Perform PCA on the reference spectra to reduce dimensionality and create a latent space.
+
+2. **AutoML Training**:
+   - Use the AutoML regressor to learn the mapping from photometric data to PCA coefficients, incorporating synthetic data for regularization.
+
+3. **Forward Modeling**:
+   - Simulate photometric measurements from synthetic spectra by convolving with filter responses and adding noise.
+
+4. **Cross-Validation**:
+   - Validate the model by iteratively holding out one spectrum, retraining, and testing the reconstruction.
+
+5. **Reconstruction and Classification**:
+   - From photometry, predict latent coefficients, classify taxonomic type, and invert PCA to reconstruct the spectrum.
+
+6. **Uncertainty Quantification**:
+   - Use Gaussian Copula to sample the posterior distribution of latent coefficients, generating credible intervals for the spectrum.
+
+7. **Applications**:
+   - Optimize photometric surveys by identifying informative filters.
+   - Detect rare spectral types by analyzing deviations in the latent space.
+
+---
+
+This algorithm provides a structured approach to probabilistically reconstructing TNO spectra from sparse photometry, enabling taxonomic classification and survey optimization while accounting for uncertainties.

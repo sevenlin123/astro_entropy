@@ -1,0 +1,16 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Principal Component Analysis (PCA) Training**:
+   - Train a PCA model using a dataset of known near-infrared spectra to extract principal components (latent space representation).
+
+2. **Bayesian Inference in Latent Space**:
+   - For each object, use its sparse photometric measurements to perform Bayesian inference in the PCA-derived latent space.
+   - Infer the most probable underlying spectrum by considering uncertainties and correlations in the photometric data.
+
+3. **Spectral Reconstruction**:
+   - Reconstruct the full spectrum by mapping the inferred latent space representation back to the original spectral space.
+   - Propagate measurement uncertainties to provide confidence intervals for the reconstructed spectra.
+
+4. **Survey Optimization and Outlier Detection**:
+   - Apply the framework to determine optimal NIRCam filters for future observations.
+   - Identify and reconstruct rare spectral types by exploring intermediate, low-probability components in the latent space.

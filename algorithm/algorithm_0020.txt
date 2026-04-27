@@ -1,0 +1,20 @@
+Step 0: Initialize Gaussian Process Model  
+Set up a Gaussian process to model the spectral energy distribution (SED), incorporating kernels that capture smoothness and wavelength correlations.  
+
+Step 1: Define Priors Based on Taxonomic Knowledge  
+Establish prior distributions for SED parameters using existing TNO taxonomic classifications to guide inference toward known spectral types.  
+
+Step 2: Impute Missing Photometric Data  
+Use the Gaussian process to model the complete SED and impute missing photometric measurements across all wavelengths.  
+
+Step 3: Perform Bayesian Inference to Reconstruct SEDs  
+Apply Bayesian inference to estimate the posterior distribution of SED parameters, combining photometric observations and spectral templates.  
+
+Step 4: Detect Outliers Using Taxonomic Comparison  
+Compare inferred SEDs against the distribution of known taxonomic classes to identify outliers, indicating potential new classes or unusual objects.  
+
+Step 5: Assess Uncertainty and Confidence Intervals  
+Calculate uncertainty estimates and confidence intervals for the reconstructed SEDs to quantify the reliability of the results.  
+
+Step 6: Validate Through Cross-Validation (Optional)  
+Optionally, perform leave-one-out cross-validation to validate the accuracy and robustness of the SED reconstruction framework.

@@ -1,0 +1,115 @@
+### Algorithm Description
+
+The algorithm is structured in three main phases: **Latent Space Definition**, **Forward Inference Pipeline**, and **Posterior Processing**. Here’s a detailed breakdown:
+
+---
+
+### **Phase 1: Latent Space Definition**
+
+1. **Input Data Preparation**:
+   - Collect a reference set of `N` near-infrared TNO spectra (`S_1, S_2, ..., S_N`).
+   - Each spectrum `S_i` is represented as a vector of reflectance values across a grid of wavelengths.
+
+2. **Principal Component Analysis (PCA)**:
+   - Perform PCA on the reference spectra to extract `K` principal components (PCs) that capture the dominant spectral variability.
+   - Retain the top `K` PCs, where `K` is determined based on explained variance (e.g., cumulative variance ≥ 95%).
+
+3. **Kernel Density Estimation (KDE) for Prior Modeling**:
+   - Project the reference spectra onto the `K`-dimensional latent space to obtain latent coefficient vectors (`z_1, z_2, ..., z_N`).
+   - Use KDE to estimate the probability density of these latent coefficients, creating a smooth manifold that approximates the underlying distribution of valid spectra.
+
+4. **Synthetic Data Augmentation**:
+   - Sample new latent vectors from the KDE-defined manifold to augment the training set.
+   - This step helps stabilize the regression model by providing a larger, smoother training dataset.
+
+---
+
+### **Phase 2: Forward Inference Pipeline**
+
+1. **Training the Encoder (AutoML Regressor)**:
+   - For each augmented latent vector `z`, forward-model the corresponding photometric measurements by convolving the reconstructed spectrum with the instrument's filter curves (e.g., JWST/NIRCam filters).
+   - Inject Gaussian noise (20% relative uncertainty) into the synthetic photometry to simulate real-world observational noise.
+   - Train an AutoML regressor (e.g., Gradient Boosted Decision Trees) to map sparse photometric inputs to the latent space.
+
+2. **Training the Taxonomic Classifier**:
+   - Using the latent coefficients from the reference spectra, train a secondary AutoML classifier to partition the latent space into predefined taxonomic classes (e.g., H₂O, CO₂, Organics, Methanol).
+   - The classifier operates in the latent space, leveraging the reduced dimensionality and physical structure of the spectral manifold.
+
+3. **Generating Mock Photometry for Training**:
+   - For each latent vector `z`, compute the corresponding mock photometry by forward-modeling through the instrument's response.
+   - Combine the mock photometry with the original reference photometry to form the complete training dataset.
+
+---
+
+### **Phase 3: Posterior Processing**
+
+1. **Receiving New Photometric Observations**:
+   - For a new observation, pass its photometric measurements through the trained encoder to obtain predicted latent coefficients.
+   - Use these coefficients to reconstruct the full spectrum via the inverse PCA transform.
+
+2. **Spectral Reconstruction**:
+   - Apply the inverse PCA transform to the predicted latent coefficients to obtain the reconstructed spectrum.
+   - The reconstructed spectrum inherits the physical smoothness of the PCA basis, preventing high-frequency noise.
+
+3. **Taxonomic Classification**:
+   - Project the predicted latent coefficients into the taxonomic classifier to obtain posterior probabilities for each spectral type.
+   - Identify the most probable class and assess confidence.
+
+4. **Uncertainty Propagation**:
+   - Quantify uncertainties in the reconstructed spectrum by sampling from the posterior distribution of latent coefficients.
+   - Evaluate the empirical credible-interval coverage to assess calibration accuracy.
+
+5. **Outlier Detection**:
+   - Compute the probability of the predicted latent state under the KDE-defined prior.
+   - Flag objects with low posterior probabilities as outliers, indicating rare or unusual spectral types.
+
+---
+
+### **Algorithm Pseudocode**
+
+```python
+function spectral_reconstruction_framework():
+
+    // Phase 1: Latent Space Definition
+    reference_spectra = load_reference_spectra()
+    pca = PCA(reference_spectra)
+    top_k_pca = select_top_k_components(pca, explained_variance=0.95)
+    latent_coefficients = project(reference_spectra, top_k_pca)
+    KDE_prior = fit_KDE(latent_coefficients)
+
+    // Phase 2: Forward Inference Pipeline
+    synthetic_latent = sample(KDE_prior, num_samples=large_dataset)
+    mock_photometry = forward_model(synthetic_latent, instrument_filters)
+    add_real_photometry = combine(mock_photometry, reference_photometry)
+    encoder = train_AutoMLRegressor(add_real_photometry, latent_coefficients)
+    taxonomic_classifier = train_Classifier(latent_coefficients, taxonomic_labels)
+
+    // Phase 3: Posterior Processing
+    for each new_observation in test_set:
+        latent_prediction = encoder.predict(new_observation.photometry)
+        reconstructed_spectrum = inverse_PCA(latent_prediction, top_k_pca)
+        taxonomic_posterior = taxonomic_classifier.predict(latent_prediction)
+        uncertainty = calculate_uncertainty(latent_prediction, KDE_prior)
+        check_outlier(latent_prediction, KDE_prior)
+
+    return reconstructed_spectra, taxonomic_posteriors, uncertainties, outliers
+```
+
+---
+
+### **Key Steps in Detail**
+
+1. **Latent Space Definition**:
+   - PCA reduces the spectral dimensionality, capturing the most significant variations in the data.
+   - KDE smooths the latent space, providing a continuous probability distribution for the prior.
+
+2. **Forward Inference**:
+   - The AutoML regressor maps photometric inputs to the latent space, enabling reconstruction of spectra even from sparse data.
+   - Taxonomic classification occurs in the latent space, improving decision boundaries due to reduced dimensionality and physical regularization.
+
+3. **Posterior Processing**:
+   - Reconstructed spectra are smooth and physically plausible due to the inverse PCA transform.
+   - Uncertainty propagation ensures calibrated confidence intervals.
+   - Outlier detection identifies unusual spectral types not captured in the training data.
+
+This framework effectively bridges the gap between sparse photometry and high-fidelity spectral reconstruction, providing a robust tool for studying TNOs in large-scale surveys.

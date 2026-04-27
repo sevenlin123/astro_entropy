@@ -1,0 +1,11 @@
+**Final Answer**
+
+**Extracted Algorithm:**
+
+1. **Preprocess the photometric data**: Normalize the flux values to adjust for differences in observation conditions and instrument calibrations.
+2. **Train a Probabilistic Principal Component Analysis (PPCA) model**: Use a reference set of TNO near-infrared spectra to capture the primary spectral characteristics and associated uncertainties.
+3. **Execute Bayesian inference in the latent space**: Utilize the sparse photometric measurements as observational data within the PPCA model.
+4. **Propagate uncertainties**: During the inference process, carry forward the uncertainties to determine credible intervals for the reconstructed spectra.
+5. **Determine optimal principal components**: Use cross-validation to choose the number of components that effectively represent spectral diversity without overfitting.
+6. **Infer latent variables and reconstruct spectra**: For each object, derive its latent variables from photometric data and project them to recreate the full spectrum.
+7. **Optimize NIR filters for surveys**: Assess the information content of each filter by their ability to constrain latent variables, aiding in selecting optimal configurations for future observations.

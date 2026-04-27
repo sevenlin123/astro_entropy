@@ -1,0 +1,15 @@
+**Algorithm Description:**
+
+1. **Principal Component Analysis (PCA) Training:**
+   - Train a PCA model on a dataset of near-infrared (near-IR) spectra of trans-Neptunian objects (TNOs).
+   - Determine the number of principal components (e.g., 4-5 for taxonomic classification, 8-10 for improved reconstruction).
+
+2. **Bayesian Inference in PCA Space:**
+   - For each TNO, given its sparse photometric measurements, perform Bayesian inference to estimate the most probable position in the PCA space.
+   - Use a likelihood function based on the photometric data and the PCA model, incorporating measurement uncertainties.
+
+3. **Spectral Reconstruction:**
+   - Transform the estimated PCA coefficients back into the original spectral space to obtain the reconstructed spectrum.
+   - Propagate measurement uncertainties through the reconstruction process to ensure reliable confidence intervals.
+
+This algorithm effectively reconstructs full spectra from sparse photometric data by leveraging a probabilistic latent-space framework, enabling accurate taxonomic classification and outlier detection in TNO studies.

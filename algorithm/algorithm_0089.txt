@@ -1,0 +1,11 @@
+**Final Answer**
+
+The core computational algorithm consists of the following steps:
+
+1. **Input Data**: Obtain sparse photometric measurements of trans-Neptunian objects.
+2. **Prior Knowledge**: Define Bayesian priors based on known SED distributions in the solar system.
+3. **Model Initialization**: Set up a mixture model with multiple SED components to account for potential diversity in the dataset.
+4. **Bayesian Inference**: Use Markov Chain Monte Carlo (MCMC) methods to sample the posterior distribution of SED parameters given the data.
+5. **Confidence Intervals**: Extract credible intervals from the posterior samples to quantify uncertainty in the reconstructed SEDs.
+6. **Outlier Detection**: Compute posterior probabilities for each object belonging to each SED component. Identify outliers as those with significantly lower probabilities across all components.
+7. **Iterative Refinement**: Repeatedly update the model parameters and SED components using all available data to improve convergence.

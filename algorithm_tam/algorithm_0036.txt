@@ -1,0 +1,36 @@
+### Algorithm for Probabilistic Spectral Reconstruction of Trans-Neptunian Objects from Sparse Photometry
+
+1. **Data Preparation**:
+   - Collect a seed set of near-infrared (near-IR) spectra of TNOs, excluding rare and outlier spectral types to form a clean training dataset.
+
+2. **Principal Component Analysis (PCA)**:
+   - Perform PCA on the seed spectra to define a low-dimensional latent space.
+   - Use Kernel Density Estimation (KDE) to create a continuous probability distribution over the latent space, augmenting the training data.
+
+3. **Synthetic Photometry Generation**:
+   - Forward model the augmented spectra with the target instrument's (e.g., JWST/NIRCam) filter responses to generate synthetic photometric measurements.
+   - Inject Gaussian noise (~20% relative reflectance uncertainty) to simulate realistic photometric observations.
+
+4. **Training the AutoML Regressor**:
+   - Train an ensemble of gradient-boosted decision trees using the synthetic photometry as inputs and the latent coefficients as targets.
+   - Use AutoML (e.g., AutoGluon) to automate hyperparameter tuning and model selection.
+
+5. **Taxonomic Classifier Training**:
+   - Train a secondary AutoML classifier on the latent coefficients to predict taxonomic classes (e.g., H₂O, CO₂, Organics, Methanol).
+   - This classifier operates directly within the latent space to improve classification accuracy.
+
+6. **Reconstruction Pipeline**:
+   - For new photometric observations:
+     - Pass the photometry through the trained AutoML regressor to predict latent coefficients.
+     - Apply the inverse PCA transform to the latent coefficients to reconstruct the full spectrum.
+     - Simultaneously use the taxonomic classifier to predict the spectral type probabilities.
+
+7. **Validation**:
+   - Perform Leave-One-Out Cross-Validation (LOOCV) on the original seed spectra to assess reconstruction fidelity (Pearson correlation coefficient, RMSE) and taxonomic classification accuracy.
+   - Evaluate the empirical confidence intervals against the actual spectral uncertainties.
+
+8. **Applications**:
+   - **Survey Optimization**: Analyze different filter configurations to maximize information content for spectral reconstruction.
+   - **Outlier Detection**: Identify objects with low posterior probabilities in the latent manifold, indicating unusual spectral types.
+
+This algorithm efficiently bridges sparse photometry and detailed spectral modeling, enabling accurate reconstruction and classification of TNO spectra while propagating uncertainties and detecting anomalies.

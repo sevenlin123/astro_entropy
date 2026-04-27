@@ -1,0 +1,47 @@
+```pseudocode
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. Initialize:
+   - Train set: 51 observed TNO spectra
+   - Target bands: JWST/NIRCam filter set (e.g., F090W, F115W, F410M, F460M)
+
+2. Perform Principal Component Analysis (PCA) on training spectra:
+   - Select number of principal components K (4-10) based on variance explained
+   - Obtain principal component (PC) coefficients for each spectrum
+
+3. Generate synthetic training data using Kernel Density Estimation (KDE):
+   - Fit KDE to PC coefficients of training spectra
+   - Sample synthetic PC coefficients to create augmented training set
+
+4. Train AutoML regressor (ensemble of Gradient Boosted Decision Trees):
+   - Input: Sparse photometric observations (fluxes in target bands)
+   - Output: Predicted PC coefficients
+   - Include noise (20% relative reflectance uncertainty) in synthetic photometry for robust training
+
+5. Define forward modeling process:
+   - Simulate photometric observations from synthetic spectra by convolving with filter responses
+   - Use these simulated photometry to train the regressor
+
+6. For each test object:
+   a. Remove object from training set
+   b. Retrain regressor and KDE on remaining N-1 objects
+   c. Predict latent PC coefficients from observed photometry
+   d. Apply inverse PCA transformation to reconstruct full spectrum
+   e. Sample posterior distribution using Gaussian Copula to obtain confidence intervals
+
+7. Evaluate reconstruction:
+   - Calculate RMSE and credible interval coverage for each wavelength
+   - Flag outliers if RMSE exceeds thresholds
+
+8. Classify spectral type:
+   - Use latent space classifier to predict taxonomic group
+   - Obtain posterior probabilities for each class
+
+9. Quantify information content:
+   - Measure reconstruction fidelity for different filter combinations
+   - Identify optimal filter sets for future observations
+
+10. Detect outliers:
+    - Monitor posterior distributions in latent space
+    - Flag objects with posterior probabilities inconsistent with training manifold
+```

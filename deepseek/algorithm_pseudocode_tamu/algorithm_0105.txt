@@ -1,0 +1,38 @@
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+**Objective:**  
+Reconstruct high-resolution spectra of trans-Neptunian objects (TNOs) from sparse photometric measurements using a Bayesian framework with principal component analysis (PCA) and machine learning.
+
+**Steps:**
+
+1. **Preprocessing and PCA Decomposition:**
+   - **Input:** Observed photometric measurements (sparse multi-band data) for TNOs.
+   - **Training Data:** A reference library of near-infrared ( NIR ) spectra for TNOs.
+   - **Step 1:** Apply PCA to the reference library to extract principal components ( eigenvectors ) and corresponding latent coefficients ( scores ).
+   - **Step 2:** Determine the optimal number of principal components ( K ) that capture the dominant spectral variability ( e.g., 4–5 for taxonomy, 8–10 for fidelity ).
+
+2. **Latent Space Definition:**
+   - **Step 3:** Construct a continuous latent space using Kernel Density Estimation ( KDE ) on the PCA coefficients of the reference spectra.
+   - **Step 4:** Augment the training data with synthetic spectra generated via forward modeling through the PCA basis, introducing controlled noise ( e.g., 20% relative reflectance uncertainty ).
+
+3. **Model Training ( Photometric-to-Latent Regression ):**
+   - **Step 5:** Train an automated machine learning regressor ( e.g., AutoGluon ensemble ) to map sparse photometric inputs to latent coefficients.
+   - **Step 6:** Validate the model using leave-one-out cross-validation ( LOOCV ), ensuring no leakage of held-out data into training.
+
+4. **Forward Inference ( Spectral Reconstruction ):**
+   - **Step 7:** For new photometric observations, predict latent coefficients using the trained regressor.
+   - **Step 8:** Project the predicted latent coefficients back to the full spectral space via inverse PCA transformation.
+   - **Step 9:** Generate an ensemble of reconstructed spectra by sampling the joint posterior distribution of latent coefficients using a Gaussian Copula framework to preserve physical correlations.
+
+5. **Taxonomy Classification:**
+   - **Step 10:** Classify the reconstructed spectra into predefined taxonomic categories ( e.g., H₂O, CO₂, Organics, Methanol ) by predicting probabilities in the latent space.
+
+6. **Uncertainty Quantification:**
+   - **Step 11:** Compute credible intervals for the reconstructed spectra and validate their empirical coverage ( e.g., 95% intervals should contain the true spectrum with ~95% probability ).
+
+7. **Applications:**
+   - **Survey Optimization:** Identify optimal NIR filter configurations ( e.g., F090W, F115W, F410M, F460M ) by maximizing information content for spectral reconstruction.
+   - **Outlier Detection:** Detect rare spectral types by constraining photometric observations to low-probability regions in the latent manifold.
+
+**End Result:**  
+A statistically rigorous reconstruction of TNO spectra from sparse photometry, enabling compositional mapping, taxonomy classification, and outlier detection in large-scale surveys.

@@ -1,0 +1,47 @@
+```python
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. **Input**: Sparse photometric measurements of a trans-Neptunian object (TNO)
+2. **Output**: Reconstructed full near-infrared spectrum with uncertainty quantification and taxonomic classification
+
+**Steps**:
+
+1. **Preprocessing**:
+   - Normalize photometric measurements to reflectance units.
+   - Apply noise modeling (e.g., 20% relative uncertainty).
+
+2. **Latent Space Definition**:
+   - Load pre-trained Principal Component Analysis (PCA) basis derived from reference TNO spectra.
+   - Determine the optimal number of PCA components (K) based on cross-validation results (typically K=5 to 10).
+
+3. **Encoder Training**:
+   - Use AutoML regressor (e.g., Gradient Boosted Decision Trees) trained on synthetic data:
+     - Generate synthetic latent vectors using Kernel Density Estimation (KDE) on the PCA basis.
+     - Forward model synthetic spectra through target instrument filters (e.g., JWST/NIRCam) to simulate photometry.
+     - Add noise to synthetic photometry and train regressor to map noisy photometry to latent PCA coefficients.
+
+4. **Spectral Reconstruction**:
+   - For input photometry:
+     - Predict latent PCA coefficients using the trained AutoML regressor.
+     - Apply inverse PCA transform to obtain full spectrum reconstruction.
+     - Perform uncertainty quantification via posterior sampling (e.g., Gaussian Copula) to generate confidence intervals.
+
+5. **Taxonomic Classification**:
+   - Feed reconstructed PCA coefficients to a pre-trained taxonomic classifier.
+   - Output probability distribution over spectral types (e.g., H2O, CO2, Organic).
+
+6. **Validation**:
+   - Compute metrics like RMSE, correlation coefficient, and credible interval coverage against reference spectra.
+   - Assess classification accuracy.
+
+7. **Output**:
+   - Provide reconstructed spectrum, uncertainty bounds, and taxonomic probabilities.
+```
+
+---
+
+**Notes**:
+
+- This algorithm is optimized for large-scale surveys and sparse data.
+- It integrates Bayesian inference, manifold learning, and machine learning for robust spectral reconstruction.
+- The core computation leverages pre-trained PCA and AutoML models for efficient inference.

@@ -1,0 +1,27 @@
+**Algorithm Description: Probabilistic Spectral Reconstruction of Trans-Neptunian Objects from Sparse Photometry**
+
+1. **Collect Reference Spectra**: Gather high-resolution near-IR spectra of TNOs, focusing on dominant taxonomic types (e.g., Water-type, CO₂-type, Organics-type).
+
+2. **Perform PCA**: Apply Principal Component Analysis to the collected spectra to extract principal components, reducing the data into orthogonal latent variables.
+
+3. **Determine Principal Components**: Retain 8-10 principal components to capture sufficient spectral variability for accurate reconstruction and classification.
+
+4. **Project Spectra onto Latent Space**: Convert the seed spectra into their latent coefficients using the PCA basis.
+
+5. **Kernel Density Estimation (KDE)**: Smooth the latent space using KDE with a bandwidth of ~0.5 to create a continuous probability distribution, enhancing robustness.
+
+6. **Generate Synthetic Photometry**: Convolve each augmented spectrum with instrument throughput curves (e.g., JWST/NIRCam) to simulate photometric measurements.
+
+7. **Add Noise to Photometry**: Incorporate Gaussian noise (e.g., 20% relative uncertainty) to account for observational uncertainties.
+
+8. **Train AutoML Regressor**: Use AutoGluon to train a model mapping sparse photometry to latent coefficients, ensuring resistance to noise and overfitting.
+
+9. **Reconstruct Spectra**: For new photometric data, predict latent coefficients and apply inverse PCA to obtain full spectra, constrained by the learned manifold.
+
+10. **Classify Taxonomic Type**: Use a latent-space classifier to predict taxonomic types (e.g., H₂O, CO₂, Organic) based on latent coefficients.
+
+11. **Performance Evaluation**: Conduct LOOCV to validate reconstruction accuracy, credible interval coverage, and classification success rates.
+
+12. **Survey Optimization and Outlier Detection**: Use the framework to identify optimal filter combinations and detect spectral outliers, enhancing scientific discovery and data reliability.
+
+This structured approach effectively bridges sparse photometric data with detailed spectral analysis, enabling robust reconstruction and classification of TNO spectra.

@@ -1,0 +1,8 @@
+Algorithm:
+1. **Data Preprocessing**
+2. **Spectral Model Definition**
+3. **Bayesian Inference Setup**
+4. **Parameter Estimation**
+5. **SED Reconstruction**
+6. **Outlier Detection**
+7. **Classification and Survey Optimization**

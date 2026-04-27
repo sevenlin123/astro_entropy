@@ -1,0 +1,44 @@
+**Probabilistic Spectral Reconstruction Algorithm for Trans-Neptunian Objects**
+
+**Input:**  
+- Observed photometric data points (sparse and noisy)  
+- Associated measurement errors  
+- Observation times  
+
+**Steps:**  
+
+1. **Data Preparation**:  
+   - Read and parse the input photometric data.  
+   - Normalize the data to account for differences in exposure times or instrument calibration.  
+   - Apply noise reduction techniques to minimize observational uncertainties.  
+
+2. **Forward Modeling**:  
+   - For each set of hypothesized physical parameters (e.g., diameter, albedo, rotation period, shape), simulate the expected light curve considering:  
+     a. Phase variations due to rotation.  
+     b. Occultations and other brightness variations.  
+     c. Viewing geometry and orientation.  
+   - Compare the simulated light curve with the observed data to assess goodness of fit.  
+
+3. **Bayesian Parameter Estimation using MCMC**:  
+   - Define the prior distributions for each physical parameter based on prior knowledge or assumptions.  
+   - Perform Markov Chain Monte Carlo sampling to explore the posterior distribution of parameters given the observed data.  
+   - Convergence diagnostics are applied to ensure the MCMC chains have adequately explored the parameter space.  
+
+4. **Posterior Analysis**:  
+   - From the MCMC samples, determine the most probable values of the physical parameters.  
+   - Calculate uncertainties by quantifying the spread in the sampled posterior distribution.  
+
+5. **SED Reconstruction**:  
+   - Using the most probable physical parameters, compute the spectral energy distribution.  
+   - Apply corrections for geometric and albedo variations to obtain the final SED.  
+   - Include confidence intervals based on the parameter uncertainties.  
+
+6. **Reliability Measure Calculation**:  
+   - Evaluate how well the reconstructed SED can reproduce the observed light curve.  
+   - Compute a figure of merit indicating the quality of the reconstruction.  
+
+**Output:**  
+- Reconstructed spectral energy distribution (SED) with confidence intervals.  
+- Reliability measure assessing the consistency between the SED and the observed light curve.  
+
+---

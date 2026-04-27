@@ -1,0 +1,30 @@
+**Algorithm for Probabilistic Spectral Reconstruction of Trans-Neptunian Objects from Sparse Photometry**
+
+**1. Preprocessing:**
+   - **Feature Extraction:** Extract spectral features from available near-infrared (near-IR) spectral data of Trans-Neptunian Objects (TNOs).
+   - **Principal Component Analysis (PCA):** Apply PCA to the extracted features to derive latent variables (principal components) capturing the main axes of variance in the data.
+
+**2. Bayesian Inference:**
+   - **Model Estimation:** Perform Bayesian inference in the PCA-reduced space to estimate the underlying spectral parameters.
+   - **Posterior Distributions:** Obtain posterior distributions of the principal components using the observed photometric data.
+
+**3. Probabilistic Model Implementation:**
+   - **Uncertainty Quantification:** Develop a probabilistic model to quantify uncertainty in spectral reconstruction, capturing variability and correlations among spectral components.
+
+**4. Uncertainty Propagation:**
+   - **Error Analysis:** Compute uncertainties in the reconstructed spectra considering photometric measurement uncertainties.
+   - **Reliability Assessment:** Assess the reliability of each spectral reconstruction based on propagated uncertainties.
+
+**5. Spectral Reconstruction:**
+   - **Reconstruction:** Combine reconstructed spectral parameters with uncertainties to produce final spectral estimates.
+   - **Validation:** Use leave-one-out cross-validation to validate the model's accuracy and robustness.
+
+**6. Outlier Detection:**
+   - **Probability Distribution Analysis:** Analyze the probability distribution of the PCA-based model.
+   - **Outlier Identification:** Flag objects with unusual spectral features as potential outliers based on deviation from expected distributions.
+
+**7. Survey Optimization:**
+   - **Filter Evaluation:** Evaluate the information content of different photometric bands and filter combinations.
+   - **Optimal Configuration:** Recommend optimal filter configurations for future surveys to maximize spectral information extraction.
+
+This algorithm enables the prediction of spectral properties of unseen TNOs from sparse photometry, facilitating taxonomy, survey optimization, and outlier detection.

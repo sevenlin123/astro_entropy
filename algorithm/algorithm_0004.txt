@@ -1,0 +1,13 @@
+**Final Answer**
+
+The core computational algorithm for probabilistic spectral reconstruction of trans-Neptunian objects from sparse photometry involves the following steps:
+
+1. **Input Data Preparation**: Gather sparse photometric flux measurements of TNOs from different surveys.
+2. **Feature Extraction**: Utilize a pre-trained CNN to extract high-level features from the flux measurements, capturing complex patterns.
+3. **Bayesian Gaussian Process Initialization**: Set up a Gaussian process with hyperparameters learned from the training data, employing Bayesian inference to model SED uncertainty.
+4. **SED Prediction**: For each object, input the extracted features into the Gaussian process to predict the spectral energy distribution.
+5. **Outlier Detection**: Compare observed flux measurements against the predicted SED; flag measurements deviating significantly as outliers.
+6. **Robustness Check**: Ensure the reconstructed SED remains accurate even with up to 40% outlier contamination by retraining on clean subsets.
+7. **Output Generation**: Provide reliable SEDs and outlier flags for each TNO.
+
+End of Algorithm.

@@ -1,0 +1,29 @@
+**Algorithm: Probabilistic Spectral Reconstruction of Trans-Neptunian Objects**
+
+1. **Preprocess Data**
+   - Input: Photometric observations of TNOs.
+   - Collect all available measurements per object across bands.
+   - Handle missing measurements (e.g., placeholder values or exclusion during inference).
+
+2. **Define Probabilistic Model**
+   - Represent SED as a sum of basis functions (e.g., Gaussians): SED(λ) = Σ w_i φ_i(λ).
+   - Assign Dirichlet prior to weights (Σw_i = 1).
+   - Use uninformative priors for φ_i parameters (e.g., μ_i ~ Uniform, σ_i² ~ InverseGamma).
+   - Relate observed magnitudes to SED via response functions: m_obs,b = -2.5 log(∫R_b(λ)SED(λ)dλ/Z_b) + m_0,b.
+
+3. **Bayesian Parameter Estimation**
+   - Use MCMC to sample posterior distributions of SED parameters.
+   - Monitor convergence (Gelman-Rubin statistic < 1.2).
+   - Extract posterior summaries (mean, median, credible intervals).
+
+4. **Classify and Detect Outliers**
+   - Compute posterior probabilities of taxonomic classes using Bayesian inference.
+   - Assess goodness-of-fit with chi-squared statistic: χ² = Σ[(m_obs - m_pred)²/σ_obs²].
+   - Flag outliers where χ² exceeds thresholds.
+
+5. **Output Results**
+   - Assign each object to its most probable taxonomic class.
+   - Provide outlier flags and confidence measures.
+   - Prepare summary reports without validation or visualization.
+
+This algorithm efficiently reconstructs SEDs, classifies TNOs, and detects outliers using Bayesian methods, focusing on sparse photometric data.

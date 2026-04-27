@@ -1,0 +1,29 @@
+**Algorithm: Probabilistic Spectral Reconstruction Framework**
+
+1. **Input Data**
+   - Load training set of near-infrared (NIR) spectra of TNOs.
+   - Load sparse photometric measurements for target TNOs.
+
+2. **Principal Component Analysis (PCA)**
+   - Perform PCA on the training NIR spectra.
+   - Determine optimal number of principal components (e.g., 4-5 for taxonomic classification, 8-10 for high-fidelity reconstruction).
+   - Construct the latent space using these principal components.
+
+3. **Probabilistic Model Setup**
+   - Represent spectral manifold in the latent space using the identified principal components.
+   - Define Bayesian model with latent variables corresponding to principal components.
+   - Set prior distributions for the latent variables.
+
+4. **Bayesian Inference**
+   - Implement MCMC sampling or alternative method to estimate posterior distributions of latent variables given photometric data.
+   - Generate posterior samples for latent space.
+
+5. **Spectral Reconstruction**
+   - Map posterior samples from latent space back to original spectral space.
+   - Reconstruct full NIR spectra from posterior distributions.
+
+6. **Uncertainty Propagation**
+   - Quantify uncertainties in reconstructed spectra using variability from posterior samples.
+   - Calculate credible intervals for the reconstructed spectra.
+
+This algorithm outlines the core steps for probabilistic spectral reconstruction of TNOs from sparse photometry using a Bayesian latent space approach.

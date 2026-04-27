@@ -1,0 +1,30 @@
+The algorithm describes the core computational method for reconstructing full spectra of trans-Neptunian objects from sparse photometric data using a probabilistic latent-space framework. It combines dimensionality reduction with Bayesian inference in the latent space.
+
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. **Input Data**: Sparse photometric measurements of trans-Neptunian objects (TNOs).
+
+2. **Training Spectral Libraries**:
+   - Use a set of near-infrared spectral libraries (e.g., Lowell Observatory Spectral Energy Distribution Library and Deep Spectral Libraries).
+   - Preprocess these libraries to extract representative spectral features.
+
+3. **Principal Component Analysis (PCA)**:
+   - Apply PCA to the spectral libraries to reduce dimensionality.
+   - Extract the leading principal components that capture the dominant modes of spectral variability relevant for taxonomic classification (4-5 components) and improved reconstruction fidelity (8-10 components).
+
+4. **Probabilistic Latent-Space Modeling**:
+   - Model the spectral manifold of TNOs using Gaussian Processes and Bayesian inference in the reduced latent space.
+   - Perform Bayesian inference to reconstruct full spectra from the sparse photometric data while propagating measurement uncertainties.
+
+5. **Spectral Reconstruction**:
+   - Use the trained probabilistic model to infer the full spectrum of each TNO from its photometric data.
+   - Quantify uncertainties in the reconstructed spectra by sampling from the posterior distribution.
+
+6. **Survey Optimization and Outlier Detection**:
+   - Apply the framework to evaluate the information content of different survey instrument configurations (e.g., JWST/NIRCam filters) for optimal spectral reconstruction.
+   - Detect rare spectral types by constraining photometry to select low-probability intermediate models from the continuous topological manifold.
+
+### Output:
+- Reconstructed full spectra of TNOs with associated uncertainties.
+- Optimized survey configurations for future observations.
+- Detection and reconstruction of rare spectral types.

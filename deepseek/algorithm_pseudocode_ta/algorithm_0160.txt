@@ -1,0 +1,46 @@
+**Algorithm: Probabilistic Spectral Reconstruction Framework**
+
+**Step 1: Preprocess the Training Data**
+- Input: Collection of near-IR spectra from a sample of TNOs.
+- Perform normalization and alignment of spectra to ensure consistency.
+- Remove noise and outliers from the training dataset using robust statistical methods.
+- Store preprocessed spectra in a matrix format, where each row represents a spectrum and columns represent wavelengths.
+
+**Step 2: Principal Component Analysis (PCA)**
+- Compute the covariance matrix of the preprocessed spectra.
+- Perform eigenvalue decomposition to obtain eigenvectors and eigenvalues.
+- Select the top K principal components based on explained variance or domain knowledge (K ranges from 4 to 10 for different applications).
+- Construct the reduced-dimensional basis using these selected principal components.
+
+**Step 3: Bayesian Inference Setup**
+- Define the probabilistic model in the reduced PCA space.
+- Set prior distributions for the latent variables (e.g., mean and variance parameters of the PCA components).
+- Define the likelihood function that relates the reduced spectral manifold to the observed photometric measurements.
+- Incorporate measurement uncertainties into the likelihood function.
+
+**Step 4: Perform Bayesian Inference**
+- Use Markov Chain Monte Carlo (MCMC) or variational inference to sample the posterior distribution of the latent variables.
+- Propagate measurement uncertainties through the inference process.
+- Obtain posterior estimates of the PCA coefficients and their uncertainties.
+
+**Step 5: Reconstruct Full Spectra**
+- For each TNO, project the inferred PCA coefficients back into the original spectral space.
+- Reconstruct the full spectrum by combining the PCA basis vectors weighted by the inferred coefficients.
+- Ensure the reconstructed spectrum aligns with the observed photometric data within the propagated uncertainties.
+
+**Step 6: Uncertainty Calibration**
+- Quantify the uncertainty in the reconstructed spectra by calculating the standard deviation of the posterior distribution of the PCA coefficients.
+- Assess the credibility of the reconstructed spectra by checking if the observed data falls within the credible intervals.
+- Adjust the reconstruction if discrepancies are found, iterating until convergence.
+
+**Step 7: Application to Individual Objects**
+- For each TNO, apply the framework by inputting its photometric measurements.
+- Repeat Steps 4 to 6 for each object to obtain individualized spectral reconstructions.
+- Use the reconstructed spectra for further applications like taxonomic classification or survey optimization.
+
+**Step 8: Outlier Detection and Rare Spectral Types**
+- Identify objects with photometric measurements that significantly deviate from the reconstructed spectral manifold.
+- Apply additional constraining photometry to refine the reconstruction of outliers.
+- Utilize the continuous topological manifold to detect and constrain rare spectral types by exploring low-probability intermediate models.
+
+**End of Algorithm**

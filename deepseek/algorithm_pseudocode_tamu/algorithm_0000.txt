@@ -1,0 +1,85 @@
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. **Input Data**:
+   - Training Spectra: Set of reference TNO spectra (e.g., 51 observed spectra).
+   - Photometric Observations: Sparse multi-band photometry for objects of interest.
+
+2. **Preprocessing**:
+   - Perform **Principal Component Analysis (PCA)** on the training spectra to define a low-dimensional latent space.
+   - Determine the number of principal components (K) that optimally balances model flexibility and numerical stability (e.g., K = 4-10).
+
+3. **Construct Latent Manifold**:
+   - Use **Kernel Density Estimation (KDE)** to estimate the probability density of the latent coefficients derived from the training spectra.
+   - Augment the training data with synthetic latent vectors sampled from the KDE to create a smooth, continuous manifold.
+
+4. **Forward Modeling**:
+   - Simulate photometric observations for each augmented spectrum by convolving them with the effective throughput curves of the target instrument (e.g., JWST NIRCam filters).
+   - Inject Gaussian noise (e.g., 20% relative reflectance uncertainty) to account for observational uncertainties.
+
+5. **Training AutoML Regressor**:
+   - Train an **Automated Machine Learning (AutoML)** regressor (e.g., ensemble of gradient-boosted decision trees) to map sparse photometry to latent coefficients.
+   - Use the synthetic photometry and corresponding ground truth latent coefficients for training.
+
+6. **Bayesian Inference**:
+   - For new photometric observations, predict the latent coefficients using the trained regressor.
+   - Apply **Inverse PCA Transform** to reconstruct the full spectrum from the predicted latent coefficients.
+   - Generate an ensemble of reconstructions by sampling the joint posterior distribution of the latent coefficients using a **Gaussian Copula** to preserve intrinsic dependencies.
+
+7. **Taxonomic Classification**:
+   - Project the predicted latent coefficients into a pre-trained taxonomic classifier to obtain probabilities for spectral types (e.g., H₂O, CO₂, Organic, Methanol).
+
+8. **Output**:
+   - Reconstructed spectrum with uncertainties.
+   - Probabilistic taxonomic classification.
+
+### Pseudocode Representation:
+
+```python
+def spectral_reconstruction(training_spectra, photometry_data):
+    # Step 1: PCA on training spectra
+    pca = PCA(n_components=K)
+    pca.fit(training_spectra)
+    
+    # Step 2: Construct latent manifold using KDE
+    latent_coefficients = pca.transform(training_spectra)
+    kde = KernelDensityEstimator(bandwidth=0.5)
+    kde.fit(latent_coefficients)
+    
+    # Step 3: Generate synthetic training data
+    synthetic_latents = kde.sample(num_samples)
+    
+    # Step 4: Forward modeling (simulate photometry)
+    def forward_model(spectrum, filters):
+        return simulate_photometry(spectrum, filters)
+    
+    synthetic_photometry = [forward_model(pca.inverse_transform(l), filters) 
+                            for l in synthetic_latents]
+    
+    # Step 5: Train AutoML regressor
+    regressor = AutoMLRegressor()
+    regressor.fit(synthetic_photometry + original_photometry, 
+                  synthetic_latents + original_latents)
+    
+    # Step 6: Process new photometry
+    predicted_latents = regressor.predict(photometry_data)
+    
+    # Step 7: Reconstruct spectrum
+    reconstructed_spectrum = pca.inverse_transform(predicted_latents)
+    
+    # Step 8: Classify taxonomy
+    taxonomy_probs = classifier.predict_proba(predicted_latents)
+    
+    return reconstructed_spectrum, taxonomy_probs
+```
+
+### Explanation:
+
+- **PCA**: Reduces the spectral dimensionality to extract dominant modes of variability.
+- **KDE**: Creates a smooth probability distribution in the latent space for robust regression.
+- **Forward Modeling**: Simulates photometric observations to implicitly define the likelihood mapping.
+- **AutoML Regressor**: Learns the mapping from photometry to latent coefficients, enabling reconstruction.
+- **Inverse PCA**: Maps latent coefficients back to full spectra, inheriting physical constraints.
+- **Gaussian Copula**: Samples the posterior distribution while preserving dependencies in the latent space.
+- **Classifier**: Provides taxonomic probabilities based on the latent representation.
+
+This algorithm efficiently bridges sparse photometric data to detailed spectral reconstructions, enabling compositional mapping of TNOs with minimal spectroscopic observations.

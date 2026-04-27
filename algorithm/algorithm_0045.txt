@@ -1,0 +1,39 @@
+**Algorithm: Probabilistic Spectral Reconstruction of Trans-Neptunian Objects**
+
+1. **Input Data Preparation**  
+   - Collect photometric measurements for each TNO across multiple passbands (e.g., u, g, r, i, z).  
+   - Remove artifacts and calibrate the data to ensure accuracy.
+
+2. **Model Initialization**  
+   - Define the set of wavelengths corresponding to the passbands used in the measurements.  
+   - For each wavelength, initialize a Gaussian Process (GP) with a specified kernel (e.g., squared exponential) to model the SED.  
+
+3. **Likelihood Construction**  
+   - For each photometric measurement, compute the predicted flux and its uncertainty using the GP model.  
+   - Assume the true SED varies smoothly across wavelengths, informed by the GP kernel choice.  
+
+4. **Parameter Inference**  
+   - Employ Markov Chain Monte Carlo (MCMC) to sample the posterior distributions of GP hyperparameters (e.g., length scale, variance) and the latent SED values.  
+   - Use the collected measurements to condition the GP, updating the model to reflect observed data.  
+
+5. **Posterior Prediction**  
+   - After training, generate the posterior predictive distribution of the SED at all wavelengths to estimate the complete SED and associated uncertainties.  
+
+6. **Outlier Detection**  
+   - Compare the reconstructed SED against a library of reference spectra to identify outliers.  
+   - Determine if the object's SED significantly deviates from typical spectral shapes.  
+
+7. **Survey Optimization**  
+   - Simulate observations of TNOs across different passbands and conditions to predict optimal survey strategies.  
+   - Adjust survey parameters to maximize detection rates and minimize observational noise.  
+
+8. **Probabilistic SED Matching**  
+   - Compute likelihood ratios between the reconstructed SED and a set of template spectra.  
+   - Assign probabilities to each template based on compatibility with the observed SED.  
+   - Classify the object using the most probable template or mark it as unclassifiable if no template meets the threshold.  
+
+9. **Output Generation**  
+   - Deliver the reconstructed SED with uncertainties.  
+   - Provide outlier status (outlier or not).  
+   - Identify the best-matching template spectrum along with its probability.  
+   - Offer optimized survey parameters to guide future observations.

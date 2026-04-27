@@ -1,0 +1,7 @@
+The core computational steps can be outlined as follows:
+
+1. **Preprocess the spectral data**: Apply Principal Component Analysis (PCA) to the spectral dataset of TNOs to obtain a latent-space representation.
+
+2. **Perform Bayesian inference**: Utilize the latent space derived from PCA to conduct Bayesian inference, enabling the propagation of measurement uncertainties and the reconstruction of spectral information.
+
+3. **Reconstruct original spectra**: Translate the inferred parameters from the Bayesian analysis back into the original spectral space to obtain the full spectra, considering propagated uncertainties.

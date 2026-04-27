@@ -1,0 +1,76 @@
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+**Input:**  
+- `obs_photometry`: Observed sparse photometric measurements (e.g., NIRCam filters)  
+- `training_spectra`: Reference spectral library (seed spectra)  
+- `n_components`: Number of principal components (selected via validation)  
+
+**Output:**  
+- `reconstructed_spectrum`: High-resolution spectrum  
+- `credible_intervals`: Uncertainty quantification  
+- `taxonomic_prediction`: Predicted spectral type  
+
+---
+
+**Step 1: Precompute Principal Component Analysis (PCA)**  
+1. **Training Data Preparation:**  
+   - Use the reference spectral library (`training_spectra`) to compute PCA.  
+   - Extract principal components (eigenvectors and explained variance).  
+
+2. **Latent Space Definition:**  
+   - Project the reference spectra onto the PCA components to get latent coefficients.  
+   - Use Kernel Density Estimation (KDE) to estimate the density of latent coefficients, creating a continuous manifold.  
+
+3. **Forward Modeling:**  
+   - Simulate photometric measurements for each synthetic spectrum by convolving with instrumental response (e.g., JWST/NIRCam filters).  
+   - Inject Gaussian noise (relative uncertainty ~20%) to simulate real-world observations.  
+
+---
+
+**Step 2: Train Photometric-to-Latent Space Regressor**  
+1. **Data Augmentation:**  
+   - Generate synthetic spectra using KDE.  
+   - Forward-model these synthetic spectra into photometric measurements.  
+
+2. **Training Dataset Construction:**  
+   - Combine real and synthetic photometry with corresponding latent coefficients.  
+
+3. **Automated Machine Learning (AutoML):**  
+   - Train an ensemble regressor (e.g., Gradient Boosted Decision Trees) to map photometric inputs to latent coefficients.  
+
+---
+
+**Step 3: Bayesian Inference and Reconstruction**  
+1. **Predict Latent Coefficients:**  
+   - Pass observed photometry (`obs_photometry`) through the trained regressor to obtain posterior distributions of latent coefficients.  
+
+2. **Inverse PCA Transformation:**  
+   - Reconstruct the full-resolution spectrum using the predicted latent coefficients and PCA basis.  
+
+3. **Uncertainty Quantification:**  
+   - Sample the joint posterior of latent coefficients using Gaussian Copula to preserve physical correlations.  
+   - Propagate uncertainties through the inverse PCA transform to generate credible intervals.  
+
+---
+
+**Step 4: Taxonomic Classification (Optional)**  
+1. **Latent Space Features Extraction:**  
+   - Use the predicted latent coefficients as features for classification.  
+
+2. **Classification Model Inference:**  
+   - Apply a pre-trained taxonomic classifier to assign probabilities to spectral types (e.g., H₂O, CO₂, Organics).  
+
+---
+
+**Step 5: Validation and Outlier Detection (Optional)**  
+1. **Reconstruction Metrics:**  
+   - Compute Mean Absolute Percentage Difference (MAPD) between reconstructed and true spectra.  
+   - Assess credible interval coverage (CIC) to validate uncertainty calibration.  
+
+2. **Outlier Detection:**  
+   - Calculate Mahalanobis distance of predicted latents from the training manifold.  
+   - Flag objects with distances exceeding thresholds as outliers.  
+
+---
+
+**End of Algorithm**

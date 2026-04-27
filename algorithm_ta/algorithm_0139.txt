@@ -1,0 +1,27 @@
+1. **Input Data**
+   - Step 1: Obtain sparse photometric measurements of trans-Neptunian objects (TNOs).
+   - Step 2: Collect a reference sample of near-infrared (near-IR) spectra for training the dimensionality reduction model.
+
+2. **Preprocessing**
+   - Step 1: Normalize photometric data to account for observation conditions and instrument response.
+   - Step 2: Convert reference near-IR spectra into a standardized format suitable for principal component analysis (PCA).
+
+3. **Dimensionality Reduction**
+   - Step 1: Perform PCA on the reference near-IR spectra to identify principal components capturing spectral variability.
+   - Step 2: Retain the top 4-5 principal components for taxonomic classification and 8-10 for improved reconstruction fidelity.
+   - Step 3: Construct a spectral manifold representing the reduced spectral space of TNOs.
+
+4. **Probabilistic Inference**
+   - Step 1: Model the spectral manifold using Bayesian inference in the reduced PCA space.
+   - Step 2: Propagate measurement uncertainties from photometric data through the probabilistic model.
+   - Step 3: Reconstruct full spectra from sparse photometry by sampling the posterior distribution in the latent space.
+
+5. **Output Generation**
+   - Step 1: Generate reconstructed full spectra for each object.
+   - Step 2: Calculate credible intervals for the reconstructed spectra to assess uncertainty.
+   - Step 3: Classify objects based on their reconstructed spectral features into taxonomic groups.
+
+6. **Error Propagation**
+   - Step 1: Quantify the uncertainty in the reconstructed spectra using the propagated measurement errors.
+   - Step 2: Validate the error estimates by comparing against independent datasets or theoretical expectations.
+   - Step 3: Adjust the output generation process to account for detected outliers and rare spectral types.

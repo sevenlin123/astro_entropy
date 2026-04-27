@@ -1,0 +1,26 @@
+**Algorithm: Probabilistic Spectral Reconstruction of Trans-Neptunian Objects**
+
+1. **Data Preprocessing**
+   - Collect sparse photometric data of TNOs.
+   - Normalize and preprocess the data to handle missing values and noise.
+
+2. **Gaussian Process Modeling**
+   - Initialize Gaussian Process (GP) with kernel functions suited for spectral variations.
+   - Train GP using normalized photometric data to capture spectral patterns.
+
+3. **Dirichlet Process Clustering**
+   - Apply Dirichlet Process (DP) to cluster TNOs into spectral taxonomic groups.
+   - Use inferred spectral parameters from GP as inputs for DP clustering.
+
+4. **Joint Inference**
+   - Perform joint inference considering all observed photometric bands.
+   - Update spectral parameters and clusters iteratively until convergence.
+
+5. **Probabilistic Out-of-Sample Detection**
+   - Extend the trained model to predict probabilities for new, unseen data points.
+   - Identify anomalies by checking if predicted probabilities fall below a threshold.
+
+6. **Output**
+   - Generate reconstructed spectral types and detect outliers based on probabilistic measures.
+
+**End of Algorithm**

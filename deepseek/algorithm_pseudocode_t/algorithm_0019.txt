@@ -1,0 +1,20 @@
+**Algorithm: Probabilistic Spectral Reconstruction**
+
+1. **Initialization**
+   - Initialize all model parameters, including mixture weights, GPLVM hyperparameters, and neural network weights.
+   
+2. **Posterior Inference using Metropolis-Hastings**
+   - For each iteration:
+     - Propose new values for the latent variables and model parameters.
+     - Compute the acceptance probability based on the posterior distribution.
+     - Accept or reject the proposed values based on the Metropolis-Hastings criterion.
+     
+3. **Latent Space Mapping**
+   - For each object:
+     - Use the inferred latent variables from the GPLVM.
+     - Map these latent variables through a pre-trained neural network to reconstruct the spectral reflectance.
+   
+4. **Output Reconstructed Spectra**
+   - Obtain the reconstructed spectral reflectance and associated uncertainties.
+
+**End of Algorithm**

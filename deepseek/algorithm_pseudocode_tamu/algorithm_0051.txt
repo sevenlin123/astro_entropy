@@ -1,0 +1,83 @@
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+#### Inputs:
+1. **Sparse Photometry** (vector of observed magnitudes or fluxes in specific filters).
+2. **Instrument Response Functions** (filter transmission curves and noise characteristics).
+3. **Trained Latent Space Model**: Includes PCA basis, KDE prior, and AutoML regressor.
+4. **Taxonomic Labels**: Known spectral types for training purposes.
+
+#### Outputs:
+1. **Reconstructed Spectrum**: High-resolution spectral estimate in reflectance.
+2. **Uncertainty Intervals**: Probability intervals for each wavelength.
+3. **Taxonomic Probabilities**: Probabilities of belonging to each spectral class.
+
+#### Steps:
+
+1. **Forward Modeling**:
+   - Simulate photometric observations from a given spectrum by convolving with instrument response functions.
+   - Add Gaussian noise consistent with expected uncertainties.
+
+2. **Latent Space Training**:
+   - Perform PCA on reference spectra to derive principal components.
+   - Use KDE to create a smooth prior distribution in the latent space.
+
+3. **Data Augmentation**:
+   - Generate synthetic spectra by sampling the latent space prior and projecting back to full spectral dimensionality.
+
+4. **Model Training**:
+   - Train an AutoML regressor (e.g., Gradient Boosted Decision Trees) to map photometric inputs to latent coefficients.
+   - Train a classifier on the latent space to predict taxonomic labels.
+
+5. **Inference**:
+   - For a new photometric observation:
+     a. Use the trained regressor to predict latent coefficients.
+     b. Apply inverse PCA transform to reconstruct the spectrum.
+     c. Sample from the posterior distribution using a Gaussian Copula to quantify uncertainties.
+     d. Classify the spectrum into taxonomic categories based on latent space probabilities.
+
+6. **Validation**:
+   - Compare reconstructed spectra with ground truth using metrics like RMSE and PCC.
+   - Assess uncertainty calibration by comparing credible intervals to true values.
+
+7. **Survey Optimization**:
+   - Evaluate different filter configurations by simulating photometric data and measuring reconstruction performance.
+
+8. **Outlier Detection**:
+   - Identify objects whose posterior distributions lie outside the training manifold using statistical thresholds.
+
+#### Pseudocode:
+
+```
+function spectral_reconstruction(photometry, instrument_response, trained_model):
+    # Step 1: Forward Modeling
+    simulated_photometry = forward_model(trained_model pca_basis, photometry, instrument_response)
+
+    # Step 2: Latent Space Inference
+    latent_coefficients = auto_ml_regressor(trained_model regressor, simulated_photometry)
+    
+    # Step 3: Spectrum Reconstruction
+    reconstructed_spectrum = inverse_pca(pca_basis, latent_coefficients)
+    
+    # Step 4: Posterior Sampling
+    posterior_samples = gaussian_copula_sample(latent_coefficients, trained_model correlations)
+    
+    # Step 5: Uncertainty Quantification
+    credible_intervals = calculate_credible_intervals(reconstructed_spectrum, posterior_samples)
+    
+    # Step 6: Taxonomy Classification
+    taxonomic_probabilities = classify_latent_space(trained_model classifier, latent_coefficients)
+    
+    return reconstructed_spectrum, credible_intervals, taxonomic_probabilities
+```
+
+#### Explanation:
+- **Forward Modeling**: Converts a spectrum into what it would look like as observed through given filters with noise.
+- **Latent Space Training**: Uses PCA to reduce spectral dimensionality and KDE to model the distribution of latent variables.
+- **Data Augmentation**: Creates synthetic data to improve model training in low-sample scenarios.
+- **Model Training**: Trains regression and classification models on the augmented data.
+- **Inference**: Maps new photometry to latent space, reconstructs the spectrum, and quantifies uncertainties and classifications.
+- **Validation**: Evaluates the accuracy and reliability of the reconstruction.
+- **Survey Optimization**: Tests different observing strategies to maximize information gain.
+- **Outlier Detection**: Identifies unusual spectra that deviate from the known manifold.
+
+This algorithm provides a statistically rigorous framework for reconstructing detailed spectra from sparse photometric data, enabling insights into the composition and diversity of trans-Neptunian objects.

@@ -1,0 +1,45 @@
+```pseudocode
+Algorithm: Probabilistic Spectral Reconstruction for TNOs
+
+Input:
+    - TemplateLibrary: Collection of basis spectra
+    - PhotometryData: Sparse and noisy photometric observations
+    - NoiseModel: Distribution describing observational noise
+
+Output:
+    - ReconstructedSED: Most probable spectral energy distribution
+    - Uncertainties: Variance estimates for each SED component
+    - Outliers: List of flagged outlier observations
+
+Steps:
+
+1. Initialize Parameters:
+    - Coefficients ← Uniform distribution over possible values
+
+2. Bayesian Inference Setup:
+    - Define Likelihood(PhotometryData | Coefficients, NoiseModel)
+    - Define Prior(Coefficients | TemplateLibrary)
+
+3. Markov Chain Monte Carlo (MCMC):
+    - Sample Posterior(Coefficients | PhotometryData, NoiseModel, TemplateLibrary)
+    - Store posterior distributions
+
+4. Outlier Detection:
+    - Compute Residuals = PhotometryData - ExpectedSED(Coefficients)
+    - Flag Outliers where |Residuals| exceeds thresholds
+
+5. Outlier Exclusion:
+    - FilterOutliers = PhotometryData without flagged outliers
+    - Repeat Bayesian Inference with FilterOutliers
+
+6. Reconstruct SED:
+    - ReconstructedSED = LinearCombination(TemplateLibrary, posterior mode of Coefficients)
+
+7. Uncertainty Quantification:
+    - Uncertainties = Variance(Posterior distributions of Coefficients)
+
+8. Output:
+    - Return ReconstructedSED, Uncertainties, and Outliers
+
+End Algorithm
+```

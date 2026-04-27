@@ -1,0 +1,43 @@
+**Algorithm for Probabilistic Spectral Reconstruction of TNOs from Sparse Photometry**
+
+1. **Principal Component Analysis (PCA) Initialization**:
+   - Train PCA on a set of reference TNO spectra to define a low-dimensional latent space.
+   - Use the PCA basis to represent the spectral manifold, capturing dominant modes of spectral variability.
+
+2. **Data Augmentation**:
+   - Project the seed spectra onto PCA latent coefficients.
+   - Apply Kernel Density Estimation (KDE) to smooth the latent distribution, generating synthetic latent vectors for training.
+
+3. **Synthetic Photometry Generation**:
+   - Forward model the synthetic spectra through the target instrument's filter curves (e.g., JWST/NIRCam).
+   - Introduce Gaussian noise (e.g., 20% relative uncertainty) to simulate real photometric conditions.
+
+4. **Training the AutoML Regressor**:
+   - Use the AutoML framework (e.g., AutoGluon) to regress sparse photometry onto PCA latent coefficients.
+   - The model learns the mapping from photometric inputs to latent space, stabilized by synthetic data.
+
+5. **Taxonomic Classifier Training**:
+   - Train a secondary AutoML classifier on the latent space to predict taxonomic labels (e.g., H₂O, CO₂, Organic, Methanol).
+   - Use the latent coefficients as features for classification.
+
+6. **Bayesian Inference for Spectral Reconstruction**:
+   - For new photometric observations, predict latent coefficients using the trained regressor.
+   - Project the predicted latent coefficients through inverse PCA to reconstruct the full spectrum.
+   - Sample the posterior distribution of latent coefficients to quantify uncertainties in the reconstructed spectrum.
+
+7. **Taxonomic Classification**:
+   - Use the latent space classifier to predict the probability distribution of taxonomic types for new observations.
+   - Evaluate classification accuracy using metrics like Kullback-Leibler Divergence.
+
+8. **Performance Evaluation**:
+   - Measure reconstruction fidelity using RMSE and Cosine Similarity.
+   - Assess uncertainty calibration by checking credible interval coverage.
+   - Validate results through leave-one-out cross-validation across the training set.
+
+9. **Applications**:
+   - Optimize photometric filter configurations for survey design.
+   - Detect spectral outliers and guide spectroscopic follow-up.
+   - Perform unsupervised discovery of novel spectral types.
+   - Support forward modeling for theoretical studies and instrument design.
+
+This algorithm effectively bridges the gap between sparse photometry and detailed spectral analysis, providing a statistically rigorous framework for reconstructing and classifying TNO spectra.

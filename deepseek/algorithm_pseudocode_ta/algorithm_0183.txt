@@ -1,0 +1,33 @@
+**Algorithm: Probabilistic Spectral Reconstruction Framework**
+
+1. **Load Training Data Set**:
+   - Read in a collection of near-infrared (NIR) spectra of trans-Neptunian objects (TNOs).
+
+2. **Preprocess Data**:
+   - Normalize the spectral data to ensure all spectra are on a comparable scale.
+   - Remove any outliers or anomalies in the training data set.
+
+3. **Apply Principal Component Analysis (PCA)**:
+   - Train a PCA model on the preprocessed spectral data.
+   - Extract principal components to capture the majority of spectral variability.
+
+4. **Build Latent-Space Model**:
+   - Develop a probabilistic framework that maps sparse photometric observations into the latent space defined by the PCA.
+   - Establish a forward model linking photometric measurements to latent variables.
+
+5. **Process Each Test Object**:
+   - **a. Obtain Sparse Photometric Measurements**: Retrieve available photometric data for the object.
+   - **b. Map Photometry to Latent Space**: Use the pre-trained PCA model to transform photometric data into latent space.
+   - **c. Perform Bayesian Inference**: Utilize Bayesian methods to compute posterior distributions of latent variables given photometric measurements.
+   - **d. Propagate Uncertainties**: Transfer uncertainties from the latent space back to the spectral space.
+   - **e. Reconstruct Full Spectrum**: Generate reconstructed spectra based on posterior means of latent variables.
+
+6. **Identify Optimal NIRCam Filters**:
+   - Evaluate the information content of various JWST/NIRCam filters.
+   - Determine optimally informative filter combinations for future observations.
+
+7. **Detect Outliers and Rare Spectral Types**:
+   - Apply the framework to identify objects with photometry conforming to low-probability intermediate models.
+   - Reconstruct and constrain spectra of rare types by allowing exploration of less probable latent states.
+
+**End Algorithm**

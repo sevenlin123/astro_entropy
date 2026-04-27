@@ -1,0 +1,24 @@
+The core computational algorithm involves the following steps:
+
+1. **Training Principal Component Analysis (PCA):** 
+   - Apply PCA to a sample set of near-infrared spectra to create a principal component representation. This captures the main modes of spectral variability in TNOs.
+
+2. **Modeling the Spectral Manifold:** 
+   - Use the trained PCA model to represent the spectral manifold of TNOs in a lower-dimensional latent space.
+
+3. **Bayesian Inference in Reduced Space:** 
+   - Perform Bayesian inference within this latent space to reconstruct full spectra from sparse photometric data, incorporating measurement uncertainties.
+
+4. **Leave-One-Out Cross-Validation (LOOCV):** 
+   - Validate the model using LOOCV to determine the optimal number of principal components required for accurate reconstruction. It was found that 4-5 components are sufficient for classification, with 8-10 improving reconstruction fidelity.
+
+5. **Reconstructing Spectra:** 
+   - For each object, use the validated model to reconstruct its spectrum from photometry. This includes quantifying uncertainties and ensuring credible intervals meet the desired coverage (e.g., ~95%).
+
+6. **Survey Optimization and Filter Selection:** 
+   - Analyze the information content of different JWST/NIRCam filters to identify optimal configurations for future observations, enhancing the ability to classify TNOs based on their spectra.
+
+7. **Outlier Detection and Rare Spectral Type Reconstruction:** 
+   - Allow the model to constrain photometry to identify and reconstruct rare or peculiar spectral types by selecting low-probability intermediate models from the spectral manifold.
+
+This framework effectively bridges sparse photometry and spectroscopy, enabling statistically rigorous mapping of compositional structures in minor planets through large-scale surveys.

@@ -1,0 +1,27 @@
+**Algorithm Description:**
+
+1. **Parameterize the Spectral Energy Distribution (SED):**
+   - Represent the SED of trans-Neptunian objects (TNOs) using a set of basis vectors derived from known spectral templates. These basis vectors help reduce the dimensionality and leverage prior knowledge about TNO spectra.
+
+2. **Determine Optimal Number of Components:**
+   - Apply a Gaussian Mixture Model (GMM) to identify the optimal number of spectral components. This step prevents overfitting by adjusting the model complexity according to the data.
+
+3. **Construct Probabilistic Model:**
+   - Develop a probabilistic framework linking photometric measurements to the SED parameters. This model accounts for uncertainties in both the photometric data and the spectral templates.
+
+4. **Iterative Least Squares Minimization:**
+   - Use an iterative least squares method to solve for the coefficients of the SED. This ensures consistency between the reconstructed SED and the observed photometric data.
+
+5. **Bayesian Inference:**
+   - Employ Bayesian methods to determine the posterior distribution of the SED parameters given the observations, incorporating regularization techniques for numerical stability and preventing overfitting.
+
+6. **Sparsity Promotion:**
+   - Represent the SED as a sparse combination of basis vectors to enhance interpretability and reduce overfitting.
+
+7. **Automatic Outlier Detection:**
+   - Utilize the probabilistic framework to identify outliers inconsistent with the model, ensuring robust analysis.
+
+8. **Uncertainty Quantification:**
+   - Provide a quantitative measure of uncertainty in the reconstructed SED, facilitating reliable comparisons between spectral taxonomic classes and aiding in survey optimization.
+
+**Final Output:** The algorithm reconstructs the SED of TNOs by iteratively minimizing the discrepancies between observed photometric data and the model predictions, using basis vectors, probabilistic models, and Bayesian inference to achieve accurate and robust results.

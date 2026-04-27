@@ -1,0 +1,45 @@
+The algorithm reconstructs the Spectral Energy Distribution (SED) of trans-Neptunian objects using Gaussian Processes and Bayesian inference. Here is the step-by-step pseudocode:
+
+```python
+Algorithm SEDReconstruction(objects, photometric_bands):
+    for each object in objects:
+        Initialize Gaussian Process parameters θ (e.g., σ_f, l)
+        Collect observed bands, fluxes, and uncertainties:
+            bands_observed = list of observed photometric bands
+            flux_observed = flux measurements in these bands
+            sigma_band = measurement uncertainties for each band
+
+        Create input vectors:
+            X = array of wavelengths of observed bands
+            Y = array of flux observations
+            Sigma = array of measurement uncertainties
+
+        Build the covariance matrix K:
+            for i in range(len(X)):
+                for j in range(len(X)):
+                    K[i, j] = σ_f^2 * exp(- (X[i] - X[j])^2 / (2 * l^2))
+            K += diag(Sigma^2)
+
+        Compute the log-likelihood:
+            log_p = -0.5 * (log(det(K)) + Y^T * K^{-1} * Y)
+
+        Perform Bayesian inference to update θ:
+            using MCMC or optimization to maximize log_p, sample θ and flux_true
+
+        Sample flux_true from the posterior:
+            flux_samples = MCMC_samples(θ, K)
+
+        Compute the posterior predictive distribution:
+            sed_mean = mean(flux_samples)
+
+        Compute outlier probabilities for each observed flux:
+            for each y in Y:
+                p_outlier = probability that y is an outlier using half-Cauchy distribution
+
+        Output:
+            SED = sed_mean
+            outlier_probs = list of p_outlier for each observed flux
+    end for
+```
+
+This pseudocode outlines the core steps of the reconstruction framework, focusing on Bayesian inference with Gaussian Processes to infer the SED and calculate outlier probabilities.

@@ -1,0 +1,18 @@
+``` 
+algorithm CoreReconstructionFramework
+    Input: sparse photometric data for multiple bands
+    Output: posterior predictive distributions of SEDs
+
+    For each object in dataset:
+        Initialize Gaussian components for each photometric band
+        Set initial mixing weights for each Gaussian component
+        For each iteration until convergence:
+            For each photometric band:
+                Update Gaussian parameters (mean, variance) based on observed fluxes
+                Adjust fluxes according to 1/r^2 law for extinction
+            Update mixing weights using Bayesian inference
+        After convergence:
+            Generate posterior predictive distributions using Gibbs sampling
+    End For each object
+    Return posterior predictive distributions
+```

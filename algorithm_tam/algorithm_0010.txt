@@ -1,0 +1,41 @@
+The probabilistic spectral reconstruction framework for Trans-Neptunian Objects (TNOs) involves the following steps:
+
+1. **Training Data Preparation**:
+   - Collect and preprocess a set of reference TNO spectra, focusing on dominant taxonomic classes (e.g., Water-type, CO₂-type, Organics-type).
+   - Exclude rare or outlier spectral types to ensure a "clean" latent space representative of the majority population.
+
+2. **Principal Component Analysis (PCA)**:
+   - Perform PCA on the preprocessed spectra to obtain principal components (PCs).
+   - PCs capture the major modes of spectral variability, reducing the dimensionality of the data.
+   - Typically, 4-5 PCs are sufficient for taxonomic classification, while 8-10 PCs improve reconstruction fidelity.
+
+3. **Latent Space Definition**:
+   - Use Kernel Density Estimation (KDE) on the PCA coefficients to define a continuous probability distribution in the latent space.
+   - This distribution serves as the prior for Bayesian inference.
+
+4. **Synthetic Photometry Generation**:
+   - Forward model the synthetic photometric measurements by convolving the spectra with the instrument's filter responses (e.g., JWST/NIRCam).
+   - Inject Gaussian noise (e.g., 20% relative uncertainty) to simulate realistic photometric observations.
+
+5. **AutoML Model Training**:
+   - Train an ensemble of Gradient-Boosted Decision Trees (GBDTs) using AutoML (e.g., AutoGluon) to regress sparse photometry onto PCA latent coefficients.
+   - The model learns the mapping from photometric data to the latent space.
+
+6. **Taxonomic Classifier Training**:
+   - Train a secondary AutoML classifier on the latent coordinates to predict taxonomic labels (e.g., H₂O, CO₂, Organic, Methanol).
+   - This enhances decision boundaries by leveraging the reduced-dimensional, physically meaningful latent space.
+
+7. **Reconstruction Pipeline**:
+   - For new observations, pass the photometric data through the trained AutoML regressor to predict latent coefficients.
+   - Project the predicted coefficients back to the full spectral space using inverse PCA transformation to reconstruct the spectrum.
+   - Simultaneously, use the latent coordinates to classify the spectral type.
+
+8. **Validation and Uncertainty Propagation**:
+   - Perform Leave-One-Out Cross-Validation (LOOCV) to assess reconstruction accuracy and validate the framework.
+   - Measure empirical credible-interval coverage to evaluate uncertainty calibration.
+
+9. **Survey Optimization and Outlier Detection**:
+   - Quantify the information content of different filter configurations to optimize future photometric surveys.
+   - Detect rare spectral types by constraining photometry to identify low-probability intermediate models.
+
+The algorithm effectively bridges sparse photometry and detailed spectroscopy, enabling accurate spectral reconstruction and taxonomic classification while propagating measurement uncertainties.

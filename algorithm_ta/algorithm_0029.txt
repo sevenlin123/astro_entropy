@@ -1,0 +1,11 @@
+The final answer, after considering the steps involved in the core computational method described in the paper, is presented as follows:
+
+\boxed{
+\begin{aligned}
+&1.\ \text{Train a PCA model on a set of reference near-IR spectra of TNOs.} \\
+&2.\ \text{For each TNO, obtain its sparse photometric measurements.} \\
+&3.\ \text{Project the photometric measurements into the PCA space.} \\
+&4.\ \text{Perform Bayesian inference in the PCA space to estimate the latent variables.} \\
+&5.\ \text{Reconstruct the full spectrum using the estimated latent variables.}
+\end{aligned}
+}

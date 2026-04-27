@@ -1,0 +1,86 @@
+**Algorithm Description**
+
+1. **Data Preparation**
+   - Collect a reference set of TNO spectra (e.g., 51 spectra).
+   - Apply PCA to the reference spectra to obtain principal components (PCs).
+   - Determine the number of PCs (e.g., 4-5 for classification, 8-10 for reconstruction).
+
+2. **Training Phase**
+   - Project the reference spectra onto the determined number of PCs to get latent coefficients.
+   - Use Kernel Density Estimation (KDE) to create a smooth probability distribution in the latent space.
+   - Generate synthetic spectra by sampling from the latent space and projecting back using inverse PCA.
+
+3. **Likelihood Construction**
+   - Simulate photometric measurements for each synthetic spectrum by convolving with NIRCam filter curves.
+   - Add noise (e.g., 20% relative uncertainty) to the simulated photometry to account for observational errors.
+
+4. **Model Training**
+   - Train an AutoML regressor (e.g., Gradient Boosted Decision Trees) to map noisy photometry to latent coefficients.
+   - Train a separate classifier within the latent space to predict taxonomic classes.
+
+5. **Reconstruction Process**
+   - For new photometric observations, use the trained regressor to predict latent coefficients.
+   - Apply inverse PCA to reconstruct the full spectrum.
+   - Classify the object into a taxonomic category based on the latent coefficients.
+
+6. **Validation**
+   - Perform Leave-One-Out Cross-Validation (LOOCV) to assess reconstruction accuracy and uncertainty calibration.
+   - Validate taxonomic classification accuracy.
+
+7. **Applications**
+   - Identify optimal NIRCam filter configurations for high-fidelity reconstructions.
+   - Detect spectral outliers by checking deviations from the expected latent manifold.
+
+8. **Output**
+   - Reconstructed spectrum with uncertainty estimates.
+   - Probabilistic taxonomic classification.
+   - Identified outliers for spectroscopic follow-up.
+
+**Pseudocode**
+
+```python
+function spectral_reconstruction_framework():
+    # Step 1: Data Preparation
+    reference_spectra = load_reference_spectra()
+    pca = PCA(n_components=num_pcs)
+    latent_coefficients = pca.fit_transform(reference_spectra)
+
+    # Step 2: Training Phase
+    kde = KernelDensityEstimator(bandwidth=h)
+    kde.fit(latent_coefficients)
+    synthetic_latents = kde.sample(n_samples=num_synthetic)
+    synthetic_spectra = inverse_pca(pca, synthetic_latents)
+
+    # Step 3: Likelihood Construction
+    simulated_photometry = []
+    for spec in synthetic_spectra:
+        flux = convolve(spec, filter_curves)
+        add_noise(flux, noise_level=0.2)
+        simulated_photometry.append(flux)
+
+    # Step 4: Model Training
+    regressor = AutoMLRegressor()
+    regressor.train(simulated_photometry, synthetic_latents)
+    classifier = AutoMLClassifier()
+    classifier.train(latent_coefficients, taxonomic_labels)
+
+    # Step 5: Reconstruction Process
+    def reconstruct(sparse_photometry):
+        latents = regressor.predict(sparse_photometry)
+        reconstructed_spec = inverse_pca(pca, latents)
+        taxonomy = classifier.predict(latents)
+        return reconstructed_spec, taxonomy
+
+    # Step 6: Validation
+    cv_scores = leave_one_out_cv(reference_spectra, simulated_photometry, regressor)
+
+    # Step 7: Applications
+    optimal_filters = find_optimal_filters(regressor, classifier)
+    outliers = detect_outliers(reconstructed_specs, expected_manifold)
+
+    return optimal_filters, outliers
+```
+
+**Explanation**
+
+The algorithm begins by preparing the reference spectra and reducing their dimensionality using PCA. It then generates synthetic data to augment the training set, ensuring a smooth latent space distribution. The likelihood is constructed by simulating noisy photometry from the synthetic spectra. An AutoML regressor is trained to map photometry to latent coefficients, and a classifier operates in the latent space for taxonomic prediction. The reconstruction process uses the regressor and inverse PCA to produce full spectra from new photometric data. Validation through LOOCV ensures accuracy, and applications include identifying optimal filters and detecting outliers.

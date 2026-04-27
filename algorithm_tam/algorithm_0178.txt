@@ -1,0 +1,42 @@
+### Algorithm Description
+
+1. **Data Preparation**:
+   - Collect a set of reference TNO spectra (e.g., 51 spectra) from existing studies.
+   - Exclude rare or outlier spectral types to focus on dominant taxonomic classes.
+
+2. **Principal Component Analysis (PCA)**:
+   - Perform PCA on the reference spectra to reduce them into a low-dimensional latent space.
+   - Determine the number of principal components (e.g., 4-10) that capture the necessary spectral variability for accurate reconstruction and classification.
+
+3. **Latent Space Definition**:
+   - Use Kernel Density Estimation (KDE) on the PCA latent coordinates to create a smooth probability distribution, augmenting the training data.
+   - Choose an appropriate bandwidth for KDE to balance local fidelity and global smoothness.
+
+4. **Synthetic Photometry Generation**:
+   - Forward-model the augmented spectra with the target instrument's (e.g., JWST/NIRCam) filter curves to simulate photometric measurements.
+   - Inject noise (e.g., 20% relative uncertainty) to account for observational uncertainties.
+
+5. **Model Training**:
+   - Train an AutoML regressor (e.g., Gradient Boosted Decision Trees) to map the sparse photometry to the latent coefficients.
+   - Use the generated synthetic photometry and corresponding latent coordinates for training.
+
+6. **Bayesian Inference for Spectral Reconstruction**:
+   - For new photometric observations, use the trained AutoML model to predict latent coefficients.
+   - Project these coefficients through the inverse PCA transform to reconstruct the full spectrum.
+   - Calculate posterior uncertainties to assess confidence in the reconstruction.
+
+7. **Taxonomic Classification**:
+   - Train a secondary classifier on the latent space to predict the spectral type (e.g., H₂O, CO₂, Organics, Methanol).
+   - Classify new objects based on their latent coordinates.
+
+8. **Cross-Validation and Evaluation**:
+   - Apply Leave-One-Out Cross-Validation (LOOCV) to assess reconstruction accuracy and credible interval coverage.
+   - Measure taxonomic classification accuracy to validate the framework's performance.
+
+9. **Survey Optimization and Outlier Detection**:
+   - Use the framework to evaluate different filter configurations and optimize photometric surveys for TNO studies.
+   - Identify outliers by examining the probability density of latent coordinates for new observations.
+
+10. **Applications and Analysis**:
+    - Apply the reconstructed spectra to study TNO taxonomy, surface composition, and physical properties.
+    - Detect peculiar objects and refine the framework for future missions and large-scale surveys.

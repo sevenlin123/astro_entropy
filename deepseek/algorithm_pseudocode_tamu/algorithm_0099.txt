@@ -1,0 +1,68 @@
+```pseudocode
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+    - Training Spectra: Set of reference TNO spectra
+    - Photometric Observations: Sparse multi-band photometry for objects
+    - JWST/NIRCam Filter Response Curves
+    - Uncertainty levels for photometric measurements
+
+Output:
+    - Reconstructed Spectra
+    - Taxonomic Classification Probabilities
+    - Uncertainty Quantification
+
+Steps:
+
+1. Preprocessing:
+    a. Normalize Training Spectra: Reflectance divided by solar spectrum.
+    b. Apply Principal Component Analysis (PCA):
+        i. Extract eigenvectors and eigenvalues from training spectra.
+        ii. Determine optimal number of Principal Components (PCs) via cross-validation (LOOCV).
+    c. Construct Latent Space:
+        i. Project training spectra onto identified PCs to get latent coefficients.
+        ii. Augment latent space using Kernel Density Estimation (KDE) with Gaussian kernel to ensure smooth probability distribution.
+
+2. Forward Modeling:
+    a. Simulate photometric observations from augmented spectra:
+        i. Convolve spectra with NIRCam filter responses to compute reflectance in each band.
+        ii. Inject Gaussian noise (relative uncertainty ~20%) into simulated photometry.
+    b. Create training database of noisy photometry paired with latent coefficients.
+
+3. Training AutoML Regressor:
+    a. Use AutoGluon framework to train an ensemble model (e.g., Gradient Boosted Decision Trees) mapping photometric inputs to latent coefficients.
+    b. Optimize hyperparameters to minimize reconstruction error and ensure generalization.
+
+4. Validation:
+    a. Perform Leave-One-Out Cross-Validation (LOOCV):
+        i. For each held-out spectrum:
+            - Remove from training set.
+            - Generate synthetic data for remaining training spectra.
+            - Train regressor on augmented data.
+            - Predict latent coefficients for held-out photometry.
+            - Reconstruct spectrum using inverse PCA.
+            - Compute nRMSE and coverage probability for validation.
+    b. Evaluate empirical coverage of 95% credible intervals.
+
+5. Reconstruction Pipeline:
+    a. For new photometric observations:
+        i. Pass photometry through trained regressor to obtain latent coefficients distribution.
+        ii. Apply inverse PCA to generate reconstructed spectrum.
+        iii. Use Gaussian Copula to sample joint posterior for uncertainty quantification.
+    b. Taxonomic Classification:
+        i. Classify latent coefficients using pre-trained classifier to determine spectral type probabilities.
+
+6. Applications:
+    a. Survey Optimization:
+        i. Measure mutual information between photometric filters and latent components.
+        ii. Prioritize filters maximizing discriminative power.
+    b. Outlier Detection:
+        i. Identify objects with latent states in sparse regions of the manifold.
+        ii. Flag rare spectral types based on posterior probabilities.
+
+End
+```
+
+```plaintext
+The algorithm outlines a probabilistic framework that combines PCA, machine learning, and Bayesian inference to reconstruct high-resolution spectra from sparse photometry. It includes preprocessing steps, forward modeling, model training, validation, and inference for both spectral reconstruction and taxonomic classification. The method also provides tools for survey optimization and outlier detection in TNO studies.
+```

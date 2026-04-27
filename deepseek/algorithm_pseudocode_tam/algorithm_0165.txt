@@ -1,0 +1,47 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+**1. Initialize Training Data:**
+   - Collect reference TNO spectra (e.g., 51 observed spectra).
+   - Exclude rare or outlier spectral types to define a "clean" training set.
+
+**2. Perform Principal Component Analysis (PCA):**
+   - Decompose the training spectra into principal components (latent space).
+   - Retain sufficient components (e.g., 4-5 for classification, 8-10 for reconstruction fidelity).
+
+**3. Augment Latent Space with Synthetic Data:**
+   - Use Kernel Density Estimation (KDE) on the PCA coefficients to generate a smooth probability distribution.
+   - Bandwidth selection (e.g., h ≈ 0.5) ensures balance between local fidelity and global smoothness.
+
+**4. Generate Synthetic Photometry:**
+   - For each augmented spectrum, compute photometric magnitudes using JWST/NIRCam filter responses.
+   - Add Gaussian noise (e.g., 20% relative reflectance uncertainty) to simulate realistic photometric measurements.
+
+**5. Train AutoML Regressor:**
+   - Use synthetic photometry as input and latent coefficients as output.
+   - Employ an ensemble of Gradient Boosted Decision Trees (GBDTs) for the regression task.
+
+**6. Train Taxonomic Classifier:**
+   - Project the latent coefficients of the training spectra into a categorical space.
+   - Train another AutoML classifier to predict taxonomic labels (e.g., H₂O, CO₂, Organic, Methanol).
+
+**7. Perform Leave-One-Out Cross-Validation (LOOCV):**
+   - For each held-out spectrum:
+     - Simulate photometric measurements with noise.
+     - Use the trained regressor to predict latent coefficients.
+     - Reconstruct the spectrum via inverse PCA transformation.
+     - Evaluate MAE, Pearson correlation, and classification accuracy.
+     - Check credible interval coverage for uncertainty calibration.
+
+**8. Survey Optimization:**
+   - Compute Fisher Information Matrix (FIM) for each filter configuration.
+   - Rank filters based on FIM determinant to maximize information content.
+
+**9. Outlier Detection:**
+   - Analyze posterior distributions in latent space.
+   - Identify objects outside the convex hull of training data.
+
+**10. Output:**
+   - Reconstructed spectra with uncertainty estimates.
+   - Probabilistic taxonomic classifications.
+   - Optimized filter configurations.
+   - Flagged outliers for follow-up spectroscopy.

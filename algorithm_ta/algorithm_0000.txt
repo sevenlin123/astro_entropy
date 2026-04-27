@@ -1,0 +1,38 @@
+**Algorithm: Probabilistic Spectral Reconstruction Framework**
+
+1. **Data Preprocessing**:
+   - **Input**: Sparse photometric measurements of TNOs.
+   - **Output**: Processed data ready for spectral analysis.
+
+2. **Principal Component Analysis (PCA)**:
+   - **Input**: Near-infrared (near-IR) spectra from a training sample.
+   - **Output**: Principal component representation capturing the major spectral variations.
+
+3. **Bayesian Inference in Reduced Space**:
+   - **Input**: Processed photometric data and PCA model.
+   - **Output**: Probabilistic reconstruction of full spectra using the reduced PCA space.
+
+4. **Model Training**:
+   - **Input**: Training set of near-IR spectra.
+   - **Output**: Trained PCA model with defined number of principal components (e.g., 4-5 for classification, 8-10 for high-fidelity reconstruction).
+
+5. **Spectral Manifold Construction**:
+   - **Input**: PCA model and processed photometric data.
+   - **Output**: Representation of the spectral manifold for TNOs.
+
+6. **Reconstruction and Uncertainty Propagation**:
+   - **Input**: Photometric data and trained PCA model.
+   - **Output**: Reconstructed spectra with associated uncertainties, ensuring credible interval coverage (~95%).
+
+7. **Survey Optimization and Filter Selection**:
+   - **Input**: Information content of NIRCam filters.
+   - **Output**: Optimally informative filter configurations for future observations.
+
+8. **Outlier Detection and Rare Spectral Types**:
+   - **Input**: Photometric data and PCA model.
+   - **Output**: Identification of unusual spectral types by constraining photometry to low-probability intermediate models.
+
+9. **Final Output**:
+   - **Output**: Probabilistic spectral reconstructions, uncertainty estimates, optimized survey configurations, and identified outlier spectral types.
+
+This algorithm bridges sparse photometry and detailed spectral analysis, enabling robust compositional mapping of TNOs in large-scale surveys.

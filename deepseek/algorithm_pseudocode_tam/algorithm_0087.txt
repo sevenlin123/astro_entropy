@@ -1,0 +1,86 @@
+To implement the core reconstruction framework described in the paper, we follow these steps:
+
+1. **Prepare Training Data**: 
+   - Collect a set of reference TNO spectra.
+   - Perform Principal Component Analysis (PCA) to create a low-dimensional latent space.
+
+2. **Data Augmentation**:
+   - Use Kernel Density Estimation (KDE) to smooth the latent space, generating synthetic spectra that fill gaps between observed data.
+
+3. **Generate Synthetic Photometry**:
+   - Convolve the augmented spectra with the instrument's filter curves to produce theoretical photometric measurements.
+   - Add noise to simulate real-world observational uncertainties.
+
+4. **Train AutoML Regressor**:
+   - Develop a machine learning model (e.g., Gradient Boosted Decision Trees) to map photometric inputs to latent space coefficients.
+
+5. **Reconstruct Spectra**:
+   - For new photometric observations, predict latent coefficients and invert using PCA to obtain full spectra.
+
+6. **Taxonomic Classification**:
+   - Classify the object's spectral type based on the latent space representation.
+
+7. **Validation**:
+   - Use Leave-One-Out Cross-Validation (LOOCV) to assess reconstruction accuracy and uncertainty calibration.
+
+Here is the algorithm in pseudocode:
+
+```
+Algorithm: Probabilistic Spectral Reconstruction from Photometry
+
+Input:
+    - Reference Spectra: Collection of high-resolution TNO spectra
+    - Photometry Data: Observed photometric measurements
+    - Instrument Filters: Filter curves of the observing instrument (e.g., JWST/NIRCam)
+
+Output:
+    - Reconstructed Spectra: Full spectral energy distributions
+    - Taxonomic Classifications: Categorical labels of spectral types
+    - Uncertainty Estimates: Probabilistic confidence intervals
+
+Steps:
+
+1. Perform Principal Component Analysis (PCA) on Reference Spectra:
+    - Compute PCA eigenvectors and eigenvalues.
+    - Project Reference Spectra onto the PCA basis to get latent coefficients.
+
+2. Augment the Latent Space:
+    - Apply Kernel Density Estimation (KDE) to smooth the latent coefficients distribution.
+    - Generate synthetic latent points to create a continuous manifold.
+
+3. Generate Synthetic Photometry:
+    - For each synthetic latent point, compute the expected photometric measurements by convolving with instrument filters.
+    - Add Gaussian noise (e.g., 20% relative uncertainty) to simulate realistic photometry.
+
+4. Train AutoML Regressor:
+    - Train a machine learning model (e.g., AutoGluon) to predict latent coefficients from photometric inputs.
+    - Use the noisy synthetic photometry as training data.
+
+5. Reconstruct Spectra from Photometry:
+    - For each observed photometric measurement:
+        a. Use the trained regressor to predict latent coefficients.
+        b. Invert the PCA transformation to obtain the full spectrum.
+
+6. Perform Taxonomic Classification:
+    - Train a classifier on the latent space using labeled reference spectra.
+    - Predict taxonomic labels for new objects based on their latent coefficients.
+
+7. Validate the Model:
+    - Apply Leave-One-Out Cross-Validation (LOOCV):
+        i. For each spectrum, hold it out, retrain the model, and test reconstruction.
+        ii. Calculate Normalized Root Mean Square Error (NRMSE) between true and reconstructed spectra.
+        iii. Check credible interval coverage to assess uncertainty calibration.
+
+8. Detect Outliers:
+    - Identify objects whose posterior probabilities in latent space fall below a threshold, indicating rare or unusual spectral types.
+
+9. Optimize Survey Filters:
+    - Use the framework to evaluate different filter combinations for maximizing information content and classification accuracy.
+
+10. Output Results:
+    - Provide reconstructed spectra with uncertainty estimates.
+    - Deliver taxonomic classifications for each object.
+    - Highlight outliers and unusual spectral types.
+```
+
+This algorithm effectively bridges the gap between sparse photometric data and detailed spectral information, enabling robust analysis of TNOs' surface compositions in large-scale surveys.

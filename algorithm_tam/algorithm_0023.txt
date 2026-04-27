@@ -1,0 +1,29 @@
+The core computational algorithm for the spectral reconstruction framework can be structured as follows:
+
+1. **Principal Component Analysis (PCA) Setup**:
+   - Train PCA on a reference set of TNO spectra to create a low-dimensional latent space (typically 4-10 principal components).
+   - Use the eigenvectors to represent spectral variations and capture the dominant modes of spectral diversity.
+
+2. **Data Augmentation**:
+   - Project seed spectra onto the PCA latent space.
+   - Generate synthetic training data using Kernel Density Estimation (KDE) to create a continuous probability distribution in the latent space, ensuring smooth transitions between spectral types.
+
+3. **Synthetic Photometry Generation**:
+   - Convolve the augmented spectra with the instrumental filter responses (e.g., JWST/NIRCam) to simulate observed photometric magnitudes.
+   - Introduce Gaussian noise (e.g., 20% relative uncertainty) to account for observational uncertainties.
+
+4. **AutoML Regression Training**:
+   - Train an ensemble of gradient-boosted decision trees (AutoML) to regress from sparse photometry to latent space coordinates.
+   - The model learns the mapping from photometric inputs to PCA coefficients.
+
+5. **Reconstruction Pipeline**:
+   - For new photometric observations:
+     a. Use the trained AutoML model to predict the latent space coordinates.
+     b. Apply the inverse PCA transformation to reconstruct the full spectrum.
+     c. Generate a probability distribution over taxonomic classes using a secondary classifier trained on the latent space.
+
+6. **Validation and Uncertainty Quantification**:
+   - Perform leave-one-out cross-validation to assess reconstruction accuracy and credible interval coverage.
+   - Evaluate metrics such as MSE, feature correlation, and empirical coverage to ensure the reconstructed spectra are accurate and physically plausible.
+
+This algorithm efficiently bridges sparse photometric data to detailed spectral reconstructions, enabling insights into TNO surface compositions and supporting survey optimization and outlier detection.

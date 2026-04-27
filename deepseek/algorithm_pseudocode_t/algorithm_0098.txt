@@ -1,0 +1,18 @@
+**Algorithm: Probabilistic Spectral Reconstruction**
+
+1. **Initialization**
+   - Initialize parameters for basis components (e.g., blackbody temperatures, coefficients).
+   
+2. **Markov Chain Monte Carlo (MCMC) Sampling**
+   - For each iteration:
+     - Sample posterior distributions of SED components using MCMC.
+     - Update parameters based on data and noise model.
+     - Perform variable selection to identify relevant basis components.
+   
+3. **Dimensionality Reduction**
+   - Combine sampled parameters into a reduced set of basis components.
+   
+4. **Hierarchical Clustering**
+   - Group similar SEDs into classes using hierarchical clustering.
+
+**End Algorithm**

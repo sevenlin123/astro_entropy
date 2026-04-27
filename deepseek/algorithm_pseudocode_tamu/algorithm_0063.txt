@@ -1,0 +1,31 @@
+```
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input: 
+- Sparse photometric observations (m)
+- Pre-trained PCA basis (principal_components)
+- Pre-trained KDE model (kernel_density_estimation)
+- Pre-trained AutoML regressor (encoder)
+
+Output:
+- Reconstructed spectrum (S)
+- Classification probabilities (C)
+
+Steps:
+1. **Latent Space Prediction:**
+   - Use the AutoML regressor (encoder) to predict the latent coefficients (z) from the sparse photometry (m).
+   
+2. **Generate Posterior Samples:**
+   - Sample from the joint posterior distribution of the latent coefficients using the Gaussian Copula framework.
+   
+3. **Reconstruct Spectrum:**
+   - Apply the inverse PCA transform to each sampled latent coefficient to obtain a high-resolution spectrum (S).
+   
+4. **Compute Classification Probabilities:**
+   - Project the latent coefficients into the pre-trained taxonomy classifier to predict the probability distribution over spectral types (C).
+   
+5. **Return Result:**
+   - Output the mean reconstructed spectrum (S) and the classification probabilities (C).
+
+End
+```

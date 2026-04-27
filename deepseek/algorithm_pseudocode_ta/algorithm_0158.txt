@@ -1,0 +1,39 @@
+```
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+- Training set of TNO spectra: {S_1, S_2, ..., S_T}
+- Observed photometric magnitudes for each object: {m_λ_i}
+- Number of photometric bands: N_phot (<=20)
+
+Output:
+- Reconstructed spectrum Ŝ(λ)
+- Uncertainty in Ŝ(λ)
+
+Preprocessing:
+1. For each spectrum S_t in training set:
+   a. Convert S_t into flux vector F_t.
+2. Perform PCA on {F_1, F_2, ..., F_T} to get principal components v_j (for j=1 to J), ordered by variance.
+
+For each object to analyze:
+1. Convert observed magnitudes m_λ_i to fluxes f_λ_i: f_λ_i = 10^(-0.4 * m_λ_i)
+2. Form flux vector F = [f_λ1, f_λ2, ..., f_λN]
+3. Project F onto each PCA eigenvector v_j to get coefficient a_j = F · v_j
+4. Collect all a_j for this object
+
+Bayesian Inference:
+1. Define prior distribution P(a) (e.g., Gaussian with mean 0 and variance based on PCA analysis)
+2. Compute likelihood P(data | a) based on the projection F = sum_j a_j v_j + noise
+3. Perform Bayesian inference to get posterior P(a | data) using, e.g., MCMC or variational methods
+
+Spectrum Reconstruction:
+1. Compute posterior mean a_j_posterior_mean
+2. Reconstruct spectrum: Ŝ(λ) = sum_j (a_j_posterior_mean * v_j(λ))
+
+Uncertainty Quantification:
+1. Compute posterior covariance matrix Cov(a)
+2. For each wavelength λ, compute variance in Ŝ(λ) as sum_jk Cov(a)_jk * v_j(λ) * v_k(λ)
+3. Take square root to get standard deviation at each λ
+
+End
+```

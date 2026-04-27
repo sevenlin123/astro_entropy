@@ -1,0 +1,49 @@
+```python
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. Initialize the PCA model using the reference TNO spectra.
+   - Input: Reference spectra (training set).
+   - Output: PCA components (principal eigenvectors and eigenvalues).
+
+2. Generate synthetic spectra using Kernel Density Estimation (KDE) on the PCA latent space.
+   - Input: Real spectra and their latent coefficients.
+   - Output: Augmented training data with smooth manifold.
+
+3. Forward model the synthetic spectra through the NIRCam filter set to obtain mock photometry.
+   - Input: Synthetic spectra.
+   - Output: Mock photometric measurements with added noise.
+
+4. Train the AutoML regressor (e.g., Gradient Boosted Decision Trees) to map photometry to latent coefficients.
+   - Input: Mock photometry.
+   - Output: Trained encoder model.
+
+5. Retrain the model using LOOCV:
+   - For each spectrum in the training set:
+     - Remove the spectrum from the training set.
+     - Use the trained encoder to predict latent coefficients from the observed photometry.
+     - Project the latent coefficients through inverse PCA to reconstruct the spectrum.
+     - Compute RMSE and credible interval coverage between reconstructed and actual spectra.
+
+6. Classify spectra using the trained taxonomic classifier in the latent space.
+   - For each spectrum:
+     - Predict latent coefficients from photometry.
+     - Project to latent space and assign taxonomic probabilities.
+
+7. Apply the model to new observations:
+   - For each new object:
+     - Pass photometry through the encoder to get latent coefficients.
+     - Decode to obtain reconstructed spectrum.
+     - Classify taxonomic type.
+
+8. For outlier detection:
+   - For each object:
+     - Calculate distance from the manifold in latent space.
+     - Identify objects with significant deviations as outliers.
+
+9. Optimize photometric surveys by evaluating filter combinations for reconstruction fidelity.
+   - For each filter configuration:
+     - Simulate photometric measurements.
+     - Reconstruct spectra and assess RMSE.
+
+End.
+```

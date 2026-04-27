@@ -1,0 +1,29 @@
+**Algorithm: Probabilistic Spectral Reconstruction Framework**
+
+1. **Training the Principal Component Analysis (PCA) Model**:
+   - Input: Collection of near-IR spectra of trans-Neptunian objects (TNOs).
+   - Perform PCA on the spectral data to obtain principal component (PC) representations.
+     - Compute eigenvectors and eigenvalues from the covariance matrix of the spectral dataset.
+     - Select the number of principal components (e.g., 4-5 for taxonomic classification; 8-10 for higher fidelity).
+     - Project the original spectra onto the PCA space to create latent space representations.
+
+2. **Bayesian Inference in the Latent Space**:
+   - For each TNO:
+     - Input: Sparse photometric flux measurements.
+     - Use the pre-trained PCA model to infer the latent space coordinates (principal component scores).
+     - Perform Bayesian inference:
+       - Define a prior distribution over the latent space (e.g., Gaussian prior with mean zero and variance based on PCA variances).
+       - Define a likelihood function that relates the photometric fluxes to the latent space coordinates through the PCA model.
+       - Use Markov Chain Monte Carlo (MCMC) or variational inference to sample the posterior distribution of the latent coordinates given the photometric data.
+       - Propagate uncertainties from the photometric measurements to the latent space.
+
+3. **Spectral Reconstruction**:
+   - For each TNO:
+     - Using the inferred latent coordinates from the Bayesian inference step, project back into the original spectral space.
+     - Reconstruct the full spectrum by combining the PCA eigenvectors scaled by the inferred latent coordinates.
+     - Calculate credible intervals for the reconstructed spectrum based on the posterior uncertainties in the latent space.
+
+4. **Output**:
+   - For each TNO, output the reconstructed spectrum and associated uncertainties.
+
+**Note**: This algorithm focuses on the core reconstruction framework and excludes validation procedures, plotting, and visualization steps.

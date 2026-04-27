@@ -1,0 +1,11 @@
+```plaintext
+Initialize hyperparameters.
+For each object do:
+    Extract observed photometric measurements.
+    Initialize emission component parameters.
+    Use Bayesian inference to estimate mixing coefficients and component parameters.
+    Reconstruct the full spectral energy distribution.
+End for.
+Optimize hyperparameters collectively across all objects.
+Return reconstructed spectra and optimized hyperparameters.
+```

@@ -1,0 +1,24 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Precompute Reference Sample and PCA Decomposition**
+   - Input: Collection of near-IR spectra of TNOs.
+   - Output: PCA eigenbasis vectors and explained variance.
+     - Perform PCA on the reference spectra.
+     - Extract principal components (PCs) that capture spectral variability (e.g., 4-5 PCs for classification, 8-10 for detailed reconstruction).
+
+2. **Construct Probabilistic Generative Model**
+   - Input: Observed photometric flux measurements and their uncertainties.
+   - Output: Reconstructed spectra and associated uncertainties.
+     - Map observed photometry to the PCA space.
+     - Establish a linear relationship between photometry and PCA coefficients.
+     - Perform Bayesian inference to estimate latent variables (PCA coefficients) given the observed photometry.
+     - Reconstruct the full spectrum using the estimated PCA coefficients.
+
+3. **Uncertainty Propagation and Validation**
+   - Input: Uncertainties from photometric measurements.
+   - Output: Uncertainties on reconstructed spectra.
+     - Propagate photometric uncertainties through the PCA inversion process.
+     - Calculate uncertainties for each wavelength in the reconstructed spectrum.
+     - Validate reconstruction fidelity using leave-one-out cross-validation.
+
+**End Algorithm**

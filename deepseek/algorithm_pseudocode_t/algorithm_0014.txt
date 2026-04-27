@@ -1,0 +1,12 @@
+```
+Algorithm: Core Reconstruction Framework
+
+1. Initialize probabilistic parameters for each spectral feature.
+2. Decompose the observed data matrix using Probabilistic Latent Component Analysis (PLCA) to obtain latent components.
+3. Represent the observed light curve as a sparse linear combination of the latent components.
+4. Perform convex optimization to compute the optimal coefficients that minimize the representation error.
+5. Reconstruct the spectrum by combining the latent components according to the computed coefficients.
+6. Classify the object based on the reconstructed spectrum by comparing it against predefined taxonomic classes.
+
+End Algorithm
+```

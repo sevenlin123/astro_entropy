@@ -1,0 +1,23 @@
+**Algorithm for Probabilistic Spectral Reconstruction of TNOs**
+
+1. **Input Data Preparation**:  
+   - Collect sparse photometric measurements of TNOs. Each measurement is tagged with its corresponding photometric band and uncertainty.
+
+2. **Model Setup**:  
+   - Establish a probabilistic model linking the SED to observed fluxes. Include parameters like albedo, spectral slope, and other relevant TNO properties.  
+   - Assign priors based on known typical TNO properties.
+
+3. **Bayesian Inference**:  
+   - Implement MCMC sampling to explore the parameter space. Use posterior distributions to reconstruct the SED and quantify uncertainties.
+
+4. **Outlier Detection**:  
+   - Calculate the likelihood of observed data given the reconstructed SED for each TNO. Flag as outliers if likelihood falls below a defined threshold.
+
+5. **Taxonomic Classification**:  
+   - Extract features from reconstructed SEDs (e.g., spectral slope, color indices). Train a classifier using these features to categorize TNOs into spectral classes. Assess classification confidence.
+
+6. **Survey Optimization**:  
+   - Identify high-variance or high-uncertainty regions in the SEDs. Prioritize these areas for future observations to enhance information gain.
+
+7. **Output Compilation**:  
+   - Generate results including reconstructed SEDs, taxonomic classifications, outlier flags, and survey optimization recommendations.

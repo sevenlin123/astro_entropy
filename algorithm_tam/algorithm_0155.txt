@@ -1,0 +1,24 @@
+The core computational algorithm implementing the framework involves several steps:
+
+1. **Principal Component Analysis (PCA) on Reference Spectra**: 
+   - Apply PCA to a set of TNO spectra to create a low-dimensional latent space. This latent space captures the dominant modes of spectral variability, reducing the complexity of the problem and providing a compressed representation of the spectra.
+
+2. **Density Estimation with Kernel Density Estimation (KDE)**:
+   - Use KDE to construct a continuous probability distribution in the latent space. This helps in generating synthetic data that fills the gaps between the observed spectra, providing a smooth manifold for the regression model.
+
+3. **Synthetic Photometry Generation**:
+   - For each synthetic spectrum, generate corresponding photometric measurements by convolving the spectrum with the instrument's filter responses (e.g., JWST/NIRCam filters). Introduce noise to simulate realistic photometric uncertainties, ensuring the model accounts for observational noise.
+
+4. **Training the AutoML Regressor**:
+   - Train an automated machine learning regressor (e.g., using AutoGluon) to map the sparse photometric inputs to the latent space coefficients. This step effectively learns the relationship between photometry and the underlying spectral structure.
+
+5. **Reconstructing Spectra**:
+   - Use the trained regressor to predict the latent coefficients from new photometric observations. Apply the inverse PCA transformation to these coefficients to reconstruct the full spectrum, leveraging the physical structure captured in the PCA basis.
+
+6. **Taxonomy Classification**:
+   - Train a separate classifier within the latent space to predict taxonomic labels (e.g., Water-type, CO₂-type, Organics-type). This step uses the principal components as features, enhancing the distinction between taxonomic groups.
+
+7. **Outlier Detection**:
+   - Identify rare or unusual spectral types by examining the probability distribution in the latent space. Points that lie far from the main clusters are flagged as potential outliers, allowing for the detection of peculiar objects like some Neptune Trojans.
+
+The algorithm effectively combines dimensionality reduction, probabilistic modeling, and machine learning to reconstruct high-resolution spectra and classify taxonomic types from sparse photometric data, bridging the gap between available photometry and detailed spectroscopy.

@@ -1,0 +1,27 @@
+### Algorithm Description: Probabilistic Spectral Reconstruction Framework
+
+1. **Principal Component Analysis (PCA) Training**:
+   - Train a PCA model using a reference sample of near-infrared (near-IR) spectra of trans-Neptunian objects (TNOs).
+   - Extract the principal components (PCs) that represent the dominant modes of spectral variability.
+
+2. **Probabilistic Latent-Space Model Construction**:
+   - Construct a probabilistic model in the reduced PCA space.
+   - This model captures the underlying structure of the spectral manifold of TNOs.
+
+3. **Bayesian Inference in Reduced Space**:
+   - Perform Bayesian inference using the PCA-reduced space to reconstruct full spectra from sparse photometric data.
+   - Propagate measurement uncertainties through the inference process.
+
+4. **Spectral Reconstruction**:
+   - For each object, use the probabilistic model to reconstruct the full spectrum based on its photometric measurements.
+   - Determine the number of PCs required for accurate reconstruction (e.g., 8-10 PCs for high fidelity).
+
+5. **Outlier Detection**:
+   - Identify objects with photometric data inconsistent with the reconstructed spectral manifold.
+   - Use the framework to detect rare spectral types by constraining photometry to select low-probability intermediate models.
+
+6. **Survey Optimization**:
+   - Evaluate the information content of different filter configurations for future surveys.
+   - Select optimal filter combinations (e.g., F090W, F115W, F410M, F460M) to maximize spectral reconstruction fidelity.
+
+### Output: The algorithm focuses on reconstructing full spectra from sparse photometry using a probabilistic latent-space framework with Bayesian inference, enabling taxonomic classification, survey optimization, and outlier detection for TNOs.

@@ -1,0 +1,15 @@
+**Algorithm: Probabilistic Spectral Reconstruction Framework**
+
+1. **Principal Component Analysis (PCA) Training**
+   - Train a PCA model on a dataset of near-infrared (near-IR) spectra of trans-Neptunian objects (TNOs).
+
+2. **Spectral Manifold Modeling**
+   - Represent the spectral data in a lower-dimensional latent space using the trained PCA model, capturing the essential variability of the spectra.
+
+3. **Bayesian Inference in Latent Space**
+   - Perform Bayesian inference within this reduced PCA space to reconstruct full spectral curves from sparse photometric measurements.
+
+4. **Uncertainty Propagation**
+   - Propagate measurement uncertainties from the photometric data through the Bayesian model to estimate uncertainties in the reconstructed spectra.
+
+This structured approach allows for the probabilistic reconstruction of full spectra from sparse photometric data, enabling taxonomic classification and analysis of TNOs.

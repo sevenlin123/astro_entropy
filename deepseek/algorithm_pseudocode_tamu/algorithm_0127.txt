@@ -1,0 +1,66 @@
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+#### Step-by-Step Pseudocode:
+
+1. **Preprocessing**:
+   - **Input**: Sparse photometric measurements of TNOs.
+   - **Output**: Prepared photometric data ready for model training.
+
+2. **Principal Component Analysis (PCA)**:
+   - **Training Data**: Reference TNO spectra.
+   - **Objective**: Reduce spectral dimensionality.
+   - **Steps**:
+     a. Perform PCA on the training spectra to extract principal components.
+     b. Define a low-dimensional latent space using the PCA basis.
+
+3. **Data Augmentation with KDE**:
+   - **Objective**: Create synthetic training data for model regularization.
+   - **Steps**:
+     a. Project training spectra onto PCA latent space.
+     b. Use Kernel Density Estimation (KDE) to generate synthetic latent vectors.
+     c. Ensure synthetic data fills intermediate regions of the latent space.
+
+4. **Forward Modeling for Synthetic Photometry**:
+   - **Objective**: Simulate photometric observations from synthetic spectra.
+   - **Steps**:
+     a. Convolve synthetic spectra with NIRCam filter responses.
+     b. Add Gaussian noise (20% relative reflectance uncertainty) to simulate observational errors.
+
+5. **AutoML Regression Training**:
+   - **Objective**: Learn mapping from photometry to latent coefficients.
+   - **Steps**:
+     a. Train an ensemble of gradient-boosted decision trees (e.g., XGBoost) on synthetic photometry and corresponding latent coefficients.
+     b. Optimize hyperparameters automatically using AutoML frameworks (e.g., AutoGluon).
+
+6. **LOOCV Validation**:
+   - **Objective**: Assess reconstruction accuracy and uncertainty calibration.
+   - **Steps**:
+     a. For each test object, remove it from the training set.
+     b. Predict latent coefficients using the trained regressor.
+     c. Decode latent coefficients back to full spectra using inverse PCA.
+     d. Evaluate reconstruction error and credible interval coverage.
+
+7. **Spectral Reconstruction**:
+   - **Input**: New sparse photometric observations.
+   - **Steps**:
+     a. Use trained regressor to predict latent coefficients.
+     b. Apply inverse PCA to reconstruct the full spectrum.
+     c. Sample the posterior distribution using Gaussian Copula to quantify uncertainties.
+
+8. **Taxonomic Classification**:
+   - **Objective**: Classify TNO spectra into known types.
+   - **Steps**:
+     a. Use latent coefficients as features for a secondary classifier.
+     b. Predict taxonomic probabilities for new objects.
+
+9. **Applications**:
+   - **Survey Optimization**:
+     a. Simulate different filter configurations.
+     b. Measure information content for optimal observing strategies.
+   - **Outlier Detection**:
+     a. Identify objects with low posterior probabilities in the latent manifold.
+   - **Compositional Mapping**:
+     a. Systematically map surface compositions across the TNO population.
+
+### Summary:
+The algorithm leverages PCA for dimensionality reduction, AutoML for robust regression, and Bayesian inference for uncertainty quantification, enabling accurate spectral reconstruction from sparse photometry and facilitating downstream scientific applications.

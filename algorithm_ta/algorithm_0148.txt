@@ -1,0 +1,12 @@
+Algorithm: Probabilistic Spectral Reconstruction via PCA and Bayesian Inference
+
+Steps:
+1. Preprocess a training set of near-infrared (near-IR) spectra for trans-Neptunian objects (TNOs).
+2. Perform Principal Component Analysis (PCA) on the preprocessed spectra to obtain principal components (PCs) representing the major spectral variations.
+3. For each TNO with available sparse photometric data:
+   a. Obtain photometric measurements (fluxes/magnitudes) in specific bands.
+   b. Convert photometric data into a spectral representation using instrument response functions.
+   c. Project the spectral representation into the PCA latent space to compute initial PCA coefficients.
+   d. Use Bayesian inference to refine the coefficients, incorporating photometric uncertainties.
+   e. Reconstruct the full spectrum from the refined PCA coefficients.
+   f. Propagate uncertainties from photometric data to the reconstructed spectrum.

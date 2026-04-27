@@ -1,0 +1,108 @@
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+**Step-by-Step Pseudocode**
+
+1. **Initialize Training Parameters**
+   - Input: Seed spectral dataset of TNOs (N = 51)
+   - Output: Trained model for spectral reconstruction
+
+2. **Principal Component Analysis (PCA)**
+   - **Input**: Reference spectra
+   - **Output**: Principal components (eigenvectors) and latent coefficients (scores)
+     ```python
+     # Perform PCA on reference spectra
+     pca = PCA(n_components=K)
+     principal_components = pca.fit_transform(reference_spectra)
+     ```
+
+3. **Density Estimation with Kernel Density (KDE)**
+   - **Input**: Latent coefficients from PCA
+   - **Output**: Smoothed probability distribution over latent space
+     ```python
+     # Train KDE on latent coefficients
+     kde = KernelDensity(bandwidth=h).fit(latent_coefficients)
+     ```
+
+4. **Synthetic Data Generation**
+   - **Input**: Smoothed latent distribution
+   - **Output**: Synthetic latent samples
+     ```python
+     # Sample from KDE
+     synthetic_latents = kde.sample(N_synthetic)
+     ```
+
+5. **Forward Modeling with Simulated Photometry**
+   - **Input**: Synthetic spectra and instrument response functions
+   - **Output**: Noisy photometric measurements
+     ```python
+     # Convolve spectra with filter responses and add noise
+     simulated_photometry = forward_model(synthetic_spectra, filters) + noise
+     ```
+
+6. **Train AutoML Regressor**
+   - **Input**: Simulated photometry and corresponding synthetic latents
+   - **Output**: Trained encoder model mapping photometry to latents
+     ```python
+     # Train regressor
+     regressor = AutoGluonRegressor()
+     regressor.fit(simulated_photometry, synthetic_latents)
+     ```
+
+7. **LOOCV Validation**
+   - **Loop Over Each Object in Seed Dataset**
+     ```python
+     for i in range(N):
+         # Remove ith object from training set
+         train_set = np.delete(seed_spectra, i, axis=0)
+         train_photometry = np.delete(obs_photometry, i, axis=0)
+
+         # Perform PCA and KDE on training set
+         principal_components_val = pca.fit_transform(train_set)
+         kde_val = KernelDensity(bandwidth=h).fit(principal_components_val)
+
+         # Generate synthetic data for validation
+         synthetic_latents_val = kde_val.sample(N_synthetic)
+         simulated_photometry_val = forward_model(synthetic_spectra_val, filters) + noise
+
+         # Train regressor on validation set
+         regressor_val = AutoGluonRegressor()
+         regressor_val.fit(simulated_photometry_val, synthetic_latents_val)
+
+         # Test on held-out object
+         predicted_latents = regressor_val.predict(obs_photometry[i:i+1])
+         reconstructed_spectrum = pca.inverse_transform(predicted_latents)
+     ```
+
+8. **Taxonomic Classification**
+   - **Input**: Predicted latent coefficients
+   - **Output**: Probabilistic taxonomic classification
+     ```python
+     # Predict taxonomic probabilities
+     taxonomic_probs = classifier.predict_proba(predicted_latents)
+     ```
+
+9. **Uncertainty Quantification**
+   - **Input**: Posterior distribution of latents
+   - **Output**: Empirical credible intervals for spectrum
+     ```python
+     # Sample from posterior and compute credible intervals
+     posterior_samples = gaussian_copula.sample(N_samples)
+     credible_intervals = compute_intervals(reconstructed_spectra)
+     ```
+
+10. **Final Output**
+    - **Reconstructed Spectra**
+      - High-resolution spectrum reconstructed from photometry
+    - **Classification Probabilities**
+      - Probabilities for each taxonomic class
+    - **Confidence Intervals**
+      - Uncertainty bounds on spectral features
+      ```python
+      output = {
+          'reconstructed_spectrum': reconstructed_spectrum,
+          'taxonomic_probabilities': taxonomic_probs,
+          'credible_intervals': credible_intervals
+      }
+      ```
+
+**End of Algorithm**

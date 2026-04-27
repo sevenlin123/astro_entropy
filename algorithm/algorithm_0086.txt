@@ -1,0 +1,43 @@
+**Algorithm Steps:**
+
+1. **Input Data:** 
+   - Sparse multi-band photometric observations of Trans-Neptunian Objects (TNOs).
+
+2. **Model Initialization:**
+   - Define a probabilistic model that represents the spectral energy distribution (SED) of TNOs using Bayesian inference.
+   - Parameterize the SED with physical parameters such as albedo, thermal emission, and phase functions.
+
+3. **Likelihood Function:**
+   - Compute the likelihood of observed photometric measurements given the model parameters.
+   - Account for noise and uncertainties in photometric data.
+
+4. **Prior Distributions:**
+   - Define prior probability distributions for the model parameters based on existing knowledge about TNOs (e.g., typical albedos, temperatures, etc.).
+
+5. **Posterior Inference:**
+   - Use Bayesian inference (e.g., Markov Chain Monte Carlo, MCMC) to compute the posterior distribution of model parameters given the observed data.
+   - This step reconstructs the most probable SED for each TNO.
+
+6. **SED Reconstruction:**
+   - Extract the mean or median SED from the posterior distribution.
+   - This reconstructed SED represents the best estimate of the object's spectral properties.
+
+7. **Taxonomic Classification:**
+   - Compare the reconstructed SEDs against reference spectra of known taxonomic groups (e.g., C-, O-, P-type).
+   - Assign a classification based on the closest match or probability distributions.
+
+8. **Survey Optimization:**
+   - Analyze the sensitivity of the SED reconstruction to different observation bands.
+   - Determine optimal observing strategies (e.g., band selection, exposure times) for maximizing information gain about TNO spectra.
+
+9. **Outlier Detection:**
+   - Identify TNOs whose reconstructed SEDs deviate significantly from the majority.
+   - Use statistical methods (e.g., clustering, anomaly detection) to flag outliers for further study.
+
+10. **Output:**
+    - Reconstructed SEDs for each TNO.
+    - Taxonomic classifications.
+    - Optimized survey recommendations.
+    - Identified outliers.
+
+**End of Algorithm.**

@@ -1,0 +1,24 @@
+**Algorithm for Probabilistic Spectral Reconstruction of Trans-Neptunian Objects**
+
+1. **Initialization:**
+   - Read sparse photometric data for each TNO, including measurements and uncertainties.
+
+2. **Bayesian Inference:**
+   - For each TNO:
+     - Define prior distributions over spectral parameters (e.g., reflectivity, albedo).
+     - Compute posterior distributions using Bayesian updating with observed photometric data.
+
+3. **Gaussian Process Regression (GPR):**
+   - Train a GPR model on the photometric data to predict spectral features:
+     - Input: Photometric measurements and their uncertainties.
+     - Output: Predicted spectral features with associated uncertainties.
+     - Hyperparameters are tuned for sparse data handling.
+
+4. **Spectral Reconstruction:**
+   - Integrate posterior distributions from Bayesian inference with GPR predictions.
+   - Obtain reconstructed spectral energy distribution (SED) with uncertainty quantification.
+
+5. **Output:**
+   - For each TNO, output reconstructed SED, uncertainties, and derived spectral classifications.
+
+**End of Algorithm**

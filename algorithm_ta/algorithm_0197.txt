@@ -1,0 +1,27 @@
+The core computational algorithm consists of the following steps:
+
+1. **Principal Component Analysis (PCA):** 
+   - Perform PCA on a training set of near-IR spectra to establish a set of principal components (PCs). These PCs capture the major patterns of spectral variability in the dataset. The number of PCs is determined based on cross-validation results, typically around 4-5 for taxonomic purposes, increasing up to 8-10 for improved spectral fidelity.
+
+2. **Model the Spectral Manifold:** 
+   - Use the principal components to construct a spectral manifold, which represents the reduced-dimensional structure of the spectral data. This manifold captures the correlated variations in the spectra, reflecting the underlying physical processes on the TNO surfaces.
+
+3. **Probabilistic Inference in Reduced Space:** 
+   - Employ Bayesian inference in this reduced principal component space to reconstruct the full spectrum from sparse photometric measurements. This involves defining a probabilistic model that maps the photometric data to the latent principal component representation.
+
+4. **Reconstruct Full Spectra:** 
+   - Using the inferred latent variables (principal components), project back to the original spectral space to obtain the reconstructed spectrum. This step effectively interpolates the missing spectral information based on the learned manifold structure.
+
+5. **Uncertainty Propagation:** 
+   - Quantify uncertainties in the reconstructed spectra by propagating the uncertainties from the photometric measurements through the probabilistic model. This provides confidence intervals on the reconstructed spectra, ensuring that the uncertainties are well-calibrated.
+
+6. **Outlier Detection and Anomaly Handling:** 
+   - Implement a mechanism within the Bayesian framework to detect and handle outliers. This may involve identifying points that have low posterior probabilities under the learned spectral manifold, indicating they deviate significantly from the norm.
+
+7. **Optimal Filter Selection:** 
+   - Apply the framework to evaluate the information content of different photometric filters (e.g., JWST/NIRCam filters). This involves determining which filter combinations provide the most discriminative information for taxonomic classification, enhancing the utility of future observations.
+
+8. **Special Case Handling:** 
+   - Include a procedure to handle peculiar objects, like the Neptune Trojans, by allowing the model to explore less probable regions of the spectral manifold. This enables the reconstruction of rare or unusual spectral types that might otherwise be missed with standard methods.
+
+This algorithm efficiently bridges the gap between sparse photometric data and detailed spectral information, enabling robust taxonomic classification and outlier detection in the context of trans-Neptunian object studies.

@@ -1,0 +1,44 @@
+```plaintext
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input: List of photometric measurements (flux, band, time)
+
+Output: Reconstructed Spectral Energy Distribution (SED) with uncertainties
+
+0. Initialize:
+   a. Collect all photometric data for the target object
+   b. Convert flux measurements to relative units (e.g., magnitudes)
+   c. Identify available photometric bands and their wavelengths
+
+1. Model Setup:
+   a. Define Gaussian Process (GP) prior with kernel:
+      - Kernel: Squared Exponential with noise term
+   b. Construct likelihood function:
+      - Assume Poisson noise for counts; Gaussian noise for flux units
+   c. Set prior distributions for GP hyperparameters (amplitude, length scale, noise)
+
+2. Bayesian Inference:
+   a. Implement Markov Chain Monte Carlo (MCMC) sampling:
+      - Run multiple chains to ensure convergence
+      - Diagnose convergence using Gelman-Rubin statistic
+   b. Extract posterior samples of SED parameters
+
+3. Posterior Analysis:
+   a. Determine the mode of the posterior distribution (most probable SED)
+   b. Calculate Highest Posterior Density (HPD) intervals for confidence regions
+
+4. Uncertainty Quantification:
+   a. Compute posterior variance
+   b. Propagate uncertainties to color indices and spectral features using error propagation
+
+5. Outlier Detection:
+   a. Analyze residuals from the best-fit model
+   b. Apply statistical tests (e.g., chi-squared, Mahalanobis distance) to identify outliers
+
+6. Output Generation:
+   a. Save reconstructed SED and uncertainties
+   b. Compute summary statistics (mean, median, credible intervals)
+   c. Prepare for downstream analysis or reporting
+
+End Algorithm
+```

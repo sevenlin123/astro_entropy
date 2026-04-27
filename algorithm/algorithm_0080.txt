@@ -1,0 +1,19 @@
+The computational algorithm for the probabilistic spectral reconstruction framework can be outlined as follows:
+
+1. **Precompute Synthetic SED Library**: Utilize radiative transfer simulations to generate a comprehensive library of synthetic SEDs. This library should encompass a wide variety of possible TNO properties, including but not limited to albedo, thermal emission, and phase curves, ensuring it captures the full diversity of known TNO spectra.
+
+2. **Obtain Observed Photometric Data**: For each trans-Neptunian object of interest, gather the available sparse photometric measurements. This data may include observations across multiple bands and from different sources.
+
+3. **Bayesian Inference Setup**: Establish a Bayesian model where the parameters are the indices corresponding to the precomputed SED library. The likelihood function is based on the observed photometric magnitudes, while the prior distribution is informed by the empirical prior of TNO surface compositions derived from existing spectral data.
+
+4. **Perform Bayesian Inference**: Using Markov Chain Monte Carlo (MCMC) methods or another suitable sampling technique, compute the posterior distribution over the SED indices. This process effectively maps the observed photometric data into a probabilistic selection of the most consistent synthetic SEDs from the library.
+
+5. **Determine Most Probable SED**: From the posterior distribution, identify the SED index with the highest posterior probability. This SED serves as the primary reconstruction for further analysis.
+
+6. **Uncertainty Propagation (Optional)**: If required, propagate the uncertainties from the posterior distribution to assess the confidence intervals on derived properties such as taxonomic classifications or physical parameters.
+
+7. **Posterior Analysis**: Analyze the posterior distribution to derive insights, such as taxonomic classification of the TNO, detect spectral outliers by comparing posterior distributions against the prior expectations, and identify biases in the survey data.
+
+8. **Output Results**: Generate outputs including the reconstructed SED, taxonomic classification, identified outliers, and any associated uncertainties.
+
+Each step is designed to systematically reconstruct the SED of TNOs from sparse photometric data, enabling taxonomic analysis, outlier detection, and survey optimization through a robust probabilistic framework.

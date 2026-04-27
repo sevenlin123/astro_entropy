@@ -1,0 +1,23 @@
+The core computational algorithm involves the following steps:
+
+1. **Principal Component Analysis (PCA):**
+   - Train a PCA model using a sample of near-infrared spectra to create a low-dimensional representation of the spectral data.
+
+2. **Bayesian Inference in Reduced Space:**
+   - Perform Bayesian inference using the principal components to model the spectral manifold.
+   - Reconstruct full spectra from photometric measurements by inferring the most probable spectral representations.
+
+3. **Cross-Validation for Optimal Components:**
+   - Determine the optimal number of principal components (4-5 for classification; 8-10 for improved reconstruction).
+
+4. **Probabilistic Spectral Reconstruction:**
+   - Use the Bayesian framework to propagate measurement uncertainties and reconstruct spectra while considering the probability distribution of possible spectral models.
+
+5. **Uncertainty Quantification and Outlier Detection:**
+   - Compute uncertainty estimates for the reconstructed spectra.
+   - Identify outliers by comparing photometric constraints against the reconstructed spectral models.
+
+6. **Survey Optimization:**
+   - Apply the framework to evaluate the information content of different photometric filters, optimizing observation configurations for future surveys.
+
+**Final Output:** Reconstructed spectra with uncertainty intervals and identified outliers, enabling taxonomic classification and survey optimization.

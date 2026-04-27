@@ -1,0 +1,21 @@
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input: 
+- Sparse photometric observations (e.g., magnitudes or fluxes in selected filters)
+- Training set of reference TNO spectra
+- Filter transmission curves and noise levels
+
+Output: 
+- Reconstructed high-resolution spectrum
+- Probabilistic classification of spectral type
+
+Steps:
+1. Preprocess the reference TNO spectra using Principal Component Analysis (PCA) to obtain principal components (PCs).
+2. Train a non-parametric Kernel Density Estimate (KDE) on the latent coefficients derived from the PCA to define the prior distribution.
+3. Simulate synthetic photometric observations by convolving the PCA-enhanced spectra with the instrument's filter transmission curves, introducing a 20% relative reflectance noise.
+4. Use AutoML (e.g., AutoGluon) to train a regressor that maps the sparse photometry to the latent PCA coefficients.
+5. For new observations, pass the sparse photometric data through the trained regressor to obtain the predicted latent coefficients.
+6. Project the predicted latent coefficients back to the full spectral space using the inverse PCA transform to reconstruct the high-resolution spectrum.
+7. Classify the latent coefficients using a secondary AutoML classifier to determine the spectral type probabilities.
+
+End.

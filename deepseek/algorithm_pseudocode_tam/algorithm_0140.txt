@@ -1,0 +1,44 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Initialize Principal Component Analysis (PCA):**
+   - Train PCA on a reference set of TNO spectra to extract principal components (eigenvectors).
+   - Determine the number of components (e.g., 4-5 for classification, 8-10 for detailed reconstruction).
+
+2. **Generate Synthetic Training Data:**
+   - Project reference spectra onto PCA latent space.
+   - Use Kernel Density Estimation (KDE) to create a smooth probability distribution in the latent space.
+   - Augment the training set with synthetic latent vectors sampled from this distribution.
+
+3. **Forward Model Photometry:**
+   - Convolve each augmented spectrum with the filter responses of the target instrument (e.g., JWST/NIRCam).
+   - Add Gaussian noise (e.g., 20% relative uncertainty) to simulate realistic photometric measurements.
+
+4. **Train AutoML Regressor:**
+   - Train an ensemble of gradient-boosted decision trees to map sparse photometry to PCA latent coefficients.
+   - Use the noisy synthetic photometry and corresponding latent coefficients as training data.
+
+5. **Perform Leave-One-Out Cross-Validation (LOOCV):**
+   - For each spectrum in the reference set:
+     - Remove the spectrum from the training set.
+     - Use the trained regressor to predict latent coefficients from photometry.
+     - Invert PCA to reconstruct the spectrum.
+     - Compute reconstruction error and uncertainty propagation.
+
+6. **Reconstruct Spectrum:**
+   - For new photometric observations:
+     - Predict latent coefficients using the trained regressor.
+     - Apply inverse PCA transform to obtain the full spectrum.
+
+7. **Taxonomic Classification:**
+   - Train a secondary classifier on the latent space to predict spectral type probabilities.
+   - Classify new observations based on their latent coefficients.
+
+8. **Survey Optimization and Outlier Detection:**
+   - Analyze information content of different filter combinations.
+   - Detect outliers by flagging spectra outside the latent manifold.
+
+**Output:**  
+- Reconstructed spectra with uncertainty intervals.
+- Probabilistic taxonomic classifications.
+- Optimized filter configurations for surveys.
+- Identified outliers for follow-up spectroscopy.

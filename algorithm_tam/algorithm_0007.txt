@@ -1,0 +1,34 @@
+The algorithm involves the following steps:
+
+1. **Principal Component Analysis (PCA) on Reference Spectra**: 
+   - Obtain a set of reference TNO spectra.
+   - Apply PCA to extract principal components, capturing the main spectral variations.
+
+2. **Latent Space Construction**:
+   - Use PCA to project the reference spectra into a low-dimensional latent space.
+   - Apply Kernel Density Estimation (KDE) to smooth the distribution of latent coefficients, creating a continuous manifold.
+
+3. **Synthetic Photometry Generation**:
+   - For each augmented spectrum, convolve with filter responses (e.g., JWST/NIRCam) to calculate expected photometric magnitudes.
+   - Add noise (e.g., 20% relative uncertainty) to simulate realistic photometric observations.
+
+4. **AutoMLRegressor Training**:
+   - Train an ensemble of Gradient Boosted Decision Trees using synthetic photometry and corresponding latent coefficients as input-output pairs.
+
+5. **LOOCV Validation**:
+   - Iteratively remove one spectrum, train the model, and test it on the removed spectrum.
+   - Measure performance metrics like RMSE and credible interval coverage.
+
+6. **Spectral Reconstruction**:
+   - For new photometric observations, use the trained regressor to predict latent coefficients.
+   - Project these coefficients back into the full spectral space using inverse PCA.
+
+7. **Taxonomic Classification**:
+   - Classify the reconstructed spectra into predefined taxonomic types using a secondary classifier operating in the latent space.
+
+8. **Applications**:
+   - Optimize survey filters for maximum information yield.
+   - Detect outliers by identifying deviations in the latent space.
+   - Classify new objects based on their spectral reconstructions.
+
+This structured approach efficiently transforms sparse photometric data into detailed spectral information, enabling comprehensive analysis of TNO surface compositions.

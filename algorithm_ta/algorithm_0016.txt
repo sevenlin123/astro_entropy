@@ -1,0 +1,18 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Principal Component Analysis (PCA) Training:**
+   - Train a PCA model using a set of reference near-infrared spectra of trans-Neptunian objects to derive principal components capturing spectral variability.
+
+2. **Latent Space Representation:**
+   - Represent each object's spectrum in the learned PCA latent space, where each object is described by a set of principal component coefficients.
+
+3. **Bayesian Inference:**
+   - Perform Bayesian inference in the PCA-reduced space using sparse photometric measurements to estimate posterior distributions of the principal component coefficients.
+
+4. **Spectral Reconstruction:**
+   - Reconstruct full spectra by applying the posterior mean of the inferred principal components to the PCA basis vectors.
+
+5. **Uncertainty Estimation:**
+   - Compute uncertainties for each wavelength in the reconstructed spectrum using the variance of the posterior distributions of the principal components.
+
+This algorithm efficiently reconstructs detailed spectra from sparse photometry, enabling robust taxonomic analysis and outlier detection.

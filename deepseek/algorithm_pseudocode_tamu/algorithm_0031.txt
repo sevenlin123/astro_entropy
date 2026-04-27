@@ -1,0 +1,45 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+**Input:**  
+- `training_spectra`: Set of reference TNO spectra  
+- `photometry_data`: Sparse photometric observations to reconstruct  
+- `filter_set`: Target instrument filters (e.g., JWST/NIRCam)  
+
+**Output:**  
+- `reconstructed_spectrum`: Full spectrum estimate from photometry  
+- `credible_intervals`: Uncertainty bounds on the reconstructed spectrum  
+- `taxonomic_class`: Predicted spectral type  
+
+**Steps:**
+
+1. **Latent Space Definition (Training Phase):**
+   - **PCA Training:**  
+     - Perform Principal Component Analysis (PCA) on `training_spectra` to obtain principal components (PCs) and loadings.  
+     - Select the number of PCs (e.g., 4-5 for classification, 8-10 for fidelity).  
+   - **Kernel Density Estimation (KDE):**  
+     - Project training spectra onto the selected PCs to get latent coefficients.  
+     - Train a Gaussian KDE on these coefficients to define the prior distribution.  
+
+2. **Synthetic Data Generation:**
+   - For each latent coefficient sampled from KDE:  
+     - Generate synthetic spectra by applying the inverse PCA transformation.  
+     - Simulate photometric measurements by convolving synthetic spectra with instrument filter responses.  
+     - Add noise (e.g., 20% relative uncertainty) to simulate real-world observational errors.  
+
+3. **Model Training:**
+   - Use synthetic photometry and corresponding latent coefficients as input-output pairs.  
+   - Train an AutoML regressor (e.g., XGBoost) to map photometric inputs to latent coefficients.  
+
+4. **Forward Inference:**
+   - **Predict Latent Coefficients:**  
+     - Pass `photometry_data` through the trained regressor to obtain predicted latent coefficients.  
+   - **Reconstruct Spectrum:**  
+     - Apply inverse PCA using predicted coefficients to generate `reconstructed_spectrum`.  
+   - **Sampling Uncertainties:**  
+     - Use Gaussian Copula to sample from the joint posterior of latent coefficients.  
+     - Reconstruct multiple spectra to estimate `credible_intervals`.  
+
+5. **Taxonomic Classification (Optional):**
+   - Train a classifier on the latent space to predict taxonomic class from reconstructed spectra.  
+
+**End of Algorithm**

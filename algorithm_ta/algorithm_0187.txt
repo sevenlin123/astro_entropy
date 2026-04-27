@@ -1,0 +1,36 @@
+**Algorithm: Probabilistic Spectral Reconstruction Framework**
+
+1. **Training Data Preparation:**
+   - Collect a sample of near-infrared (near-IR) spectra of trans-Neptunian objects (TNOs).
+   
+2. **Principal Component Analysis (PCA):**
+   - Apply PCA to the training spectra to create a latent-space representation.
+   - Determine the number of principal components (e.g., 4-5 for taxonomic classification, 8-10 for improved reconstruction).
+
+3. **Model Construction:**
+   - Use the PCA-derived latent space to build a probabilistic model.
+   - Perform Bayesian inference in this reduced space to reconstruct full spectra from sparse photometric data.
+   - Incorporate measurement uncertainties in the photometric data into the model.
+
+4. **Reconstruction Process:**
+   - For each object, use the sparse photometric measurements to infer the most probable spectral representation in the latent space.
+   - Propagate the uncertainties from photometry through the model to the reconstructed spectrum.
+
+5. **Dimensionality Assessment:**
+   - Validate the dimensionality of the spectral manifold using the determined number of principal components.
+
+6. **Survey Optimization:**
+   - Analyze the information content of different photometric filters (e.g., JWST/NIRCam filters).
+   - Identify optimal filter combinations for future observations based on the framework's requirements.
+
+7. **Outlier Detection and Rare Spectral Types:**
+   - Implement a method to constrain photometry and identify low-probability intermediate models.
+   - Detect rare spectral types by analyzing the probability distribution in the latent space.
+
+8. **Output Generation:**
+   - Generate reconstructed spectra along with their uncertainties.
+   - Provide quantitative assessment of the spectral manifold's dimensionality.
+   - Output optimal photometric filter configurations for surveys.
+   - Highlight detected rare spectral types and their reconstructions.
+
+This algorithm efficiently bridges sparse photometric data and detailed spectral reconstruction, enabling robust analysis of TNOs' compositional structures.

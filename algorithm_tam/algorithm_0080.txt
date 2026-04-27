@@ -1,0 +1,44 @@
+### Algorithm Description
+
+1. **Data Preparation**:
+   - Collect a reference dataset of near-infrared (near-IR) spectra of trans-Neptunian objects (TNOs) classified into known taxonomic types (e.g., Water-type, CO₂-type, Organics-type).
+   - Exclude rare or outlier spectral types to focus on dominant taxonomic groups.
+
+2. **Principal Component Analysis (PCA)**:
+   - Perform PCA on the reference spectra to reduce the spectral data into a set of principal components (latent space).
+   - Determine the optimal number of principal components (approximately 4–5) that capture the majority of spectral variability relevant for taxonomic classification.
+
+3. **Density Estimation**:
+   - Use Kernel Density Estimation (KDE) on the PCA latent space to create a smooth probability distribution, enabling the generation of synthetic latent vectors that fill gaps between sparse reference spectra.
+
+4. **Synthetic Photometry Generation**:
+   - For each synthetic latent vector, forward-model the corresponding spectrum through the NIRCam filter set to generate synthetic photometric measurements.
+   - Introduce Gaussian noise (relative reflectance uncertainty of ~20%) to simulate realistic photometric observations.
+
+5. **Training the AutoML Regressor**:
+   - Train an ensemble of gradient-boosted decision trees (AutoML) to map sparse photometric inputs to the latent coefficients in the PCA space.
+   - Use the synthetic photometry and corresponding latent vectors as the training dataset.
+
+6. **Reconstruction Pipeline**:
+   - For new photometric observations, use the trained AutoML regressor to predict the latent coefficients.
+   - Apply the inverse PCA transform to these coefficients to reconstruct the full spectral energy distribution (SED).
+
+7. **Taxonomic Classification**:
+   - Utilize a secondary classifier trained on the PCA latent space to predict the taxonomic type (e.g., H₂O, CO₂, Organic, Methanol) of the object based on the reconstructed latent coefficients.
+
+8. **Validation and Uncertainty Propagation**:
+   - Evaluate the reconstructed spectra against the true spectra using metrics like empirical credible interval coverage.
+   - Propagate photometric uncertainties into spectral uncertainties to assess the reliability of the reconstructed spectra.
+
+9. **Survey Optimization and Outlier Detection**:
+   - Analyze the information content of NIRCam filters to identify optimal configurations for future surveys.
+   - Detect rare or unusual spectral types by identifying points in the latent space that deviate significantly from the learned distribution.
+
+### Key Steps:
+
+- **Dimensionality Reduction**: PCA is used to reduce spectral data into a manageable number of components, ensuring stable inversion.
+- **Generative Prior**: The KDE-based latent manifold provides a continuous probability distribution, enabling robust reconstruction from sparse inputs.
+- **Probabilistic Inference**: Bayesian framework propagates uncertainties from photometry to spectral reconstructions.
+- **AutoML Integration**: Efficiently maps sparse photometry to latent coefficients, avoiding manual tuning and ensuring scalability.
+
+This algorithm bridges the gap between sparse photometric data and detailed spectral analysis, enabling efficient exploration of TNO populations with limited spectroscopic observations.

@@ -1,0 +1,28 @@
+**Algorithm: Probabilistic Spectral Reconstruction**
+
+1. **Initialize Gaussian Process Models**: 
+   - For each trans-Neptunian object, set up a Gaussian Process (GP) initialized with prior knowledge about typical spectral features.
+
+2. **Process Photometric Observations**:
+   - For each observation:
+     a. Use the GP to predict flux at the observed wavelength.
+     b. Compute the discrepancy between observed and predicted flux.
+     c. Adjust GP hyperparameters based on discrepancy to refine the model.
+
+3. **Perform Mixture Modeling**:
+   - Extract spectral features from GP predictions.
+   - Determine the number of mixture components by maximizing likelihood.
+   - Fit the mixture model to these features.
+   - Identify spectral features and their probabilities using the model.
+
+4. **Iterative Outlier Detection**:
+   - In each iteration:
+     a. Detect outliers using mixture model probabilities.
+     b. Correct or remove outliers.
+   - Repeat until no significant outliers are found.
+
+5. **Combine Refinements**:
+   - Integrate refined spectral parameters and photometric uncertainties to update the spectral reconstruction.
+
+6. **Output Results**:
+   - Deliver reconstructed spectrum, uncertainties, and feature probabilities.

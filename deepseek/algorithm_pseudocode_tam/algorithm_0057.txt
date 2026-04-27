@@ -1,0 +1,46 @@
+```plaintext
+Algorithm: Probabilistic Spectral Reconstruction Framework
+
+1. Initialize Training Data:
+   - Collect reference TNO spectra from the DiSCo-TNO sample.
+   - Exclude rare spectral types and outliers to focus on dominant classes.
+
+2. Perform Principal Component Analysis (PCA):
+   - Project the collected spectra onto a low-dimensional latent space using PCA.
+   - Determine the number of principal components (e.g., 4-5 for classification, 8-10 for detailed reconstruction).
+
+3. Augment Latent Space:
+   - Use Kernel Density Estimation (KDE) to create a smooth probability distribution in the latent space.
+   - This step generates synthetic spectra to enhance the training dataset.
+
+4. Generate Synthetic Photometry:
+   - Convolve each augmented spectrum with the filter transmission curves of the target instrument (e.g., JWST NIRCam).
+   - Add Gaussian noise (e.g., 20% uncertainty) to simulate realistic photometric observations.
+
+5. Train AutoML Regressor:
+   - Use an ensemble of Gradient Boosted Decision Trees to map photometric inputs to latent coefficients.
+   - This step establishes the mapping from sparse photometry to the latent space.
+
+6. Define Taxonomic Classifier:
+   - Train another AutoML model to classify the latent coefficients into predefined spectral types (e.g., H₂O, CO₂, Organic, Methanol).
+
+7. Perform Spectral Reconstruction:
+   - For new photometric observations, use the trained regressor to predict latent coefficients.
+   - Apply inverse PCA transform to reconstruct the full spectrum.
+
+8. Evaluate Using LOOCV:
+   - Assess spectral reconstruction accuracy (e.g., RMSE, ECI coverage).
+   - Validate taxonomic classification accuracy.
+
+9. Identify Optimal Filters:
+   - Analyze impact of different filter combinations on reconstruction fidelity.
+   - Select configurations that minimize RMSE and enhance classification power.
+
+10. Detect Outliers:
+    - Use posterior probabilities and latent space analysis to flag objects inconsistent with the spectral manifold.
+
+11. Output Reconstructed Spectra and Classifications:
+    - Provide both full spectral reconstructions and probabilistic taxonomic assignments.
+```
+
+This algorithm encapsulates the core computational steps of the probabilistic framework described in the paper.

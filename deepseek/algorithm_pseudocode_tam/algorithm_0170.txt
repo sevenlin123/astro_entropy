@@ -1,0 +1,52 @@
+The algorithm implements a probabilistic framework to reconstruct TNO spectra from sparse photometry. It employs PCA to define a latent space, AutoML to map photometry to latent coefficients, and Bayesian inference to quantify uncertainties. Here is the pseudocode:
+
+```
+Algorithm: Probabilistic Spectral Reconstruction from Photometry
+
+Input:
+    - Training Spectra: Set of reference TNO spectra (e.g., 51 seed spectra)
+    - NIRCam Filters: Filter definitions for JWST/NIRCam
+    - Photometric Data: Sparse multi-band observations of TNOs
+    - Noise Level: Simulated observational noise (e.g., 20% relative uncertainty)
+
+Output:
+    - Reconstructed Spectra: High-resolution spectral estimates
+    - Classification Probabilities: Taxonomic classification outputs
+    - Uncertainty Quantification: Posterior covariance in spectral domain
+
+1. Define Latent Space:
+    a. Perform PCA on Training Spectra to obtain principal components (PCs).
+    b. Construct latent space using Kernel Density Estimation (KDE) on PCA coefficients of training spectra.
+    c. Generate synthetic training data by sampling the latent space.
+
+2. Forward Model Photometry:
+    a. For each synthetic spectrum, compute photometric measurements by convolving with NIRCam filter responses.
+    b. Add Gaussian noise to photometric measurements to simulate observational uncertainty.
+
+3. Train Encoder:
+    a. Use AutoML (e.g., AutoGluon) to train a regressor mapping noisy photometry to latent coefficients.
+    b. Optimize hyperparameters and select best performing model (e.g., GBDT).
+
+4. Bayesian Inference:
+    a. For new photometric observations, predict latent coefficients using the trained encoder.
+    b. Apply inverse PCA transform to reconstruct the full spectrum.
+    c. Compute posterior covariance of latent coefficients to derive spectral uncertainties.
+
+5. Taxonomic Classification:
+    a. Train a classifier on latent coefficients to predict taxonomic labels.
+    b. For each prediction, output classification probabilities.
+
+6. Performance Validation:
+    a. Perform LOOCV: For each object, remove its photometry, predict latent coefficients, reconstruct spectrum, compute RMSE and credibility intervals.
+    b. Check empirical coverage of credibility intervals across wavelengths.
+
+7. Applications:
+    a. Survey Optimization: Identify optimal NIRCam filter combinations.
+    b. Outlier Detection: Flag objects with latent coefficients outside training manifold.
+
+8. Error Propagation:
+    a. Project posterior covariance from latent space to spectral domain.
+    b. Derive credible intervals for reconstructed spectra.
+
+End Algorithm
+```

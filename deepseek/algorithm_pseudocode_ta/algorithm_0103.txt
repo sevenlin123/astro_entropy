@@ -1,0 +1,18 @@
+```python
+Read training spectra.
+
+Compute mean, center, covariance.
+
+Diagonalize to get PCA eigenvectors and eigenvalues.
+
+Select K eigenvectors based on cumulative explained variance.
+
+For each TNO:
+    Read photometric fluxes F.
+    Project F onto PCA basis.
+    Perform Bayesian inference to compute posterior distribution of latent variables.
+    Reconstruct spectrum using posterior latent variables.
+    Compute uncertainties by propagating variance through the transformation.
+
+Output reconstructed spectra and uncertainties.
+```

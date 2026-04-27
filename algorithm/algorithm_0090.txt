@@ -1,0 +1,28 @@
+The core reconstruction framework can be succinctly described through the following structured algorithm:
+
+**Algorithm: Probabilistic Spectral Reconstruction**
+
+1. **Initialization**
+   - Derive an initial set of Spectral Energy Distributions (SEDs) from the observed photometric magnitudes.
+   - Set up a probabilistic mixture model starting with a limited number of spectral components, each representing a distinct spectral class characterized by unique colors.
+
+2. **Iterative Refinement Loop**
+   - For each iteration:
+     a. Utilize forward models to simulate the observed photometric data from the current SEDs and compute the likelihood.
+     b. Perform Bayesian inference to sample from the posterior distribution of possible SEDs and model parameters.
+     c. Update the model parameters based on the sampled SEDs.
+     d. Assess if the simulated photometric data matches the observed data within acceptable error margins.
+
+3. **Adaptive Mixture Model Adjustment**
+   - If the match is insufficient:
+     a. Increase the number of components in the mixture model to better capture dataset diversity.
+     b. Assign each object to a spectral class using the updated mixture model.
+     c. Calculate the posterior probabilities for each object's spectral class membership.
+     d. Flag as outliers those objects with posterior probabilities below a predefined threshold.
+
+4. **Convergence Check and Parameter Extraction**
+   - Once the simulated data sufficiently matches the observations:
+     - Extract object parameters including color, brightness, and spectral type.
+     - Output the refined SEDs and the classified parameters.
+
+This algorithm effectively combines Bayesian inference and an adaptive mixture model to refine SEDs, classify spectral types, and detect outliers in the context of trans-Neptunian objects.

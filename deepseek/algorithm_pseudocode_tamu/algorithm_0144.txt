@@ -1,0 +1,45 @@
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. **Initialize the Training Dataset**:
+   - Collect and preprocess near-infrared spectra of TNOs, normalizing and scaling to a common magnitude system.
+
+2. **Perform Principal Component Analysis (PCA)**:
+   - Decompose the training spectra into principal components to define a low-dimensional latent space.
+   - Extract latent coefficients for each spectrum.
+
+3. **Generate Synthetic Latent Vectors**:
+   - Use Kernel Density Estimation (KDE) with a Gaussian kernel to create a continuous probability distribution over the latent space.
+   - Bandwidth (`h`) is optimized empirically (e.g., `h ≈ 0.5`).
+
+4. **Augment Training Data**:
+   - Sample 10,000 synthetic latent vectors from the KDE distribution.
+   - Simulate photometric measurements by convolving each synthetic spectrum with JWST/NIRCam filter transmission curves.
+   - Add Gaussian noise (20% relative reflectance uncertainty) to the simulated photometry.
+
+5. **Train AutoML Regressor**:
+   - Use an ensemble of gradient-boosted decision trees (e.g., XGBoost) to regress from sparse photometry to latent coefficients.
+   - Apply automated hyperparameter tuning (e.g., AutoGluon) for optimal model performance.
+
+6. **Conduct Leave-One-Out Cross-Validation (LOOCV)**:
+   - For each seed spectrum:
+     - Temporarily exclude the spectrum from the training set.
+     - Retrain the model using the remaining data.
+     - Predict latent coefficients from the real photometry of the excluded spectrum.
+     - Reconstruct the spectrum using inverse PCA.
+
+7. **Evaluate Reconstruction Accuracy**:
+   - Compute the Mean Absolute Difference (MAD) between reconstructed and original spectra across all wavelengths.
+   - Assess the empirical coverage of credible intervals using Gaussian Copula sampling.
+
+8. **Classify Taxonomic Types**:
+   - Train a secondary AutoML classifier on the latent space to predict taxonomic labels (e.g., Water-type, CO₂-type, Organic-type).
+   - Evaluate classification accuracy and confidence intervals.
+
+9. **Apply to Survey Optimization**:
+   - Identify optimal JWST/NIRCam filter combinations (e.g., F090W, F115W, F410M, F460M) by evaluating information content for spectral reconstruction fidelity.
+
+10. **Detect Outliers**:
+    - Flag spectra with low probability in the KDE-learned latent distribution as potential outliers, such as peculiar Neptune Trojans.
+    - Perform detailed analysis of outliers to confirm unique spectral types.
+
+**End of Algorithm**

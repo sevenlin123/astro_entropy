@@ -1,0 +1,45 @@
+```python
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input: 
+- Sparse photometric observations of a TNO (flux measurements in specific filters)
+- Pre-trained PCA basis derived from reference spectra
+- Training data consisting of reference spectra and corresponding synthetic photometry
+
+Output:
+- Reconstructed high-resolution spectrum with uncertainty quantification
+- Probabilistic taxonomic classification
+
+Steps:
+
+1. Initialize PCA Basis:
+   - Perform PCA on reference spectra to obtain principal components (eigenvectors and eigenvalues).
+   - Determine the number of principal components (K) that capture the essential spectral variability (~4-5 for classification, ~8-10 for improved fidelity).
+
+2. Data Augmentation (Training Phase):
+   - Use Kernel Density Estimation (KDE) on the latent PCA coefficients to create synthetic training data, ensuring a smooth and continuous manifold.
+   - For each augmented spectrum, generate synthetic photometry by forward modeling through the target instrument's filter response curves (e.g., JWST/NIRCam).
+   - Inject Gaussian noise (relative uncertainty ~20%) into the synthetic photometry to simulate observational uncertainties.
+
+3. Train AutoML Regressor:
+   - Train an ensemble of gradient-boosted decision trees (e.g., XGBoost) to map sparse photometric inputs to latent PCA coefficients.
+   - Use the synthetic photometry and corresponding latent coefficients as training data.
+   - Optimize hyperparameters automatically using AutoML frameworks (e.g., AutoGluon).
+
+4. Latent Space Inference:
+   - For a new photometric observation, pass it through the trained regressor to predict the latent PCA coefficients.
+   - Sample the joint posterior distribution of the latent coefficients using a Gaussian Copula to account for intrinsic dependencies in the latent space.
+
+5. Spectrum Reconstruction:
+   - Apply the inverse PCA transformation to the latent coefficients to reconstruct the full high-resolution spectrum.
+   - Calculate confidence intervals for the reconstructed spectrum based on the posterior uncertainty in the latent space.
+
+6. Taxonomic Classification (Optional):
+   - Project the predicted latent coefficients into a pre-trained taxonomic classifier to determine the probability distribution over spectral types (e.g., H2O, CO2, Organic, Methanol).
+
+7. Validation (LOOCV):
+   - Remove one reference spectrum from the training set and validate the reconstruction by comparing the reconstructed spectrum to the original.
+   - Measure reconstruction error (MAE) and credible interval coverage to assess framework performance.
+
+End Algorithm
+```

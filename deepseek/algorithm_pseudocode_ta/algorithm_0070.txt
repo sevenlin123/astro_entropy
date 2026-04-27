@@ -1,0 +1,23 @@
+**Algorithm: Probabilistic Spectral Reconstruction via Latent Space Inference**
+
+1. **Principal Component Analysis (PCA) Decomposition**  
+   - Train PCA on a reference dataset of near-infrared (near-IR) spectra of TNOs.
+   - Determine the number of principal components (PCs) based on the results of leave-one-out cross-validation (e.g., 4-5 PCs for taxonomic classification; 8-10 PCs for improved spectral reconstruction fidelity).
+
+2. **Construct Gaussian Mixture Model (GMM) Prior**  
+   - Build a GMM over the selected principal components.
+   - The GMM represents the natural clustering of TNO spectra in the latent space.
+
+3. **Bayesian Inference in Reduced Space**  
+   - For each object, perform Bayesian inference in the PCA latent space.
+   - Use Markov Chain Monte Carlo (MCMC) to sample the posterior distribution of latent parameters given the sparse photometric measurements.
+   - Propagate measurement uncertainties from the photometric data through this process.
+
+4. **Transform Back to Original Spectral Space**  
+   - After obtaining posterior samples of the latent parameters (principal components), map them back to the original spectral space using the inverse PCA transformation.
+   - This yields reconstructed full spectra along with their associated uncertainties.
+
+5. **Output Reconstructed Spectra and Uncertainties**  
+   - The algorithm outputs the reconstructed spectra and their uncertainties for further analysis, such as taxonomic classification, survey optimization, and outlier detection.
+
+**End Algorithm**

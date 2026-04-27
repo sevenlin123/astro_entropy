@@ -1,0 +1,42 @@
+The computational algorithm for probabilistic spectral reconstruction of Trans-Neptunian Objects (TNOs) from sparse photometry involves the following steps:
+
+1. **Principal Component Analysis (PCA) on Reference Spectra**:
+   - Use a sample of TNO near-infrared spectra to perform PCA.
+   - The goal is to capture the dominant modes of spectral variability, typically 4-5 components for taxonomic classification and up to 10 components for improved spectral fidelity.
+
+2. **Data Augmentation via Kernel Density Estimation (KDE)**:
+   - Project the PCA components into a latent space.
+   - Apply non-parametric KDE to create a continuous probability distribution, enabling the generation of synthetic latent vectors that fill gaps between observed spectra.
+
+3. **Synthetic Photometry Generation**:
+   - Forward model the synthetic spectra using the NIRCam filter set to compute photometric magnitudes.
+   - Inject Gaussian noise (e.g., 20% relative uncertainty) to simulate realistic photometric observations.
+
+4. **Training the AutoML Regressor (Encoder)**:
+   - Use the synthetic photometry and corresponding latent coefficients to train an ensemble of gradient-boosted decision trees.
+   - The regressor maps sparse photometric inputs to latent space coefficients.
+
+5. **Inverse PCA Transform for Spectral Reconstruction**:
+   - Apply the inverse PCA transformation to the predicted latent coefficients to reconstruct the full spectrum.
+   - This step ensures the reconstructed spectrum adheres to physical smoothness and absorption features.
+
+6. **Probabilistic Taxonomy Classification**:
+   - Train a classifier using the latent space to predict taxonomic types (e.g., H₂O, CO₂, Organics).
+   - The classifier operates on the latent coefficients derived from the AutoML regressor.
+
+7. **Performance Validation via Leave-One-Out Cross-Validation (LOOCV)**:
+   - Validate the framework by iteratively removing each spectrum from the training set and testing reconstruction accuracy.
+   - Ensure the model generalizes well and is not overfitted.
+
+8. **Bootstrap Analysis for Uncertainty Quantification**:
+   - Resample the training data and retrain the models to estimate confidence intervals for reconstructed spectra and taxonomic probabilities.
+
+9. **Application to Simulated JWST Observations**:
+   - Apply the trained framework to hypothetical JWST/NIRCam observations.
+   - Compare reconstructed spectra with true values to validate practical applicability.
+
+10. **Survey Optimization and Outlier Detection**:
+    - Use the framework to evaluate different NIRCam filter configurations for optimal information content.
+    - Detect unusual spectral types by analyzing deviations in the latent space probability distribution.
+
+This algorithm integrates statistical modeling, machine learning, and physical constraints to bridge the gap between sparse photometry and detailed spectral analysis, enabling compositional mapping of minor planets efficiently.

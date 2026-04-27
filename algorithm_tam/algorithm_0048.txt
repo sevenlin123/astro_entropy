@@ -1,0 +1,29 @@
+The computational algorithm described in the paper focuses on reconstructing high-resolution spectra of trans-Neptunian objects (TNOs) from sparse photometric data. Here's a structured outline of the core steps of the algorithm:
+
+1. **Training Data Preparation**:
+   - **Principal Component Analysis (PCA)**: Apply PCA on a set of reference TNO spectra to reduce the spectral dimensionality and create a latent space representation.
+   - **Data Augmentation**: Use non-parametric Kernel Density Estimation (KDE) to generate synthetic spectra from the latent space, expanding the training dataset to improve model generalization.
+
+2. **Model Architecture**:
+   - **Encoder**: Train an AutoML regressor (e.g., Gradient Boosted Decision Trees) to map sparse photometric measurements to the latent PCA coefficients.
+   - **Decoder**: Use the inverse PCA transform to convert the latent coefficients back into high-resolution spectra.
+
+3. **Forward Modeling**:
+   - Simulate photometric observations by convolving the high-resolution spectra with the instrument's filter responses (e.g., JWST/NIRCam).
+   - Inject noise (e.g., 20% relative reflectance uncertainty) into the simulated photometry to train the model with realistic data.
+
+4. **Spectral Reconstruction**:
+   - For new photometric measurements, predict the latent coefficients using the trained encoder.
+   - Apply the inverse PCA transform to these coefficients to obtain the reconstructed spectrum.
+   - Calculate the Root Mean Square Error (RMSE) to assess reconstruction accuracy.
+
+5. **Taxonomic Classification**:
+   - Train a secondary AutoML classifier on the latent PCA coordinates to classify TNOs into predefined spectral types (e.g., Water-type, CO₂-type, Organics-type).
+   - Evaluate classification accuracy using leave-one-out cross-validation.
+
+6. **Validation and Applications**:
+   - Perform leave-one-out cross-validation (LOOCV) to validate the reconstruction framework and assess credible interval coverage.
+   - Optimize photometric filter configurations to maximize reconstruction fidelity and classification accuracy.
+   - Detect outliers by analyzing deviations in latent space or credible intervals, identifying rare spectral types for further study.
+
+This algorithm bridges the gap between sparse photometric data and detailed spectral analysis, enabling efficient characterization of TNOs in large-scale surveys.

@@ -1,0 +1,36 @@
+**Algorithm: Probabilistic Spectral Reconstruction Framework**
+
+1. **Training Phase:**
+   - **Principal Component Analysis (PCA):**
+     - Apply PCA on a set of reference TNO spectra to derive a low-dimensional latent space.
+     - Determine the optimal number of principal components (e.g., 4-5 for classification, 8-10 for detailed reconstruction).
+   - **Data Augmentation:**
+     - Use Kernel Density Estimation (KDE) to generate synthetic latent vectors, creating a smooth manifold of possible spectral states.
+   - **Forward Modeling:**
+     - Simulate photometric measurements by convolving the augmented spectra with instrument-specific filter curves (e.g., JWST/NIRCam).
+     - Add Gaussian noise (e.g., 20% uncertainty) to the synthetic photometry to simulate real observational conditions.
+   - **Model Training:**
+     - Train an AutoML regressor (e.g., Gradient-Boosted Decision Trees) to map sparse photometric inputs to latent coefficients.
+     - Train a secondary classifier to partition the latent space into taxonomic categories.
+
+2. **Inference Phase:**
+   - **Photometric Input:**
+     - Receive sparse photometric measurements of a TNO.
+   - **Latent Space Prediction:**
+     - Use the trained AutoML regressor to predict the latent coefficients corresponding to the input photometry.
+   - **Spectral Reconstruction:**
+     - Apply the inverse PCA transformation to the predicted latent coefficients to obtain the full spectrum.
+   - **Taxonomic Classification:**
+     - Classify the latent state to determine the taxonomic type (e.g., H₂O, CO₂, Organic, Methanol).
+   - **Uncertainty Propagation:**
+     - Compute credible intervals for the reconstructed spectrum, ensuring proper uncertainty calibration.
+
+3. **Validation and Applications:**
+   - **Leave-One-Out Cross-Validation (LOOCV):**
+     - Validate reconstruction accuracy and uncertainty calibration by iteratively excluding each spectrum from the training set and testing the framework.
+   - **Survey Optimization:**
+     - Identify optimal photometric filters for future observations based on information content and reconstruction fidelity.
+   - **Outlier Detection:**
+     - Flag objects with low-probability latent states as outliers for prioritized follow-up.
+
+This algorithm efficiently bridges sparse photometry to detailed spectral reconstructions, enabling robust taxonomic classification and outlier detection for TNOs.

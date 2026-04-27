@@ -1,0 +1,57 @@
+**Algorithm: Core Computational Framework for Spectral Reconstruction**
+
+**1. Initialize Training Data**
+   - Input: Reference TNO spectra (training set)
+   - Perform Principal Component Analysis (PCA) on the training spectra to extract principal components.
+   - Determine the number of principal components (e.g., 4-5 for taxonomic classification, 8-10 for detailed reconstruction).
+
+**2. Augment Latent Space**
+   - Apply Kernel Density Estimation (KDE) on the PCA coefficients of the training spectra to create a smooth probability distribution.
+   - Use the KDE to generate synthetic latent vectors, expanding the training manifold without introducing unrealistic "Frankenstein" spectra.
+
+**3. Generate Synthetic Photometry**
+   - For each synthetic latent vector:
+     - Project back to the full spectrum using inverse PCA.
+     - Convolve the spectrum with the instrument's filter response curves (e.g., JWST/NIRCam) to compute theoretical photometric magnitudes.
+     - Inject Gaussian noise (e.g., 20% relative uncertainty) to simulate real-world photometric noise.
+
+**4. Train Photometric-to-Latent Regressor**
+   - Use AutoML (e.g., AutoGluon) to train a model that maps sparse photometric inputs to latent coefficients.
+   - Ensure the model generalizes well by avoiding overfitting to the noise in synthetic data.
+
+**5. Train Taxonomic Classifier**
+   - Use the latent coefficients as features.
+   - Train a classifier (e.g., logistic regression or random forest) to predict taxonomic categories (e.g., H₂O, CO₂, Organics, Methanol).
+   - Validate using separate training and test sets derived from the original spectra.
+
+**6. Bayesian Inference for Spectral Reconstruction**
+   - For new photometric observations:
+     - Use the trained regressor to predict latent coefficients.
+     - Project these coefficients through inverse PCA to reconstruct the full spectrum.
+     - Propagate uncertainties from photometric measurements to the reconstructed spectrum.
+
+**7. Outlier Detection and Rare Spectral Types**
+   - Compute the probability density of latent coefficients for new objects.
+   - Identify objects with low probability density as potential outliers or novel spectral types.
+   - Reconstruct their spectra and compare with expectations to validate their uniqueness.
+
+**8. Survey Optimization**
+   - Evaluate different filter configurations using metrics like Fisher Information Matrix (FIM) to determine which combinations provide the highest information content for accurate spectral reconstruction.
+   - Select configurations that maximize information gain, balancing between survey depth, speed, and diagnostic power.
+
+**9. Performance Metrics Calculation**
+   - Reconstruct original spectra using the framework.
+   - Compare reconstructed spectra with the original to compute reconstruction error (e.g., average absolute difference).
+   - Assess coverage accuracy by checking how much of the original spectrum falls within the 1σ credible intervals.
+   - Measure taxonomic classification accuracy on a held-out test set.
+
+**10. Validation Through Cross-Validation**
+   - Perform Leave-One-Out Cross-Validation (LOOCV):
+     - Remove one real spectrum from the training set.
+     - Retrain the regressor and classifier using the remaining data.
+     - Reconstruct the removed spectrum and assess its fidelity.
+     - Ensure the framework maintains stability and accuracy across iterations.
+
+**11. Final Output**
+   - Provide reconstructed spectra with uncertainty estimates and taxonomic classifications for each object.
+   - Highlight potential outliers and recommend optimal filter configurations for future surveys.

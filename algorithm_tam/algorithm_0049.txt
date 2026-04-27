@@ -1,0 +1,33 @@
+The core computational algorithm involves a Bayesian framework that uses Principal Component Analysis (PCA) to create a latent space, followed by training an AutoML regressor to map sparse photometric data to this latent space. Here is the step-by-step algorithm:
+
+1. **Data Preparation**:
+   - Collect and preprocess near-infrared spectra of trans-Neptunian objects (TNOs).
+   - Perform Principal Component Analysis (PCA) on the spectra to define a low-dimensional latent space.
+
+2. **Training the Latent Space**:
+   - Use PCA to project the spectra into a latent space, capturing the main modes of spectral variability.
+   - Augment the training data using Kernel Density Estimation (KDE) to create a smooth probability distribution in the latent space, ensuring the manifold is continuous and stable for inference.
+
+3. **Forward Modeling for Photometry**:
+   - Simulate synthetic photometric measurements by convolving the spectra with the instrument's filter response curves (e.g., JWST/NIRCam).
+   - Add noise to these synthetic photometric measurements to account for observational uncertainties, creating realistic training data.
+
+4. **AutoML Regressor Training**:
+   - Train an ensemble of gradient-boosted decision trees (AutoML) to map sparse photometric inputs to the latent space coefficients.
+   - This model acts as the "encoder," translating photometry into the latent representation.
+
+5. **Inverse PCA for Spectral Reconstruction**:
+   - Apply the inverse PCA transformation to the predicted latent coefficients to reconstruct the full spectrum.
+   - The reconstructed spectrum inherits physical smoothness from the PCA basis, avoiding high-frequency noise.
+
+6. **Taxonomic Classification**:
+   - Train a secondary AutoML classifier on the latent space to predict taxonomic categories (e.g., Water-type, CO₂-type, Organics-type) using the latent coefficients.
+
+7. **Performance Evaluation**:
+   - Validate the framework using Leave-One-Out Cross-Validation (LOOCV) to assess spectral reconstruction accuracy, credible-interval coverage, and taxonomic classification accuracy.
+
+8. **Applications**:
+   - Use the framework for survey optimization by identifying optimal filter configurations.
+   - Detect outliers and rare spectral types by analyzing deviations in the latent space.
+
+This algorithm effectively transforms sparse photometric data into detailed spectral information, enabling accurate reconstruction and classification of TNO spectra.

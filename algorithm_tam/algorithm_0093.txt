@@ -1,0 +1,33 @@
+The computational algorithm for the probabilistic spectral reconstruction framework involves the following steps:
+
+1. **Data Preparation**:
+   - Gather a set of reference TNO spectra.
+   - Apply Principal Component Analysis (PCA) to reduce the spectral data into a low-dimensional latent space (e.g., 4-5 principal components for classification, up to 10 for detailed reconstruction).
+
+2. **Prior Definition**:
+   - Use PCA to derive eigenvectors representing the main spectral variations.
+   - Augment the latent space using Kernel Density Estimation (KDE) to create a smooth probability distribution, ensuring physically plausible spectra.
+
+3. **Synthetic Photometry Generation**:
+   - Forward model the augmented spectra through the target instrument's filter set (e.g., JWST/NIRCam).
+   - Inject noise (e.g., 20% relative reflectance uncertainty) to simulate realistic photometric observations.
+
+4. **Model Training**:
+   - Train an AutoML regressor (e.g., Gradient Boosted Decision Trees) to map sparse photometry to latent coefficients.
+   - Simultaneously train a classifier in the latent space for taxonomic identification.
+
+5. **Reconstruction Process**:
+   - For new photometric data, predict latent coefficients using the trained regressor.
+   - Project the coefficients back into full spectral resolution via inverse PCA to obtain the reconstructed spectrum.
+   - Perform Bayesian inference to quantify uncertainties and generate credible intervals.
+
+6. **Classification and Validation**:
+   - Use the latent classifier to predict taxonomic probabilities.
+   - Evaluate reconstruction fidelity (nRMSE) and uncertainty coverage (empirical credibility).
+   - Assess taxonomic accuracy (misclassification rate and probability entropy).
+
+7. **Applications**:
+   - Optimize survey filters for maximum information content.
+   - Detect outliers by identifying posterior inconsistencies with the spectral manifold.
+
+**Final Answer**: The algorithm leverages PCA for dimensionality reduction, Bayesian inference for spectral reconstruction, and AutoML for robust photometric mapping, enabling high-fidelity spectral recovery and taxonomic classification from sparse photometry.

@@ -1,0 +1,21 @@
+The algorithm consists of several steps to reconstruct spectra from sparse photometric data using a probabilistic framework. Here is the step-by-step breakdown:
+
+1. **Preprocess the Spectral Data**: 
+   - Normalize and align the near-infrared spectra of trans-Neptunian objects (TNOs) to ensure consistency.
+
+2. **Principal Component Analysis (PCA)**:
+   - Apply PCA to the preprocessed spectral dataset to extract principal components, reducing the dimensionality while retaining key spectral variability.
+
+3. **Probabilistic Latent-Space Model**:
+   - Develop a model that maps sparse photometric measurements to the principal component scores, capturing the spectral manifold of TNOs.
+
+4. **Bayesian Inference**:
+   - Use Bayesian methods to estimate the posterior distribution of principal component scores based on the observed photometric data.
+
+5. **Spectrum Reconstruction**:
+   - Reconstruct the full spectrum by combining the estimated principal components with the PCA basis vectors.
+
+6. **Uncertainty Propagation**:
+   - Calculate uncertainties in the reconstructed spectrum by propagating measurement errors from photometry through the model.
+
+This structured approach allows for efficient and robust spectral reconstruction from sparse photometric data, leveraging statistical rigor to handle uncertainties and model complexities.

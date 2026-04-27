@@ -1,0 +1,15 @@
+The computational algorithm is structured as follows:
+
+1. **Principal Component Analysis (PCA) Training**: 
+   - Compute principal components from a dataset of near-infrared spectra to capture the major spectral variations.
+
+2. **Spectral Manifold Model Construction**: 
+   - Develop a probabilistic model using the obtained PCA components to represent the spectral manifold.
+
+3. **Bayesian Inference**: 
+   - For each object, use photometric data to infer PCA coefficients via Bayesian methods, incorporating measurement uncertainties.
+
+4. **Spectrum Reconstruction**: 
+   - Reconstruct the full spectrum by projecting the inferred PCA coefficients back into the original spectral space.
+
+This algorithm efficiently reconstructs detailed spectra from sparse photometric data, enabling robust taxonomic analysis and outlier detection.

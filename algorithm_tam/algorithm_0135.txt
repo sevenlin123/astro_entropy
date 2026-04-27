@@ -1,0 +1,40 @@
+### Algorithm: Probabilistic Spectral Reconstruction Framework
+
+1. **Data Preparation**:
+   - Collect a reference set of TNO near-infrared spectra (training data).
+   - Exclude rare spectral types to focus on dominant taxonomic classes (e.g., Water, CO₂, Organics).
+
+2. **Principal Component Analysis (PCA)**:
+   - Perform PCA on the reference spectra to reduce dimensionality.
+   - Retain approximately 4-5 principal components for taxonomy, and 8-10 for improved reconstruction.
+
+3. **Latent Space Construction**:
+   - Use Kernel Density Estimation (KDE) on the PCA latent coefficients to create a continuous probability distribution.
+   - Set a smoothing bandwidth (e.g., h ~ 0.5) to balance local fidelity and global smoothness.
+
+4. **Synthetic Data Generation**:
+   - Forward model the reference spectra through JWST/NIRCam filters to simulate photometric observations.
+   - Add 20% Gaussian noise to the synthetic photometry to account for observational uncertainties.
+
+5. **Training AutoML Regressor**:
+   - Train an ensemble of gradient-boosted decision trees to map sparse photometry to latent space coefficients.
+   - Use a large synthetic dataset (e.g., 100,000 samples) to avoid overfitting.
+
+6. **Taxonomy Classifier**:
+   - Train a separate AutoML classifier on the PCA latent space to predict taxonomic classes (e.g., Water, CO₂, Organics, Methanol).
+
+7. **Reconstruction Pipeline**:
+   - For new photometric observations:
+     - Predict latent coefficients using the trained AutoML regressor.
+     - Project the latent coefficients back to full spectra via inverse PCA transformation.
+     - Classify the spectral type using the latent space classifier.
+
+8. **Validation and Applications**:
+   - Perform leave-one-out cross-validation to assess reconstruction accuracy and classification performance.
+   - Optimize filter configurations for future surveys by evaluating information content.
+   - Detect spectral outliers by identifying points distant from the main latent clusters.
+
+9. **Output**:
+   - Reconstructed spectra with uncertainty estimates.
+   - Probabilistic taxonomic classifications.
+   - Optimized filter configurations and outlier flags for follow-up observations.

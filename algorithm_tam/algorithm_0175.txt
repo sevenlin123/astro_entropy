@@ -1,0 +1,45 @@
+**Computational Algorithm for Probabilistic Spectral Reconstruction of TNOs from Sparse Photometry**
+
+**Objective**: Reconstruct high-resolution near-IR spectra of trans-Neptunian objects (TNOs) from sparse photometric data using a probabilistic latent-space framework.
+
+**Algorithm Steps**:
+
+1. **Training Data Preparation**:
+   - Collect a sample of 51 TNO spectra representing dominant taxonomic classes (e.g., H₂O, CO₂, Organics).
+   
+2. **Principal Component Analysis (PCA)**:
+   - Perform PCA on the training spectra to extract principal components (PCs), reducing the spectral data to a low-dimensional latent space (e.g., 4-10 PCs).
+
+3. **Latent Space Augmentation**:
+   - Use Kernel Density Estimation (KDE) to create a continuous probability distribution in the latent space, augmenting the training data for robust regression training.
+
+4. **Synthetic Photometry Generation**:
+   - For each augmented spectrum, convolve with JWST/NIRCam filter curves to generate synthetic photometric measurements.
+   - Add Gaussian noise (20% relative uncertainty) to simulate realistic photometric uncertainties.
+
+5. **Automated Machine Learning (AutoML) Regression**:
+   - Train an ensemble of Gradient-Boosted Decision Trees (GBDTs) using the synthetic photometry as inputs and the PCA coefficients as targets.
+   - Utilize AutoML frameworks (e.g., AutoGluon) for automated model selection and hyperparameter tuning.
+
+6. **Spectral Reconstruction Pipeline**:
+   - For new photometric observations:
+     - Pass the photometry through the trained AutoML regressor to predict latent coefficients.
+     - Apply inverse PCA transformation to reconstruct the full high-resolution spectrum.
+
+7. **Taxonomic Classification**:
+   - Train a secondary classifier within the latent space to predict taxonomic labels (e.g., H₂O, CO₂, Organics, Methanol) using the PCA coefficients.
+   - Output probability distributions for taxonomic classification.
+
+8. **Cross-Validation and Performance Assessment**:
+   - Perform Leave-One-Out Cross-Validation (LOOCV) to evaluate reconstruction fidelity and classification accuracy.
+   - Measure credible-interval coverage and confusion matrix for classification performance.
+
+9. **Survey Optimization and Outlier Detection**:
+   - Analyze filter configurations (e.g., F090W, F115W, F410M) to optimize JWST/NIRCam surveys for TNO observations.
+   - Detect rare spectral types by identifying low-probability regions in the latent space.
+
+**Output**:
+- Reconstructed high-resolution spectra from sparse photometry.
+- Probabilistic taxonomic classifications for each object.
+- Optimized filter configurations for survey design.
+- Identification of spectral outliers and unique taxonomic types.

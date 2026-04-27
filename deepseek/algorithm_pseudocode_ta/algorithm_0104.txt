@@ -1,0 +1,20 @@
+To reconstruct the spectrum of a trans-Neptunian object (TNO) from sparse photometric data using a probabilistic latent-space model, the algorithm proceeds as follows:
+
+1. **Training Phase**:
+   - **Input**: A dataset of known TNO spectra.
+   - **Process**: Apply Principal Component Analysis (PCA) to decompose the spectral data into principal components (PCs). Each spectrum is represented as a linear combination of these PCs.
+
+2. **Spectral Manifold Modeling**:
+   - **Model**: Represent each TNO's spectrum in the reduced PCA space.
+   - **Inference**: Perform Bayesian inference in the PCA space, accounting for photometric uncertainties.
+
+3. **Reconstruction for Each Object**:
+   - **Input**: Sparse photometric data.
+   - **Forward Model**: Relate each photometric band to the spectral components using the PCA eigenvectors.
+   - **Inverse Problem**: Solve for the PCA scores that best explain the observed photometric data, incorporating measurement uncertainties.
+   - **Reconstruction**: Use the estimated PCA scores to reconstruct the full spectrum by combining the corresponding eigenvectors.
+
+4. **Output**:
+   - **Result**: Reconstructed spectrum, uncertainties, and credibility intervals.
+
+This approach effectively bridges sparse photometric data with detailed spectral information, enabling robust taxonomic analysis and survey optimization.

@@ -1,0 +1,16 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+**Step 1:** Preprocess the sparse photometric data by converting it into flux values corresponding to specific wavelength bands.
+
+**Step 2:** Project the processed photometric data into the pre-trained Principal Component Analysis (PCA) space. This may involve mapping the data to the PCA wavelengths and applying any necessary transformations to align with the training data.
+
+**Step 3:** Perform Bayesian inference within the PCA space:
+   - Define a prior distribution for the PCA coefficients.
+   - Calculate the likelihood of the observed data using the PCA coefficients.
+   - Utilize a sampling method like Markov Chain Monte Carlo (MCMC) to derive posterior distributions of the PCA coefficients.
+
+**Step 4:** Reconstruct the full spectrum by multiplying the posterior-distributed PCA coefficients with the PCA basis vectors.
+
+**Step 5:** Propagate the uncertainties from the PCA coefficient posteriors through the PCA basis vectors to determine the uncertainty estimates for the reconstructed spectrum.
+
+**Step 6:** Output the mean spectrum and the associated uncertainty spectrum.

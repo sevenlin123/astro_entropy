@@ -1,0 +1,23 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Precompute Principal Components:**
+   - Train a Principal Component Analysis (PCA) model on a dataset of near-infrared spectra of TNOs.
+   - Identify the number of principal components (e.g., 4-5 for taxonomic classification, 8-10 for improved fidelity).
+
+2. **Construct Spectral Manifold Model:**
+   - Use the trained PCA model to represent the spectral manifold of TNOs in a reduced latent space.
+
+3. **Bayesian Inference in Latent Space:**
+   - Perform Bayesian inference in the PCA-reduced space to estimate latent variables corresponding to the spectral features of TNOs based on sparse photometric data.
+
+4. **Spectral Reconstruction:**
+   - Reconstruct the full near-IR spectrum for each TNO using the inferred latent variables.
+   - Quantify uncertainties in the reconstructed spectra by propagating measurement uncertainties through the model.
+
+5. **Survey Optimization:**
+   - Evaluate the information content of different photometric filters (e.g., JWST/NIRCam filters) to identify optimal configurations for future observations.
+
+6. **Outlier Detection and Rare Spectral Types:**
+   - Apply the model to photometric data to detect and reconstruct rare spectral types by constraining the inference to low-probability intermediate models in the spectral manifold.
+
+**Output:** Reconstructed spectra for each TNO with associated uncertainties, optimized survey configurations, and detection of rare spectral types.

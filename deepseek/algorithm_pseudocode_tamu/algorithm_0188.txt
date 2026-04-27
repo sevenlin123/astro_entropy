@@ -1,0 +1,20 @@
+\boxed{
+    \begin{algorithm}[H]
+        \caption{Probabilistic Spectral Reconstruction from Sparse Photometry}
+        \begin{algorithmic}[1]
+            \State Initialize the training set of reference TNO spectra (e.g., DiSCo-TNO sample)
+            \State Perform Principal Component Analysis (PCA) on the training spectra to extract principal components (PCs) and define the latent space
+            \State Use Kernel Density Estimation (KDE) to augment the training data in the PCA latent space, creating a continuous probability distribution
+            \State Generate synthetic photometry for the augmented spectra by convolving with the instrument's filter curves (e.g., JWST/NIRCam)
+            \State Add Gaussian noise (e.g., 20\% relative reflectance uncertainty) to the synthetic photometry to simulate real-world observational noise
+            \State Train an AutoML regressor (e.g., ensemble of gradient-boosted decision trees) to map sparse photometry to PCA coefficients
+            \State Perform Leave-One-Out Cross-Validation (LOOCV) to assess reconstruction fidelity, uncertainty coverage, and taxonomic classification accuracy
+            \State For new photometric observations:
+                \State Extract the photometric measurements for the object of interest
+                \State Use the trained regressor to predict the PCA coefficients in the latent space
+                \State Apply the inverse PCA transformation to reconstruct the full spectrum
+                \State Sample the joint posterior distribution of the latent coefficients using a Gaussian Copula to quantify uncertainties and generate credible intervals
+                \State Classify the spectral type by evaluating the latent coefficients against predefined taxonomic boundaries
+        \end{algorithmic}
+    \end{algorithm}
+}

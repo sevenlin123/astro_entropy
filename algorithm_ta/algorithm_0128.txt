@@ -1,0 +1,19 @@
+### Computational Algorithm: Probabilistic Spectral Reconstruction Framework
+
+**Step 1: Data Preprocessing**
+- **Input:** Sparse photometric measurements of trans-Neptunian objects (TNOs) and a reference dataset of near-infrared (NIR) spectra.
+- **Process:** Normalize and align the spectral data to a common wavelength grid. Remove outliers and noise from the photometric data to enhance accuracy.
+
+**Step 2: Principal Component Analysis (PCA)**
+- **Apply PCA:** Transform the reference NIR spectra dataset into a principal component (PC) representation.
+- **Determine Components:** Retain approximately 4-5 principal components for taxonomic classification, and up to 8-10 for improved spectral fidelity and uncertainty handling.
+
+**Step 3: Probabilistic Latent-Space Modeling**
+- **Construct Manifold:** Use the PCA-derived components to model the spectral manifold of TNOs.
+- **Bayesian Inference:** Perform Bayesian inference within the reduced latent space to estimate the underlying spectral parameters from photometric data.
+
+**Step 4: Spectral Reconstruction**
+- **Reconstruct Spectra:** Map the inferred latent space parameters back to full-spectrum estimates.
+- **Uncertainty Propagation:** Calculate uncertainties associated with each reconstructed spectrum, ensuring reliable credible intervals.
+
+This structured approach efficiently reconstructs full spectra from sparse photometry, leveraging Bayesian methods and dimensionality reduction to handle uncertainty and variability effectively.

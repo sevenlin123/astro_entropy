@@ -1,0 +1,26 @@
+```
+Algorithm: Probabilistic Spectral Reconstruction Framework
+
+1. Preprocessing:
+   a. Collect reference TNO spectra from the DiSCo-TNO sample (51 objects).
+   b. Project spectra into a principal component (PCA) space using PCA.
+      - Compute PCA eigenvectors and eigenvalues.
+      - Express each spectrum as a linear combination of PCA components.
+   c. Perform kernel density estimation (KDE) on the PCA coefficients to approximate the latent manifold probability distribution.
+   d. Augment the training dataset by sampling synthetic latent vectors from the estimated KDE distribution.
+
+2. Training:
+   a. Generate synthetic photometric data by convolving each augmented spectrum with the JWST/NIRCam filter curves.
+   b. Inject Gaussian noise (20% relative reflectance uncertainty) into the synthetic photometry to simulate observational noise.
+   c. Train an AutoML regressor (e.g., Gradient-Boosted Decision Trees) to map sparse photometry to PCA latent coefficients.
+   d. Train a secondary AutoML classifier to partition the latent space into taxonomic groups (Water, CO2, Organics, Methanol).
+   
+3. Inference:
+   a. For a new photometric observation:
+      i. Use the trained regressor to predict latent coefficients.
+      ii. Apply inverse PCA transformation to reconstruct the full spectrum.
+      iii. Use the classifier to predict taxonomic probabilities.
+   b. Output reconstructed spectrum and taxonomic classification.
+
+End.
+```

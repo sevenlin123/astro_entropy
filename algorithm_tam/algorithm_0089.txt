@@ -1,0 +1,36 @@
+### Algorithm Description: Probabilistic Spectral Reconstruction Framework
+
+1. **Principal Component Analysis (PCA):**
+   - Input: Reference TNO spectra.
+   - Output: Low-dimensional latent space (principal components).
+   - Description: Perform PCA on a set of reference TNO spectra to extract the dominant modes of spectral variability. The latent space is defined by the principal components, which represent the most significant variations in the spectral data.
+
+2. **Latent Space Definition:**
+   - Input: PCA coefficients and seed spectra.
+   - Output: Smoothed latent distribution.
+   - Description: Use Kernel Density Estimation (KDE) to smooth the latent distribution of the seed spectra. This creates a continuous probability distribution over the latent space, accounting for the physical constraints of the spectral manifold.
+
+3. **Synthetic Photometry Generation:**
+   - Input: Augmented latent vectors and instrument filter response curves.
+   - Output: Synthetic photometric measurements.
+   - Description: For each augmented latent vector, generate synthetic photometric measurements by convolving the corresponding spectrum with the instrument's filter response curves. Inject Gaussian noise to simulate realistic photometric uncertainties.
+
+4. **AutoMLRegressor Training:**
+   - Input: Synthetic photometry and corresponding latent coefficients.
+   - Output: Trained AutoML regressor.
+   - Description: Train an ensemble of gradient-boosted decision trees (AutoML) to regress from sparse photometric measurements to the latent coefficients. The model learns the non-linear mapping between photometric inputs and the latent space.
+
+5. **Reconstruction Pipeline:**
+   - Input: New sparse photometric observations.
+   - Output: Reconstructed spectrum and taxonomic classification.
+   - Description: 
+     - Pass the new photometric observations through the trained AutoML regressor to predict the latent coefficients.
+     - Apply the inverse PCA transformation to the predicted latent coefficients to reconstruct the full spectrum.
+     - Simultaneously, use a secondary classifier trained on the latent space to predict the taxonomic classification (e.g., H₂O, CO₂, Organic, Methanol).
+
+6. **Outlier Detection and Rare Spectral Type Identification:**
+   - Input: Constrained photometric observations.
+   - Output: Identified outliers and rare spectral types.
+   - Description: By constraining the photometry to select only the most extreme points in the latent manifold, the framework flags objects with spectral types not represented in the training set, enabling targeted follow-up observations.
+
+This algorithm bridges the gap between sparse photometric data and detailed spectral analysis, enabling robust reconstruction of spectral energy distributions and accurate taxonomic classification of TNOs.

@@ -1,0 +1,29 @@
+**Algorithm: Probabilistic Spectral Reconstruction**
+
+1. **Input:** Sparse photometric data (magnitudes) for trans-Neptunian objects.
+
+2. **Gaussian Process Modeling:**
+   - Use a Gaussian process to model the spectral energy distribution (SED) as a prior.
+   - The Gaussian process captures the expected smoothness and properties of spectral data.
+
+3. **Bayesian Inference:**
+   - Apply Bayesian inference to update the Gaussian process model using the observed sparse photometric data.
+   - Obtain the posterior distribution of the SED, incorporating uncertainties from the data.
+
+4. **Projection onto Templates:**
+   - Project the posterior SED onto a set of predefined spectral templates.
+   - Compute the probability of each template given the observed data and posterior distribution.
+
+5. **Spectral Classification Probabilities:**
+   - For each spectral template, calculate the probability that the object belongs to that class based on the data and model.
+   - Aggregate these probabilities to determine the most likely spectral classification.
+
+6. **Outlier Detection:**
+   - Compare observed data against the reconstructed SEDs.
+   - Identify outliers where data significantly deviate from the expected distribution.
+
+7. **Survey Optimization:**
+   - Evaluate which objects require additional observations based on reconstruction uncertainties.
+   - Determine optimal survey strategies for improved spectral data collection.
+
+8. **Output:** Probabilities for each spectral classification and flags for outliers, along with recommendations for further observations.

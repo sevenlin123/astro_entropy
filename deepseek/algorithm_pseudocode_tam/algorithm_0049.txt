@@ -1,0 +1,33 @@
+\boxed{
+\begin{algorithm}
+\caption{Probabilistic Spectral Reconstruction Algorithm}
+
+\begin{enumerate}
+\item \textbf{Prepare Training Data}: 
+    - Select a representative sample of known trans-Neptunian object (TNO) spectra (e.g., DiSCo-TNO dataset).
+    - Perform Principal Component Analysis (PCA) on the spectral dataset to project spectra into a principal component (PC) space.
+
+\item \textbf{Define the Prior}: 
+    - Use Kernel Density Estimation (KDE) on the PCA projections to construct a continuous probability distribution over the latent space.
+
+\item \textbf{Generate Synthetic Photometry}: 
+    - For each spectrum in the augmented latent space, convolve the spectrum with instrumental response functions (e.g., JWST NIRCam filter profiles) to produce synthetic photometric measurements.
+    - Introduce Gaussian noise with a relative reflectance uncertainty of 20\% to simulate realistic observational uncertainties.
+
+\item \textbf{Train the Regression Model}: 
+    - Utilize AutoML (e.g., AutoGluon framework) to train a regressor that maps the synthetic photometry to the latent principal component coefficients.
+
+\item \textbf{Reconstruct Spectra}: 
+    - For new photometric observations, apply the trained regressor to predict the latent PC coefficients.
+    - Use the inverse PCA transformation to reconstruct the full spectrum from the latent coefficients.
+
+\item \textbf{Validate and Calibrate}: 
+    - Perform leave-one-out cross-validation (LOOCV) to assess reconstruction accuracy, credible interval coverage, and taxonomic classification success rates.
+    - Adjust parameters (e.g., KDE bandwidth) as needed to optimize performance.
+
+\item \textbf{Process Real Data}: 
+    - Apply the trained pipeline to new TNO photometric observations to obtain reconstructed spectra and taxonomic classifications.
+\end{enumerate}
+
+\end{algorithm}
+}

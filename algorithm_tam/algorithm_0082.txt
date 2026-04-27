@@ -1,0 +1,41 @@
+The probabilistic spectral reconstruction framework for Trans-Neptunian Objects (TNOs) can be implemented as follows:
+
+**Algorithm Steps:**
+
+1. **Data Preparation:**
+   - Collect a reference dataset of TNO near-infrared spectra.
+   - Exclude rare and outlier spectral types to focus on dominant taxonomic classes.
+
+2. **Principal Component Analysis (PCA):**
+   - Perform PCA on the reference spectra to extract principal components.
+   - Determine the number of principal components (4-5 for classification, 8-10 for detailed reconstruction).
+   - Use the PCA basis to define a latent space representation.
+
+3. **Kernel Density Estimation (KDE):**
+   - Apply KDE on the latent coefficients derived from the PCA to create a smooth probability distribution.
+   - Set the bandwidth to ensure stability and physically plausible spectra (e.g., h ~ 0.5).
+
+4. **Synthetic Data Generation:**
+   - Forward model the spectra with the NIRCam filter set to compute synthetic photometry.
+   - Introduce Gaussian noise (~20% relative uncertainty) to simulate realistic photometric observations.
+
+5. **Training the AutoML Regressor:**
+   - Use the synthetic photometry and latent coefficients to train an ensemble of gradient-boosted decision trees (AutoGluon framework).
+   - The regressor maps sparse photometry to latent space coordinates.
+
+6. **Inverse PCA Transformation:**
+   - Apply the inverse PCA transform to the predicted latent coordinates to reconstruct high-resolution spectra.
+
+7. **Classification in Latent Space:**
+   - Train a secondary classifier on the latent space to predict taxonomic categories (e.g., H₂O, CO₂, Organics, Methanol).
+
+8. **Reconstruction and Validation:**
+   - For each object, use the trained regressor to predict latent coefficients from photometry.
+   - Project to full spectra using inverse PCA.
+   - Compute credible intervals and validate against the original spectra.
+
+9. **Applications:**
+   - Optimize NIRCam filter configurations for maximal information content.
+   - Detect rare spectral types by constraining photometry to identify low-probability intermediate models.
+
+This algorithm efficiently bridges sparse photometry and detailed spectroscopy, enabling robust taxonomic classification and survey optimization for TNOs.

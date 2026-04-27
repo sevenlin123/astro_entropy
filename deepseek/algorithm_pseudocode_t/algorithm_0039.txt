@@ -1,0 +1,38 @@
+```
+Algorithm: Probabilistic Spectral Reconstruction of TNOs from Sparse Photometry
+
+Input: Set of photometric measurements for each TNO, each consisting of filter identifier and flux.
+
+Output: Posterior mean and variance of the SED for each TNO.
+
+Begin
+
+For each TNO in dataset:
+
+    1. Initialize Gaussian Process (GP) model with kernel reflecting physical constraints on TNO reflectivity.
+        a. Select kernel type (e.g., squared exponential)
+        b. Set hyperparameters based on prior knowledge of TNO reflectivity and albedo.
+
+    2. Collect all photometric measurements for the TNO.
+        a. Organize measurements into input vector X (filters) and output vector Y (fluxes).
+
+    3. Perform Bayesian inference on the GP model using the collected measurements.
+        a. Compute the covariance matrix K between training points.
+        b. Compute the Cholesky decomposition of K + σ²I, where σ² is the noise variance.
+        c. Solve for the posterior mean μ = (K^T * inv(L L^T)) Y, where L is the lower triangular matrix from Cholesky decomposition.
+        d. Compute the posterior covariance Σ = (K^T * inv(L L^T) * K) - diag(K^T * inv(L L^T) * Y)
+
+    4. Compute the posterior predictive distribution for new points.
+        a. For each new filter, compute the predictive mean E[y*] = μ*.
+        b. Compute the predictive variance Var(y*) = k(**) - k(*, *)^T (K^−1 Y + σ²I)^{-1} (K^−1 Y + σ²I) k(*, *) 
+            where k(**) is the covariance between new point and training points.
+
+    5. Extract posterior mean and variance of the SED.
+        a. Store μ as the posterior mean.
+        b. Store Σ as the posterior variance.
+
+End
+
+Output the posterior mean and variance for each TNO's SED.
+
+```

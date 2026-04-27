@@ -1,0 +1,5 @@
+The algorithm proceeds by first preprocessing the input data to adjust for noise, exposure time, and cadence variations. It then utilizes a deep generative model, such as a Variational Autoencoder (VAE), to generate hypothetical SEDs, providing a prior distribution. A forward model is employed to simulate photometric measurements from these SEDs, incorporating noise and observational constraints. 
+
+A Bayesian hierarchical model is introduced to connect SEDs with physical parameters, updating the distribution of typical SEDs for TNOs. Bayesian inference is conducted to derive the posterior distribution of SEDs based on observed data. Uncertainties are quantified, and outliers are identified by assessing deviations from the posterior predictive distributions. 
+
+Finally, the algorithm aggregates results across all objects to optimize observing strategies and enhance taxonomy refinement through outlier detection.

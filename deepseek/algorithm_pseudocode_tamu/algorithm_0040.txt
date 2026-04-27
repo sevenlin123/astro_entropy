@@ -1,0 +1,74 @@
+To address the problem, we will outline a computational algorithm based on the described method. The algorithm involves dimensionality reduction using PCA, training a regressor on synthetic data, and predicting spectra from photometric observations.
+
+### Pseudocode
+
+```python
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+    - Reference spectra X (NxM)
+    - Photometry m (NyK)
+
+Output:
+    - Reconstructed spectra Ŝ (NyM)
+    - Uncertainty estimates U (NyM)
+
+1. **Preprocessing and PCA**
+    a. Compute PCA on X:
+        i. X_normalized = normalize(X)
+        ii. [P, Z_train, _] = PCA(X_normalized, num_components)
+    
+2. **Data Augmentation**
+    a. Generate synthetic latent variables using KDE:
+        i. Z_synthetic = sample_KDE(Z_train, bandwidth=h)
+    
+3. **Forward Modeling and Noise Injection**
+    a. Forward model synthetic spectra through NIRCam filters:
+        i. m_synthetic = forward_model(Z_synthetic)
+    b. Add Gaussian noise to synthetic photometry:
+        i. m_synthetic_noisy = add_noise(m_synthetic, noise_level=0.2)
+    
+4. **Regressor Training**
+    a. Combine real and synthetic data:
+        i. T = combine_data(real_photometry, m_synthetic_noisy, Z_train)
+    b. Train AutoML regressor:
+        i. R = train_AutoML(T.x, T.y)
+    
+5. **Prediction and Reconstruction**
+    a. For each test photometry m_i:
+        i. Predict latent coefficients:
+            - z_i = R.predict(m_i)
+        ii. Reconstruct spectrum:
+            - ŝ_i = inverse_PCA(z_i, P, mean_spectrum)
+        iii. Sample posterior for uncertainty:
+            - samples = sample_posterior(z_i)
+            - U_i = compute_uncertainty(samples)
+    
+6. **Output Results**
+    a. Ŝ = stack(all ŝ_i)
+    b. U = stack(all U_i)
+
+Return Ŝ, U
+```
+
+### Explanation
+
+1. **Preprocessing and PCA**: 
+   - Normalize the reference spectra and apply Principal Component Analysis (PCA) to reduce the dimensionality. This step captures the main spectral variations and reduces computational complexity.
+
+2. **Data Augmentation**: 
+   - Use Kernel Density Estimation (KDE) on the PCA scores to generate synthetic data points. This helps in creating a smooth manifold, improving the model's ability to handle intermediate spectral types.
+
+3. **Forward Modeling and Noise Injection**: 
+   - Simulate photometric observations by integrating synthetic spectra over the NIRCam filter responses. Adding Gaussian noise to these simulations mimics real-world photometric uncertainties.
+
+4. **Regressor Training**: 
+   - Train an automated machine learning regressor (e.g., XGBoost) on the combined real and synthetic data to map photometric observations to PCA latent variables.
+
+5. **Prediction and Reconstruction**: 
+   - For each new photometric observation, predict the latent variables using the trained regressor. Reconstruct the full spectrum using inverse PCA and propagate uncertainties through posterior sampling.
+
+6. **Output Results**: 
+   - Compile the reconstructed spectra and their associated uncertainties for all test cases.
+
+This algorithm effectively bridges the gap between sparse photometric data and full spectral reconstruction, providing a statistically rigorous tool for studying trans-Neptunian objects.

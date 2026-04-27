@@ -1,0 +1,58 @@
+To implement the core reconstruction framework, we follow these steps:
+
+1. **Principal Component Analysis (PCA):**
+   - Train PCA on a reference set of TNO spectra to create a low-dimensional latent space.
+
+2. **Data Augmentation with Kernel Density Estimation (KDE):**
+   - Use KDE to smooth the latent space, generating synthetic spectra for training.
+
+3. **Likelihood Function Setup:**
+   - Simulate photometric measurements by convolving spectra with instrument filters and adding noise.
+
+4. **AutoML Regressor Training:**
+   - Train an ensemble of gradient-boosted decision trees to map photometry to latent coefficients.
+
+5. **Reconstruct Spectra:**
+   - For new photometry, predict latent coefficients and invert PCA to get the reconstructed spectrum.
+
+6. **Taxonomic Classification:**
+   - Classify the object's taxonomic type based on the latent space representation.
+
+Here is the pseudocode:
+
+```python
+def spectral_reconstruction_framework():
+    # Step 1: Preprocess and PCA Training
+    train_spectra = load_training_spectra()
+    pca = PCA(n_components=K)
+    pca.fit(train_spectra)
+
+    # Step 2: Data Augmentation with KDE
+    latent_coeffs = pca.transform(train_spectra)
+    bandwidth = 0.5  # determined through experiments
+    kernel_density_model = KDE(latent_coeffs, bandwidth)
+    
+    # Step 3: Simulate Photometry
+    simulated_photometry = []
+    for coeff in kernel_density_model.sample(num_samples):
+        spectrum = pca.inverse_transform(coeff)
+        convolve_with_filters(spectrum, noise_level=0.2)
+        simulated_photometry.append(...)
+    
+    # Step 4: AutoML Regressor Training
+    regressor = AutoGluonRegressor()
+    regressor.train(simulated_photometry, latent_coeffs)
+
+    # Step 5: Reconstruct Spectrum from New Photometry
+    new_photometry = [...]  # input sparse photometric data
+    predicted_coeffs = regressor.predict(new_photometry)
+    reconstructed_spectrum = pca.inverse_transform(predicted_coeffs)
+    
+    # Step 6: Taxonomic Classification
+    classifier = AutoGluonClassifier()
+    taxonomic_label = classifier.predict(predicted_coeffs)
+    
+    return reconstructed_spectrum, taxonomic_label
+```
+
+This pseudocode outlines the key steps of the framework without detailing the specific functions.

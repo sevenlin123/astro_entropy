@@ -1,0 +1,21 @@
+**Pseudocode of the Core Computational Algorithm**
+
+**Training Phase:**
+1. **Acquire Spectra**: Read `N` near-infrared spectra.
+2. **Compute Mean Spectrum**: Calculate the mean spectrum `μ(λ)` across all spectra.
+3. **Center Spectra**: Subtract `μ(λ)` from each spectrum.
+4. **Extract Principal Components**: Perform PCA on the centered spectra to obtain `K` principal components.
+5. **Store Results**: Archive `μ(λ)` and the principal components for future use.
+
+**Analysis Phase:**
+For each object:
+A. **Obtain Photometric Data**: Retrieve observed photometric magnitudes.
+B. **Define Filters**: For each band, obtain the transmission curve `T_i(λ)`.
+C. **Model Spectrum**: Express the spectrum as `S(λ) = μ(λ) + Σ(a_k * PC_k(λ))`.
+D. **Relate Magnitudes to Flux**: Compute magnitudes as `m_i = -2.5 * log(integral(S(λ) * T_i(λ) dλ) / F0) + c_i`.
+E. **Bayesian Model**: Set up a model where `a_k` are random variables constrained by observed `m_i`.
+F. **Sample Posterior**: Use HMC to draw samples from the posterior distribution of `a_k`.
+G. **Reconstruct Spectrum**: Build `S(λ)` using sampled `a_k`: `S(λ) = μ(λ) + Σ(a_k * PC_k(λ))`.
+H. **Calculate Uncertainties**: Propagate uncertainties in `a_k` to determine uncertainties in `S(λ)`.
+
+This algorithm efficiently reconstructs full spectra from sparse photometry, enabling detailed taxonomic analysis and survey optimization.

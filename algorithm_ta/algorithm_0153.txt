@@ -1,0 +1,28 @@
+### Algorithm: Probabilistic Spectral Reconstruction Framework
+
+1. **Preprocess Near-Infrared Spectra**:
+   - Collect a sample of near-IR spectra of trans-Neptunian objects (TNOs).
+   - Normalize and preprocess the spectral data to remove noise and standardize measurements.
+
+2. **Extract Principal Components**:
+   - Perform Principal Component Analysis (PCA) on the preprocessed spectra.
+   - Determine the number of principal components (4-5 for taxonomic classification; 8-10 for improved reconstruction fidelity).
+   - Retain these principal components to form a reduced latent-space representation of the spectral manifold.
+
+3. **Build Bayesian Inference Model**:
+   - Construct a probabilistic model in the reduced latent space using the extracted principal components.
+   - Define prior distributions for the latent variables based on the training data.
+   - Establish likelihood functions that relate the latent space representation to the observed photometric measurements.
+
+4. **Inference and Reconstruction**:
+   - For each object, input sparse photometric measurements.
+   - Project the photometric data into the latent space using the Bayesian model.
+   - Perform Markov Chain Monte Carlo (MCMC) sampling or other Bayesian inference techniques to estimate the latent variables.
+   - Reconstruct the full spectrum by mapping the estimated latent variables back to the original spectral space.
+   - Propagate measurement uncertainties through the model to quantify uncertainty in the reconstructed spectra.
+
+5. **Output Reconstructed Spectra and Uncertainties**:
+   - For each object, produce the reconstructed spectrum and associated uncertainty estimates across the wavelength range.
+   - Apply the framework to optimize survey configurations or detect unusual spectral types as needed.
+
+This algorithm effectively leverages dimensionality reduction and Bayesian inference to reconstruct high-fidelity spectra from sparse photometric data, enabling detailed taxonomic analysis and outlier detection in TNO studies.

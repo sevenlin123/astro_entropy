@@ -1,0 +1,9 @@
+1. Initialize a Gaussian Mixture Model (GMM) with parameters to cluster trans-Neptunian objects (TNOs) based on their spectral features.
+
+2. Use the GMM to cluster the TNOs into groups with similar spectral characteristics.
+
+3. Train a neural network (NN) using the observed photometric data and corresponding intrinsic color spectra from a training set of well-characterized TNOs.
+
+4. For each TNO, map its observed color distribution through the trained NN to obtain the reconstructed intrinsic color spectrum.
+
+5. Output the reconstructed intrinsic color spectra for all TNOs.

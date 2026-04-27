@@ -1,0 +1,24 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Preprocessing and PCA Analysis**
+   - Collect a set of near-infrared spectra of trans-Neptunian objects (TNOs).
+   - Perform Principal Component Analysis (PCA) on these spectra to derive principal components, reducing the dimensionality and capturing the major spectral variations.
+
+2. **Data Augmentation with KDE**
+   - Using the first few PCA components, apply Kernel Density Estimation (KDE) to generate synthetic spectra, creating a smooth probability distribution in the latent space.
+
+3. **Forward Modeling**
+   - For each synthetic spectrum, compute the expected photometric measurements by convolving with the instrument's (e.g., JWST/NIRCam) filter responses.
+   - Introduce Gaussian noise (e.g., 20%) to simulate real photometric uncertainties.
+
+4. **AutoML Model Training**
+   - Train an ensemble model (e.g., Gradient Boosted Decision Trees) using the synthetic photometry and corresponding PCA coefficients as the target, enabling prediction of latent variables from photometric data.
+
+5. **Spectral Reconstruction**
+   - For new photometric observations, use the trained AutoML regressor to predict the PCA coefficients.
+   - Apply the inverse PCA transform to these coefficients to reconstruct the full high-resolution spectrum.
+
+6. **Taxonomic Classification (Optional)**
+   - Train a classifier on the latent space to predict taxonomic categories (e.g., H₂O, CO₂, Organic types) from the inferred PCA coefficients.
+
+This algorithm efficiently reconstructs TNO spectra and classifies their types using sparse photometry, leveraging PCA and Bayesian inference.

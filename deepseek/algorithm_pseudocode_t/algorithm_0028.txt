@@ -1,0 +1,19 @@
+```pseudocode
+Initialize data structures for input photometric data.
+    Read sparse photometric data including observed magnitudes and uncertainties.
+Define semi-parametric model with basis functions.
+    Set up basis functions to capture variability in TNO spectra.
+Set up parameter space including model coefficients, photometric system parameters, and noise levels.
+    Define all parameters involved in spectral reconstruction.
+Simulate expected magnitudes for each object using forward model.
+    For each TNO, compute expected magnitudes across all bands considering noise.
+Perform Bayesian inference to update parameters based on observed data.
+    Use Bayesian statistics to compute posterior distribution of parameters.
+Use MCMC sampling to obtain posterior parameter distributions.
+    Draw samples from posterior using Markov Chain Monte Carlo.
+Reconstruct SEDs by combining basis functions with sampled coefficients.
+    For each TNO, combine basis functions weighted by sampled coefficients to get SED.
+Identify outliers by examining parameter posteriors.
+    Analyze posterior distributions to detect unusual discrepancies.
+Output reconstructed SEDs and outlier flags.
+```

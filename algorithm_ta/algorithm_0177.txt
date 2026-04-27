@@ -1,0 +1,35 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Input Data**: Sparse photometric measurements of trans-Neptunian objects (TNOs).
+
+2. **Preprocessing**: 
+   - Convert photometric data into a suitable format for spectral analysis.
+   - Remove any obvious outliers or noise from the dataset if necessary.
+
+3. **Principal Component Analysis (PCA)**:
+   - Apply PCA to a training set of near-infrared (near-IR) spectra.
+   - Determine the optimal number of principal components (4-5 for taxonomic classification; 8-10 for high-fidelity reconstruction).
+   - Construct a spectral manifold model using these principal components.
+
+4. **Bayesian Inference in Reduced Space**:
+   - Perform Bayesian inference in the PCA-reduced latent space.
+   - Propagate measurement uncertainties from the photometric data through the inference process.
+   - Reconstruct full spectra by sampling from the posterior distribution of the latent variables.
+
+5. **Spectral Reconstruction**:
+   - Use the inferred latent variables to reconstruct the full spectral representation of each TNO.
+   - Ensure that the reconstructed spectra have empirical credible-interval coverage (~95%) across wavelengths.
+
+6. **Outlier Detection**:
+   - Analyze the intermediate model probabilities during the reconstruction process.
+   - Identify unusual spectral types (e.g., peculiar Neptune Trojans) by detecting cases where photometric constraints favor low-probability models on the spectral manifold.
+
+7. **Survey Optimization**:
+   - Evaluate the information content of different observing configurations (e.g., JWST/NIRCam filters).
+   - Select filter combinations that maximize the retention of spectral information for taxonomic studies.
+
+8. **Output**: 
+   - Reconstructed full spectra with uncertainty estimates for each TNO.
+   - Optimized survey configurations and detected outliers.
+
+This algorithm efficiently bridges the gap between sparse photometric data and detailed spectral analysis, enabling accurate taxonomic classification and survey planning for minor planets.

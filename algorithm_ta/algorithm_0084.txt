@@ -1,0 +1,35 @@
+The computational algorithm implements a probabilistic spectral reconstruction framework for trans-Neptunian objects (TNOs) using sparse photometric data. It employs Bayesian inference in a reduced latent space, leveraging Principal Component Analysis (PCA) to model spectral variability.
+
+1. **Preprocessing**:
+   - Normalize and preprocess the photometric data from observations.
+   - Convert photometric measurements into a format suitable for spectral analysis.
+
+2. **Principal Component Analysis (PCA)**:
+   - Train a PCA model on a reference dataset of near-infrared spectra.
+   - Determine the optimal number of principal components (4-5 for classification, 8-10 for accurate reconstruction).
+
+3. **Probabilistic Latent-Space Modeling**:
+   - Map the input photometric data into the latent PCA space.
+   - Perform Bayesian inference within this reduced space to estimate the underlying spectral components.
+
+4. **Spectral Reconstruction**:
+   - Reconstruct the full spectrum from the inferred latent components.
+   - Propagate measurement uncertainties from photometric data to the reconstructed spectra.
+
+5. **Uncertainty Quantification**:
+   - Calculate credible intervals for the reconstructed spectra.
+   - Validate the empirical coverage of these intervals (e.g., ~95%).
+
+6. **Outlier Detection**:
+   - Analyze the probability distribution of latent components.
+   - Identify unusual objects with photometric data inconsistent with typical spectral models.
+
+7. **Survey Optimization**:
+   - Evaluate the information content of different filter configurations.
+   - Suggest optimal filter combinations for future observations based on their ability to improve spectral reconstruction fidelity.
+
+8. **Special Cases Handling**:
+   - Apply the framework to reconstruct spectra of rare or peculiar TNOs.
+   - Use constrained photometry to identify and reconstruct outlier spectral types.
+
+This algorithm efficiently bridges sparse photometry and spectroscopy, enabling robust spectral reconstruction and compositional mapping of TNOs.

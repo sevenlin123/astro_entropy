@@ -1,0 +1,51 @@
+### Algorithm: Probabilistic Spectral Reconstruction Framework
+
+1. **Input Data**:
+   - Training Set: A collection of reference TNO spectra.
+   - Photometric Measurements: Sparse photometric observations of a TNO.
+
+2. **Initialize PCA**:
+   - Apply Principal Component Analysis (PCA) on the training set of TNO spectra.
+   - Extract principal components (latent space) to capture dominant spectral variations.
+
+3. **Data Augmentation**:
+   - Use Kernel Density Estimation (KDE) on the PCA latent space to generate synthetic spectral representations.
+   - Inject noise (e.g., 20% reflectance uncertainty) into synthetic photometry derived from these augmented spectra.
+
+4. **Train Encoder**:
+   - Develop an AutoML regressor (e.g., Gradient Boosted Decision Trees) to map sparse photometric inputs to latent coefficients.
+   - Training is done using the synthetic photometric data paired with ground truth PCA targets.
+
+5. **Define Taxonomic Classifier**:
+   - Train a secondary AutoML classifier on the latent space to predict taxonomic labels (e.g., Water-type, CO2-type) using labels from the training set.
+
+6. **Reconstruct Spectrum**:
+   - For new photometric observations:
+     - Predict latent coefficients using the trained encoder.
+     - Invert the PCA transform to reconstruct the high-dimensional spectrum.
+
+7. **Classify Taxonomic Type**:
+   - Project the reconstructed latent coefficients into the taxonomic classifier.
+   - Obtain a probability distribution over spectral types.
+
+8. **Output**:
+   - Reconstructed spectrum.
+   - Taxonomic classification probabilities.
+
+### Pseudocode:
+
+```
+Function SpectralReconstruction(photometry, training_spectra):
+    1. Initialize PCA with training_spectra.
+    2. Generate synthetic_spectra using PCA latent space and KDE.
+    3. Create synthetic_photometry by convolving synthetic_spectra with NIRCam filter curves.
+    4. Inject noise (e.g., 20% uncertainty) into synthetic_photometry.
+    5. Train AutoML regressor (Encoder) mapping synthetic_photometry to PCA latent coefficients.
+    6. Train AutoML classifier (Classifier) mapping PCA latent coefficients to taxonomic labels.
+    7. For new photometry:
+        a. Predict latent_coefficients using Encoder.
+        b. Reconstruct spectrum by applying inverse PCA transform.
+        c. Classify taxonomic type using Classifier.
+    8. Return reconstructed_spectrum, taxonomic_probabilities.
+End Function
+```

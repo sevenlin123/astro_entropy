@@ -1,0 +1,67 @@
+**Algorithm: Probabilistic Spectral Reconstruction Framework**
+
+1. **Training Phase**:
+   - **Principal Component Analysis (PCA)**:
+     - Train PCA on a set of reference TNO spectra to derive principal components.
+     - Determine the number of principal components (4-10) that best capture spectral variability for accurate reconstruction.
+   - **Latent Space Construction**:
+     - Use Kernel Density Estimation (KDE) to model the probability distribution of the PCA coefficients, creating a continuous manifold.
+   - **Synthetic Data Generation**:
+     - Forward model the PCA-derived spectra through the target instrument's filters (e.g., JWST NIRCam) to simulate photometric measurements.
+     - Add noise (e.g., 20% relative uncertainty) to simulate realistic photometric observations.
+   - **Model Training**:
+     - Train an AutoML regressor (e.g., Gradient-Boosted Decision Trees) to map sparse photometric inputs to latent coefficients.
+     - Train a secondary classifier to predict taxonomic categories using the latent space.
+
+2. **Reconstruction Phase**:
+   - **Input Processing**:
+     - For new photometric observations, apply the trained AutoML regressor to predict latent coefficients.
+   - **Spectral Reconstruction**:
+     - Use the inverse PCA transform on the predicted latent coefficients to reconstruct the full spectrum.
+   - **Uncertainty Propagation**:
+     - Quantify uncertainties in the reconstructed spectra by propagating the uncertainties from photometric measurements through the model.
+   - **Taxonomic Classification**:
+     - Classify the object's spectral type using the latent space-based classifier.
+
+3. **Validation and Applications**:
+   - Perform Leave-One-Out Cross-Validation (LOOCV) to assess reconstruction accuracy and uncertainty calibration.
+   - Use the framework for survey optimization by evaluating different filter configurations.
+   - Detect outliers by analyzing the position of reconstructed spectra in the latent space.
+
+**Steps**:
+
+1. **Principal Component Analysis (PCA)**:
+   - Extract the principal components from a set of reference TNO spectra.
+   - Select the appropriate number of components (e.g., 4-10) to retain significant spectral information.
+
+2. **Latent Space Construction**:
+   - Apply Kernel Density Estimation (KDE) to the PCA coefficients to create a continuous probability distribution.
+   - Adjust the KDE bandwidth to balance local fidelity and global smoothness.
+
+3. **Synthetic Data Generation**:
+   - Simulate photometric measurements by convolving the PCA-derived spectra with instrument response functions.
+   - Introduce noise (e.g., Gaussian noise with specified relative uncertainty) to the synthetic photometry.
+
+4. **Model Training**:
+   - Train an AutoML regressor to map the sparse photometric inputs to the latent coefficients.
+   - Train a classifier to predict taxonomic categories based on the latent space representation.
+
+5. **Reconstruction**:
+   - For new observations, use the trained regressor to predict latent coefficients.
+   - Apply inverse PCA to reconstruct the full spectrum.
+   - Calculate uncertainties and classify the spectral type using the latent space.
+
+6. **Validation**:
+   - Use LOOCV to evaluate reconstruction accuracy and coverage.
+   - Assess the framework's ability to detect outliers and optimize survey strategies.
+
+**Inputs**:
+- Reference TNO spectra
+- Sparse photometric observations
+- Instrument response functions (e.g., JWST NIRCam)
+
+**Outputs**:
+- Reconstructed full spectra
+- Probabilistic taxonomic classification
+- Outlier detection flags
+- Optimized filter configurations

@@ -1,0 +1,40 @@
+```pseudocode
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+    - Set of reference TNO spectra
+    - Sparse photometric observations of TNOs
+    - JWST/NIRCam filter set
+
+Output:
+    - Reconstructed full spectra
+    - Taxonomic classification probabilities
+    - Uncertainty intervals
+
+1. Preprocessing:
+    a. Normalize and preprocess reference spectra.
+    b. Perform Principal Component Analysis (PCA) on reference spectra to obtain principal components (PCs).
+    c. Select optimal number of PCs (K) based on explained variance and LOOCV results.
+    
+2. Training Phase:
+    a. Use Kernel Density Estimation (KDE) to augment latent space and create synthetic training data.
+    b. Forward model synthetic spectra through selected JWST/NIRCam filters to simulate photometry.
+    c. Inject Gaussian noise (20% relative uncertainty) into synthetic photometry.
+    d. Train AutoML regressor (ensemble of gradient-boosted trees) to map photometry to latent PC coefficients.
+    
+3. Inference Phase:
+    a. For each test object:
+        i. Pass sparse photometry through trained regressor to predict latent coefficients.
+        ii. Apply inverse PCA transform to reconstruct full spectrum.
+    b. Perform posterior sampling using Gaussian Copula to quantify uncertainties.
+    
+4. Taxonomy Classification:
+    a. Train secondary classifier on latent PC coefficients.
+    b. Predict taxonomic probabilities for each object.
+    
+5. Applications:
+    a. Optimize filter configurations by evaluating information content.
+    b. Detect outliers by identifying low-probability latent states.
+```
+
+This pseudocode outlines the core computational steps of the probabilistic framework, focusing on spectral reconstruction and taxonomic classification from sparse photometric data.

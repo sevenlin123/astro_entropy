@@ -1,0 +1,92 @@
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+**Inputs:**  
+- Observed photometric magnitudes $\mathbf{m}$ for a trans-Neptunian object (TNO).  
+- Training set of reference TNO spectra $\mathcal{S}_{\text{train}}$ and their corresponding photometric measurements.  
+- Principal Component Analysis (PCA) decomposition of $\mathcal{S}_{\text{train}}$ into principal components (PCs) and latent coefficients.  
+- Synthetic latent samples generated via Kernel Density Estimation (KDE) augmentation.  
+
+**Outputs:**  
+- Reconstructed high-resolution spectrum $S_{\text{reconstructed}}$.  
+- Posterior probabilities over spectral taxonomic classes.  
+- Uncertainty estimates on the reconstructed spectrum.  
+
+---
+
+#### **Step 1: Define the Latent Space**  
+1. Perform PCA on the reference TNO spectra $\mathcal{S}_{\text{train}}$ to obtain principal components $\mathbf{U}$ and latent coefficients $\mathbf{z}_{\text{train}}$.  
+2. Augment the latent space using KDE to generate synthetic samples $\mathbf{z}_{\text{synthetic}}$ that smooth the distribution of $\mathbf{z}_{\text{train}}$.  
+
+---
+
+#### **Step 2: Forward Modeling**  
+1. Simulate synthetic photometry $\mathbf{m}_{\text{synthetic}}$ for each synthetic latent sample $\mathbf{z}_{\text{synthetic}}$ by convolving with the instrumental response (e.g., JWST/NIRCam filters).  
+2. Inject Gaussian noise with a specified relative uncertainty (e.g., 20%) into $\mathbf{m}_{\text{synthetic}}$ to mimic real photometric measurements.  
+
+---
+
+#### **Step 3: Train the AutoML Regressor**  
+1. Combine the real training photometry $\mathbf{m}_{\text{train}}$ (excluding the held-out object) and synthetic photometry $\mathbf{m}_{\text{synthetic}}$ into a unified training dataset.  
+2. Use AutoML (e.g., AutoGluon) to train a regressor $\mathcal{M}$ that maps photometric inputs $\mathbf{m}$ to latent coefficients $\mathbf{z}$.  
+3. Validate the regressor using leave-one-out cross-validation (LOOCV) to ensure unbiased evaluation.  
+
+---
+
+#### **Step 4: Inference and Reconstruction**  
+1. For the observed photometry $\mathbf{m}$ of the target TNO:  
+   - Use the trained regressor $\mathcal{M}$ to predict the latent coefficients $\hat{\mathbf{z}}$.  
+2. Apply the inverse PCA transform to $\hat{\mathbf{z}}$ to reconstruct the high-resolution spectrum $S_{\text{reconstructed}}$.  
+
+---
+
+#### **Step 5: Posterior Sampling and Uncertainty Quantification**  
+1. Sample the joint posterior distribution of $\mathbf{z}$ using a Gaussian Copula framework to preserve physical correlations in the latent space.  
+2. Generate an ensemble of reconstructed spectra $S_{\text{reconstructed}}^{(i)}$ for $i = 1, ..., N_{\text{samples}}$.  
+3. Compute empirical credible intervals for the reconstructed spectrum based on the ensemble.  
+
+---
+
+#### **Step 6: Taxonomic Classification**  
+1. Project the predicted latent coefficients $\hat{\mathbf{z}}$ into a pre-trained taxonomic classifier.  
+2. Obtain posterior probabilities over spectral taxonomic classes (e.g., Water-type, CO$_2$-type, Organics-type).  
+
+---
+
+### Pseudocode Representation:
+
+```python
+function spectral_reconstruction(photometry m):
+    # Step 1: Define the latent space
+    pca_model = train_pca(reference_spectra)
+    z_train = pca_model.transform(reference_spectra)
+    z_synthetic = generate_kde_samples(z_train)
+
+    # Step 2: Forward modeling
+    m_synthetic = forward_model(z_synthetic, instrumental_response)
+    m_synthetic = add_noise(m_synthetic, noise_level=0.2)
+
+    # Step 3: Train the AutoML regressor
+    training_data = combine(real_photometry_excluding_held_out, m_synthetic)
+    regressor = auto_ml_train(training_data, target=z_synthetic)
+
+    # Step 4: Inference and reconstruction
+    z_hat = regressor.predict(m)
+    s_reconstructed = pca_model.inverse_transform(z_hat)
+
+    # Step 5: Posterior sampling and uncertainty quantification
+    z_samples = gaussian_copula_sample(z_hat)
+    s_samples = [pca_model.inverse_transform(z) for z in z_samples]
+    compute_credible_intervals(s_samples)
+
+    # Step 6: Taxonomic classification
+    taxonomic_probs = taxonomic_classifier.predict_proba(z_hat)
+
+    return s_reconstructed, taxonomic_probs,credible_intervals
+```
+
+---
+
+**Notes:**  
+- The PCA decomposition and the number of components (K) are determined during model training and validation (e.g., K=8–10 for optimal results).  
+- The synthetic data augmentation ensures numerical stability and generalization in low-sample regimes.  
+- Gaussian Copula sampling preserves physical correlations in the latent space, ensuring realistic uncertainty quantification.

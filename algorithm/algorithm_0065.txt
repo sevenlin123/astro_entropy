@@ -1,0 +1,45 @@
+**Algorithm: Probabilistic Spectral Reconstruction for Trans-Neptunian Objects**
+
+1. **Preprocessing**:
+   - **Input**: Sparse photometric data for TNOs.
+   - **Output**: Clean and normalized data ready for modeling.
+     - Remove or interpolate missing values.
+     - Correct for instrumental biases and flux calibration issues.
+     - Normalize flux measurements to a common scale.
+     - Filter out obvious outliers and artifacts.
+     - Merge duplicate observations and compute averages.
+
+2. **Model Construction**:
+   - **Input**: Cleaned photometric data.
+   - **Output**: Joint probability distribution of spectral parameters and measurements.
+     - Define a probabilistic model combining Gaussian processes and mixture models.
+     - Set up the likelihood function based on photometric data.
+     - Specify prior distributions for spectral parameters (e.g., smoothness, variability).
+     - Incorporate mixture components to account for outliers.
+     - Implement the model in a probabilistic programming language (e.g., PyMC, Stan).
+
+3. **Inference**:
+   - **Input**: Modeled joint distribution.
+   - **Output**: Posterior distributions of spectral parameters.
+     - Use MCMC algorithms (e.g., Metropolis-Hastings, Gibbs sampler) to sample from the posterior.
+     - Monitor convergence diagnostics (e.g., Rhat, effective sample size).
+     - Adjust sampler parameters for better mixing if needed.
+     - Generate posterior samples for all spectral parameters across the dataset.
+
+4. **Outlier Detection**:
+   - **Input**: Posterior samples and original data.
+   - **Output**: Identified outliers and clean data subset.
+     - Compute expected value and variance of spectral parameters from posterior.
+     - Calculate likelihood ratios between main and outlier components in the mixture model for each observation.
+     - Rank observations by likelihood ratios and classify those above a threshold as outliers.
+     - Use posterior predictive checks to identify discrepancies between observed data and model predictions.
+     - Flag identified outliers for further inspection.
+
+5. **Post-Inference Processing**:
+   - **Input**: Posterior distributions and outlier flags.
+   - **Output**: Best estimates and confidence intervals.
+     - Calculate posterior mean or median as the best estimate of the spectrum.
+     - Determine confidence intervals or credible regions from posterior quantiles.
+     - Visualize reconstructed spectra alongside original data for verification.
+     - Compare reconstructed spectra with template spectra to assess consistency.
+     - Output best estimates and confidence intervals for further analysis.

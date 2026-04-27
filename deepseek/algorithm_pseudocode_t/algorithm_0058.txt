@@ -1,0 +1,29 @@
+**Algorithm: Probabilistic Spectral Reconstruction**
+
+1. **Input**: Sparse photometric data for each object, consisting of flux measurements in select bands.
+
+2. **Preprocessing**:
+   - Normalize the flux values across all bands to a common scale.
+   - Ensure data is in a consistent format for all objects.
+
+3. **Gaussian Process Regression (GPR)**:
+   - For each object, apply GPR to estimate flux values at unobserved bands.
+   - The GPR utilizes prior knowledge about spectral smoothness and correlations between bands.
+   - This step produces a reconstructed spectrum for each object.
+
+4. **Bayesian Mixture Model**:
+   - Train a Bayesian mixture model using known spectral templates as components.
+   - Each component corresponds to a specific spectral type.
+   - The model estimates the probability of the reconstructed spectrum matching each template.
+
+5. **Posterior Probability Calculation**:
+   - For each object, compute the posterior probability of it belonging to each spectral template.
+   - These probabilities are derived from the Bayesian mixture model.
+
+6. **Spectral Type Assignment**:
+   - Select the spectral template with the highest posterior probability as the object's spectral type.
+   - This determines the most likely classification for each object.
+
+7. **Output**: Assigned spectral types for all objects based on the highest posterior probabilities.
+
+This algorithm effectively reconstructs the spectral types of trans-Neptunian objects using probabilistic methods, enabling accurate taxonomy and survey optimization.

@@ -1,0 +1,36 @@
+### Algorithm Description
+
+1. **Data Preparation**:
+   - Collect a set of reference TNO spectra and their corresponding photometric measurements.
+   - Exclude rare spectral types and outliers to focus on dominant classes.
+
+2. **Principal Component Analysis (PCA)**:
+   - Perform PCA on the reference spectra to extract principal components (PCs).
+   - PCs represent the main sources of spectral variability.
+
+3. **Training Data Augmentation**:
+   - Use Kernel Density Estimation (KDE) on the latent PCA coefficients to generate synthetic training data.
+   - This creates a smooth, continuous manifold in the latent space.
+
+4. **Synthetic Photometry Generation**:
+   - For each augmented spectrum, simulate photometric measurements by convolving the spectrum with the instrument's filter response curves (e.g., JWST/NIRCam).
+   - Add Gaussian noise to simulate observational uncertainties.
+
+5. **AutoML Model Training**:
+   - Train an AutoML regressor (e.g., Gradient-Boosted Decision Trees) to map sparse photometry to latent PCA coefficients.
+   - Also, train a classifier to predict taxonomic labels using the latent space.
+
+6. **Reconstruction Pipeline**:
+   - For new photometric observations, use the trained AutoML encoder to predict latent coefficients.
+   - Apply inverse PCA transformation to reconstruct the full spectrum.
+   - Simultaneously, use the classifier to determine the taxonomic label.
+
+7. **Validation and Performance Assessment**:
+   - Conduct Leave-One-Out Cross-Validation (LOOCV) to evaluate the model's accuracy and uncertainty calibration.
+   - Measure Root Mean Square Error (RMSE) and credible interval coverage for spectral reconstruction.
+
+8. **Applications**:
+   - **Survey Optimization**: Evaluate different filter combinations to maximize spectral reconstruction fidelity.
+   - **Outlier Detection**: Identify unusual spectral types by constraining photometry and detecting low-probability latent states.
+
+This algorithm efficiently translates sparse photometric data into detailed spectral information, enabling robust characterization of TNO surface compositions.

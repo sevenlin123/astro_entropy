@@ -1,0 +1,19 @@
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input: Sparse photometric data D for N trans-Neptunian objects
+
+Output: Reconstructed SEDs S, outlier flags O
+
+1. Initialize shared Gaussian Process (GP_shared) and individual Gaussian Processes (GP_i) for each object i.
+2. Form composite Gaussian Processes for each object: GP_composite_i = GP_shared + GP_i.
+3. Initialize probabilistic outlier mixture model OModel.
+4. Jointly train GP_shared, all GP_i, and OModel using Markov chain Monte Carlo (MCMC):
+   a. For each iteration in MCMC:
+      i. Update GP_shared and GP_i hyperparameters to better fit the data.
+      ii. Update OModel parameters to better classify outliers.
+      iii. Draw samples from the posterior distributions of spectral parameters θ_i for each object i.
+5. After training, for each observation o in D:
+   a. Compute the posterior probability of o being an outlier using OModel.
+   b. If P(outlier | o) > threshold, add o to outlier flags O.
+6. For each object i, reconstruct SED S_i using the trained GP_composite_i.
+7. Output SEDs S and outlier flags O.

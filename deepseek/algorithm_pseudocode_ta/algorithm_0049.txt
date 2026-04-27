@@ -1,0 +1,38 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Photometry**
+
+**Inputs:**
+- Training Set: Collection of TNO spectra.
+- Photometric Measurements: Sparse photometric data for the target object.
+
+**Outputs:**
+- Reconstructed Spectrum: Full spectrum of the target object.
+- Uncertainty Estimates: Quantitative measures of uncertainty in the reconstructed spectrum.
+
+**Steps:**
+
+1. **Principal Component Analysis (PCA):**
+   a. **Training Set Processing:** Load the training set of TNO spectra.
+   b. **Centering Data:** Subtract the mean spectrum from all training spectra to center the data.
+   c. **Covariance Matrix Computation:** Calculate the covariance matrix of the centered spectra.
+   d. **Eigenvalue Decomposition:** Compute eigenvalues and eigenvectors of the covariance matrix. The eigenvectors represent the principal components (PCs).
+   e. **Select Principal Components:** Based on variance explained, determine the number of PCs to use (e.g., 4-5 for taxonomic classification; 8-10 for higher fidelity).
+
+2. **Spectral Manifold Modeling:**
+   a. **Latent Space Construction:** Represent the spectra in the reduced PCA space.
+   b. **Probabilistic Model Setup:** Define a probabilistic model in the PCA space, incorporating prior knowledge about spectral variability.
+
+3. **Bayesian Inference:**
+   a. **Likelihood Function:** Define the likelihood based on the relationship between photometric measurements and the latent PCA variables.
+   b. **Prior Distributions:** Specify prior distributions for the PCA coefficients and other parameters based on the training data.
+   c. **Inference Method:** Use Bayesian inference (e.g., Markov Chain Monte Carlo) to estimate posterior distributions of the latent variables given the photometric data.
+
+4. **Reconstruction of Spectrum:**
+   a. **Posterior Samples:** Obtain posterior samples of the latent PCA coefficients.
+   b. **Spectrum Reconstruction:** Project the latent coefficients back into the original spectral space using the PCA eigenvectors.
+   c. **Uncertainty Estimation:** Calculate the uncertainty in the reconstructed spectrum by propagating the uncertainties from the posterior distributions of the latent variables.
+
+5. **Output:**
+   a. **Return Reconstructed Spectrum:** The full spectrum obtained from the most probable latent variables.
+   b. **Return Uncertainty Estimates:** Quantitative measures of uncertainty at each wavelength.
+
+**End Algorithm**

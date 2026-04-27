@@ -1,0 +1,11 @@
+**Extracted Algorithm:**
+
+1. **Data Preparation**: Create synthetic CT datasets with known ground truth rotation angles.
+
+2. **Network Architecture**: Design a U-Net-like Convolutional Neural Network (CNN) with a downsampling path for feature extraction and an upsampling path for accurate angular displacement estimation.
+
+3. **Training**: Train the CNN end-to-end using the synthetic datasets to learn rotation estimation.
+
+4. **Testing**: Apply the trained model to real CT scans to estimate rotation.
+
+5. **Evaluation**: Compare the computational efficiency and accuracy of the CNN with traditional methods.

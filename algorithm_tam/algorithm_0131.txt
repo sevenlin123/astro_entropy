@@ -1,0 +1,42 @@
+### Algorithm: Probabilistic Spectral Reconstruction Framework
+
+1. **Data Preparation**:
+   - Collect a training set of TNO spectra, focusing on dominant taxonomic types (e.g., Water, CO₂, Organic).
+   - Exclude rare or outlier spectral types to ensure a stable latent space.
+
+2. **Principal Component Analysis (PCA)**:
+   - Apply PCA to the training spectra to extract principal components (latent space).
+   - Determine the optimal number of components (e.g., 8-10) based on reconstruction fidelity and LOOCV performance.
+
+3. **Latent Space Augmentation**:
+   - Use Kernel Density Estimation (KDE) on the PCA coefficients to create a continuous probability distribution in the latent space.
+   - Set the KDE bandwidth to ensure smooth, physically plausible interpolations between training spectra.
+
+4. **Synthetic Photometry Generation**:
+   - Forward model the spectra through the target instrument's filter response functions (e.g., JWST/NIRCam).
+   - Add Gaussian noise (e.g., 20% relative uncertainty) to simulate realistic photometric observations.
+
+5. **AutoML Regression Model Training**:
+   - Train an ensemble of gradient-boosted decision trees to map sparse photometry to latent coefficients.
+   - Use synthetic photometry and augmented latent data for training.
+
+6. **Bayesian Inference for Spectral Reconstruction**:
+   - For new photometric observations, predict latent coefficients using the trained AutoML model.
+   - Project the latent coefficients back to the full spectrum via inverse PCA transformation.
+
+7. **Error and Uncertainty Propagation**:
+   - Compute pixel-wise reconstruction errors and relative uncertainties.
+   - Assess credible interval coverage across the spectrum to evaluate uncertainty calibration.
+
+8. **Taxonomic Classification**:
+   - Classify the object into taxonomic categories (e.g., Water, CO₂, Organic) based on the latent space coordinates.
+
+9. **Outlier Detection**:
+   - Calculate the Kullback-Leibler (KL) divergence between the posterior latent distribution and the prior distribution.
+   - Flag objects with significantly high KL divergence as potential outliers or unusual spectral types.
+
+10. **Survey Optimization**:
+    - Evaluate the information content of different filter configurations using mutual information metrics.
+    - Select filter sets that maximize spectral reconstruction fidelity and taxonomic classification accuracy.
+
+This algorithm provides a probabilistic framework to reconstruct high-fidelity spectra from sparse photometry, enabling robust classification and outlier detection for trans-Neptunian objects.

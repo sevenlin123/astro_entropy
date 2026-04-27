@@ -1,0 +1,22 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Preprocess Spectral Data**
+   - Normalize and convert reference spectra into photometric bands matching the observations.
+   
+2. **Principal Component Analysis (PCA)**
+   - Train PCA on the normalized reference spectra to capture the dominant spectral variations.
+   - Determine the optimal number of principal components (e.g., 4-5 for taxonomic classification; 8-10 for improved reconstruction).
+   
+3. **Construct Spectral Manifold in Latent Space**
+   - Represent each spectrum as a linear combination of the selected principal components.
+   
+4. **Bayesian Inference**
+   - Perform Bayesian inference in the PCA-reduced latent space to estimate the posterior distribution of latent variables given sparse photometric measurements.
+   
+5. **Reconstruct Full Spectra**
+   - Use the posterior means of the latent variables to reconstruct the full spectra.
+   
+6. **Propagate Uncertainties**
+   - Calculate uncertainties in the reconstructed spectra by considering the variance in the latent space and the photometric measurement errors.
+   
+**End Algorithm**

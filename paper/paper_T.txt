@@ -1,0 +1,2 @@
+Title: Probabilistic Spectral Reconstruction of Trans-Neptunian Objects from Sparse Photometry: A Framework for Taxonomy, Survey Optimization, and Outlier Detection
+

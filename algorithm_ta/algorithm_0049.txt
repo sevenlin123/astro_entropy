@@ -1,0 +1,23 @@
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. **Input**: Sparse photometric measurements of trans-Neptunian objects.
+
+2. **Training Data Preparation**:
+   - Obtain a sample of near-infrared (near-IR) spectra.
+   - Perform Principal Component Analysis (PCA) on the sample to derive principal components representing the spectral manifold.
+
+3. **Model Construction**:
+   - Use the PCA-derived components to construct a probabilistic latent-space model.
+   - Bayesian inference is applied within this reduced space to estimate the underlying spectral parameters based on the sparse photometric data.
+
+4. **Cross-Validation for Dimensionality Selection**:
+   - Determine the optimal number of principal components (e.g., 4-5 for classification; 8-10 for high-fidelity reconstruction) using leave-one-out cross-validation.
+
+5. **Spectral Reconstruction**:
+   - Project the sparse photometric data into the selected principal component space.
+   - Propagate measurement uncertainties through the Bayesian framework to reconstruct the full spectrum.
+   - Validate the reconstruction by checking credible-interval coverage across wavelengths.
+
+6. **Output**: Reconstructed spectra with associated uncertainties, ready for taxonomic classification or further analysis.
+
+This algorithm effectively bridges sparse photometric data with spectral information, enabling robust reconstruction and analysis of trans-Neptunian object compositions.

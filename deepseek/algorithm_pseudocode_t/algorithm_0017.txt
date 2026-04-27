@@ -1,0 +1,24 @@
+```plaintext
+Algorithm: Probabilistic Spectral Reconstruction Framework
+
+1. Initialize parameters for each TNO:
+   - Blackbody spectrum with temperature parameter T
+   - Smoothness prior with regularization coefficient λ
+   - Extinction curve with coefficients β
+
+2. For each spectral pixel:
+   a. Model the expected flux F using the blackbody, smoothness prior, and extinction curve.
+   b. Convolve F with instrumental response function to simulate observed flux O.
+
+3. Compute likelihood L = P(observed data | model parameters), using FFT-based convolution for efficiency.
+
+4. Use Bayesian inference to compute posterior distribution P(model parameters | observed data):
+   a. Implement Metropolis-Hastings algorithm within Gibbs sampling framework.
+   b. Apply parallel tempering to improve mixing and convergence.
+
+5. Sample posterior distribution to estimate optimal spectrum S and identify outliers in the dataset.
+
+6. Output reconstructed spectrum S and outlier indices.
+```
+
+```

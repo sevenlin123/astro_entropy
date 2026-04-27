@@ -1,0 +1,45 @@
+```
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. Function InitializeTrainingData(seed_spectra):
+    - Input: Collection of reference TNO spectra
+    - Output: Processed training dataset
+    - Execute PCA on seed_spectra to obtain principal components
+    - Project seed_spectra onto PCA basis to get latent coefficients
+    - Return processed dataset with latent coefficients and original spectra
+
+2. Function GenerateSyntheticData(latent_coefficients, jwst_filters):
+    - Input: Latent coefficients, list of NIRCam filters
+    - Output: Synthetic photometric data
+    - For each latent coefficient:
+        - Apply inverse PCA transform to reconstruct full spectrum
+        - Convolve spectrum with filter throughput curves to compute photometric magnitudes
+        - Add Gaussian noise (σ = 0.2 relative reflectance)
+    - Return synthetic_photometry paired with ground_truth_spectra
+
+3. Function TrainAutoMLRegressor(train_photometry, train_latent):
+    - Input: Training photometry, corresponding latent coefficients
+    - Output: Trained AutoML regressor model
+    - Configure AutoML with ensemble of gradient-boosted trees
+    - Train regressor to predict latent coefficients from photometry
+    - Optimize hyperparameters via cross-validation
+    - Return trained_model
+
+4. Function BayesianInference(new_photometry, trained_model, pca_basis):
+    - Input: New photometric observations, trained regressor, PCA eigenvectors
+    - Output: Reconstructed spectrum and taxonomic probabilities
+    - Use regressor to predict latent coefficients from new_photometry
+    - Apply inverse PCA transform to obtain full spectrum
+    - Project latent coefficients through taxonomic classifier
+    - Output reconstructed_spectrum and taxonomic_probabilities
+
+5. Function SpectralReconstructionPipeline(test_photometry, initialized_model):
+    - Input: Test photometric data, complete initialized model
+    - Output: Final spectral reconstruction and classification
+    - For each object:
+        - Run test_photometry through BayesianInference function
+        - Validate spectral coverage and classification accuracy
+    - Compile results for analysis
+
+Return reconstructed_spectra, taxonomic_classifications
+```

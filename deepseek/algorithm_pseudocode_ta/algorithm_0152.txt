@@ -1,0 +1,22 @@
+**Algorithm: Probabilistic Spectral Reconstruction Framework**
+
+1. **PCA Training:**
+   - Input: Training set of N reference spectra, each of length L.
+   - Compute covariance matrix C of the reference spectra.
+   - Perform eigenvalue decomposition on C to obtain top M principal components (M << L).
+   - Store PCA basis vectors for later use.
+
+2. **Processing Each Target Object:**
+   - Input: Sparse photometric flux measurements f_j at wavelengths λ_j.
+   - For each PCA basis vector p_k (k = 1 to M):
+     - Compute likelihood L_k = P(flux measurements | s = p_k).
+   - Perform Bayesian inference to calculate posterior probabilities P(p_k | f) for each p_k.
+     - Integrate over possible PCA coefficients and measurement uncertainties.
+   - Select the basis vector with maximum posterior probability P_max.
+   - Reconstruct the spectrum using the selected PCA basis vector.
+
+3. **Uncertainty Propagation:**
+   - Calculate variances in the PCA coefficients.
+   - Transform variances back to the original spectrum space to determine uncertainties.
+
+**End Algorithm**

@@ -1,0 +1,8 @@
+algorithm spectral_reconstruction_framework():
+    input = sparse_photometric_data()
+    collect all objects' chromatic_indices()
+    build gaussian_process(population_chromatic_indices)
+    for each object in input:
+        infer s_e_d(object, gaussian_process, measurement_uncertainties)
+        detect outliers(object, inferred_S_E_D, gaussian_process)
+    output = reconstructed_s_e_ds_with_outliers

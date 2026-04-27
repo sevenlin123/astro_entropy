@@ -1,0 +1,22 @@
+### Algorithm: Probabilistic Spectral Reconstruction Framework
+
+1. **Training Phase**:
+   - **Data Preparation**: Collect a reference set of TNO spectra (e.g., 51 spectra) and exclude outliers and rare types to ensure a clean training set.
+   - **Principal Component Analysis (PCA)**: Apply PCA to the reference spectra to derive principal components (latent space). Typically, 4-5 components capture dominant variability, while 8-10 improve fidelity.
+   - **Density Estimation**: Use Kernel Density Estimation (KDE) on the PCA coefficients to create a continuous latent manifold, ensuring smooth interpolation between training examples.
+   - **Synthetic Photometry Generation**: Forward model the spectra through the target instrument's filters (e.g., JWST/NIRCam) to simulate photometric measurements. Inject noise (e.g., 20% relative uncertainty) to account for observational errors.
+   - **Training AutoML Regressor**: Train an ensemble of gradient-boosted decision trees (AutoML) to regress from photometric inputs to PCA coefficients. This model learns the mapping from sparse photometry to the latent space.
+
+2. **Inference Phase**:
+   - **Input Photometry**: Provide new sparse photometric observations as input to the trained AutoML model.
+   - **Latent Space Prediction**: The AutoML model predicts the latent coefficients, which represent the object's position in the spectral manifold.
+   - **Spectral Reconstruction**: Use the inverse PCA transform to project the latent coefficients back into the full spectral space, yielding the reconstructed spectrum.
+   - **Taxonomic Classification**: Apply a secondary classifier trained on the latent space to assign probabilities to taxonomic classes (e.g., H₂O, CO₂, Organic, Methanol).
+   - **Uncertainty Quantification**: Propagate the uncertainties from the photometric measurements through the reconstruction process to estimate credible intervals for the reconstructed spectra.
+
+3. **Applications**:
+   - **Survey Optimization**: Evaluate different filter combinations to determine the most informative configurations for future surveys based on spectral reconstruction fidelity.
+   - **Outlier Detection**: Identify objects whose reconstructed spectra significantly deviate from known taxonomic classes, flagging them for follow-up spectroscopy.
+
+4. **Validation**:
+   - Perform leave-one-out cross-validation (LOOCV) to assess the framework's performance, ensuring that reconstructed spectra match the true diversity of TNO surfaces and validate uncertainty estimates.

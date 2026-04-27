@@ -1,0 +1,15 @@
+**Algorithm Description**
+
+1. **Input Data**: For each object, obtain sparse photometric observations across multiple bands.
+
+2. **Gaussian Process Initialization**: Establish a Gaussian Process model to capture the spectral variability of TNOs.
+
+3. **Latent Spectral Dimension**: Model each object's spectrum with a latent spectral dimension.
+
+4. **Projection into Bands**: Use an invertible linear transformation to project the latent dimension into observed photometric bands.
+
+5. **Probabilistic Transformation**: Convert the latent spectral representation into a probability distribution to account for uncertainties.
+
+6. **Combine Spectra**: Aggregate probabilistic spectra from all bands to form a unified rest-frame spectrum.
+
+7. **Output**: Deliver the reconstructed probabilistic spectra for each object.

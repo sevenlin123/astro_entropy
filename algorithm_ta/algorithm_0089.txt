@@ -1,0 +1,40 @@
+**Probabilistic Spectral Reconstruction Algorithm (PSR)**
+
+**Objective**: Reconstruct full spectra of trans-Neptunian objects (TNOs) from sparse photometric measurements using Bayesian inference in a PCA-based latent space.
+
+**Inputs**:
+- **Training Spectra**: Collection of N reference spectra with M wavelengths each.
+- **Observed Photometry**: Sparse photometric measurements for a test object.
+- **Parameters**: Number of principal components (K).
+
+**Outputs**:
+- **Reconstructed Spectrum**: Estimated full spectrum for the test object.
+- **Uncertainty Estimate**: Associated uncertainties for each wavelength.
+
+**Steps**:
+
+1. **Preprocess Training Spectra**:
+   - Remove outliers and normalize the spectra if necessary.
+
+2. **Perform Principal Component Analysis (PCA)**:
+   - Compute the mean spectrum of the training set.
+   - Subtract the mean from all training spectra.
+   - Compute the covariance matrix of the centered spectra.
+   - Calculate eigenvalues and eigenvectors of the covariance matrix.
+   - Select top K eigenvectors based on explained variance to form the latent space basis.
+
+3. **Define Probabilistic Model**:
+   - Establish a forward model linking latent variables to observed photometry.
+   - Define prior distributions for latent variables and photometric noise.
+
+4. **Bayesian Inference in Latent Space**:
+   - For each test object, use observed photometry to perform Bayesian inference.
+   - Employ MCMC sampling or variational methods to estimate latent variables and their posteriors.
+
+5. **Spectral Reconstruction**:
+   - Project estimated latent variables back into the original spectral space using the inverse PCA transformation.
+
+6. **Uncertainty Propagation**:
+   - Calculate uncertainties in the reconstructed spectrum by propagating latent variable uncertainties through the forward model.
+
+**End**.

@@ -1,0 +1,27 @@
+### Core Computational Algorithm for Probabilistic Spectral Reconstruction of Trans-Neptunian Objects
+
+1. **Training Principal Component Analysis (PCA):**
+   - Construct a principal component representation using a sample of near-IR spectra.
+   - Determine the number of principal components needed (e.g., 4-5 for taxonomic classification; 8-10 for improved spectral fidelity and uncertainty calibration).
+
+2. **Model the Spectral Manifold:**
+   - Use the PCA-derived latent space to model the spectral manifold of TNOs.
+   - Represent each object's spectrum as a point in this reduced-dimensional space.
+
+3. **Bayesian Inference in Latent Space:**
+   - Perform Bayesian inference within the PCA-reduced space to reconstruct full spectra from sparse photometric measurements.
+   - Propagate measurement uncertainties through the reconstruction process.
+
+4. **Reconstruct Full Spectra:**
+   - For each object, use the inferred parameters in the latent space to reconstruct the full near-IR spectrum.
+   - Calculate credible intervals to assess the uncertainty of the reconstructed spectra.
+
+5. **Survey Optimization and Filter Selection:**
+   - Apply the framework to evaluate the information content of different NIRCam filters (e.g., F090W, F115W, F410M, F460M).
+   - Identify filter combinations that maximize spectral reconstruction fidelity and taxonomic information.
+
+6. **Outlier Detection and Rare Spectral Types:**
+   - Use the probabilistic framework to identify unusual spectral types by constraining photometry.
+   - Detect objects with low-probability intermediate models, indicating rare or peculiar spectral classes.
+
+This algorithm bridges the gap between sparse photometry and detailed spectral analysis, enabling robust reconstruction of TNO compositions from limited data.

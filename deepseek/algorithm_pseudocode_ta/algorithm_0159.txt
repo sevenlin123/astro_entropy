@@ -1,0 +1,41 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+**Input:**
+- Training Spectra: Collection of known spectral templates.
+- Photometric Data: Observed fluxes for each object.
+- Filter Transmission Curves: Define how each photometric band projects onto the spectrum.
+- Noise Model: Uncertainty characteristics of photometric measurements.
+
+**Output:**
+- Reconstructed Spectra: Inferred spectra for each object.
+- Uncertainty Quantification: Associated uncertainties in the reconstructed spectra.
+
+**Steps:**
+
+1. **Preprocess Training Spectra:**
+   - Normalize spectra for consistency.
+
+2. **Compute Principal Component Decomposition (PCA):**
+   - Construct a matrix from training spectra.
+   - Center the data by subtracting the mean.
+   - Compute covariance matrix \( C = \frac{1}{N-1} X^T X \).
+   - Find eigenvalues \( \lambda \) and eigenvectors \( V \) of \( C \).
+   - Sort eigenvalues and eigenvectors in descending order of eigenvalues.
+   - Select top \( K \) PCA components (e.g., \( K = 4 \) to 5).
+   - Form PCA basis matrix \( PC = V[:, :K] \).
+
+3. **For Each Object:**
+   - Extract photometric data \( P \).
+   - Compute the system relating photometric data to PCA coefficients:
+     - \( P = FPC \times Z \), where \( FPC \) combines filter functions and PCA basis.
+   - Assume a Gaussian prior for \( Z \): \( Z \sim \mathcal{N}(0, \tau^2 I) \).
+   - Calculate posterior distribution of \( Z \) given \( P \):
+     - Posterior mean \( Z_{hat} = ( \tau^{-2} I + FPC^T \Sigma^{-1} FPC )^{-1} ( FPC^T \Sigma^{-1} P ) \).
+     - Posterior covariance \( Z_{cov} = ( \tau^{-2} I + FPC^T \Sigma^{-1} FPC )^{-1} \).
+   - Reconstruct spectrum \( S_{hat} = PC \times Z_{hat} \).
+   - Propagate uncertainty to compute uncertainty in \( S_{hat} \).
+
+4. **Postprocessing:**
+   - Compute credible intervals for reconstructed spectra.
+
+**End Algorithm**

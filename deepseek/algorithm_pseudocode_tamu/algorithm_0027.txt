@@ -1,0 +1,68 @@
+```
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input: 
+- Training Spectra: Set of reference TNO spectra {S_1, ..., S_N}
+- Photometric Observations: Sparse photometry measurements {m_1, ..., m_M}
+- NIRCam Filter Set: Set of filters used for forward modeling
+
+Output:
+- Reconstructed Spectra: High-resolution spectra {S'_1, ..., S'_M}
+- Taxonomic Classifications: Probabilistic assignments to spectral types
+- Uncertainty Estimates: Standard deviations for reconstructed features
+
+1. Preprocessing:
+   a. Apply Principal Component Analysis (PCA) to Training Spectra:
+      i. Compute principal components (PCs) capturing dominant spectral variations.
+      ii. Determine latent space dimensionality K (e.g., 4-5 PCs for classification, 8-10 for fidelity).
+      iii. Project each training spectrum into the latent space, obtaining latent coefficients {z_1, ..., z_N}.
+
+   b. Data Augmentation:
+      i. Use Kernel Density Estimation (KDE) on latent coefficients to generate synthetic samples.
+      ii. Smooth the latent manifold with Gaussian kernel, selecting optimal bandwidth h (e.g., h=0.5).
+      iii. Ensure synthetic samples fill intermediate regions of the latent space without introducing unphysical spectra.
+
+2. Training Phase:
+   a. Forward Modeling:
+      i. Simulate photometric observations for each augmented spectrum by convolving with NIRCam filter response curves.
+      ii. Inject Gaussian noise with 20% relative reflectance uncertainty to simulate real-world photometric errors.
+      iii. Create training dataset of noisy photometry paired with ground truth latent coefficients.
+
+   b. Model Training:
+      i. Train AutoML regressor (e.g., ensemble of Gradient Boosted Decision Trees) to map photometry to latent coefficients.
+      ii. Train secondary AutoML classifier to map latent coefficients to taxonomic labels.
+
+3. Inference Phase:
+   a. For each object with photometry m_i:
+      i. Pass m_i through trained regressor to obtain posterior distribution over latent coefficients z'.
+      ii. Apply inverse PCA transform to reconstruct high-resolution spectrum S' = Σ(z'_k * PC_k).
+      iii. Sample from joint posterior distribution of latent coefficients using Gaussian Copula to generate ensemble of reconstructions.
+      iv. Classify taxonomic type by passing z' through trained classifier.
+
+4. Validation (Leave-One-Out Cross-Validation):
+   a. For each held-out spectrum S_test:
+      i. Exclude S_test from training dataset.
+      ii. Rebuild latent manifold and retrain models using remaining data.
+      iii. Forward-model S_test through NIRCam filters to generate mock photometry m'.
+      iv. Pass m' through trained pipeline to obtain S'_test and compare with S_test.
+      v. Evaluate reconstruction fidelity using RMSE, correlation coefficient, and coverage of credible intervals.
+      vi. Assess taxonomic classification accuracy.
+
+5. Applications:
+   a. Survey Optimization:
+      i. Quantify information content of different filter combinations.
+      ii. Identify optimal filter configurations that minimize reconstruction RMSE.
+      iii. Balance trade-offs between survey depth, cadence, and number of bands.
+
+   b. Outlier Detection:
+      i. Flag objects with photometric inputs yielding extremely low probability latent coefficients.
+      ii. Reconstruct peculiar spectra of outliers (e.g., Neptune Trojans) by constraining photometry to select low-probability intermediate models.
+
+6. Output Results:
+   a. Provide reconstructed spectra with uncertainties.
+   b. Deliver taxonomic classifications with probabilities.
+   c. Analyze information content of survey configurations.
+   d. Detect and characterize spectral outliers.
+
+End of Algorithm
+```

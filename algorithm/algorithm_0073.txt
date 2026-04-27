@@ -1,0 +1,32 @@
+Algorithm:
+
+Input:
+- Sparse photometric data for each TNO (fluxes in multiple bands)
+
+Output:
+- Reconstructed SED for each TNO with uncertainty
+- Posterior distributions of parameters
+- Outliers identified
+- Taxonomic classifications
+- Optimized observing strategy
+
+Steps:
+
+1. For each TNO:
+   a. Convert observed magnitudes to flux densities
+   b. Apply Gaussian Process Regression (GPR) with a suitable covariance function to model the SED
+   c. Incorporate 1/f noise characteristic into the GPR model to adjust uncertainties
+   d. Perform Bayesian inference to obtain posterior distributions of the SED parameters
+   e. Calculate the likelihood of observed fluxes given the inferred model to identify outliers
+   f. Use the reconstructed SEDs as features for taxonomic classification
+
+2. For taxonomic classification:
+   a. Select appropriate machine learning algorithm (e.g., Random Forest, SVM)
+   b. Train the classifier using labeled data
+   c. Apply the classifier to unlabelled TNOs using their SEDs
+
+3. For survey optimization:
+   a. Determine optimal observing bands and cadences by maximizing the information gain about the SEDs of unseen TNOs
+   b. Use the posterior distributions to assess the expected utility of different observing strategies
+
+4. Compile all outputs into a structured format for analysis and reporting

@@ -1,0 +1,36 @@
+**Algorithm: Probabilistic Spectral Reconstruction Framework**
+
+1. **Preprocessing:**
+   - Acquire the target TNO's sparse photometric measurements.
+   - Estimate measurement uncertainties for these photometric data points.
+
+2. **Dimensionality Reduction:**
+   - Apply PCA to a training set of near-IR spectra.
+   - Select an appropriate number of principal components (e.g., 4-5 for classification; up to 8-10 for detailed reconstruction).
+
+3. **Spectral Manifold Modeling:**
+   - Construct the spectral manifold using the PCA-derived principal components.
+   - Capture the inherent spectral variability within the dataset.
+
+4. **Bayesian Inference:**
+   - Perform Bayesian inference in the reduced PCA space.
+   - Integrate the photometric data and propagate measurement uncertainties.
+   - Reconstruct the full near-IR spectrum by determining the most probable principal component combination.
+
+5. **Uncertainty Quantification:**
+   - Compute uncertainties for each wavelength in the reconstructed spectrum.
+   - Assess credible-interval coverage to validate uncertainty accuracy.
+
+6. **Survey Optimization:**
+   - Evaluate NIRCam filters (e.g., F090W, F115W) for their information content.
+   - Recommend optimal filter combinations for efficient taxonomic studies.
+
+7. **Rare Spectral Detection:**
+   - Use constrained photometry to identify low-probability spectral models.
+   - Detect and reconstruct rare spectral types like peculiar Neptune Trojans.
+
+8. **Output:**
+   - Deliver the reconstructed spectrum and associated uncertainties.
+   - Provide optimal filter configurations and rare spectral type identifications.
+
+This algorithm efficiently bridges sparse photometry and detailed spectral reconstruction, facilitating taxonomic studies and optimizing future surveys.

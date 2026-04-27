@@ -1,0 +1,28 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Training Data Preparation**: 
+   - Collect a dataset of near-infrared spectra for trans-Neptunian objects (TNOs).
+   - Normalize and preprocess the spectra to ensure consistency.
+
+2. **Principal Component Analysis (PCA) Training**:
+   - Perform PCA on the preprocessed spectra to reduce dimensionality.
+   - Determine the optimal number of principal components (e.g., 4-5 for classification, 8-10 for detailed reconstruction) based on explained variance.
+
+3. **Bayesian Inference Setup**:
+   - Define a probabilistic model using the PCA representation as latent variables.
+   - Incorporate prior distributions for the latent variables and measurement uncertainties from photometric data.
+
+4. **Reconstruction Process**:
+   - For a new photometric observation, convert the photometric measurements into flux values.
+   - Use the pre-trained PCA model to infer the latent variables via Bayesian inference.
+   - Propagate uncertainties through the model to compute uncertainties in the reconstructed spectrum.
+
+5. **Spectrum Reconstruction**:
+   - Combine the inferred latent components to reconstruct the full spectrum.
+   - Output the reconstructed spectrum along with associated uncertainties at each wavelength.
+
+6. **Survey Optimization and Outlier Detection**:
+   - Apply the reconstructed spectra to evaluate the information content of different filter configurations for future surveys.
+   - Identify unusual spectral types by analyzing deviations in the latent space manifold.
+
+This structured approach efficiently bridges sparse photometric data with detailed spectral reconstruction, enabling robust taxonomic classification and survey planning for TNOs.

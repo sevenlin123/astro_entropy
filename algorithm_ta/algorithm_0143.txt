@@ -1,0 +1,18 @@
+The algorithm steps are as follows:
+
+1. **Training Set Acquisition**: Gather a dataset of near-infrared (near-IR) spectra of trans-Neptunian objects (TNOs).
+
+2. **Principal Component Analysis (PCA)**: Apply PCA to the training set to reduce the spectral data into principal components (PCs). The number of PCs is selected based on the explained variance; typically, 4-5 PCs are used for taxonomic classification, and up to 10 PCs are employed for improved spectral reconstruction accuracy.
+
+3. **Probabilistic Model Construction**: Develop a probabilistic model within the PCA-reduced space. This model represents the spectral manifold of TNOs, enabling Bayesian inference to reconstruct full spectra from sparse photometric measurements.
+
+4. **Spectral Reconstruction**:
+   - For each TNO:
+     - Use its sparse photometric data to project into the PCA space.
+     - Conduct Bayesian inference in this space to determine the most probable position on the manifold, taking into account the uncertainties associated with the photometric measurements.
+     - Reconstruct the full spectrum by mapping the inferred PCA coefficients back to the original spectral domain.
+
+5. **Survey Optimization**: Analyze the information content of various observation strategies, particularly those utilizing JWST/NIRCam filters, to identify optimal configurations for taxonomic studies.
+
+6. **Outlier Detection and Rare Spectral Type Identification**:
+   - Apply the reconstruction framework to detect and characterize rare or unusual spectral types, such as peculiar Neptune Trojans, by constraining the model to focus on less probable components within the continuous spectral manifold.

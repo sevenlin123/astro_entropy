@@ -1,0 +1,46 @@
+```
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+- Reference spectra (training set): Collection of known TNO spectra used for PCA
+- Photometric measurements: Sparse photometric data for objects to reconstruct spectra
+- NIRCam filter profiles: Filter curves used to simulate photometry from reference spectra
+- Noise level: Relative reflectance uncertainty (e.g., 20%)
+
+Output:
+- Reconstructed spectra: Full spectral energy distribution for each object
+- Taxonomic classification probabilities: Probabilities of belonging to different spectral types
+
+Steps:
+
+1. Preprocess Reference Spectra:
+   a. Normalize reference spectra to unit variance.
+   b. Perform Principal Component Analysis (PCA) to obtain principal components (PCs).
+
+2. Define Latent Space:
+   a. Project reference spectra onto PCA PCs to get latent coefficients.
+   b. Use Kernel Density Estimation (KDE) to estimate the probability density of latent coefficients from the reference spectra.
+
+3. Generate Synthetic Photometry:
+   a. For each reference spectrum, convolve it with NIRCam filter profiles to compute synthetic photometry.
+   b. Add Gaussian noise to synthetic photometry based on the specified noise level.
+
+4. Train Regression Model:
+   a. Use AutoML (e.g., Gradient-Boosted Decision Trees) to regress the latent coefficients from the noisy synthetic photometry.
+
+5. Predict Latent Coefficients:
+   a. For new photometric measurements, use the trained regression model to predict latent coefficients.
+
+6. Reconstruct Spectra:
+   a. Apply inverse PCA transform to the predicted latent coefficients to obtain the reconstructed spectrum.
+
+7. Taxonomic Classification:
+   a. Train a classifier on the latent space using labels from the reference spectra.
+   b. For each reconstructed spectrum, predict the probability distribution over taxonomic classes.
+
+8. Validate and Output:
+   a. Compute metrics (MAE, RMSE, PCC, SRC) between reconstructed and true spectra.
+   b. Provide reconstructed spectra and taxonomic probabilities as output.
+
+End
+```

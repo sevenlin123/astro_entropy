@@ -1,0 +1,31 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Preprocessing**  
+   - Correct photometric data for each object using measured or estimated reddening values.
+   - Remove outliers from photometric measurements.
+
+2. **Model Training**  
+   - Apply Principal Component Analysis (PCA) to a reference sample of near-infrared TNO spectra.
+   - Determine the number of principal components (e.g., 4-5 for classification, 8-10 for detailed reconstruction).
+
+3. **Bayesian Inference**  
+   - For each object, infer posterior distributions of the principal components using its photometric measurements in the latent space.
+   - Utilize a probabilistic model (e.g., Gaussian prior with covariance matrix derived from the PCA).
+
+4. **Spectral Reconstruction**  
+   - Reconstruct the full near-infrared spectrum using the inferred principal components.
+   - Multiply the latent space representation with the reference spectra matrix.
+
+5. **Uncertainty Propagation**  
+   - Pass photometric uncertainties through the covariance matrix of the latent space to the reconstructed spectra.
+
+6. **Confidence Intervals**  
+   - Calculate credible intervals for each wavelength of the reconstructed spectra.
+
+7. **Taxonomic Classification**  
+   - Classify each object based on distance to known spectral classes in the latent space.
+
+8. **Outlier Detection**  
+   - Identify objects with posterior probabilities significantly different from expected distribution.
+
+**End of Algorithm**

@@ -1,0 +1,39 @@
+**Algorithm for Probabilistic Spectral Reconstruction of TNOs**
+
+1. **Data Preparation**:
+   - Collect a sample of near-infrared (NIR) spectra of Trans-Neptunian Objects (TNOs).
+   - Exclude rare spectral types and outliers to focus on dominant taxonomic classes.
+
+2. **Principal Component Analysis (PCA)**:
+   - Apply PCA to the collected spectra to derive principal components (PCs).
+   - PCs represent the most significant variations in spectral data.
+
+3. **Latent Space Definition**:
+   - Use PCA to project the spectra into a low-dimensional latent space.
+   - Apply Kernel Density Estimation (KDE) to create a smooth probability distribution in this latent space, augmenting the training data.
+
+4. **Synthetic Photometry Generation**:
+   - For each augmented spectrum, generate synthetic photometric measurements by convolving with the filter response functions of the target instrument (e.g., JWST/NIRCam).
+   - Introduce Gaussian noise (e.g., 20% relative uncertainty) to simulate real observational conditions.
+
+5. **Model Training**:
+   - Train an AutoML regressor (e.g., Gradient Boosted Decision Trees) to map the synthetic photometry to the latent space coordinates.
+   - Simultaneously train a classifier within the latent space to predict taxonomic categories.
+
+6. **Reconstruction Pipeline**:
+   - For new photometric observations, use the trained regressor to predict latent coordinates.
+   - Apply inverse PCA to reconstruct the full spectrum from the latent coordinates.
+
+7. **Performance Evaluation**:
+   - Conduct leave-one-out cross-validation (LOOCV) to assess reconstruction accuracy using metrics like RMSE, correlation coefficient, and coverage.
+   - Determine the optimal number of principal components for accurate reconstruction.
+
+8. **Survey Optimization**:
+   - Evaluate different photometric filter configurations to identify those that maximize spectral reconstruction fidelity.
+
+9. **Outlier Detection**:
+   - Identify objects with latent coordinates outside the expected distribution, indicating rare or unusual spectral types.
+
+10. **Output**:
+    - Provide reconstructed spectra and taxonomic classifications for each object.
+    - Generate probabilistic constraints on surface composition, aiding in further spectroscopic follow-up.

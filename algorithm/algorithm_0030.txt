@@ -1,0 +1,19 @@
+The computational algorithm to implement the core reconstruction framework is as follows:
+
+1. For each trans-neptunian object, define the SED using fixed knot wavelengths where physical spectral features (e.g., water ice absorption, methane bands) are expected. Parameterize the SED by specifying fluxes at these knots and the slopes between them.
+
+2. Assign prior distributions to each SED parameter, including fluxes at knots and slopes.
+
+3. For each filter used in observations, define the filter's bandpass. Precompute the effective wavelength or utilize the bandpass for integration to create the forward model.
+
+4. For each observed magnitude measurement:
+   - Determine the filter it was measured through.
+   - Compute the predicted flux by integrating the SED over the filter's bandpass.
+   - Convert the predicted flux into a magnitude (m_pred).
+   - Calculate the likelihood term as a normal distribution centered at m_pred with the observed magnitude's uncertainty.
+
+5. Combine all likelihood terms to form the overall likelihood for the current SED parameters.
+
+6. Perform Bayesian inference using a method like Metropolis-Hastings to sample the posterior distribution of SED parameters.
+
+7. After sufficient samples, obtain the posterior means or medians of the SED parameters, which define the reconstructed SED along with uncertainties.

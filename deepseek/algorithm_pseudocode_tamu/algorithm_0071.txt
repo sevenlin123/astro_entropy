@@ -1,0 +1,44 @@
+```
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input: 
+- Observed photometric measurements (m) of a TNO
+- Training dataset of reference TNO spectra (S_train)
+- Precomputed PCA basis (principal components and eigenvectors)
+
+Output:
+- Reconstructed spectrum (S_recon)
+- Uncertainty estimates for the reconstructed spectrum
+- Probabilistic taxonomic classification
+
+1. Initialize:
+   a. Perform PCA on S_train to determine the principal components (PCs).
+   b. Determine the optimal number of PCs (K) using validation criteria.
+
+2. Training Phase:
+   a. Use the PCA basis to project S_train into the latent space, obtaining latent coefficients (z_train).
+   b. Augment the latent space using Kernel Density Estimation (KDE) to generate synthetic training data (z_mock).
+   c. Train an AutoML regressor (e.g., Gradient Boosted Decision Trees) to map photometric inputs (m) to latent coefficients (z).
+   d. Simulate synthetic photometry for each z_mock by forward modeling through the NIRCam filter set, injecting 20% Gaussian noise.
+
+3. Validation Phase:
+   a. Perform Leave-One-Out Cross-Validation (LOOCV):
+      i. For each held-out spectrum S_test:
+         - Remove S_test from the training set.
+         - Generate synthetic photometry for the remaining training set.
+         - Train the regressor and classifier on the augmented dataset.
+         - Evaluate reconstruction accuracy and taxonomic classification.
+
+4. Inference Phase:
+   a. For a new photometric observation m:
+      i. Use the trained AutoML regressor to predict the latent coefficients z_posterior.
+      ii. Apply the inverse PCA transform to z_posterior to obtain the reconstructed spectrum S_recon.
+      iii. Quantify uncertainties by sampling the joint posterior distribution of z_posterior using a Gaussian Copula framework.
+      iv. Classify the spectrum into taxonomic groups using a latent-space classifier.
+
+5. Output:
+   a. Return S_recon along with uncertainty intervals.
+   b. Return probabilistic taxonomic classification.
+```
+
+This algorithm encapsulates the core computational steps of the probabilistic spectral reconstruction framework described in the paper.

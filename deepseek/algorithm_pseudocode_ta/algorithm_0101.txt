@@ -1,0 +1,29 @@
+The computational algorithm implementing the core reconstruction framework involves preprocessing, PCA training, forward model construction, Bayesian inference, uncertainty propagation, and returning the results. Here is the structured pseudocode:
+
+```pseudocode
+Function SpectralReconstruction(photometry, reference_spectra):
+    1. Preprocess reference_spectra:
+        a. Normalize each spectrum by dividing by its mean flux.
+        b. Align all spectra to a common wavelength grid.
+    2. Train PCA on the preprocessed reference_spectra:
+        a. Compute the covariance matrix of the aligned and normalized spectra.
+        b. Perform eigenvalue decomposition on the covariance matrix to obtain principal components (PCs).
+        c. Select top N PCs based on explained variance ratio (determined by cross-validation).
+    3. Construct the forward model:
+        a. Define spectral templates representing different features.
+        b. Obtain response functions based on instrument specifications (e.g., JWST/NIRCam).
+        c. Establish a mathematical relationship between photometric flux measurements and spectral features using these templates and response functions.
+    4. Set up Bayesian inference:
+        a. Use the top N PCs as priors for latent variables.
+        b. Formulate the likelihood function based on the forward model and observed photometry.
+        c. Implement Bayesian inference (e.g., MCMC sampling) to obtain posterior distributions of latent variables.
+    5. Reconstruct the full spectrum:
+        a. Calculate the posterior means of the latent variables.
+        b. Project these posterior means back into the original spectral space using the inverse transformation derived from PCA.
+    6. Propagate uncertainties:
+        a. Compute credible intervals for the reconstructed spectra using posterior variances.
+    7. Output:
+        a. Return the reconstructed_spectra and their associated uncertainties.
+```
+
+This pseudocode outlines the core computational steps required to reconstruct full spectra from sparse photometric data using a Bayesian framework with PCA.

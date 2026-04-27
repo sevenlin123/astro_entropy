@@ -1,0 +1,15 @@
+**Algorithm Steps:**
+
+1. **Data Collection**: Acquire sparse photometric data from various observations for each trans-Neptunian object, including data from different filters.
+
+2. **Preprocessing**: Normalize and adjust the collected data to account for variations in observation times and instrument calibrations.
+
+3. **Bayesian Model Setup**: Construct a probabilistic model using Bayesian inference, incorporating prior distributions for parameters related to the spectral energy distribution (SED) components and potential variability factors.
+
+4. **Variability Component Identification**: Utilize the Bayesian model to detect components in the SED that exhibit significant variability across different observations, indicating surface heterogeneity or time-dependent changes.
+
+5. **Outlier Detection**: Calculate the likelihood of the observed photometric data against the reconstructed SED to identify outliers based on the discrepancy between observed data and the model's predictions.
+
+6. **Posterior Analysis**: Examine the posterior distributions to determine uncertainties in the reconstructed SED and variability indicators, providing insights into the reliability of the inferred parameters.
+
+7. **Classification and Survey Optimization**: Apply the inferred probabilities and derived metrics to classify objects into taxonomic categories and optimize future surveys based on identified variability patterns and outliers.

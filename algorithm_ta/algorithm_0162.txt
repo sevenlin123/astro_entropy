@@ -1,0 +1,23 @@
+**Algorithm: Probabilistic Spectral Reconstruction for Trans-Neptunian Objects**
+
+1. **Principal Component Analysis (PCA):**
+   - Train a PCA model using a sample of near-infrared (near-IR) spectra of TNOs.
+   - Determine the number of principal components needed for accurate spectral reconstruction (e.g., 4-5 for classification, 8-10 for high fidelity).
+
+2. **Bayesian Inference in Reduced Space:**
+   - Use the trained PCA model to represent the spectral manifold of TNOs in a lower-dimensional latent space.
+   - Perform Bayesian inference in this space to reconstruct full spectra from sparse photometric data.
+   - Propagate measurement uncertainties through the reconstruction process.
+
+3. **Model Construction:**
+   - Develop a probabilistic latent-space framework that quantifies the spectral information retained in photometric measurements.
+
+4. **Survey Optimization:**
+   - Apply the framework to evaluate the information content of different filter combinations (e.g., JWST/NIRCam filters).
+   - Identify optimal configurations for future observations based on their ability to enhance spectral reconstruction fidelity.
+
+5. **Outlier Detection and Rare Spectral Types:**
+   - Allow the framework to constrain photometry in a way that identifies unusual spectral types.
+   - Detect and reconstruct rare types like peculiar Neptune Trojans by selecting low-probability intermediate models.
+
+This structured approach effectively bridges sparse photometry and spectroscopy, offering a robust tool for mapping the compositional structure of minor planets.

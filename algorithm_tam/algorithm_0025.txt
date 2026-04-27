@@ -1,0 +1,38 @@
+### Core Computational Algorithm
+
+1. **Principal Component Analysis (PCA) Training**  
+   - Train a PCA model using a reference set of near-IR TNO spectra to define a low-dimensional latent space.  
+   - Determine the number of principal components (4-5 for classification; 8-10 for high-fidelity reconstruction).  
+
+2. **Synthetic Data Generation**  
+   - Use Kernel Density Estimation (KDE) on the latent space of PCA coefficients to create a smooth probability distribution.  
+   - Augment the training data with synthetic spectra by sampling from this distribution.  
+
+3. **Forward Modeling**  
+   - Simulate photometric observations for each synthetic spectrum by convolving with NIRCam filter throughputs.  
+   - Inject Gaussian noise (relative uncertainty ~20%) into the synthetic photometry to simulate realistic observational uncertainties.  
+
+4. **Automated Machine Learning (AutoML) Training**  
+   - Train an ensemble of Gradient Boosted Decision Trees (GBDTs) to regress from photometric inputs to PCA latent coefficients.  
+   - Validate the model using 20% of the data as a hold-out set.  
+
+5. **Leave-One-Out Cross-Validation (LOOCV)**  
+   - Evaluate model performance by iteratively excluding each real spectrum and testing reconstruction accuracy.  
+   - Measure Root Mean Square Error (RMSE) and empirical credible interval coverage.  
+
+6. **Spectral Reconstruction**  
+   - For new photometric observations, use the trained AutoML model to predict latent coefficients.  
+   - Project these coefficients back into the high-dimensional spectral space using inverse PCA.  
+
+7. **Taxonomic Classification**  
+   - Train a secondary classifier on the latent space to assign probability distributions over spectral types (e.g., H₂O, CO₂, Organics).  
+
+8. **Uncertainty Propagation**  
+   - Use Monte Carlo sampling to propagate photometric uncertainties into reconstructed spectra and their uncertainties.  
+   - Calculate confidence intervals on the reconstructed spectra for reliable measurements.  
+
+9. **Outlier Detection**  
+   - Assess posterior probabilities and latent space density to identify unusual spectral types or anomalies.  
+
+10. **Survey Optimization**  
+    - Analyze information content of different NIRCam filter combinations to optimize future photometric surveys.

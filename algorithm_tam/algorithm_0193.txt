@@ -1,0 +1,32 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Training Data Preparation**
+   - Collect a sample of near-infrared spectra of TNOs, focusing on dominant taxonomic classes (e.g., Water-type, CO₂-type, Organics-type).
+   - Exclude outliers and rare spectral types to ensure a representative training set.
+
+2. **Principal Component Analysis (PCA)**
+   - Apply PCA to the collected spectra to derive principal components (latent space).
+   - Use the eigenvectors as a basis for reconstructing full spectra from reduced representations.
+
+3. **Data Augmentation**
+   - Project the seed spectra onto the PCA latent space to obtain latent coefficients.
+   - Employ Kernel Density Estimation (KDE) to generate synthetic latent vectors, expanding the training data while maintaining physical plausibility.
+
+4. **Synthetic Photometry Generation**
+   - Forward model the synthetic spectra through the target instrument's filters (e.g., JWST/NIRCam) to create synthetic photometric data.
+   - Introduce Gaussian noise (e.g., 20% relative uncertainty) to simulate real-world photometric uncertainties.
+
+5. **AutoML Regression Training**
+   - Train an ensemble of gradient-boosted decision trees (AutoML) to map sparse photometric inputs to latent coefficients.
+   - The model learns the mapping from photometry to PCA latent space, capturing the underlying spectral structure.
+
+6. **Posterior Inference for Spectral Reconstruction**
+   - For new photometric observations, use the trained AutoML model to predict latent coefficients.
+   - Project these coefficients back through the inverse PCA transform to reconstruct the full high-resolution spectrum.
+
+7. **Taxonomic Classification**
+   - Use a secondary AutoML classifier trained on latent coefficients to predict the taxonomic type of the object.
+   - Classify the object into predefined categories (e.g., Water-type, CO₂-type, Organics-type) based on the latent representation.
+
+8. **Output**
+   - Provide both the reconstructed spectrum and the probabilistic taxonomic classification, enabling analysis of surface composition and structure from sparse photometric data.

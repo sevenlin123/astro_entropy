@@ -1,0 +1,23 @@
+```plaintext
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input: Sparse photometric measurements for each object, Training set of reference spectra
+
+Output: Reconstructed full near-IR spectrum for each object
+
+1. Read sparse photometric measurements for each object.
+
+2. For the training set of reference spectra:
+   a. Compute Principal Component Analysis (PCA) to derive principal components.
+
+3. Build latent-space model using the derived principal components.
+
+4. Perform Bayesian inference in the latent space to estimate the underlying spectral components:
+   a. Define prior distribution for the latent variables.
+   b. Define likelihood function relating latent variables to observed photometry.
+   c. Use observed photometry to infer posterior distribution of latent variables.
+
+5. Reconstruct full spectrum using inferred latent variables and principal components.
+
+Return reconstructed full near-IR spectrum for each object.
+```

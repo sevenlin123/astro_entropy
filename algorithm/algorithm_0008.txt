@@ -1,0 +1,27 @@
+**Algorithm for Probabilistic Spectral Reconstruction**
+
+1. **Data Preparation**
+   - Collect photometric measurements for each object, including flux values and uncertainties.
+   - Handle missing data and normalize flux measurements if necessary.
+
+2. **Initialize Models**
+   - **Gaussian Process (GP):** Select a kernel that enforces spectral smoothness (e.g., squared exponential kernel). Set initial hyperparameters (e.g., kernel scale, noise variance).
+   - **Mixture Model:** Define two components: a Gaussian for inliers and a heavy-tailed distribution (e.g., Student's t) for outliers. Initialize mixing weights (e.g., 0.5), means, covariances, and degrees of freedom.
+
+3. **Expectation-Maximization (EM) Algorithm**
+   - **E-step:** Calculate the probability of each data point belonging to either component using the current model parameters.
+   - **M-step:** 
+     - Partition data points into components based on responsibilities.
+     - For each component, perform GP regression on assigned data to update GP hyperparameters.
+     - Re-estimate mixture model parameters (means, covariances, mixing weights) based on the subset of data assigned to each component.
+
+4. **Convergence Check**
+   - Compare parameter updates between iterations. Terminate when changes fall below a threshold.
+
+5. **Reconstruct SEDs**
+   - Use the converged GP to sample the posterior distribution, obtaining probabilistic SED reconstructions.
+
+6. **Outlier Detection**
+   - Examine responsibilities; flag points with high probability in the heavy-tailed component as outliers.
+
+This algorithm integrates Gaussian Processes for smooth SED modeling and a mixture model to handle outliers, providing robust SED reconstruction from sparse photometric data.

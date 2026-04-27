@@ -1,0 +1,88 @@
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+#### Inputs:
+- **Sparse Photometry**: Observations of a TNO in multiple photometric bands.
+- **Pretrained PCA Model**: A principal component analysis model trained on a reference set of TNO spectra.
+- **Kernel Density Estimate (KDE)**: Represents the prior distribution of latent PCA coefficients.
+
+#### Outputs:
+- **Reconstructed Spectrum**: High-resolution spectrum of the TNO.
+- **Taxonomic Classification**: Probabilistic assignment of the TNO to spectral classes (e.g., H₂O, CO₂, Organic).
+- **Uncertainty Estimates**: Credible intervals for the reconstructed spectrum.
+
+---
+
+### Steps:
+
+1. **Forward Modeling**:
+   - Simulate photometric observations for each synthetic spectrum in the latent space using the JWST/NIRCam filter set.
+   - Inject Gaussian noise (relative uncertainty ~20%) to simulate real-world photometric uncertainties.
+
+2. **Training**:
+   - Construct a training dataset combining the original seed spectra and synthetic spectra augmented via KDE.
+   - Train an automated machine learning regressor (e.g., Gradient Boosted Decision Trees) to map photometric observations to latent PCA coefficients.
+
+3. **Inference**:
+   - For a new observation:
+     - Use the trained regressor to predict the latent coefficients from the sparse photometry.
+     - Sample the joint posterior distribution of the latent coefficients using a Gaussian Copula to account for dependencies.
+     - Project the latent coefficients back to the full spectrum using the inverse PCA transform.
+
+4. **Validation**:
+   - Evaluate reconstruction fidelity and credible interval coverage using leave-one-out cross-validation.
+   - Classify the spectrum into taxonomic groups based on the latent space.
+
+5. **Application**:
+   - Identify optimal JWST/NIRCam filter configurations for maximizing spectral information.
+   - Detect spectral outliers by analyzing deviations from the expected manifold.
+
+---
+
+### Pseudocode:
+
+```pseudocode
+Algorithm Probabilistic Spectral Reconstruction
+
+Input:
+    - Photometry m (sparse observations)
+    - Pretrained PCA model
+    - KDE of latent coefficients
+
+Output:
+    - Reconstructed spectrum S
+    - Taxonomic classification C
+    - Uncertainty estimates U
+
+1. Forward Modeling:
+    a. For each synthetic spectrum s_synthetic in latent space:
+        i. Convolve s_synthetic with JWST/NIRCam filter transmission curves.
+        ii. Add Gaussian noise (σ = 0.2 * reflectance) to simulate photometric uncertainties.
+    b. Combine synthetic photometry with real photometry to form training set.
+
+2. Training:
+    a. Use AutoML regressor (e.g., XGBoost) to train mapping from photometry to latent coefficients.
+    b. Augment training data with synthetic spectra generated via KDE.
+
+3. Inference:
+    a. Predict latent coefficients z_hat from observed photometry m using trained regressor.
+    b. Sample joint posterior of z_hat using Gaussian Copula to preserve latent dependencies.
+    c. Reconstruct spectrum S = PCA.inverse(z_samples)
+
+4. Validation:
+    a. For each held-out spectrum:
+        i. Compute reconstruction fidelity F and credible interval coverage C.
+        ii. Validate against empirical thresholds (e.g., F > 0.9, C ≈ 0.95).
+
+5. Application:
+    a. Optimize filter configurations for maximum information gain.
+    b. Detect outliers by analyzing posterior probabilities and deviations from manifold.
+
+Return:
+    - Reconstructed spectrum S
+    - Taxonomic classification C
+    - Uncertainty estimates U
+```
+
+--- 
+
+### End

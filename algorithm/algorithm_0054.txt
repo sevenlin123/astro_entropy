@@ -1,0 +1,11 @@
+**Core Computational Algorithm**
+
+1. **Input Data**: Obtain sparse photometric data of trans-Neptunian objects.
+2. **Bayesian Model Setup**: Represent the spectrum as a linear combination of an overcomplete dictionary of basis vectors.
+3. **Prior Definition**: Define a prior distribution over the basis coefficients to regularize the model.
+4. **DP-GMM Application**: Utilize a Dirichlet process Gaussian mixture model to cluster spectral components, allowing automatic determination of the number of components.
+5. **Bayesian Inference**: Compute the posterior distribution over possible spectra using the observed data.
+6. **Posterior Analysis**: Derive confidence estimates from the posterior for the reconstructed spectra.
+7. **Output**: Generate the reconstructed spectra along with confidence measures.
+
+This algorithm efficiently reconstructs spectra from sparse data using Bayesian methods and robust component modeling.

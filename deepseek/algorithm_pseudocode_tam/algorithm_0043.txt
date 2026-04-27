@@ -1,0 +1,35 @@
+```plaintext
+Algorithm: Probabilistic Spectral Reconstruction Framework
+
+1. Input:
+   - Sparse photometric observations (e.g., multi-band magnitudes)
+   - Training set of reference TNO spectra
+   - Instrument-specific filter responses (e.g., JWST/NIRCam)
+
+2. Initialize:
+   - Perform Principal Component Analysis (PCA) on the training spectra to obtain principal components (PCs).
+
+3. Data Augmentation:
+   - Use Kernel Density Estimation (KDE) on the PCA latent space to generate synthetic spectra, expanding the training dataset while maintaining physical plausibility.
+
+4. Training:
+   - Train an AutoML regressor (e.g., Gradient Boosted Decision Trees) to map sparse photometry to PCA latent coefficients.
+   - Simultaneously train a classifier on the latent space to predict taxonomic categories.
+
+5. Forward Modeling:
+   - For new photometric observations, use the trained regressor to predict latent coefficients.
+   - Project these coefficients through the inverse PCA transform to reconstruct the full spectrum.
+
+6. Posterior Sampling:
+   - Generate multiple posterior realizations of the spectrum to assess uncertainty and credible intervals.
+
+7. Performance Metrics:
+   - Compute reconstruction error, empirical coverage, calibration, and taxonomic classification accuracy via leave-one-out cross-validation.
+
+8. Applications:
+   - Optimize survey filters by evaluating information gain.
+   - Detect outliers by identifying spectra outside the manifold.
+   - Model faint or partially observed objects with propagated uncertainties.
+```
+
+This pseudocode outlines the core computational steps of the probabilistic framework for reconstructing TNO spectra from sparse photometry.

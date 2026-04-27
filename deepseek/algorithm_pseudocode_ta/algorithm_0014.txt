@@ -1,0 +1,38 @@
+**Algorithm: Probabilistic Spectral Reconstruction via Bayesian Inference in Latent Space**
+
+1. **Input Data:**
+   - Sparse photometric measurements of TNOs.
+   - Pre-trained Principal Component (PC) basis derived from a sample of near-IR spectra.
+
+2. **Training Phase (Not Shown in Pseudocode):**
+   - Compute Principal Components (PCA) from a sample of known near-IR spectra to establish the latent space.
+
+3. **Model Setup:**
+   - Represent each spectrum in the latent space using the pre-computed PCs.
+   - Define a probabilistic model where the latent variables (PC coefficients) follow a multivariate normal distribution.
+   - Model the mapping from latent space to observed photometric space.
+
+4. **Bayesian Inference:**
+   a. Prior Distribution:
+      - Assume a zero-mean multivariate Gaussian prior for the PC coefficients with covariance matrix Σ.
+   
+   b. Likelihood Function:
+      - Express the observed photometric measurements as a linear combination of the latent PC coefficients.
+      - Model the uncertainty propagation from the latent space to the photometric space.
+   
+   c. Posterior Calculation:
+      - Use Bayes' theorem to compute the posterior distribution of the PC coefficients given the photometric measurements.
+   
+   d. Parameter Estimation:
+      - Estimate the posterior mean and covariance of the latent variables.
+      - Propagate these estimates back to the original spectral space.
+
+5. **Spectral Reconstruction:**
+   a. Transform the estimated latent variables into the original spectral space using the inverse PCA transformation.
+   b. Adjust for uncertainties and correlations between wavelengths.
+
+6. **Output:**
+   - Reconstructed spectrum for each TNO.
+   - Associated uncertainty estimates.
+
+This algorithm performs Bayesian inference in the reduced latent space to reconstruct full spectra from sparse photometric data while accounting for measurement uncertainties.

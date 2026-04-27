@@ -1,0 +1,31 @@
+**Algorithm: Probabilistic Spectral Reconstruction for Trans-Neptunian Objects**
+
+1. **Preprocess Photometric Data**  
+   - Standardize and account for systematics in the input photometric data.
+
+2. **Derive Basis Spectra**  
+   - Select representative trans-neptunian objects (TNOs) from observed data.  
+   - Extract basis spectra that will be used to model the SEDs of all TNOs.
+
+3. **Model SED as Linear Combination**  
+   - Represent the SED of each TNO as a weighted sum of the basis spectra.  
+   - Introduce mixing probabilities (constrained to sum to one) to determine the contribution of each basis spectrum.
+
+4. **Incorporate Measurement Uncertainties**  
+   - Include uncertainty parameters associated with each basis spectrum.  
+   - Model these uncertainties as part of the probabilistic framework.
+
+5. **Bayesian Inference**  
+   - Employ a hierarchical Bayesian model to infer the posterior distributions of mixing probabilities, SED parameters, and uncertainty parameters.  
+   - Use MCMC methods (e.g., Metropolis-Hastings, Gibbs sampling) to sample the posterior distributions.
+
+6. **Reconstruct SEDs for Target Objects**  
+   - Apply the Bayesian model to each target TNO to obtain posterior distributions of mixing probabilities and SED parameters.
+
+7. **Perform Outlier Detection**  
+   - Compare observed photometric measurements with model predictions.  
+   - Identify outliers by detecting significant deviations between observed data and model expectations.
+
+8. **Output Posterior Distributions and Uncertainties**  
+   - Provide the posterior distributions of SED parameters and mixing probabilities.  
+   - Quantify uncertainties in the reconstructed SEDs and detected outliers.

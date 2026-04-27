@@ -1,0 +1,19 @@
+**Algorithm for Probabilistic Spectral Reconstruction**
+
+1. **Preprocess Photometric Data**
+   - Convert raw photometric observations into calibrated flux densities.
+   
+2. **Train PCA Model**
+   - Apply Principal Component Analysis (PCA) on a reference set of near-infrared spectra to derive basis vectors.
+   
+3. **Express Spectrum in Latent Space**
+   - Represent each object's spectrum as a linear combination of the PCA basis vectors.
+   
+4. **Bayesian Inference in Latent Space**
+   - Use photometric constraints to perform Bayesian inference, obtaining posterior distributions of the PCA component weights.
+   
+5. **Reconstruct Full Spectrum**
+   - Utilize the inferred PCA weights to reconstruct the full spectrum.
+   
+6. **Propagate Uncertainties**
+   - Assess the reliability of the reconstructed spectrum by propagating measurement uncertainties through the model.

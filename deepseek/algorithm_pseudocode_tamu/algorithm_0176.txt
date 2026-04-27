@@ -1,0 +1,52 @@
+```python
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+    - Training Spectra: Set of reference TNO spectra
+    - Photometric Observations: Sparse photometry measurements
+    - Filter Response Curves: NIRCam filter transmission data
+
+Output:
+    - Reconstructed Spectrum: High-resolution spectrum estimate
+    - Uncertainty Quantification: Credible intervals for the spectrum
+    - Taxonomic Classification: Predicted spectral type
+
+Steps:
+
+1. **Principal Component Analysis (PCA):**
+    a. Train PCA on reference spectra to obtain principal components.
+    b. Project reference spectra onto PCA basis to get latent coefficients.
+
+2. **Data Augmentation via KDE:**
+    a. Fit Gaussian KDE to latent coefficients of reference spectra.
+    b. Generate synthetic latent samples to augment training data.
+
+3. **Forward Modeling:**
+    a. For each augmented spectrum, simulate photometric response using NIRCam filters.
+    b. Add Gaussian noise (20% uncertainty) to simulated photometry.
+
+4. **AutoML Regressor Training:**
+    a. Train ensemble of Gradient Boosted Decision Trees (e.g., XGBoost) on synthetic photometry and latent coefficients.
+
+5. **LOOCV Validation:**
+    a. For each held-out spectrum:
+        i. Remove from training set.
+        ii. Generate new synthetic data and retrain regressor.
+        iii. Use regressor to predict latent coefficients from observed photometry.
+        iv. Reconstruct spectrum using inverse PCA.
+        v. Compute reconstruction metrics (nRMSE, CCI, CA).
+
+6. **Spectral Reconstruction:**
+    a. For new photometric observations:
+        i. Predict latent coefficients using trained regressor.
+        ii. Apply inverse PCA to reconstruct full spectrum.
+
+7. **Uncertainty Sampling:**
+    a. Use Gaussian Copula to sample joint posterior of latent variables.
+    b. Generate multiple realizations of spectrum to form credible intervals.
+
+8. **Taxonomic Classification:**
+    a. Use trained classifier on latent coefficients to predict taxonomic type.
+
+End
+```

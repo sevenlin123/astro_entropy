@@ -1,0 +1,14 @@
+The algorithm is described as follows:
+
+1. Preprocess the dataset of near-infrared spectra for trans-Neptunian objects.
+2. Extract principal components (PCs) from the preprocessed spectra to create a latent-space representation.
+3. Perform Bayesian inference in the reduced PC space using sparse photometric measurements.
+4. Reconstruct the full spectral curves based on the inferred posterior distributions of the latent space variables.
+5. Propagate measurement uncertainties through the reconstruction process to calculate credible intervals.
+6. Apply the framework to new observations by projecting photometric data into the latent space and performing Bayesian inference to obtain reconstructed spectra and associated uncertainties.
+
+The algorithm focuses on using a probabilistic approach within a reduced dimensional space to reconstruct spectra from photometric data, emphasizing uncertainty propagation and efficient computation. It leverages principal component analysis for dimensionality reduction and Bayesian methods for inference in the latent space. The result is a statistically rigorous method for mapping the compositional structure of minor planets using sparse photometry. 
+
+This approach efficiently handles the problem of reconstructing high-dimensional spectral information from limited photometric data, enabling applications such as survey optimization and outlier detection in the context of TNO taxonomy. The use of Bayesian inference allows for robust handling of uncertainties and provides credible intervals for the reconstructed spectra, ensuring reliable scientific interpretation. The method is computationally efficient and scalable, making it suitable for processing large datasets expected from future surveys. 
+
+Overall, the algorithm represents a bridge between sparse photometric measurements and detailed spectral analysis, offering a powerful tool for advancing our understanding of the surface compositions of trans-Neptunian objects.

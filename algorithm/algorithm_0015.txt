@@ -1,0 +1,19 @@
+**Algorithm: Probabilistic Spectral Reconstruction of Trans-Neptunian Objects**
+
+1. **Data Preprocessing**: Normalize and align the TNO light curves based on their magnitudes to adjust for differing exposure times and instrument calibrations.
+
+2. **Spectral Basis Construction**: 
+   - Utilize Gaussian processes to construct a low-dimensional basis that captures the smooth variations in spectral reflectance across multiple photometric bands.
+
+3. **Bayesian Inference**:
+   - Establish a probabilistic model linking the observed photometric measurements to the underlying spectral basis functions.
+   - Perform parameter estimation and quantify uncertainties using Bayesian methods.
+
+4. **Spectral Reconstruction**:
+   - Project the inferred spectral basis functions onto the observed photometric bands to reconstruct the TNO spectra.
+
+5. **Output**:
+   - Obtain reconstructed spectral features with associated uncertainties.
+   - Detect outliers and anomalies based on deviations from expected spectral patterns.
+
+6. **Survey Optimization**: Use the reconstructed spectra to optimize future surveys for efficient detection of rare spectral types.

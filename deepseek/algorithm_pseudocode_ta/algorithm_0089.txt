@@ -1,0 +1,97 @@
+**Algorithm: Probabilistic Spectral Reconstruction using PCA and Bayesian Inference**
+
+**Step-by-Step Explanation:**
+
+1. **Preprocessing Training Spectra:**
+   - Read in the set of training spectra.
+   - Normalize each spectrum by subtracting the mean flux and dividing by the standard deviation.
+
+2. **Computing PCA Basis:**
+   - Construct the covariance matrix from the normalized spectra.
+   - Diagonalize the covariance matrix to obtain eigenvalues and eigenvectors.
+   - Sort eigenvectors by descending eigenvalues.
+   - Select the top k eigenvectors as the PCA basis, where k is determined by cross-validation.
+
+3. **Projection Matrix for Filters:**
+   - For each filter, obtain its transmission curve.
+   - For each PCA basis vector, compute the inner product with the filter transmission curve. This involves integrating the product of the basis vector and the filter curve.
+   - Store these inner products in a matrix A, where each row corresponds to a filter and each column to a PCA basis vector.
+
+4. **Bayesian Inference for Each Object:**
+   - For each object, read its photometric flux measurements corresponding to each filter.
+   - Set up a Bayesian model where the photometric fluxes are modeled as a linear combination of the PCA coefficients (matrix A multiplied by coefficients x) plus noise.
+   - Use a normal distribution for the likelihood, with mean A*x and variance σ². Use an uninformative prior if no additional information is available.
+   - Perform Bayesian inference (e.g., via MCMC) to sample the posterior distribution of the coefficients x.
+
+5. **Reconstructing the Spectrum:**
+   - From the posterior means of the coefficients (m), reconstruct the spectrum as the linear combination of the PCA basis vectors: S(λ) = Σ m_j * PC_j(λ).
+
+6. **Uncertainty Calculation:**
+   - Compute the variance-covariance matrix of the reconstructed spectrum by calculating A * C * Aᵀ, where C is the posterior covariance matrix of the coefficients.
+   - Extract the diagonal elements of this matrix to obtain the uncertainties in the reconstructed spectrum.
+
+7. **Output:**
+   - Output the reconstructed spectra along with their associated uncertainties.
+
+**Pseudocode Representation:**
+
+```pseudocode
+Algorithm Probabilistic_Spectral_Reconstruction:
+
+    Input:
+        Training Spectra S
+        Photometric Data P for target objects
+        Filter Transmission Curves F
+
+    Output:
+        Reconstructed Spectra R
+        Uncertainties U
+
+    Initialize:
+        Read training spectra S
+        Read photometric data P for each target object
+        Read filter transmission curves F for each filter
+
+    Preprocess Training Spectra:
+        For each spectrum s in S:
+            s = (s - mean(s)) / std(s)
+
+    Compute PCA Basis:
+        Compute covariance matrix C of normalized spectra
+        Diagonalize C to get eigenvalues λ and eigenvectors V
+        Sort V by descending λ values
+        Select top k eigenvectors V = [v₁, v₂, ..., vk]
+
+    Projection Matrix A:
+        For each filter i:
+            For each PCA basis vector vⱼ:
+                A_ij = ∫ F_i(λ) * vⱼ(λ) dλ
+
+    For each object:
+        Read photometric fluxes P_i for each filter
+        Set up Bayesian model:
+            P_i ~ Normal(A * x, σ²)
+            Prior: x ~ Normal(0, Σ_prior) or uninformative prior
+
+        Bayesian Inference:
+            Use MCMC to sample x from posterior distribution
+            Posterior statistics: mean m, covariance matrix C
+
+        Reconstruct Spectrum R:
+            R = sum_{j=1 to k} m_j * vⱼ(λ)
+
+        Compute Uncertainties U:
+            C_R = A * C * Aᵀ
+            U = sqrt(diag(C_R))
+
+    Output:
+        Reconstructed Spectra R
+        Uncertainties U
+```
+
+**Explanation of Key Steps:**
+
+- **PCA Computation:** Reduces the dimensionality of the spectral data, capturing the most significant variations in the training set.
+- **Projection Matrix A:** Transforms the PCA basis into the photometric domain, enabling the mapping from spectral coefficients to photometric measurements.
+- **Bayesian Inference:** Provides a statistical framework to estimate the spectral coefficients from the observed photometric data, accounting for uncertainties.
+- **Uncertainty Propagation:** Ensures that the reliability of the reconstructed spectra is quantified, crucial for scientific interpretation and further analysis.

@@ -1,0 +1,62 @@
+```python
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+    - Training Spectra: A set of reference TNO spectra
+    - Photometric Observations: Sparse multi-band photometry measurements
+    - Filter Set: NIRCam filter transmission curves
+
+Output:
+    - Reconstructed Spectrum: High-resolution spectral energy distribution
+    - Latent Coefficients: PCA-derived coefficients
+    - Classification Probabilities: Taxonomic group probabilities
+
+Steps:
+
+1. Preprocessing:
+    a. Normalize and preprocess the training spectra.
+    b. Select relevant wavelength ranges and features.
+
+2. Principal Component Analysis (PCA):
+    a. Perform PCA on the training spectra to extract principal components.
+    b. Determine the optimal number of principal components (K) via validation.
+    c. Construct the PCA basis matrix for dimensionality reduction.
+
+3. Data Augmentation:
+    a. Generate synthetic latent vectors using Kernel Density Estimation (KDE) on the PCA coefficients of the training spectra.
+    b. Smooth the latent space with a Gaussian kernel to create a continuous manifold.
+
+4. Forward Modeling:
+    a. Simulate photometric observations for each augmented spectrum by convolving with the filter set.
+    b. Inject Gaussian noise (20% relative uncertainty) into the synthetic photometry to simulate real-world conditions.
+
+5. Training theRegressor:
+    a. Use AutoML (e.g., XGBoost) to train a regressor mapping synthetic photometry to latent coefficients.
+    b. Include noise in training to ensure robustness to photometric uncertainties.
+
+6. Leave-One-Out Cross-Validation (LOOCV):
+    a. For each held-out spectrum:
+        i. Remove the held-out spectrum from the training set.
+        ii. Retrain the regressor using the remaining training data.
+        iii. Generate synthetic photometry for evaluation.
+        iv. Predict latent coefficients for the held-out photometry.
+        v. Perform inverse PCA transform to reconstruct the spectrum.
+
+7. Posterior Sampling:
+    a. Use Gaussian Copula to sample the joint posterior distribution of latent coefficients.
+    b. Ensure the reconstructed spectra respect physical constraints and dependencies.
+
+8. Spectral Reconstruction:
+    a. Project the predicted latent coefficients through the inverse PCA transform to obtain the full spectrum.
+    b. Validate reconstruction accuracy using metrics like RMSE and credible interval coverage.
+
+9. Taxonomy Classification:
+    a. Train a secondary classifier on the PCA coefficients to predict taxonomic probabilities.
+    b. Classify the held-out spectra based on the predicted latent means.
+
+10. Applications:
+    a. Optimize filter configurations for NIRCam by evaluating information content.
+    b. Detect outliers by assessing the probability of photometric observations in the latent space.
+
+End
+```

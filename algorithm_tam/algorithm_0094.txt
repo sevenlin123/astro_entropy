@@ -1,0 +1,41 @@
+### Core Computational Algorithm for Spectral Reconstruction
+
+1. **Data Preparation**:
+   - Obtain a set of reference TNO spectra (e.g., 51 observed spectra) representing dominant taxonomic classes (Water-type, CO₂-type, Organics-type).
+   
+2. **Principal Component Analysis (PCA)**:
+   - Apply PCA to the reference spectra to derive principal components (latent space). This reduces the spectral data into a smaller set of orthogonal latent coefficients that capture the main variability in the spectra.
+   
+3. **Density Estimation**:
+   - Use Kernel Density Estimation (KDE) on the PCA latent coefficients to create a continuous probability distribution, forming the prior for the Bayesian framework. This prior is derived from the training data and represents the manifold of plausible spectral variations.
+   
+4. **Synthetic Photometry Generation**:
+   - Forward model each augmented spectrum (from the latent space) through the NIRCam filter set to compute the expected reflectance in each band.
+   - Inject Gaussian noise (e.g., 20% relative uncertainty) into the synthetic photometry to simulate realistic observational uncertainties.
+   
+5. **AutoML Regression Training**:
+   - Train an ensemble of Gradient-Boosted Decision Trees (using AutoML framework like AutoGluon) to regress from sparse photometry (synthetic) to the latent coefficients. This step establishes the mapping from photometric observations to the latent space.
+   
+6. **Taxonomic Classification**:
+   - Train a secondary AutoML classifier on the latent coefficients to predict taxonomic labels (e.g., Water-type, CO₂-type, etc.), leveraging the reduced dimensionality for improved class separability.
+   
+7. **Reconstruction Workflow**:
+   - For new photometric observations:
+     - Pass the observed photometry through the trained AutoML regressor to predict the latent coefficients.
+     - Use the inverse PCA transform to reconstruct the full spectral energy distribution (SED) from the predicted latent coefficients.
+     - Simultaneously, use the taxonomic classifier to predict the spectral type probabilities.
+   
+8. **Uncertainty Quantification**:
+   - Compute posterior uncertainties on the reconstructed spectra by evaluating the variance across multiple posterior samples.
+   - Validate coverage by comparing observed reflectance values against the credible intervals of the reconstructed spectra.
+   
+9. **Validation and Performance Assessment**:
+   - Perform leave-one-out cross-validation (LOOCV) to evaluate reconstruction accuracy and credible interval coverage.
+   - Conduct sensitivity analyses to assess the impact of factors like filter configuration, noise levels, and latent dimensionality on reconstruction fidelity.
+
+10. **Applications**:
+    - **Survey Optimization**: Identify optimal NIRCam filter combinations that maximize reconstruction fidelity.
+    - **Outlier Detection**: Detect unusual objects by identifying spectra that deviate significantly from the expected latent manifold.
+    - **Taxonomic Classification**: Classify new objects into predefined spectral types based on the reconstructed latent coefficients.
+
+This algorithm effectively bridges the gap between sparse photometric data and detailed spectral analysis, enabling probabilistic spectral reconstruction and taxonomic classification of TNOs.

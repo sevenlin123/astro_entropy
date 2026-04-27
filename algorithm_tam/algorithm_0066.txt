@@ -1,0 +1,77 @@
+### Algorithm: Probabilistic Spectral Reconstruction Framework for Trans-Neptunian Objects
+
+**Step-by-Step Description:**
+
+1. **Data Collection**: 
+   - Gather near-infrared spectra of TNOs as the reference dataset. Include only the dominant spectral types (e.g., Water, CO₂, Organics) to define the prior distribution.
+
+2. **Principal Component Analysis (PCA) Training**:
+   - Apply PCA to the reference spectra to derive a low-dimensional latent space. Determine the number of principal components (4-5 for classification; 8-10 for high-fidelity reconstruction).
+
+3. **Latent Space Definition**:
+   - Use Kernel Density Estimation (KDE) on the PCA-derived latent coordinates to create a continuous probability distribution, ensuring smooth transitions between spectral types.
+
+4. **Synthetic Photometry Generation**:
+   - For each augmented spectrum, compute the expected photometric measurements (fluxes or magnitudes) by convolving the spectra with the instrument's filter response curves (e.g., JWST/NIRCam).
+
+5. **Model Training**:
+   - Train an AutoML regressor (ensemble of Gradient-Boosted Decision Trees) to map sparse photometric observations to the latent space coefficients. Inject noise (20% relative uncertainty) into synthetic photometry to simulate realistic observational conditions.
+
+6. **Reconstruction Pipeline**:
+   - For new observations, use the trained regressor to predict latent coefficients from photometry. Invert the PCA transformation to obtain the full spectrum.
+
+7. **Uncertainty Propagation**:
+   - Calculate posterior credible intervals by propagating photometric uncertainties through the inverse PCA mapping.
+
+8. **Taxonomic Classification**:
+   - Classify the object by projecting the predicted latent coefficients into a pre-trained classifier, which assigns probabilities to spectral types.
+
+9. **Validation and Application**:
+   - Perform LOOCV to assess reconstruction accuracy (RMSE and credibility interval coverage). Apply the framework to survey optimization, outlier detection, and spectral characterization.
+
+### Pseudocode Representation:
+
+```plaintext
+Algorithm: Probabilistic Spectral Reconstruction
+
+Inputs:
+- Reference Spectra: Set of TNO near-infrared spectra.
+- Photometric Filters: Instrument-specific filter curves (e.g., JWST/NIRCam).
+- Training Photometry: Sparse measurements of TNOs.
+
+Outputs:
+- Reconstructed Spectra: High-resolution spectral estimates from photometry.
+- Taxonomic Probabilities: Probabilities of belonging to different spectral types.
+
+Steps:
+
+1. **PCA Training**:
+   a. Compute PCA on the reference spectra to obtain principal components (PCs).
+   b. Determine the number of PCs needed for classification (4-5) and high-fidelity reconstruction (8-10).
+
+2. **Latent Space Construction**:
+   a. Project reference spectra onto the PCA PCs.
+   b. Apply Kernel Density Estimation (KDE) on the latent coordinates to create a continuous probability distribution.
+
+3. **Synthetic Photometry Generation**:
+   a. For each augmented spectrum, compute the expected photometric measurements by convolving with the instrument's filter response curves.
+   b. Add noise (20% relative uncertainty) to simulate realistic observational data.
+
+4. **Model Training**:
+   a. Train an AutoML regressor (e.g., ensemble of Gradient-Boosted Decision Trees) to map sparse photometry to latent space coefficients.
+   b. Optimize the regressor using the training data and evaluate performance.
+
+5. **Reconstruction Pipeline**:
+   a. For new photometric observations, use the trained regressor to predict latent coefficients.
+   b. Invert the PCA transformation to reconstruct the full spectrum.
+   c. Calculate posterior credible intervals by propagating photometric uncertainties.
+
+6. **Taxonomic Classification**:
+   a. Use a pre-trained classifier on the latent space to assign taxonomic probabilities.
+
+7. **Validation and Application**:
+   a. Perform LOOCV to assess reconstruction accuracy (RMSE, credibility coverage).
+   b. Apply the framework to optimize surveys, detect outliers, and characterize TNOs.
+
+End.
+```

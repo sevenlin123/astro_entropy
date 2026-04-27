@@ -1,0 +1,46 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+**Input:**  
+- Photometric data (sparse)  
+- Reference spectral library (near-IR spectra)
+
+**Output:**  
+- Reconstructed full spectra for each object  
+- Uncertainty estimates  
+- Probabilistic classification of spectral types
+
+**Steps:**
+
+1. **Preprocess photometric data:**  
+   a. Normalize the data.  
+   b. Remove obvious outliers and fill in missing values.  
+
+2. **Train PCA model using reference spectra:**  
+   a. Perform PCA on the reference spectral library.  
+   b. Identify the number of principal components (k) that capture most spectral variability.  
+   c. Retain k components.  
+
+3. **Build probabilistic model:**  
+   a. Represent the spectral manifold in the reduced PCA space.  
+   b. Define a probabilistic model in this latent space.  
+   c. Use Bayesian inference to model the mapping from photometry to latent factors.  
+
+4. **Training phase:**  
+   a. Use labeled reference spectra and their corresponding photometric measurements to estimate model parameters.  
+   b. Calibrate the model uncertainty based on the residuals.  
+
+5. **Inference phase:**  
+   a. For each object with photometric data:  
+      i. Use the trained model to infer latent factors.  
+      ii. Propagate measurement uncertainties through the model to estimate uncertainties in the latent factors.  
+      iii. Project inferred factors back into full spectral space.  
+
+6. **Post-processing:**  
+   a. Smooth the reconstructed spectra where necessary.  
+   b. Calculate credible intervals for the reconstructed spectra.  
+
+7. **Optional hyperparameter tuning:**  
+   a. Use cross-validation or other methods to optimize hyperparameters like the number of principal components.  
+
+**Notes:**  
+- The exact details of Bayesian inference and model specifics can vary based on the actual implementation.

@@ -1,0 +1,32 @@
+The algorithm described in the paper focuses on reconstructing full spectra of trans-Neptunian objects (TNOs) from sparse photometric data using a probabilistic framework. Here's a structured breakdown of the core computational algorithm:
+
+1. **Training Data Preparation**:
+   - **Collect Reference Spectra**: Gather a set of reference TNO spectra (around 51 objects) that represent the dominant taxonomic classes (e.g., Water-type, CO₂-type, Organics-type).
+   - **Principal Component Analysis (PCA)**: Apply PCA on the reference spectra to create a low-dimensional latent space. This reduces the spectral data into principal components that capture the main variations in the spectra.
+
+2. **Data Augmentation**:
+   - **Kernel Density Estimation (KDE)**: Use KDE to create a smooth probability distribution in the latent space. This helps in generating synthetic spectra to augment the training data, especially since the original dataset is small.
+
+3. **Synthetic Photometry Generation**:
+   - **Forward Modeling**: For each augmented spectrum, compute the expected photometric measurements using the instrument's filter response curves (e.g., JWST/NIRCam filters). This involves convolving the spectra with the filter throughput curves.
+   - **Noise Injection**: Add Gaussian noise (e.g., 20% relative uncertainty) to the synthetic photometry to simulate realistic observational uncertainties.
+
+4. **Model Training**:
+   - **AutoML Regression**: Train an ensemble of gradient-boosted decision trees (AutoML) to map the sparse photometric measurements to the latent space coordinates. This step involves using the synthetic photometry with added noise as inputs and the PCA coefficients as targets.
+
+5. **Reconstruction Pipeline**:
+   - **Inference Phase**: For new photometric observations:
+     - **Predict Latent Coefficients**: Use the trained AutoML model to predict the latent space coordinates.
+     - **Inverse PCA Transform**: Convert the latent coefficients back into a full-resolution spectrum using the inverse PCA transformation.
+
+6. **Taxonomic Classification**:
+   - **Latent Space Classifier**: Train another AutoML classifier on the latent space to predict the taxonomic type (e.g., H₂O, CO₂, Organic) based on the latent coordinates.
+
+7. **Performance Evaluation**:
+   - **Leave-One-Out Cross-Validation (LOOCV)**: Validate the model by iteratively removing one spectrum from the training set and testing the reconstruction. This assesses the accuracy of the reconstructed spectra and taxonomic classifications.
+
+8. **Applications**:
+   - **Survey Optimization**: Determine optimal filter configurations for future surveys by evaluating the information content of different filter sets.
+   - **Outlier Detection**: Identify rare spectral types by constraining photometric data to select low-probability models in the latent manifold.
+
+This algorithm effectively bridges the gap between sparse photometric data and detailed spectral analysis, enabling accurate reconstruction of TNO spectra and supporting taxonomic classification and survey planning.

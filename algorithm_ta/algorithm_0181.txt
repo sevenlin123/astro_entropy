@@ -1,0 +1,21 @@
+1. Input: Near-infrared photometric data of trans-Neptunian objects (TNOs).
+
+2. Preprocess: Convert photometric data into a numerical format suitable for dimensionality reduction.
+
+3. Perform Principal Component Analysis (PCA) on a training set of near-infrared spectra to extract principal components (PCs).
+
+4. Model the spectral manifold of TNOs using the obtained principal components.
+
+5. Implement Bayesian inference in the reduced PCA space to reconstruct full spectra from photometric data.
+
+6. Propagate measurement uncertainties through the reconstruction process.
+
+7. Use the dominant principal components (e.g., 4–5) to perform taxonomic classification of the objects.
+
+8. Apply additional principal components (e.g., 8–10) for enhanced spectral reconstruction fidelity and uncertainty calibration.
+
+9. Optimize surveys by evaluating the information content of NIRCam filters to determine optimal observation configurations.
+
+10. Detect and reconstruct rare spectral types by constraining photometric data to select low-probability intermediate models from the continuous spectral manifold.
+
+11. Output reconstructed spectra with associated uncertainty estimates and information content metrics.

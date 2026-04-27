@@ -1,0 +1,13 @@
+Algorithm Steps:
+
+1. **Input Data Collection**: Collect sparse photometric data of trans-Neptunian objects, which includes measurements at various wavelengths with some missing values.
+
+2. **GAN Training**: Train a Generative Adversarial Network (GAN) where the generator learns to fill in missing wavelengths to produce complete Spectral Energy Distributions (SEDs), while the discriminator evaluates the realism of these SEDs against a dataset of known, densely sampled SEDs.
+
+3. **SED Reconstruction**: For each object, input its sparse photometric data into the trained GAN to obtain a probabilistic complete SED, capturing the uncertainty due to the sparsity of input data.
+
+4. **Photometric Redshift Calculation**: Utilize the reconstructed SEDs to determine photometric redshifts by comparing against a lookup table built from the training data's redshift distribution, providing a probabilistic estimate of redshift.
+
+5. **Clustering for Classification**: Apply clustering techniques to the reconstructed SEDs to group objects into distinct spectral classes, aiding in taxonomic classification and identifying outliers.
+
+6. **Uncertainty Quantification**: Extract uncertainties from the GAN's probabilistic outputs to assess the reliability of the SED reconstruction and redshift estimates.

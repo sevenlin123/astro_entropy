@@ -1,0 +1,52 @@
+**Algorithm: Probabilistic Spectral Reconstruction Framework**
+
+**Input:**
+- Sparse photometric data of trans-Neptunian objects (TNOs) (flux measurements across different bands, potentially incomplete or noisy)
+- Prior knowledge about typical TNO spectra (e.g., common spectral features, temperature distributions)
+
+**Output:**
+- Inferred spectral energy distributions (SEDs) for each TNO with associated uncertainties
+- Probabilistic classifications into spectral classes
+- Identified outliers
+
+**Steps:**
+
+1. **Preprocessing:**
+   - Clean and normalize the sparse photometric data.
+   - Structure the data for compatibility with the Bayesian hierarchical model.
+
+2. **Model Initialization:**
+   - Define the Bayesian hierarchical model components:
+     - **Likelihood:** Probability of observing photometric data given an SED.
+     - **Priors:** Based on prior knowledge (e.g., blackbody models for thermal emission).
+     - **Hyperparameters:** Parameters governing the Gaussian Mixture Model (GMM) for classification.
+
+3. **Bayesian Inference:**
+   - Use Markov Chain Monte Carlo (MCMC) sampling to estimate posterior distributions of SED parameters.
+   - Generate posterior samples representing possible SED realizations.
+
+4. **Spectral Classification:**
+   - Train a GMM using the inferred SED parameters.
+   - Calculate posterior probabilities for each TNO's spectral class membership.
+   - Assign each TNO to the most probable spectral class.
+
+5. **Outlier Detection:**
+   - Compute the posterior predictive distribution of photometric data.
+   - Compare observed data against the predictive distribution for each TNO.
+   - Identify outliers as those significantly outside the predicted distribution.
+
+6. **Uncertainty Quantification:**
+   - Determine variability in posterior SED parameter samples to establish uncertainties.
+   - Propagate these uncertainties into spectral class assignments for probabilistic results.
+
+7. **Output Compilation:**
+   - Store each TNO's inferred SED with uncertainties.
+   - Record probabilistic spectral class assignments with confidence levels.
+   - Note any detected outliers.
+
+**Final Output:**
+- **Inferred SEDs:** Detailed spectral energy distributions with uncertainty ranges for each TNO.
+- **Spectral Classes:** Probabilistic assignments indicating the likelihood of each TNO belonging to specific classes.
+- **Outliers:** List of TNOs flagged as outliers based on posterior predictive checks.
+
+**End of Algorithm**

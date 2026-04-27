@@ -1,0 +1,19 @@
+```
+Algorithm:
+
+1. Input sparse photometric data of trans-Neptunian objects.
+
+2. Preprocess data by converting it into a format suitable for principal component analysis (PCA).
+
+3. Apply PCA to the dataset to obtain a reduced spectral manifold representation, retaining approximately 4-5 principal components for taxonomic classification and up to 10 for improved spectral reconstruction.
+
+4. Construct a probabilistic model linking the principal components to the full spectrum, incorporating uncertainties from the photometric measurements.
+
+5. Perform Bayesian inference in the reduced PCA space to estimate the posterior distribution of the principal components given the observed photometric data.
+
+6. Use the estimated posterior distributions to reconstruct the full spectrum by mapping the inferred principal components back to the original spectral space.
+
+7. Propagate the uncertainties from the photometric data through the probabilistic model and the PCA transformation to obtain uncertainty estimates for the reconstructed spectra.
+
+8. Output the reconstructed spectra along with their associated uncertainties.
+```

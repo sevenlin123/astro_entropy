@@ -1,0 +1,15 @@
+The Probabilistic Spectral Reconstruction Algorithm can be described in the following steps:
+
+1. **Principal Component Analysis (PCA)**: Apply PCA to a set of training near-infrared spectra to create a low-dimensional representation. Extract principal components that capture the essential variability (e.g., 4-5 for classification, 8-10 for detailed reconstruction).
+
+2. **Feature Vector Creation**: Transform each observed spectrum into a feature vector using the extracted principal components. This vector serves as a compressed representation in the latent space.
+
+3. **Bayesian Inference**: Use Bayesian methods in the latent space to estimate the underlying spectral features given photometric data. Incorporate measurement uncertainties and prior knowledge to refine the estimates.
+
+4. **Latent to Spectral Mapping**: Reconstruct the full spectrum from the estimated features by mapping them back through the inverse PCA transformation, effectively translating the latent features into their corresponding spectral representations.
+
+5. **Uncertainty Propagation**: Calculate credible intervals for the reconstructed spectra, reflecting the propagated uncertainties from the photometric measurements and the Bayesian inference process.
+
+6. **Spectral Manifold Analysis**: Examine the structure of the spectral data within the latent space to identify distinct modes of variability, aiding in taxonomic classification and outlier detection.
+
+**Result**: Obtain reconstructed spectra with associated credibility intervals, enabling robust taxonomic classification and outlier detection based on sparse photometric data.

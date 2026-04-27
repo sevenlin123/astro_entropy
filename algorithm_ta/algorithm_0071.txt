@@ -1,0 +1,26 @@
+**Probabilistic Spectral Reconstruction Algorithm**
+
+**Step-by-Step Description:**
+
+1. **Input Data**:
+   - Obtain sparse photometric measurements for each trans-Neptunian object (TNO). Each object's measurements may cover a subset of photometric bands.
+
+2. **Retrieve Pre-trained Spectral Manifold Model**:
+   - Access a pre-trained model based on principal component analysis (PCA) using a sample of near-IR spectra. This model captures the spectral variability of TNOs in a reduced PCA space.
+
+3. **Preprocess Photometric Data**:
+   - Normalize the photometric measurements to ensure they are on a consistent scale or unit.
+
+4. **Bayesian Inference in PCA Space**:
+   - Use the sparse photometric data to perform Bayesian inference, determining the PCA coefficients that best represent the object's spectrum. This step incorporates uncertainties in the photometric measurements.
+
+5. **Spectral Reconstruction**:
+   - Reconstruct the full spectrum from the inferred PCA coefficients. This involves mapping the PCA coefficients back to the original spectral space.
+
+6. **Uncertainty Propagation**:
+   - Calculate the uncertainties associated with the reconstructed spectrum by propagating the uncertainties from the PCA inference through to the spectral reconstruction.
+
+7. **Output**:
+   - Generate the reconstructed spectrum for each TNO, along with credible intervals reflecting the propagated uncertainties.
+
+**End of Algorithm**

@@ -1,0 +1,40 @@
+```plaintext
+Algorithm:
+
+1. Initialize:
+   - Input: Sparse photometric measurements of TNOs
+   - Output: Reconstructed high-resolution spectrum and taxonomic classification
+
+2. Preprocessing:
+   a. Obtain reference TNO spectra (e.g., from DiSCo-TNO sample).
+   b. Perform Principal Component Analysis (PCA) on reference spectra to derive principal components (latent space).
+
+3. Data Augmentation:
+   a. Use Kernel Density Estimation (KDE) on PCA latent coefficients to create synthetic spectra, expanding the training dataset.
+   b. Convolve augmented spectra with JWST NIRCam filter responses to simulate photometric observations.
+
+4. Model Training:
+   a. Train an AutoML regressor (e.g., Gradient-Boosted Decision Trees) to map sparse photometry to latent coefficients.
+   b. Inject Gaussian noise (20% relative uncertainty) into synthetic photometry to account for observational errors.
+
+5. Bayesian Inference:
+   a. For each input photometric observation:
+      i. Predict latent coefficients using the trained AutoML regressor.
+      ii. Project predicted coefficients through inverse PCA transformation to reconstruct the full spectrum.
+      iii. Compute posterior probabilities over taxonomic classes using a secondary classifier trained on latent space.
+
+6. Performance Metrics:
+   a. Evaluate using Leave-One-Out Cross-Validation (LOOCV):
+      i. Root Mean Square Error (RMSE) between ground truth and reconstructed spectra.
+      ii. Pearson correlation coefficient (r) between spectra.
+      iii. Accuracy and F1 scores for taxonomic classification.
+
+7. Applications:
+   a. Identify optimal NIRCam filter configurations for future surveys by simulating RMSE for different filter combinations.
+   b. Detect outliers by exploring the latent manifold beyond training data.
+
+8. Output:
+   - Reconstructed spectrum
+   - Taxonomic classification probabilities
+   - Empirical credible intervals for spectral features
+```

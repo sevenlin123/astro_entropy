@@ -1,0 +1,35 @@
+```pseudocode
+Algorithm Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input: Sparse photometric observations m (multi-band measurements)
+Output: Full high-resolution spectrum S and associated uncertainties
+
+1. Initialize PCA with reference TNO spectra:
+   a. Train PCA on N = 51 reference spectra to obtain principal components (PCs).
+   b. Define latent space using top K PCs (K = 8-10 for high fidelity).
+   c. Project reference spectra onto latent space to get latent coefficients.
+
+2. Data Augmentation using Kernel Density Estimation (KDE):
+   a. Generate synthetic latent vectors by sampling from the KDE of the latent coefficients.
+   b. Forward-model synthetic spectra using the top K PCs.
+   c. Convolve synthetic spectra with instrument response functions (e.g., JWST NIRCam) to simulate photometric measurements.
+   d. Inject Gaussian noise (relative uncertainty ~20%) into synthetic photometry.
+
+3. AutoML Regressor Training:
+   a. Train ensemble of Gradient Boosted Decision Trees (GBDTs) to regress from sparse photometry to latent coefficients.
+   b. Use synthetic photometry with added noise as training data.
+   c. Optimize model hyperparameters using grid search on validation data.
+
+4. Bayesian Inference:
+   a. For input photometry m:
+      i. Use trained AutoML regressor to predict latent coefficients.
+      ii. Apply inverse PCA transform to obtain full spectrum S.
+      iii. Compute uncertainties through propagation of photometric uncertainties.
+
+5. Output:
+   a. Reconstructed spectrum S.
+   b. Associated uncertainties and confidence intervals.
+   c. Probabilistic taxonomic classification (if applicable).
+
+End Algorithm
+```

@@ -1,0 +1,18 @@
+**Algorithm: Probabilistic Spectral Reconstruction of Trans-Neptunian Objects**
+
+1. **Input:** Photometric data for all objects, including observed magnitudes and associated uncertainties.
+2. **Preprocessing:**
+   - Remove outliers: Filter out data points that deviate significantly from expected values.
+   - Correct instrumental effects: Adjust measurements for known biases and detector responses.
+3. **For each object:**
+   - **Define spectral parameters:** Choose a parameterization (e.g., coefficients in a basis function expansion).
+   - **Set priors:** Establish prior probability distributions based on typical TNO spectral features.
+   - **Emission model:** Develop a forward model linking spectral parameters to observed magnitudes via the instrument's response function.
+   - **Incorporate uncertainties:** Include measurement and model parameter uncertainties in the probabilistic model.
+   - **Sample posterior:** Use MCMC (e.g., Metropolis-Hastings) to generate samples of spectral parameters.
+   - **Calculate uncertainties:** Derive credible intervals from the posterior samples.
+4. **Compute Bayesian evidence:**
+   - For each model, calculate the Bayesian evidence to assess goodness of fit and identify outliers.
+5. **Output:** Reconstructed spectra, uncertainties, and Bayesian evidence for each object.
+
+**End of Algorithm**

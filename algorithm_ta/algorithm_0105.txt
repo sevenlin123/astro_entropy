@@ -1,0 +1,18 @@
+Here is a structured algorithm description based on the provided paper:
+
+1. **Latent Space Construction**: 
+   - Train a Principal Component Analysis (PCA) model using a set of reference near-infrared spectra of trans-Neptunian objects. This creates a reduced-dimensional representation of the spectral data.
+
+2. **Probabilistic Inference**: 
+   - Use Bayesian inference in the latent space (the reduced PCA space) to reconstruct full spectra from sparse photometric measurements. This involves modeling the relationship between photometric data and the underlying spectral features.
+
+3. **Model Selection via Posterior Probability**:
+   - Evaluate possible spectral models by their posterior probabilities in the latent space. This helps in identifying the most probable spectral configuration given the observed photometric data.
+
+4. **Bayesian Uncertainty Quantification**:
+   - Propagate the uncertainties from the photometric measurements through the Bayesian model to estimate uncertainties in the reconstructed spectra, ensuring accurate uncertainty assessment.
+
+5. **Application to New Data**:
+   - For new sparse photometric observations, utilize the pre-trained PCA model and Bayesian framework to infer the underlying spectrum and associated uncertainties, enabling spectral reconstruction and analysis.
+
+This algorithm effectively bridges sparse photometric data with detailed spectral information, facilitating accurate taxonomic classification and outlier detection in the study of trans-Neptunian objects.

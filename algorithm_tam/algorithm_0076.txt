@@ -1,0 +1,35 @@
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. **Data Preparation**:
+   - Collect sparse photometric measurements of TNOs.
+   - Obtain a reference set of near-infrared spectra for training (e.g., 51 observed spectra).
+
+2. **Latent Space Definition**:
+   - Perform Principal Component Analysis (PCA) on the reference spectra to extract principal components (PCs).
+   - Use Kernel Density Estimation (KDE) to construct a continuous probability distribution in the latent space, augmenting the training data.
+
+3. **Forward Modeling**:
+   - Simulate photometric measurements for synthetic spectra by convolving them with the instrument's filter responses (e.g., JWST/NIRCam).
+   - Inject Gaussian noise (e.g., 20% relative uncertainty) to simulate realistic photometric uncertainties.
+
+4. **Training the Regressor**:
+   - Use AutoML (e.g., Gradient-Boosted Decision Trees) to train a model that maps sparse photometry to latent space coordinates.
+   - The model is trained on the synthetic data created from the augmented latent manifold.
+
+5. **Taxonomic Classifier**:
+   - Train another AutoML model on the latent coordinates to classify TNO spectra into taxonomic groups (e.g., H₂O, CO₂, Organics).
+
+6. **Reconstruction Workflow**:
+   - For new photometric observations:
+     - Use the trained regressor to predict latent coordinates.
+     - Project the latent coordinates back to full spectra using inverse PCA.
+     - Classify the spectral type using the taxonomic classifier.
+
+7. **Validation**:
+   - Conduct leave-one-out cross-validation (LOOCV) to assess reconstruction accuracy and classification performance.
+   - Evaluate metrics such as MSE, RMSE, correlation coefficient, and credible interval coverage.
+
+8. **Output**:
+   - Reconstructed full spectra and taxonomic classifications for each object.
+
+This algorithm enables the probabilistic reconstruction of detailed spectra from sparse photometric data, bridging the gap between available observations and comprehensive spectroscopic analysis.

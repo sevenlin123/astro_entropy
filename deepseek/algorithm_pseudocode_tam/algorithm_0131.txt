@@ -1,0 +1,57 @@
+To implement the core reconstruction framework, we proceed with the following steps:
+
+1. **Principal Component Analysis (PCA)**: Apply PCA to a set of reference TNO spectra to obtain principal components. This defines a low-dimensional latent space representing the spectral variability of TNOs.
+
+2. **Data Augmentation**: Use Kernel Density Estimation (KDE) on the PCA coefficients of the training spectra to generate synthetic latent vectors, creating a smooth manifold for stable regression.
+
+3. **Forward Modeling**: Simulate photometric observations by convolving the spectra with the instrument's filter responses (e.g., JWST/NIRCam) and adding noise to mimic real data.
+
+4. **Model Training**: Train an AutoML regressor (e.g., Gradient Boosted Decision Trees) to map sparse photometry to PCA latent coefficients.
+
+5. **Reconstruction**: For new photometric observations, predict the latent coefficients using the trained model and invert the PCA transform to reconstruct the full spectrum.
+
+6. **Classification**: Use a secondary classifier trained on the latent space to determine the taxonomic classification of the object.
+
+Here is the pseudocode for the core algorithm:
+
+```
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+    - Reference spectra (training set)
+    - Observed photometry (sparse measurements)
+    - Instrument filter definitions (e.g., NIRCam)
+
+Output:
+    - Reconstructed spectrum
+    - Taxonomic classification probabilities
+
+1. Perform PCA on the reference spectra to extract principal components:
+    a. Compute principal components (eigenvectors and eigenvalues).
+    b. Project the reference spectra onto the principal component space to get latent coefficients.
+
+2. Augment the latent space using KDE:
+    a. Fit KDE to the latent coefficients of the reference spectra.
+    b. Sample synthetic latent vectors from the KDE to expand the training data.
+
+3. Generate synthetic photometry for training:
+    a. Convolve each augmented spectrum with the instrument's filter responses.
+    b. Add Gaussian noise (e.g., 20%) to simulate observational uncertainties.
+
+4. Train the AutoML regressor:
+    a. Input: Synthetic photometry (with noise)
+    b. Output: Predicted latent coefficients
+    c. Use cross-validation to optimize model parameters.
+
+5. For new photometric observations:
+    a. Feed the sparse photometry into the trained regressor.
+    b. Obtain predicted latent coefficients.
+    c. Apply inverse PCA transformation to reconstruct the full spectrum.
+
+6. Perform taxonomic classification:
+    a. Project the latent coefficients into the latent space.
+    b. Classify using the pre-trained taxonomic classifier.
+    c. Output the probabilities for each spectral type.
+
+End Algorithm
+```

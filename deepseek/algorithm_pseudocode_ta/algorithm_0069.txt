@@ -1,0 +1,25 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Training Principal Component Model:**
+   - Input: Collection of near-infrared (near-IR) spectra of trans-Neptunian objects (TNOs).
+   - Compute principal component (PC) decomposition using a dimensionality reduction technique (e.g., PCA).
+   - Determine the number of PCs (select ~4-5 for taxonomic classification; ~8-10 for improved reconstruction fidelity).
+
+2. **Bayesian Inference in Reduced Space:**
+   - Input: Sparse photometric measurements of a TNO.
+   - Represent the spectrum in terms of the precomputed PC basis.
+   - Perform Bayesian inference to estimate the coefficients of the PCs, incorporating prior knowledge and measurement uncertainties.
+   - Output: Reconstructed full spectrum and associated uncertainties.
+
+3. **Quantify Information Content of Filters:**
+   - For each photometric filter (e.g., JWST/NIRCam):
+     - Project the filter response onto the PC basis.
+     - Compute the explained variance or information content.
+     - Rank filters based on their contribution to spectral reconstruction.
+
+4. **Detect Rare Spectral Types:**
+   - For each object, compute its position on the spectral manifold using the estimated PC coefficients.
+   - Compare the probability density of the object's position against the distribution of known spectral types.
+   - Identify objects with significantly lower probabilities as rare spectral types.
+
+**End Algorithm**

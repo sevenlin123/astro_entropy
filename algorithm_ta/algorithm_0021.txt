@@ -1,0 +1,25 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Input Data**: Sparse photometric measurements of trans-Neptunian objects (TNOs).
+
+2. **Preprocessing**: Normalize the photometric data to account for variations in observation conditions.
+
+3. **Reference Spectra Acquisition**: Collect a sample of near-infrared (NIR) spectra from existing databases or observations.
+
+4. **Principal Component Analysis (PCA)**: Decompose the reference spectra into principal components to capture the main variability patterns.
+
+5. **Determine Principal Components**: Using leave-one-out cross-validation, identify the optimal number of principal components (k). For taxonomic classification, k is about 4-5; for high-fidelity reconstruction, k is 8-10.
+
+6. **Probabilistic Latent-Space Model Construction**: Represent each TNO's spectrum in terms of latent variables corresponding to the first 'k' PCA components.
+
+7. **Bayesian Inference**: In the reduced latent space, perform Bayesian inference to estimate the latent variables using the sparse photometric data, considering measurement uncertainties.
+
+8. **Spectral Reconstruction**: Project the inferred latent variables back into the original spectral space to obtain the reconstructed spectrum.
+
+9. **Uncertainty Propagation**: Compute the uncertainties for each reconstructed spectrum based on the variance in the inferred latent variables.
+
+10. **Survey Optimization**: Evaluate the information content of various NIR filters (e.g., JWST/NIRCam filters like F090W, F115W, F410M, F460M) to determine optimal filter combinations for future observations.
+
+11. **Outlier Detection and Rare Spectral Types**: By constraining the photometric data, identify and reconstruct unusual spectral types, such as peculiar Neptune Trojans, by selecting low-probability intermediate models from the continuous manifold.
+
+**Output**: Reconstructed spectra with associated uncertainties and a set of recommended NIR filters for optimal TNO classification.

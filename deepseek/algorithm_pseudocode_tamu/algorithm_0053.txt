@@ -1,0 +1,44 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+**Input:**  
+- Sparse photometric measurements of a trans-Neptunian object (TNO)  
+- Training dataset of reference TNO spectra  
+- Pre-computed PCA basis from the training dataset  
+
+**Output:**  
+- Reconstructed full spectrum of the TNO  
+- Posterior probabilities of taxonomic classification  
+- Uncertainty quantification for spectral features  
+
+**Steps:**
+
+1. **Data Preprocessing:**
+   - Normalize the sparse photometric measurements to reflectance or flux density.
+
+2. **Principal Component Analysis (PCA):**
+   - Perform PCA on the training dataset of reference spectra to obtain principal components (PCs).
+   - Compute the latent coefficients (scores) for the training spectra.
+
+3. **Synthetic Data Generation:**
+   - Use Kernel Density Estimation (KDE) on the latent scores to generate synthetic training data.
+   - Forward model the synthetic spectra through the instrument response (e.g., JWST NIRCam filters) to produce synthetic photometry with added noise (~20%).
+
+4. **Training the AutoML Regressor:**
+   - Train an ensemble of gradient-boosted decision trees regressor on synthetic photometry to predict latent coefficients from sparse photometry.
+
+5. **Inference Phase:**
+   - For new photometric data:
+     a. Predict latent coefficients using the trained regressor.
+     b. Apply inverse PCA to reconstruct the full spectrum.
+
+6. **Uncertainty Quantification:**
+   - Use Gaussian Copula sampling to generate an ensemble of reconstructions.
+   - Calculate quantile-based confidence intervals for the spectrum.
+
+7. **Taxonomic Classification:**
+   - Project the predicted latent coefficients into a pre-trained classifier to determine posterior probabilities of spectral types (e.g., H₂O, CO₂, Organics, Methanol).
+
+8. **Posterior Sampling:**
+   - Generate multiple realizations of the reconstructed spectrum to assess uncertainty propagation.
+
+**End Algorithm**

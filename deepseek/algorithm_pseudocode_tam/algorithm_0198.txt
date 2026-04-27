@@ -1,0 +1,39 @@
+The problem requires the extraction of a computational algorithm from a given astrophysics paper focused on probabilistic spectral reconstruction of Trans-Neptunian Objects (TNOs) using sparse photometry. The algorithm must be presented in pseudocode, focusing solely on the core computational method, while ignoring validation, plotting, and visualization steps.
+
+### Approach
+
+1. **Understanding the Paper**: The paper describes a method to reconstruct full spectra of TNOs from sparse photometric data. It uses Principal Component Analysis (PCA) on reference spectra to create a low-dimensional latent space. This space is then used in a Bayesian framework with AutoML to map sparse photometry to the latent space, from which spectra are reconstructed.
+
+2. **Key Components**:
+   - **Principal Component Analysis (PCA)**: Reduces the dimensionality of reference spectra to form a latent space.
+   - **Kernel Density Estimation (KDE)**: Generates synthetic data to augment the training set.
+   - **AutoML Regressor**: Maps sparse photometry to latent coefficients.
+   - **Inverse PCA**: Projects latent coefficients back to full spectra.
+   - **Taxonomic Classifier**: Uses latent coefficients for spectral type classification.
+
+3. **Algorithm Design**: The algorithm initializes by training a PCA model on reference spectra, generating synthetic data, creating synthetic photometry, and training an AutoML regressor. For new observations, it converts photometry to latent coefficients, projects them to full spectra, and classifies the spectral type.
+
+4. **Handling Limitations**: The approach deals with small datasets and PCA's linearity by using KDE for data augmentation and AutoML for robust modeling.
+
+### Solution Code
+
+```python
+Initialize PCA on reference TNO spectra
+Generate synthetic latent vectors using KDE
+Create synthetic photometry by convolving with NIRCam filters and add noise
+Train AutoML regressor to map photometry to latent coefficients
+For each new observation:
+    Convert photometry to latent coefficients using regressor
+    Project latent coefficients to full spectrum via inverse PCA
+    Classify spectral type using latent coefficients
+```
+
+### Explanation
+
+- **Initialization**: The PCA is trained on existing reference spectra to create a latent space.
+- **Data Augmentation**: Synthetic data is generated to improve model training, especially useful with limited data.
+- **Synthetic Photometry**: By convolving spectra with instrument filters and adding noise, realistic photometric measurements are created for training.
+- **Training AutoML Regressor**: The regressor learns to map sparse photometric inputs to the latent space defined by PCA.
+- **Processing New Observations**: Each new observation is converted from photometric measurements to latent coefficients, then projected back to a full spectrum using inverse PCA, and classified into spectral types.
+
+This approach efficiently leverages dimensionality reduction and machine learning to reconstruct detailed spectra from sparse photometric data, enabling comprehensive analysis of TNO surfaces despite limited observations.

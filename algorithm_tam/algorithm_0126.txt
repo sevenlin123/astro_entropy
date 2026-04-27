@@ -1,0 +1,33 @@
+### Algorithm: Probabilistic Spectral Reconstruction Framework
+
+1. **Data Preparation**:
+   - Collect a set of reference TNO spectra (e.g., 51 spectra) and exclude outliers and rare types.
+   - Perform Principal Component Analysis (PCA) on the reference spectra to define a low-dimensional latent space.
+
+2. **Training Phase**:
+   - Use the PCA-derived latent space to construct a probability distribution (prior) using Kernel Density Estimation (KDE).
+   - Generate synthetic photometry by convolving the spectra with the instrument's filter response curves (e.g., JWST/NIRCam).
+   - Introduce Gaussian noise (20% relative uncertainty) to simulate realistic photometric measurements.
+
+3. **Model Training**:
+   - Train an AutoML regressor (e.g., Gradient-Boosted Decision Trees) to map the sparse photometric inputs to the PCA latent coefficients.
+   - Simultaneously train a classifier within the latent space for taxonomic classification.
+
+4. **Reconstruction Pipeline**:
+   - For new photometric observations, predict the latent coefficients using the trained regressor.
+   - Project the latent coefficients back to the full spectral space using the inverse PCA transform to reconstruct the spectrum.
+   - Classify the object's taxonomic type based on the latent space probabilities.
+
+5. **Validation and Application**:
+   - Validate using Leave-One-Out Cross-Validation (LOOCV) to assess reconstruction accuracy and credible interval coverage.
+   - Apply the framework to optimize photometric surveys by testing different filter configurations.
+   - Detect outliers by identifying objects whose latent coefficients lie outside the training manifold.
+
+### Key Steps:
+- **Latent Space Definition**: PCA on reference spectra.
+- **Data Augmentation**: Synthetic photometry with added noise.
+- **Model Training**: AutoML for regression and classification in the latent space.
+- **Reconstruction**: Inverse PCA transform for spectral synthesis.
+- **Applications**: Survey optimization, outlier detection, taxonomic classification.
+
+This algorithm enables the reconstruction of detailed spectral information from sparse photometric data, bridging the gap between photometry and spectroscopy for TNOs.

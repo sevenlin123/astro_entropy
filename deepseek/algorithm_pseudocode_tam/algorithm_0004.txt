@@ -1,0 +1,39 @@
+```
+Initialize training data with 51 high-quality TNO spectra.
+
+Perform PCA on the training spectra:
+    Extract principal components (PCs) capturing major spectral variations.
+
+Create a latent space using the PCs:
+    Determine the number of PCs needed (typically 4-5).
+
+Apply Kernel Density Estimation (KDE):
+    Estimate density of latent coefficients from PCA.
+
+Generate synthetic photometric data:
+    Convolve each latent-synthesized spectrum with NIRCam filter curves.
+    Add 20% Gaussian noise to simulate realistic photometric uncertainty.
+
+Train AutoML regressor:
+    Use synthetic photometry to predict latent coefficients.
+    Optimize hyperparameters automatically for best performance.
+
+Train taxonomic classifier:
+    Classify latent space points into predefined categories (e.g., Water, CO₂, Organics).
+    Use AutoML for optimal classification model.
+
+Perform LOOCV validation:
+    Evaluate reconstruction accuracy and classification success on the original spectra.
+
+Implement reconstruction pipeline:
+    For new photometric data:
+        Use regressor to predict latent coefficients.
+        Invert PCA to retrieve full spectrum.
+        Apply classifier for taxonomic assignment.
+    
+Detect outliers and anomalies:
+    Analyze posterior distributions of latent coefficients to spot unusual spectra.
+
+Optimize survey filters:
+    Use information from reconstructed spectra to select optimal NIRCam configurations.
+```

@@ -1,0 +1,21 @@
+The algorithm systematically processes each trans-Neptunian object (TNO) by correcting its photometric data, constructing a forward model to link spectral parameters to observations, defining prior distributions, performing Bayesian inference, detecting outliers, calculating a figure-of-merit, and outputting the results.
+
+**Algorithm:**
+
+1. **Data Correction**: For each TNO, adjust photometric measurements to account for extinction and zero-point calibration.
+
+2. **Forward Model Construction**: Develop a model that connects SED parameters to observed magnitudes, incorporating basis functions for SED representation, noise models (Gaussian and Poisson), and interstellar extinction curves.
+
+3. **Prior Definition**: Assign informative priors to SED parameters using TNO population characteristics; use uninformative priors for noise and extinction parameters.
+
+4. **Bayesian Inference**: Utilize a nested sampling algorithm to derive posterior distributions of SED parameters and compute Bayesian evidence for model evaluation.
+
+5. **Posterior Predictive Distributions**: Generate distributions to assess the model's ability to predict observed magnitudes.
+
+6. **Outlier Detection**: Compare each object's posterior probability against population priors to identify outliers.
+
+7. **Figure-of-Merit (FoM) Calculation**: Compute FoM using Bayesian evidence to gauge the reliability of spectral reconstructions.
+
+8. **Output**: For each TNO, output SED parameters, uncertainties, posterior probabilities, and FoM.
+
+This structured approach ensures robust spectral reconstruction, enabling taxonomy, survey optimization, and outlier detection in sparse photometric data.

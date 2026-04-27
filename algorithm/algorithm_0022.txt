@@ -1,0 +1,29 @@
+**Algorithm: Probabilistic Spectral Reconstruction of Trans-Neptunian Objects**
+
+**Step 1: Data Collection**
+- Collect photometric observations of TNOs, including magnitude measurements across various bands and their associated uncertainties.
+
+**Step 2: Principal Component Analysis (PCA)**
+- Apply PCA to the observed magnitudes to reduce dimensionality, identifying principal components that capture major variability in SEDs.
+
+**Step 3: Bayesian Model Definition**
+- Parameterize SEDs using PCA-derived components.
+- Assign prior distributions based on physical constraints (e.g., temperature, albedo).
+
+**Step 4: Markov Chain Monte Carlo (MCMC) Inference**
+- Utilize MCMC (e.g., Metropolis-Hastings) to sample posterior distributions of SED parameters.
+- Combine observed data likelihood with prior distributions.
+
+**Step 5: Posterior Mode Identification**
+- Determine the mode of the posterior distribution to find the most probable SED.
+
+**Step 6: Outlier Detection**
+- Calculate residuals between observed magnitudes and reconstructed SED fluxes.
+- Flag observations where residuals exceed a multiple of their uncertainties as outliers.
+
+**Step 7: Taxonomic Classification**
+- Compare reconstructed SEDs to reference spectra of known taxonomic classes.
+- Assign probability distributions over taxonomic classes based on SED similarity.
+
+**Step 8: Output Generation**
+- Deliver the most probable SED, classification probabilities, and outlier flags for each TNO.

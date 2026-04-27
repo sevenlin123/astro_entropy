@@ -1,0 +1,8 @@
+1. **Training Data Preparation**: Collect and preprocess TNO spectra, excluding rare and outlier types.  
+2. **Principal Component Analysis (PCA)**: Compute principal components to define the latent space.  
+3. **Data Augmentation**: Use non-parametric Kernel Density Estimation (KDE) to generate synthetic latent vectors, expanding the training set.  
+4. **Synthetic Photometry Generation**: For each augmented spectrum, compute photometry using NIRCam filter throughput curves, introducing Gaussian noise to simulate observational uncertainties.  
+5. **AutoML Training**: Train an ensemble of gradient-boosted decision trees (using AutoGluon) to map sparse photometry to PCA latent coefficients.  
+6. **Spectral Reconstruction**: For new photometric observations, use the trained AutoML model to predict latent coefficients, then apply inverse PCA to reconstruct the full spectra.  
+7. **Taxonomic Classification**: Classify the spectral type by operating on the latent space, determining the probability distribution over predefined taxonomic groups.  
+8. **Outlier Detection**: Identify unusual spectral types by analyzing the posterior probabilities from the taxonomic classifier.

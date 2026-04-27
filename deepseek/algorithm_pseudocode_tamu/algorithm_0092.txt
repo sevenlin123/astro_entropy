@@ -1,0 +1,96 @@
+```pseudocode
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+    - Photometric measurements (sparse_photometry)
+    - Pre-trained Principal Component Analysis (PCA) model
+    - Synthetic training data augmented with Kernel Density Estimation (KDE)
+    - AutoML regressor trained on photometric to latent space mapping
+    - Taxonomy classifier
+
+Output:
+    - Reconstructed spectrum (full_spectrum)
+    - Probabilistic taxonomic classification (taxonomy_probs)
+    - Uncertainty quantification (credible_intervals)
+
+1. **Forward Modeling and Synthetic Photometry Generation**:
+    a. For each spectrum in the training set, convolve it with the filter transmission curves of the target instrument (e.g., JWST/NIRCam).
+    b. Inject Gaussian noise with relative uncertainty (20%) into the synthetic photometry to simulate real-world observations.
+    c. Use the noisy synthetic photometry as input to train the AutoML regressor.
+
+2. **Training Phase**:
+    a. Project the seed spectra onto the PCA basis to obtain latent coefficients.
+    b. Augment the latent space using KDE with a Gaussian kernel and bandwidth h ~ 0.5 to create a smooth manifold.
+    c. Train the AutoML regressor (ensemble of gradient-boosted decision trees) to map sparse photometry to latent coefficients.
+    d. Train a secondary AutoML classifier to partition the latent space into taxonomic classes.
+
+3. **Inference Phase**:
+    a. For a new photometric observation:
+        i. Pass the sparse_photometry through the trained AutoML regressor to predict latent coefficients.
+        ii. Apply the inverse PCA transform to reconstruct the full spectrum (full_spectrum).
+    b. Generate an ensemble of reconstructions by sampling the joint posterior distribution of latent coefficients using a Gaussian Copula to preserve dependencies.
+    c. Extract credible intervals from the ensemble for uncertainty quantification.
+    d. Pass the predicted latent coefficients to the taxonomy classifier to obtain taxonomic probabilities (taxonomy_probs).
+
+4. **Validation and Application**:
+    a. Perform leave-one-out cross-validation (LOOCV) to assess reconstruction fidelity and uncertainty calibration.
+    b. Evaluate filter configurations for JWST/NIRCam to optimize spectral information content.
+    c. Test framework's capability to reconstruct rare spectral types by constraining photometry to select low-probability intermediate models.
+
+5. **Output**:
+    a. Return full_spectrum, taxonomy_probs, and credible_intervals for each object.
+```
+
+```pseudocode
+Function: Forward Modeling
+Input:
+    - Reference spectrum (spectrum)
+    - Instrument filter curves (filters)
+    - Noise level (noise_level)
+
+Output:
+    - Noisy synthetic photometry (synthetic_photometry)
+
+1. Convolve spectrum with each filter curve to obtain flux in each band.
+2. Add Gaussian noise with standard deviation proportional to noise_level to each flux.
+3. Return synthetic_photometry.
+
+Function: Training
+Input:
+    - Seed spectra (seed_spectra)
+    - Labels (labels)
+    - Number of latent dimensions (num_latent)
+    - KDE bandwidth (h)
+
+Output:
+    - Trained AutoML regressor (regressor)
+    - Trained AutoML classifier (classifier)
+    - PCA model (pca_model)
+
+1. Perform PCA on seed_spectra to obtain principal components.
+2. Project seed_spectra onto PCA basis to get latent_coefficients.
+3. Augment latent_coefficients using KDE with Gaussian kernel and bandwidth h.
+4. Generate synthetic_photometry for each augmented spectrum using Forward Modeling.
+5. Train regressor to map synthetic_photometry to latent_coefficients.
+6. Train classifier to map latent_coefficients to labels.
+7. Save pca_model, regressor, and classifier for inference.
+
+Function: Inference
+Input:
+    - Photometric observation (sparse_photometry)
+    - Trained PCA model (pca_model)
+    - Trained AutoML regressor (regressor)
+    - Trained AutoML classifier (classifier)
+
+Output:
+    - Reconstructed spectrum (full_spectrum)
+    - Taxonomic probabilities (taxonomy_probs)
+    - Credible intervals (credible_intervals)
+
+1. Predict latent coefficients using regressor on sparse_photometry.
+2. Apply inverse PCA transform to obtain full_spectrum.
+3. Generate ensemble of reconstructions using Gaussian Copula sampling from latent posterior.
+4. Compute credible_intervals from the ensemble.
+5. Classify latent coefficients using classifier to obtain taxonomy_probs.
+6. Return full_spectrum, taxonomy_probs, and credible_intervals.
+```

@@ -1,0 +1,37 @@
+**Algorithm: Spectral Reconstruction from Sparse Photometry**
+
+**Inputs:**
+- `ReferenceSpectra`: Collection of high-resolution TNO spectra.
+- `PhotometryData`: Set of sparse photometric measurements to reconstruct.
+- `FilterProfiles`: Instrument-specific filter profiles (e.g., JWST NIRCam).
+
+**Outputs:**
+- `ReconstructedSpectra`: High-resolution spectra derived from photometric data.
+
+**Steps:**
+
+1. **PCA Training:**
+   - Compute Principal Component Analysis (PCA) on `ReferenceSpectra` to extract principal components.
+   - For each spectrum in `ReferenceSpectra`, compute its corresponding PCA coefficients.
+
+2. **Synthetic Data Generation:**
+   - Perform Kernel Density Estimation (KDE) on the PCA coefficients from `ReferenceSpectra`.
+   - Sample synthetic PCA coefficients from the KDE to create augmented data.
+   - For each synthetic coefficient vector:
+     - Reconstruct a full spectrum using inverse PCA.
+     - Convolve the spectrum with `FilterProfiles` to simulate photometric measurements.
+     - Add noise (e.g., 20% reflectance uncertainty) to the simulated photometry.
+
+3. **Training the AutoML Regressor:**
+   - Combine original photometric data from `ReferenceSpectra` with the generated synthetic photometric data.
+   - Split the combined dataset into training and validation subsets.
+   - Train an AutoML regressor to predict PCA coefficients from photometric measurements.
+
+4. **Spectral Reconstruction:**
+   - For each object in `PhotometryData`:
+     - Use the trained regressor to predict PCA coefficients from its photometric measurements.
+     - Apply the inverse PCA transformation to obtain the reconstructed high-resolution spectrum.
+
+**End Algorithm**
+
+This pseudocode outlines the core computational steps for reconstructing high-resolution spectra from sparse photometric data using a probabilistic framework based on PCA and AutoML regression.

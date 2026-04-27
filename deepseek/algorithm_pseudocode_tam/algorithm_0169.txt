@@ -1,0 +1,36 @@
+To implement the core reconstruction framework described in the paper, the following steps are performed:
+
+1. **Data Preparation**:
+   - Collect a set of reference TNO spectra.
+   - Exclude outliers and singular cases (e.g., Haumea family members, Centaurs) to ensure a representative training sample.
+   - Perform Principal Component Analysis (PCA) on the selected spectra to derive principal components (latent space).
+
+2. **Prior Definition**:
+   - Use Kernel Density Estimation (KDE) on the latent space derived from PCA to create a smooth probability distribution.
+   - Determine the optimal bandwidth for KDE to ensure a balance between local fidelity and global smoothness.
+
+3. **Synthetic Data Generation**:
+   - Augment the training set by generating synthetic spectra using the KDE-defined prior.
+   - Convolve these synthetic spectra with the filter responses of the target instrument (e.g., JWST/NIRCam) to produce synthetic photometric measurements.
+   - Inject Gaussian noise into the synthetic photometry to simulate realistic observational uncertainties.
+
+4. **Model Training**:
+   - Train an AutoML regressor (e.g., Gradient-Boosted Decision Trees) to map sparse photometric inputs to the latent space.
+   - Train a secondary classifier within the latent space to categorize spectra into taxonomic types.
+
+5. **Reconstruction Process**:
+   - For new photometric observations, use the trained regressor to predict latent coefficients.
+   - Apply the inverse PCA transform to reconstruct the full spectrum.
+   - Optionally, use the taxonomic classifier to determine the spectral type.
+
+6. **Validation**:
+   - Perform Leave-One-Out Cross-Validation (LOOCV) to assess reconstruction accuracy and uncertainty propagation.
+   - Measure the RMSE between predicted and true latent coefficients.
+
+7. **Survey Optimization**:
+   - Evaluate different filter combinations to identify those that minimize RMSE, optimizing future photometric surveys.
+
+8. **Outlier Detection**:
+   - Identify rare spectral types by constraining photometry to specific bands and detecting anomalies in the latent manifold.
+
+This algorithm bridges the gap between sparse photometric data and detailed spectral reconstruction, enabling statistical rigor and practical applications in taxonomy, survey planning, and outlier detection.

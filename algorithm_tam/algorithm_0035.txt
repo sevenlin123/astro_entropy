@@ -1,0 +1,30 @@
+The algorithm involves several key steps to reconstruct the spectrum of trans-Neptunian objects (TNOs) using sparse photometric data. Here's a structured breakdown:
+
+1. **Principal Component Analysis (PCA) Training**:
+   - A set of reference TNO spectra is used to perform PCA, creating a low-dimensional latent space. This space captures the main variations in the spectral data.
+
+2. **Density Estimation of Latent Space**:
+   - Non-parametric Kernel Density Estimation (KDE) is applied to the PCA latent space to create a smooth probability distribution. This helps in generating synthetic data to augment the training set.
+
+3. **Synthetic Photometry Generation**:
+   - For each augmented spectrum, synthetic photometry is created by convolving the spectrum with the filter curves of the target instrument (e.g., JWST/NIRCam). Noise is added to simulate realistic photometric uncertainties.
+
+4. **Model Training**:
+   - An AutoML regressor (e.g., Gradient Boosted Decision Trees) is trained using the synthetic photometry and corresponding latent coefficients. This model maps sparse photometry to latent space coefficients.
+
+5. **Reconstruction Process**:
+   - For new photometric data, the trained model predicts latent coefficients. These are inverted using PCA to reconstruct the full spectrum.
+
+6. **Uncertainty Quantification**:
+   - Markov Chain Monte Carlo (MCMC) sampling is used to estimate uncertainties in the reconstructed spectrum, considering both photometric noise and latent space variability.
+
+7. **Taxonomic Classification**:
+   - A secondary classifier operates on the latent space to predict the taxonomic type (e.g., H₂O, CO₂, Organic) of the object.
+
+8. **Cross-Validation and Performance Metrics**:
+   - Leave-One-Out Cross-Validation (LOOCV) is performed to assess reconstruction accuracy using RMSE, MAPE, and Cosine Similarity. Empirical credible interval coverage is also evaluated.
+
+9. **Survey Optimization and Outlier Detection**:
+   - The framework identifies optimal photometric filter configurations for maximizing spectral information. It also detects outliers by assessing the posterior probability in the latent space.
+
+This structured approach efficiently transforms sparse photometric data into meaningful spectral reconstructions, aiding in the study of TNOs with limited spectroscopic observations.

@@ -1,0 +1,18 @@
+The algorithm involves using a probabilistic framework with Principal Component Analysis (PCA) and machine learning to reconstruct spectra from sparse photometry. Here's a concise breakdown of the steps:
+
+1. **Training Phase**:
+   - Use a set of reference TNO spectra to perform PCA, capturing the main spectral variations in a lower-dimensional latent space.
+   - Augment the latent space using Kernel Density Estimation (KDE) to create a smooth probability distribution.
+   - Train an AutoML regressor (e.g., Gradient-Boosted Decision Trees) to map sparse photometry to the latent space coefficients.
+   - Train a classifier within the latent space to identify taxonomic classes.
+
+2. **Reconstruction Phase**:
+   - For new photometric observations, use the trained AutoML regressor to predict latent coefficients.
+   - Project these coefficients back to the full spectrum using inverse PCA transformation to get the reconstructed spectrum.
+   - Simultaneously, use the classifier to determine the taxonomic type based on the latent space.
+
+3. **Validation and Applications**:
+   - Validate using LOOCV to assess reconstruction accuracy and uncertainty.
+   - Apply the framework to optimize survey strategies and detect rare spectral types.
+
+The algorithm efficiently bridges photometry and spectroscopy, enabling detailed analysis of TNO compositions with minimal data.

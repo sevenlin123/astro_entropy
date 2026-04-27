@@ -1,0 +1,22 @@
+```
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. Training Phase:
+   a. Input: Collection of near-IR spectra of TNOs.
+   b. Compute Principal Component Analysis (PCA) on the spectral dataset.
+   c. Output: Set of principal components capturing major spectral variability.
+
+2. Processing Each Object:
+   a. For each TNO:
+      i. Input: Sparse photometric measurements.
+      ii. Project photometric measurements into PCA latent space.
+      iii. Perform Bayesian inference in the latent space to reconstruct full spectrum.
+      iv. Consider measurement uncertainties during reconstruction.
+
+3. Uncertainty Propagation:
+   a. For each reconstructed spectrum:
+      i. Propagate photometric measurement uncertainties through Bayesian model.
+      ii. Determine uncertainty ranges in reconstructed spectra.
+
+Output: Reconstructed spectra with associated uncertainties for each TNO.
+```

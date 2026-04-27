@@ -1,0 +1,64 @@
+### Pseudocode Implementation of the Core Reconstruction Framework
+
+```python
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+    - Observed photometric measurements m (sparse)
+    - Training set of reference spectra S_train (matrix)
+    - Number of principal components K
+    - Photometric uncertainties σ
+
+Output:
+    - Reconstructed spectrum S_recon
+    - Classification probabilities for taxonomic classes
+    - Uncertainty estimates for spectral features
+
+Steps:
+
+1. **Preprocessing**:
+    a. Normalize the training spectra S_train to reflectance units.
+    b. Extract the effective throughput curves of the photometric filters used.
+
+2. **Principal Component Analysis (PCA)**:
+    a. Compute PCA on S_train to obtain:
+        - Eigenvalues and eigenvectors (principal components).
+        - Latent coefficients for each spectrum in S_train.
+    b. Select the top K principal components based on explained variance.
+
+3. **Density Estimation (Kernel Density Estimation, KDE)**:
+    a. Project the training spectra onto the K-dimensional latent space.
+    b. Use Gaussian KDE to estimate the probability density of the latent coefficients.
+    c. Determine the optimal bandwidth h through cross-validation.
+
+4. **Synthetic Data Augmentation**:
+    a. Sample new latent vectors from the estimated KDE distribution.
+    b. Map these latent vectors back to full spectra using inverse PCA.
+    c. Add Gaussian noise with relative uncertainty σ to simulate photometric errors.
+
+5. **Training the AutoML Regressor**:
+    a. Use the synthetic data (augmented latent vectors and noisy photometry) to train an ensemble of gradient-boosted decision trees.
+    b. The regressor maps observed photometry m to latent coefficients.
+
+6. **Forward Modeling for Likelihood Approximation**:
+    a. For each spectrum S, compute the expected photometric measurements by convolving S with the filter throughput curves.
+    b. Inject noise into these measurements to simulate real-world photometric data.
+
+7. **Reconstruction Process**:
+    a. For a new photometric observation m:
+        i. Use the trained regressor to predict the latent coefficients z_hat.
+        ii. Apply Gaussian Copula sampling to account for correlations in the latent space.
+        iii. Transform the sampled latent coefficients back to full spectra using inverse PCA.
+    b. Calculate the posterior mean and credible intervals for S_recon.
+
+8. **Taxonomic Classification**:
+    a. Train a separate classifier on the latent space using the labeled training spectra.
+    b. For each reconstructed spectrum, predict the probability distribution over taxonomic classes.
+
+9. **Validation**:
+    a. Perform leave-one-out cross-validation (LOOCV) to assess reconstruction fidelity and classification accuracy.
+
+End of Algorithm
+```
+
+This pseudocode outlines the core computational steps of the probabilistic spectral reconstruction framework described in the paper. It emphasizes the integration of PCA, KDE, AutoML regression, and Bayesian inference for reconstructing high-resolution spectra from sparse photometric data.

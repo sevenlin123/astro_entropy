@@ -1,0 +1,12 @@
+The algorithm begins by gathering and cleaning sparse photometric data of trans-Neptunian objects. It then applies Principal Component Analysis (PCA) to a set of near-infrared spectra to determine the essential components for spectral variability. Using Bayesian methods, it infers the coefficients of these components from the photometric data. A probabilistic model of the spectral manifold is built, enabling the reconstruction of full spectra and propagation of uncertainties. The algorithm also optimizes survey filters and detects outliers to reconstruct rare spectral types. Finally, it outputs reconstructed spectra with uncertainties and optimal filter recommendations. 
+
+**Answer:**
+
+1. **Preprocess Data**: Gather and clean sparse photometric measurements of TNOs.
+2. **PCA**: Apply PCA to reference spectra to capture essential spectral variability.
+3. **Bayesian Inference**: Estimate coefficients using Bayesian methods in the reduced PCA space.
+4. **Construct Spectral Manifold**: Model the spectral manifold based on PCA components.
+5. **Reconstruct Spectra**: Reconstruct full spectra with uncertainty propagation.
+6. **Optimize Surveys**: Analyze and select optimal JWST/NIRCam filter configurations.
+7. **Detect Outliers and Rare Types**: Identify outliers and reconstruct rare spectral types.
+8. **Output Results**: Provide reconstructed spectra, uncertainties, and optimal filter recommendations.

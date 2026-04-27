@@ -1,0 +1,99 @@
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+#### 1. **Preprocessing and Initialization**
+   - **Input:** Sparse photometric measurements (multi-band observations)
+   - **Output:** Latent space representation for spectral reconstruction
+
+#### 2. **Principal Component Analysis (PCA)**
+   - **Training Phase:**
+     - Train PCA on a reference set of TNO spectra.
+     - Extract principal components (eigenvectors) to form a low-dimensional latent space.
+     - Number of principal components (K) determined by LOOCV (typically 4-5 for classification, 8-10 for higher fidelity).
+   - **Forward Modeling:**
+     - Simulate synthetic photometry by convolving spectra with filter throughput curves (e.g., JWST/NIRCam).
+     - Inject Gaussian noise (20% relative uncertainty) into synthetic photometry to simulate real-world observational noise.
+
+#### 3. **Kernel Density Estimation (KDE) Augmentation**
+   - **Purpose:** Regularize latent space distribution for training stability.
+   - Apply KDE to the PCA-compressed training spectra to create a smooth, continuous manifold.
+   - Bandwidth (h) tuned empirically (found h ≈ 0.5 provides optimal smoothing).
+
+#### 4. **AutoML Regression (Encoder Training)**
+   - **Training Data:**
+     - Pairs of noisy synthetic photometry and corresponding latent coefficients.
+   - **Model Selection:**
+     - Use AutoGluon to train an ensemble of Gradient Boosted Decision Trees (GBDTs) to regress photometric inputs to latent space coefficients.
+     - Hyperparameters optimized automatically during training.
+
+#### 5. **Bayesian Inference and Posterior Sampling**
+   - **For New Observations:**
+     - Pass sparse photometry through trained AutoML regressor to predict latent coefficients.
+     - Apply Gaussian Copula sampling to generate an ensemble of latent coefficient realizations, preserving dependencies between components.
+   - **Inverse PCA Transform:**
+     - Project latent coefficients back to full spectral space using inverse PCA.
+   - **Uncertainty Quantification:**
+     - Compute 95% credible intervals from posterior samples.
+
+#### 6. **Taxonomic Classification**
+   - **Latent Space Clustering:**
+     - Train a secondary AutoML classifier on the PCA-compressed training spectra.
+     - Classify new observations based on their latent coefficients, providing probability distributions over taxonomic classes.
+
+#### 7. **Performance Evaluation**
+   - **Leave-One-Out Cross-Validation (LOOCV):**
+     - Remove one spectrum from training, reconstruct it using the pipeline, and assess against ground truth.
+   - **Metrics:**
+     - Reconstruction Error (MAE)
+     - Credible Interval Coverage
+     - Classification Accuracy
+
+#### 8. **Applications**
+   - **Survey Optimization:**
+     - Evaluate filter configurations based on Fisher information matrix to maximize spectral disambiguation.
+   - **Outlier Detection:**
+     - Identify objects with posterior probabilities significantly deviating from the manifold.
+
+### Pseudocode Representation
+
+```python
+Algorithm: Probabilistic_Spectral_Reconstruction(photometry)
+
+    // Step 1: Initialize PCA with reference spectra
+    Initialize_PCA(reference_spectra)
+    
+    // Step 2: Generate synthetic training data with noise
+    Generate_Synthetic_Data(reference_spectra, filter_curves, noise_level=0.2)
+    
+    // Step 3: Train KDE on PCA-compressed reference spectra
+    Train_KDE(reference_latents, bandwidth=0.5)
+    
+    // Step 4: Train AutoML regressor (Encoder) mapping photometry to latents
+    Train_AutoML(synthetic_photometry, reference_latents)
+    
+    // Step 5: Process new photometric observation
+    latent_prediction = AutoML_Predict(new_photometry)
+    
+    // Step 6: Sample from posterior distribution using Gaussian Copula
+    latent_samples = Gaussian_Copula_Sample(latent_prediction)
+    
+    // Step 7: Inverse transform to reconstruct full spectrum
+    reconstructed_spectrum = Inverse_PCA_Transform(latent_samples)
+    
+    // Step 8: Compute credible intervals and classification
+    credible_intervals = Calculate_Credible_Intervals(reconstructed_spectrum)
+    taxonomic_class = Classify_Latent(latent_prediction)
+    
+    Return reconstructed_spectrum, credible_intervals, taxonomic_class
+```
+
+### Explanation
+
+- **Initialization:** The algorithm starts by training a PCA model on a reference set of TNO spectra to define a low-dimensional latent space.
+- **Synthetic Data Generation:** Noisy synthetic photometry is created by forward modeling the reference spectra through the target instrument's filters.
+- **KDE Training:** A KDE is trained on the PCA-compressed reference spectra to smooth the latent space distribution, aiding the regression model.
+- **AutoML Training:** An AutoML regressor is trained to map sparse photometry to the latent space, using synthetic data for robustness.
+- **Posterior Sampling:** For new observations, the model predicts latent coefficients and samples from the posterior distribution using a Gaussian Copula to maintain dependencies.
+- **Reconstruction and Classification:** The latent samples are inverted to reconstruct full spectra, and the latent space is used for taxonomic classification.
+- **Evaluation:** The reconstruction and classification accuracy are assessed through LOOCV, providing quantitative performance metrics.
+
+This structured approach efficiently bridges the gap between sparse photometric data and detailed spectral reconstruction, enabling robust characterization of TNO surface compositions.

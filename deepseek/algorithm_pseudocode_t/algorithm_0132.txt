@@ -1,0 +1,31 @@
+```plaintext
+Algorithm PRS (Probabilistic Reconstruction Spectroscopy)
+
+Stage 1: Training Phase
+    Initialize Gaussian Process (GP) with reference spectra
+        Input: Reference spectra S = {λ_i, F_i}, i = 1..N
+        For each reference spectrum:
+            Set kernel parameters θ
+            Train GP using S
+
+Stage 2: Forward Modeling
+    For each object O:
+        Input: Observed photometric data D = {m_j, σ_j}, j = 1..M
+        For each photometric band:
+            Use trained GPs to predict flux F(λ_j)
+            Compute likelihood p(D|F)
+        Combine across bands considering uncertainties
+
+Stage 3: Bayesian Inversion
+    For each object O:
+        Set prior probabilities P(spectral type) 
+        For each spectral type s:
+            Compute posterior probability P(s|D) using Bayes' theorem
+            P(s|D) ∝ p(D|s) * P(s)
+        Select spectral type with maximum posterior probability
+        Compute outlier probability based on posterior spread
+        If outlier probability > threshold:
+            Flag as outlier
+
+Output: Most probable spectral type, posterior probabilities, outlier status
+```

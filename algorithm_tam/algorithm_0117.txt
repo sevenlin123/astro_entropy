@@ -1,0 +1,25 @@
+**Algorithm Steps:**
+
+1. **Preprocess Reference Spectra with PCA**: 
+   - Extract principal components from a set of reference TNO spectra to define a low-dimensional latent space.
+
+2. **Define Latent Space with KDE**:
+   - Use Kernel Density Estimation (KDE) on the PCA coefficients to create a smooth prior distribution.
+
+3. **Generate Synthetic Photometry**:
+   - Convolve each augmented spectrum with the instrument's filter curves (e.g., JWST/NIRCam) to produce synthetic photometric measurements.
+
+4. **Simulate Observational Noise**:
+   - Add a relative uncertainty (e.g., 20%) to the synthetic photometry to account for realistic observational noise.
+
+5. **Train AutoML Regressor**:
+   - Use an ensemble of gradient-boosted decision trees (AutoML) to map the noisy photometric inputs to the latent PCA coefficients.
+
+6. **Inference Phase**:
+   - For new photometric observations, pass them through the trained regressor to predict the posterior PCA coefficients.
+
+7. **Reconstruct Full Spectrum**:
+   - Apply the inverse PCA transform to the predicted coefficients to obtain the full reconstructed spectrum.
+
+8. **Taxonomic Classification**:
+   - Use a trained classifier on the latent coefficients to determine the probability distribution over spectral types, identifying the taxonomic classification.

@@ -1,0 +1,34 @@
+**Algorithm for Probabilistic Spectral Reconstruction of TNOs from Sparse Photometry**
+
+1. **Preprocessing and Training Data Setup**
+   - Collect a set of reference TNO spectra from the DiSCo-TNO sample, focusing on dominant taxonomic classes (e.g., Water-type, CO₂-type, Organics-type).
+   - Exclude rare spectral types and outliers to define a clean training set for PCA.
+
+2. **Principal Component Analysis (PCA)**
+   - Perform PCA on the selected reference spectra to derive principal components.
+   - Use the top 4-5 principal components for initial spectral manifold definition, capturing dominant spectral variations.
+
+3. **Data Augmentation**
+   - Apply Kernel Density Estimation (KDE) on the PCA latent coefficients to generate synthetic spectra, expanding the training set for stable regression.
+   - Inject Gaussian noise (e.g., 20% relative reflectance uncertainty) into synthetic photometry to simulate realistic observational conditions.
+
+4. **Automated Machine Learning (AutoML) Training**
+   - Train an AutoML regressor (e.g., Gradient Boosted Decision Trees) to map sparse photometric inputs to PCA latent coefficients.
+   - Simultaneously train a classifier on the latent space to predict taxonomic categories.
+
+5. **Bayesian Inference for Spectral Reconstruction**
+   - For new photometric observations, use the trained AutoML regressor to predict latent coefficients.
+   - Project these coefficients back to full spectral space via inverse PCA transformation to obtain reconstructed spectra.
+
+6. **Classification and Uncertainty Quantification**
+   - Classify the object into predefined spectral types using the latent space model.
+   - Propagate uncertainties from photometric measurements to reconstructed spectra, providing credible intervals for validation.
+
+7. **Leave-One-Out Cross-Validation (LOOCV)**
+   - Evaluate the framework by iteratively removing each spectrum from the training set, recalibrating the model, and assessing reconstruction accuracy and classification performance.
+
+8. **Survey Optimization and Outlier Detection**
+   - Identify optimal filter configurations for future surveys by evaluating information content.
+   - Detect unusual spectral types by flagging objects with reconstructed spectra outside high-probability latent regions.
+
+This algorithm enables high-fidelity spectral reconstruction and taxonomic classification from sparse photometric data, bridging the gap between photometry and spectroscopy for TNO studies.

@@ -1,0 +1,10 @@
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. Preprocess the near-infrared spectra of trans-Neptunian objects into a dataset.
+2. Perform Principal Component Analysis (PCA) on the dataset to derive principal components capturing the main spectral variations.
+3. For the object of interest:
+   a. Use its sparse photometric measurements.
+   b. Project these measurements into the PCA space.
+   c. Perform Bayesian inference in the PCA space to estimate the underlying spectral components.
+4. Reconstruct the full spectrum using the estimated PCA coefficients.
+   a. Propagate the uncertainties from the Bayesian inference to the reconstructed spectrum.

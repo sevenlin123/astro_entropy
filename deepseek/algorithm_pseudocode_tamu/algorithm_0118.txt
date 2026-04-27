@@ -1,0 +1,47 @@
+### Algorithm: Probabilistic Spectral Reconstruction Framework for TNOs from Sparse Photometry
+
+**Input:**  
+- `Training_Spectra`: Set of reference TNO spectra.  
+- `Photometry_Data`: Sparse photometric measurements of TNOs.  
+- `Filters`: List of photometric filters used (e.g., JWST/NIRCam filters).  
+
+**Output:**  
+- `Reconstructed_Spectra`: Full spectral reconstruction for each TNO.  
+- `Taxonomic_Classification`: Probabilistic taxonomic classification for each TNO.  
+- `Uncertainty_Interval`: Credible intervals for the reconstructed spectra.  
+
+---
+
+**Step 1: Preprocessing - Principal Component Analysis (PCA)**  
+1.1. Perform PCA on `Training_Spectra` to reduce dimensionality.  
+1.2. Identify the top K principal components that capture dominant spectral variability.  
+
+**Step 2: Latent Space Definition**  
+2.1. Project `Training_Spectra` onto the top K PCA components.  
+2.2. Use Kernel Density Estimation (KDE) to model the probability distribution of the latent coefficients.  
+
+**Step 3: Training the AutoML Regressor**  
+3.1. Generate synthetic photometry for each augmented spectrum by forward modeling with filter throughput curves.  
+3.2. Inject Gaussian noise (relative uncertainty ~20%) into synthetic photometry.  
+3.3. Train an ensemble of gradient-boosted decision trees (AutoML regressor) to map sparse photometry to latent coefficients.  
+
+**Step 4: Forward Inference**  
+4.1. For each TNO's `Photometry_Data`, predict latent coefficients using the trained regressor.  
+4.2. Apply inverse PCA transform to reconstruct the full spectrum.  
+
+**Step 5: Uncertainty Quantification**  
+5.1. Sample the joint posterior distribution of latent coefficients using a Gaussian Copula.  
+5.2. Map the samples through inverse PCA to obtain credible intervals for the reconstructed spectra.  
+
+**Step 6: Taxonomic Classification**  
+6.1. Train a secondary AutoML classifier on the latent space to predict taxonomic probabilities.  
+6.2. Classify each TNO based on predicted probabilities.  
+
+**Step 7: Performance Validation**  
+7.1. Conduct leave-one-out cross-validation (LOOCV) to evaluate reconstruction accuracy, RMSE, Pearson correlation, AUC, and Bhattacharyya distance.  
+7.2. Validate empirical coverage of credible intervals.  
+7.3. Assess classification accuracy using confusion matrix and AUC.  
+
+---
+
+**End of Algorithm**

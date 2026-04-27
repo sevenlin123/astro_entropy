@@ -1,0 +1,45 @@
+**Algorithm: Probabilistic Spectral Reconstruction Framework**
+
+**Step-by-Step Description:**
+
+1. **Data Preparation:**
+   - Obtain a reference set of TNO spectra (e.g., 51 observed spectra) representative of known taxonomic classes (e.g., H₂O, CO₂, Organic, Methanol).
+   - Exclude rare or outlier spectral types to focus on dominant classes.
+
+2. **Principal Component Analysis (PCA):**
+   - Apply PCA to the reference spectra to derive a low-dimensional latent space.
+   - Determine the number of principal components (e.g., 4-5 for classification, 8-10 for improved fidelity).
+
+3. **Kernel Density Estimation (KDE) Augmentation:**
+   - Project the reference spectra onto the PCA latent space.
+   - Use KDE to smooth and fill gaps in the latent space, creating a continuous manifold that approximates the spectral distribution of the training set.
+
+4. **Synthetic Photometry Generation:**
+   - Forward model the augmented spectra through the target instrument's filters (e.g., JWST/NIRCam) to generate synthetic photometric measurements.
+   - Introduce Gaussian noise (e.g., 20% relative uncertainty) to simulate realistic photometric observations.
+
+5. **Training the AutoML Regressor:**
+   - Use the synthetic photometry and corresponding latent coefficients as training data.
+   - Train an ensemble of Gradient-Boosted Decision Trees (GBDTs) to regress from sparse photometry to latent space coordinates.
+
+6. **Inverse PCA Transform:**
+   - For new photometric observations, use the trained regressor to predict latent coefficients.
+   - Apply the inverse PCA transformation to reconstruct the full spectrum.
+
+7. **Taxonomic Classification:**
+   - Train a secondary classifier on the latent space to predict taxonomic labels (e.g., H₂O, CO₂, Organic, Methanol) from latent coefficients.
+   - Classify new objects by projecting their latent coefficients and predicting the most probable taxonomic group.
+
+8. **Validation and Evaluation:**
+   - Perform leave-one-out cross-validation (LOOCV) to assess reconstruction fidelity (RMSE) and taxonomic accuracy.
+   - Compute empirical credible interval coverage to verify probabilistic constraints on reconstructed spectra.
+
+9. **Survey Optimization and Outlier Detection:**
+   - Analyze filter sensitivity to optimize photometric surveys for maximal information yield.
+   - Detect outliers by identifying latent coefficients in low-density regions of the manifold.
+
+**Final Output:**
+- Reconstructed high-resolution spectra from sparse photometry.
+- Probabilistic taxonomic classification of TNOs.
+- Identification of outliers for follow-up spectroscopy.
+- Optimized filter configurations for future surveys.

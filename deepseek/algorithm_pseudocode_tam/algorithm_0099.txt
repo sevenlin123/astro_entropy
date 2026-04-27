@@ -1,0 +1,26 @@
+```
+Initialize:
+    Read spectral library S
+    Read photometric data P
+    Preprocess S and P into appropriate formats
+    
+Training:
+    Perform PCA on S to obtain principal components (PCs)
+    Generate synthetic latent vectors using KDE based on PCs of S
+    Forward-model synthetic spectra through instrument response functions to obtain synthetic photometry
+    Add Gaussian noise (e.g., 20%) to synthetic photometry
+    Train AutoML regressor to map synthetic photometry to latent PCs
+    Train taxonomic classifier on latent space labels derived from S
+    
+Testing:
+    For each object in test set:
+        Input photometric data
+        Predict latent PCs using AutoML regressor
+        Reconstruct spectrum via inverse PCA transformation
+        Classify taxonomic type using classifier
+        
+Output:
+    For each object:
+        Reconstructed spectrum R
+        Taxonomic classification probabilities C
+```

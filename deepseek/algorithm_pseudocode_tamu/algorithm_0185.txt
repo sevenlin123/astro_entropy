@@ -1,0 +1,41 @@
+```
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+    - Observed sparse photometric measurements m
+    - Pre-trained PCA model with principal components
+    - Synthetic photometry database from forward modeling
+    - Training set of reference spectra S_train
+
+Output:
+    - Reconstructed spectrum S_recon
+    - Posterior distribution of latent coefficients z
+    - Probabilistic taxonomic classification
+
+1. Latent Space Definition:
+    a. Project reference spectra S_train into PCA space to obtain latent coefficients z_train.
+    b. Augment z_train using Kernel Density Estimation (KDE) to create synthetic latent vectors.
+    c. Construct continuous latent manifold representing plausible spectral variations.
+
+2. Training Phase:
+    a. Generate synthetic photometry for each augmented latent vector by forward modeling through target instrument filters (e.g., JWST/NIRCam).
+    b. Inject Gaussian noise (relative uncertainty ~20%) into synthetic photometry to simulate real-world observational uncertainties.
+    c. Use AutoML regressor (ensemble of gradient-boosted decision trees) to train mapping from photometric inputs m to latent coefficients z.
+
+3. Forward Inference:
+    a. For new photometric observations m_new:
+        i. Predict latent coefficients z_posterior using trained AutoML regressor.
+        ii. Sample from joint posterior distribution of z using Gaussian Copula framework to preserve physical correlations.
+    b. Decode sampled latent coefficients z into full spectral reconstructions S_recon via inverse PCA transform.
+
+4. Taxonomic Classification:
+    a. Train secondary AutoML classifier on latent manifold to predict taxonomic probabilities.
+    b. For each S_recon, compute probability distribution over spectral types (e.g., H₂O, CO₂, Organic, Methanol).
+
+5. Performance Metrics:
+    a. Compute LOOCV reconstruction error between S_recon and true spectra.
+    b. Validate empirical credible interval coverage of reconstructed features.
+    c. Measure taxonomic classification success rate.
+
+End Algorithm
+```

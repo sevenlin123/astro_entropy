@@ -1,0 +1,75 @@
+```python
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. **Input Data Preparation**
+   - Obtain sparse photometric measurements (fluxes) for a target object.
+   - Define the set of NIRCam filters used for observation.
+
+2. **Define Latent Space via PCA**
+   - Train PCA on a reference dataset of TNO spectra.
+   - Compute principal components (PCs) representing spectral variability.
+   - Select optimal number of PCs (K) based on explained variance and cross-validation.
+
+3. **Data Augmentation with KDE**
+   - Project reference spectra onto the PCA latent space.
+   - Use Gaussian KDE to generate synthetic latent vectors, creating a continuous manifold.
+   - Ensure smoothing parameter (h) balances local fidelity and global smoothness.
+
+4. **Forward Modeling and Simulation**
+   - Simulate photometric measurements for each augmented spectrum.
+   - Convolve spectra with filter responses and add Gaussian noise (relative uncertainty ~20%).
+
+5. **Training the AutoML Regressor**
+   - Train an ensemble of gradient-boosted decision trees to map photometric inputs to latent coefficients.
+   - Use synthetic data for robust training in low-sample regime.
+
+6. **Reconstruct Spectra**
+   - For new photometric data, predict latent coefficients using the trained regressor.
+   - Apply inverse PCA transform to obtain full spectral reconstruction.
+   - Sample joint posterior distribution of latent variables using Gaussian Copula to quantify uncertainties.
+
+7. **Taxonomic Classification**
+   - Predict taxonomic probabilities by projecting latent coefficients into a trained classifier.
+   - Classify into predefined spectral types (e.g., H₂O, CO₂, Organic, Methanol).
+
+8. **Output**
+   - Provide reconstructed spectrum with uncertainty intervals.
+   - Return taxonomic probabilities for classification.
+```
+
+```pseudocode
+Algorithm Steps:
+
+1. **PCA Training and Dimension Reduction**
+   - Compute PCA on reference spectra to obtain principal components (eigenvectors and scores).
+   - Determine the optimal number of principal components (K) via cross-validation.
+
+2. **Generate Synthetic Training Data**
+   - Project reference spectra into the latent PCA space.
+   - Apply KDE to create a smooth probability distribution in the latent space.
+   - Generate synthetic latent vectors to augment the training set.
+
+3. **Simulate Observed Photometry**
+   - Forward-model each synthetic spectrum through the NIRCam filter set.
+   - Add Gaussian noise to simulate realistic photometric uncertainties.
+
+4. **Train Machine Learning Model**
+   - Use AutoML to train a regressor mapping noisy photometry to latent coefficients.
+   - Validate model performance using LOOCV on the reference dataset.
+
+5. **Inference for New Observations**
+   - For a new object, pass its photometric measurements through the trained regressor.
+   - Retrieve predicted latent coefficients and project them back to the full spectrum using inverse PCA.
+
+6. **Uncertainty Propagation**
+   - Sample the joint posterior of latent variables using Gaussian Copula.
+   - Calculate credible intervals for each wavelength bin.
+
+7. **Classification**
+   - Apply a pre-trained classifier on the latent space to determine taxonomic probabilities.
+   - Assign the object to the most probable spectral class.
+
+8. **Output Results**
+   - Deliver reconstructed spectrum with uncertainty bounds.
+   - Provide taxonomic classification and confidence levels.
+```

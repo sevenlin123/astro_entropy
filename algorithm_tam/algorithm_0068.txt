@@ -1,0 +1,40 @@
+### Core Reconstruction Framework Algorithm
+
+1. **Data Preparation**:
+   - **Input**: Observed sparse photometric measurements of a TNO.
+   - **Output**: Probabilistic reconstruction of the full near-IR spectrum.
+
+2. **Principal Component Analysis (PCA)**:
+   - Train PCA on a reference set of 51 TNO spectra to define a latent space.
+   - Determine the number of principal components (typically 8–10) that capture the essential spectral variability.
+
+3. **Latent Space Definition**:
+   - Use Kernel Density Estimation (KDE) with a bandwidth of ~0.5 to create a continuous probability distribution in the latent space.
+   - Augment the training data by sampling synthetic latent vectors from this distribution.
+
+4. **Forward Modeling**:
+   - Simulate photometric measurements for each augmented spectrum by convolving with JWST/NIRCam filter curves.
+   - Inject Gaussian noise (relative uncertainty ~20%) to simulate realistic observational uncertainties.
+
+5. **AutoMLRegressor Training**:
+   - Train an ensemble of Gradient-Boosted Decision Trees (GBTs) to map sparse photometric inputs to latent coefficients.
+   - Use synthetic data with noisy photometry for robust training.
+
+6. **Bayesian Inference**:
+   - For new observations, predict latent coefficients using the trained AutoMLRegressor.
+   - Project these coefficients back to the full spectrum via inverse PCA transformation.
+
+7. **Classification**:
+   - Classify the spectrum into predefined taxonomic groups (e.g., H₂O, CO₂, Organics) by evaluating the latent space distribution.
+
+8. **Uncertainty Propagation**:
+   - Compute posterior uncertainties on the reconstructed spectrum by sampling the latent coefficient distributions.
+
+9. **Validation**:
+   - Perform leave-one-out cross-validation (LOOCV) to assess reconstruction accuracy and empirical credible interval coverage.
+
+10. **Applications**:
+    - **Survey Optimization**: Identify optimal JWST/NIRCam filter combinations based on information content.
+    - **Outlier Detection**: Detect unusual spectral types by identifying deviations from the latent manifold.
+
+**End Output**: A probabilistic reconstruction of the TNO's near-IR spectrum with associated uncertainties and taxonomic classification.

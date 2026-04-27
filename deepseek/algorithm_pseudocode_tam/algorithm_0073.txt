@@ -1,0 +1,31 @@
+```plaintext
+Algorithm: Probabilistic Spectral Reconstruction Framework for TNOs
+
+1. Compute PCA:
+   - Input: Reference TNO spectra matrix
+   - Output: PCA components (principal eigenvectors, explained variance)
+
+2. Augment Data with KDE:
+   - Input: Latent coefficients, bandwidth h
+   - Output: Smoothed latent distribution
+
+3. Simulate Photometry:
+   - Input: Augmented spectra, instrument filters, noise level
+   - Output: Synthetic photometric measurements
+
+4. Train AutoML Regressor:
+   - Input: Synthetic photometry, latent coefficients
+   - Output: Trained photometry-to-latent model
+
+5. Predict Latent Coefficients:
+   - Input: New photometric observations
+   - Output: Predicted latent coefficients
+
+6. Reconstruct Spectra:
+   - Input: Predicted latent coefficients, inverse PCA transform
+   - Output: Reconstructed high-resolution spectra
+
+7. Classify Taxonomic Type:
+   - Input: Reconstructed latent coefficients, trained classifier
+   - Output: Taxonomic probability distribution
+```

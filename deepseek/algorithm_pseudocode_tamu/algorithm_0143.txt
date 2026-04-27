@@ -1,0 +1,59 @@
+```python
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+- Training Spectra: Set of reference TNO spectra
+- Photometric Observations: Sparse photometric measurements for target objects
+- NIRCam Filters: Filter set definitions (F090W, F115W, F410M, F460M)
+
+Output:
+- Reconstructed Spectra: High-resolution spectral estimates for target objects
+- Classification Probabilities: Taxonomic classification probabilities
+
+Steps:
+
+1. **Principal Component Analysis (PCA):**
+   a. Train PCA on reference spectra to obtain principal components (PCs) and loadings.
+   b. Define latent space using the top K PCs (selected via LOOCV).
+
+2. **Data Augmentation via KDE:**
+   a. Project reference spectra onto latent space to get latent coefficients.
+   b. Use Kernel Density Estimation (KDE) to generate synthetic latent vectors, creating a continuous manifold.
+   c. Validate KDE parameters (bandwidth h ~ 0.5) to ensure smooth, physically plausible spectra.
+
+3. **Forward Modeling:**
+   a. Simulate photometric measurements for synthetic spectra using NIRCam filter responses.
+   b. Inject Gaussian noise (relative uncertainty ~20%) to account for observational errors.
+
+4. **Training AutoML Regressor:**
+   a. Train ensemble of gradient-boosted decision trees (e.g., XGBoost) to map noisy photometry to latent coefficients.
+   b. Use synthetic data (reference + augmented) for training.
+
+5. **LOOCV Validation:**
+   a. For each held-out object:
+      i. Generate synthetic photometry from true spectrum.
+      ii. Predict latent coefficients using trained regressor.
+      iii. Reconstruct spectrum via inverse PCA.
+      iv. Compute RMSE, Pearson correlation, and credible interval coverage.
+      v. Classify spectral type using latent space.
+
+6. **Taxonomic Classification:**
+   a. Train separate classifier on latent space to predict taxonomic groups (e.g., H2O, CO2, Organic, Methanol).
+   b. Output classification probabilities for each target.
+
+7. **Reconstruction Uncertainty:**
+   a. Sample posterior distribution of latent coefficients using Gaussian Copula.
+   b. Generate ensemble of reconstructed spectra to form credible intervals.
+
+8. **Survey Optimization:**
+   a. Evaluate information content of filter combinations using mutual information metrics.
+   b. Identify optimal NIRCam filter sets for maximizing reconstruction fidelity.
+
+9. **Outlier Detection:**
+   a. Perform posterior predictive checks in latent space.
+   b. Detect objects with posterior distributions inconsistent with the training manifold.
+
+End
+```
+
+This algorithm outlines the core computational steps for reconstructing TNO spectra from sparse photometry using a Bayesian framework with PCA, KDE, and AutoML.

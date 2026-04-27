@@ -1,0 +1,51 @@
+### Algorithm: Probabilistic Spectral Reconstruction Framework for TNOs from Sparse Photometry
+
+**Objective:**  
+Reconstruct high-resolution near-infrared (NIR) spectra of trans-Neptunian objects (TNOs) from sparse photometric measurements using a Bayesian framework.
+
+**Steps:**
+
+1. **Training Data Preparation:**
+   - Collect a seed set of 51 high-quality NIR spectra of TNOs belonging to dominant taxonomic classes (e.g., Water-type, CO₂-type, Organics-type).
+   - Exclude rare spectral types and outliers to maintain a "clean" latent space.
+
+2. **Principal Component Analysis (PCA):**
+   - Apply PCA to the seed spectra to extract principal components (PCs) representing dominant spectral variations.
+   - Determine the optimal number of PCs (4-5 for taxonomic classification; 8-10 for high-fidelity reconstruction).
+
+3. **Latent Space Definition:**
+   - Project the seed spectra onto the extracted PCs to form latent coefficients.
+   - Augment the latent space using Kernel Density Estimation (KDE) to create a smooth probability distribution, enabling interpolation between discrete spectra.
+
+4. **Synthetic Photometry Generation:**
+   - Convolve the augmented spectra with the filter curves of the target instrument (e.g., JWST/NIRCam) to compute synthetic photometric magnitudes.
+   - Inject Gaussian noise (20% relative uncertainty) into the synthetic photometry to simulate realistic observational uncertainties.
+
+5. **AutoML Regression Model Training:**
+   - Train an ensemble of gradient-boosted decision trees using the synthetic photometry as inputs and latent coefficients as targets.
+   - The model learns the non-linear mapping from sparse photometry to latent space.
+
+6. **Taxonomic Classifier Training:**
+   - Train a secondary AutoML classifier on the latent coefficients to predict taxonomic labels (e.g., H₂O, CO₂, Organics, Methanol).
+
+7. **Forward Inference Pipeline:**
+   - For new photometric observations:
+     - Use the trained AutoML regressor to predict latent coefficients.
+     - Project the latent coefficients through the inverse PCA transform to reconstruct the full NIR spectrum.
+     - Simultaneously, use the classifier to determine the probability distribution of taxonomic labels.
+
+8. **Validation and Evaluation:**
+   - Perform leave-one-out cross-validation (LOOCV) to assess reconstruction accuracy, empirical credible-interval coverage, and taxonomic classification confidence.
+   - Measure the information content of different filter combinations to optimize future photometric surveys.
+
+9. **Outlier Detection:**
+   - Identify objects with posterior probabilities significantly deviating from the main spectral manifold as potential outliers or rare spectral types.
+
+10. **Survey Optimization:**
+    - Evaluate the information content of NIRCam filter configurations to prioritize optimal filter sets for high-fidelity spectral reconstruction and taxonomic classification.
+
+**Output:**
+- Reconstructed NIR spectra from sparse photometry.
+- Probabilistic taxonomic classification of TNOs.
+- Detection of rare spectral types and outliers.
+- Optimized filter configurations for photometric surveys.

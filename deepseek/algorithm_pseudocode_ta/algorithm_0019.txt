@@ -1,0 +1,21 @@
+**Algorithm for Probabilistic Spectral Reconstruction of Trans-Neptunian Objects**
+
+1. **Preprocess Training Spectral Dataset**:
+   - Convert the spectral data into a numerical feature matrix.
+   
+2. **Principal Component Analysis (PCA)**:
+   - Apply PCA to the feature matrix to extract principal components (latent space).
+   
+3. **Probabilistic Model Training**:
+   - Train a probabilistic model using the extracted principal components.
+   
+4. **Bayesian Inference for Each Object**:
+   - For each object, utilize its photometric measurements to perform Bayesian inference on the latent variables.
+   
+5. **Spectrum Reconstruction**:
+   - Employ the inferred latent variables to reconstruct the full spectrum.
+   
+6. **Uncertainty Propagation**:
+   - Integrate uncertainty propagation during the reconstruction phase to ensure accurate uncertainty quantification.
+
+This structured approach efficiently bridges sparse photometric data with detailed spectral reconstruction, enabling robust taxonomic classification of TNOs.

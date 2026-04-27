@@ -1,0 +1,24 @@
+1. **Input**: Sparse photometric measurements of TNOs and a training dataset of near-infrared spectra.
+
+2. **Preprocess Training Data**:
+   - Apply Principal Component Analysis (PCA) to the training spectra to extract principal components (PCs).
+
+3. **Determine Optimal Number of Principal Components**:
+   - Identify the minimum number of PCs required to capture the majority of spectral variability (e.g., 4-5 PCs for taxonomic classification; 8-10 PCs for high-fidelity spectral reconstruction).
+
+4. **Construct Probabilistic Latent-Space Model**:
+   - Represent each TNO’s spectral information in a lower-dimensional latent space using the selected PCs.
+
+5. **Perform Bayesian Inference**:
+   - Use the sparse photometric data to infer the most probable latent representations of the TNOs within the reduced spectral manifold.
+
+6. **Spectral Reconstruction**:
+   - Map the inferred latent variables back to the original spectral space to reconstruct the full near-infrared spectra.
+
+7. **Uncertainty Propagation**:
+   - Calculate uncertainties for each reconstructed spectrum based on the variances in the latent space, quantifying the confidence in the reconstructions.
+
+8. **Applications**:
+   - **Taxonomy**: Classify TNOs into spectral categories using the reconstructed spectra.
+   - **Survey Optimization**: Assess the information content of different photometric filters to guide future observations.
+   - **Outlier Detection**: Identify unusual spectral types by analyzing deviations in the latent space.

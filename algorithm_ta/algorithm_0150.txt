@@ -1,0 +1,19 @@
+The algorithm is structured to reconstruct the spectral properties of TNOs using sparse photometric data through a probabilistic latent-space framework. Here are the steps:
+
+1. **Preprocess Training Data**: Begin with a dataset of known TNO spectra.
+
+2. **Principal Component Analysis (PCA)**: Apply PCA to the training spectra to derive orthogonal principal components.
+
+3. **Determine Principal Components**: Based on LOOCV results, select the appropriate number of principal components (e.g., 4-5 for classification, 8-10 for detailed reconstruction).
+
+4. **Probabilistic Model Construction**: Develop a model in the PCA latent space, incorporating measurement uncertainties.
+
+5. **Bayesian Inference**: Use Bayesian methods to estimate posterior distributions of spectral parameters from photometric data.
+
+6. **Posterior Sampling**: Employ MCMC or similar techniques to generate multiple spectral reconstructions.
+
+7. **Uncertainty Propagation**: Quantify uncertainties in the reconstructed spectra by propagating photometric noise.
+
+8. **Output Results**: Provide the mean reconstructed spectrum with associated uncertainty intervals.
+
+This algorithm effectively bridges sparse photometry and detailed spectral reconstruction, enabling robust analysis of TNO spectral diversity.

@@ -1,0 +1,10 @@
+The algorithm begins by processing the seed spectra to extract principal components, establishing a latent space. Synthetic data is then created using Kernel Density Estimation to augment this space. An AutoML regressor is trained on this enhanced dataset to map photometric data to latent coefficients. When new photometric data arrives, the model predicts the latent coefficients, which are then transformed back into full spectra using inverse PCA.
+
+**Algorithm Steps:**
+
+1. **Principal Component Analysis (PCA):** Process the seed spectra to extract principal components, defining the latent space.
+2. **Kernel Density Estimation (KDE):** Augment the latent space with synthetic data to enhance the model's training dataset.
+3. **AutoML Regressor Training:** Train an ensemble model (e.g., Gradient Boosted Decision Trees) to map photometric inputs to latent coefficients.
+4. **Reconstruct Spectra:** For new photometric data, use the trained model to predict latent coefficients and apply inverse PCA to obtain the full spectrum.
+
+This structured approach efficiently bridges sparse photometry to detailed spectral reconstruction, facilitating robust analysis of TNO compositions.

@@ -1,0 +1,35 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Input Data Preparation**
+   - Obtain a set of reference TNO spectra.
+   - Perform Principal Component Analysis (PCA) on the reference spectra to derive principal components.
+
+2. **Define the Latent Space**
+   - Use the PCA basis to project the reference spectra into a low-dimensional latent space.
+   - Augment this latent space using Kernel Density Estimation (KDE) to create a continuous probability distribution.
+
+3. **Generate Synthetic Photometry**
+   - For each augmented spectrum, convolve it with the instrument's filter curves (e.g., JWST/NIRCam) to simulate observed photometric magnitudes.
+   - Introduce Gaussian noise (e.g., 20% relative uncertainty) to account for observational uncertainties.
+
+4. **Train the AutoML Regressor**
+   - Train an ensemble of gradient-boosted decision trees (AutoML) to map the noisy photometric inputs to the latent coefficients.
+   - The regressor is trained on the synthetic photometry and corresponding true latent coefficients.
+
+5. **Reconstruct Spectra and Classify Taxonomic Type**
+   - For new photometric observations:
+     - Use the trained AutoML model to predict the latent coefficients.
+     - Project the predicted latent coefficients back into the full spectral space using inverse PCA to reconstruct the spectrum.
+     - Apply a secondary classifier to determine the taxonomic type based on the latent space representation.
+
+6. **Validate and Assess Performance**
+   - Use leave-one-out cross-validation (LOOCV) to evaluate the fidelity of the reconstructed spectra.
+   - Compute metrics such as RMSE, cosine similarity, and credible interval coverage.
+   - Assess taxonomic classification accuracy, precision, recall, F1-score, and AUC.
+
+7. **Apply to Survey Design and Outlier Detection**
+   - Evaluate different filter configurations for JWST/NIRCam to optimize information extraction.
+   - Identify outliers by detecting latent coefficients outside the established manifold or by failing to meet taxonomic confidence thresholds.
+
+8. **Output**
+   - Provide reconstructed spectra, taxonomic probabilities, and identified outliers for further analysis.

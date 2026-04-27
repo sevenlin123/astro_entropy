@@ -1,0 +1,33 @@
+```plaintext
+Algorithm: Probabilistic Spectral Reconstruction via Bayesian Inference and Gaussian Processes
+
+1. Initialize Gaussian Process Model:
+   - Define covariance structure for spectral bands using Gaussian Processes.
+   - Set hyperparameters for the Gaussian Process kernel.
+
+2. Bayesian Inference Setup:
+   - Define prior distributions for parameters of interest: albedo, rotation period, shape.
+   - Establish likelihood function based on observed brightness variations and orbital period data.
+
+3. Posterior Distribution Sampling:
+   - Implement Markov Chain Monte Carlo (MCMC) or Variational Inference to sample from posterior distribution.
+   - Use nested sampling or other efficient sampling techniques for high-dimensional parameter spaces.
+
+4. Light Curve Reconstruction:
+   - For each sampled parameter set, reconstruct the light curve using the defined model.
+   - Ensure consistency between reconstructed light curves and observed brightness variation.
+
+5. Joint Inference of Spectral Energy Distributions:
+   - Utilize Gaussian Processes to model covariance between different photometric bands.
+   - Perform joint inference across all bands to improve parameter estimation accuracy.
+
+6. Parameter Extraction:
+   - From the posterior samples, calculate posterior means and credible intervals for albedo, rotation period, and shape parameters.
+   - Assess convergence of the sampling method to ensure reliable parameter estimates.
+
+7. Output Results:
+   - Generate reconstructed light curves and physical parameters for each object.
+   - Provide posterior probabilities for each inferred parameter.
+
+End Algorithm
+```

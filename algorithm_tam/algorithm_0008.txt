@@ -1,0 +1,46 @@
+**Algorithm: Probabilistic Spectral Reconstruction Framework for Trans-Neptunian Objects**
+
+1. **Training Data Preparation**:
+   - Select a representative set of near-infrared TNO spectra (e.g., 51 spectra) categorized into dominant types (e.g., H₂O, CO₂, Organics).
+   - Exclude rare or outlier spectral types to maintain a "clean" latent space.
+
+2. **Principal Component Analysis (PCA)**:
+   - Apply PCA to the selected spectra to extract principal components (PCs). PCs represent fundamental variations in spectral features.
+   - Determine the optimal number of PCs (e.g., 4-5 for classification, 8-10 for high-fidelity reconstruction) based on explained variance.
+
+3. **Latent Space Definition**:
+   - Use Kernel Density Estimation (KDE) to create a continuous probability distribution in the PCA latent space.
+   - Set the KDE bandwidth (e.g., h ≈ 0.5) to balance local fidelity and global smoothness, avoiding overfitting or oversmoothing.
+
+4. **Synthetic Data Augmentation**:
+   - Generate synthetic spectra by sampling the KDE-defined latent distribution.
+   - Forward-model these synthetic spectra through JWST/NIRCam filters to compute synthetic photometry with added noise (e.g., 20% uncertainty).
+
+5. **AutoML Regression Model Training**:
+   - Train an ensemble of gradient-boosted decision trees (AutoGluon) to regress from sparse photometry to PCA latent coefficients.
+   - Use the synthetic photometry and corresponding latent coefficients for training.
+
+6. **Taxonomic Classifier Training**:
+   - Train a separate AutoML classifier on the PCA latent space to predict taxonomic categories (e.g., H₂O, CO₂, Organics) based on latent coefficients.
+
+7. **Forward Inference Pipeline**:
+   - For new photometric observations:
+     - Pass photometry through the trained AutoML regressor to predict latent coefficients.
+     - Project latent coefficients back to full spectra using inverse PCA transformation.
+     - Optionally, classify the latent state to determine taxonomic type.
+
+8. **Performance Validation**:
+   - Validate using leave-one-out cross-validation (LOOCV) on the original spectra.
+   - Assess reconstruction accuracy, credible interval coverage, and taxonomic classification success.
+
+9. **Survey Optimization and Outlier Detection**:
+   - Identify optimal filter configurations for future surveys by evaluating information content.
+   - Detect rare or unusual spectral types by analyzing low-probability regions in the latent space.
+
+**Steps in Code-Free Description**:
+- **Data Preparation**: Gather and preprocess TNO spectra, excluding rare types.
+- **Dimensionality Reduction**: Perform PCA to capture spectral variability.
+- **Generative Modeling**: Use KDE to create a smooth latent distribution.
+- **Training**: Develop regression and classification models using AutoML on synthetic and real data.
+- **Reconstruction**: Infer latent variables from photometry and reconstruct spectra.
+- **Validation and Application**: Evaluate performance and apply to survey optimization and outlier detection.

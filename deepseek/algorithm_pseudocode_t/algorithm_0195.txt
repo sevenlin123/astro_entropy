@@ -1,0 +1,29 @@
+**Algorithm: Probabilistic Spectral Reconstruction**
+
+1. **Initialization**
+   - Read input data: sparse photometric observations of trans-Neptunian objects.
+
+2. **Preprocessing**
+   - Normalize photometric measurements to a standard scale.
+   - Remove identified artifacts and corrupted data points.
+   - Align measurements across different photometric bands to ensure consistency.
+
+3. **Gaussian Process Training**
+   - Construct the Gaussian Process model using an empirical prior derived from large surveys.
+   - Set hyperparameters based on the empirical prior statistics.
+   - Train the GP model using the preprocessed data.
+
+4. **SED Inference**
+   - For each object:
+     - Use the trained GP model to predict the underlying SED based on sparse photometric data.
+     - Obtain posterior distributions of the SED components.
+
+5. **Goodness of Fit and Outlier Detection**
+   - Compute the goodness of fit between inferred SED and observed data.
+   - Identify outliers based on discrepancy between inferred and observed SEDs.
+
+6. **Optimal Observation Scheduling**
+   - Utilize information criteria (e.g., AIC, BIC) to determine optimal future observation frequencies and bands.
+   - Suggest the most informative observations based on uncertainty reduction potential.
+
+**End Algorithm**

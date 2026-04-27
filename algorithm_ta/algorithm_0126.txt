@@ -1,0 +1,12 @@
+1. Preprocess photometric data.
+2. Perform principal component analysis (PCA) on a sample set of near-IR spectra.
+3. Construct a probabilistic latent-space model using the PCA-derived components.
+4. Implement Bayesian inference within the reduced PCA space to reconstruct full spectra from photometry.
+5. Propagate measurement uncertainties through the Bayesian model.
+6. Apply leave-one-out cross-validation (LOOCV) to determine optimal number of principal components (4-5 for taxonomic classification; 8-10 for higher fidelity).
+7. Use the optimized model to reconstruct spectra and calculate credible intervals for each TNO.
+8. Evaluate the empirical coverage of credible intervals across wavelengths.
+9. Apply the framework to optimize NIRCam filter configurations by quantifying information content.
+10. Use the optimized pipeline to detect and reconstruct rare spectral types, including peculiar objects like 2006 RJ103 and 2011 SO277, by constraining photometry to select low-probability intermediate models. 
+
+Resulting Algorithm: Probabilistic Spectral Reconstruction (PSR) Framework

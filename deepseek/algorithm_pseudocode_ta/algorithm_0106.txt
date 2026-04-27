@@ -1,0 +1,24 @@
+```plaintext
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. Preprocessing:
+   (a) Normalize and align photometric data across instruments and bands.
+   (b) Convert photometric fluxes into color excess or magnitudes.
+
+2. Principal Component Analysis (PCA):
+   (c) Train PCA using a reference sample of near-infrared TNO spectra.
+   (d) Extract principal components capturing major spectral variability.
+
+3. Bayesian Inference:
+   (e) Conduct Bayesian inference using the extracted PCA components.
+   (f) Propagate measurement uncertainties through the Bayesian model.
+
+4. Spectral Reconstruction:
+   (g) Reconstruct full spectrum from photometric data using inferred PCA.
+   (h) Calculate confidence intervals for the reconstructed spectrum.
+
+5. Application:
+   (i) Apply leave-one-out cross-validation for reconstruction accuracy assessment.
+   (j) Evaluate NIRCam filter configurations for survey optimization.
+   (k) Detect and reconstruct rare spectral types using constrained photometry.
+```

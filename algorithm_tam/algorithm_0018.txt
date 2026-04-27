@@ -1,0 +1,50 @@
+The computational algorithm for the probabilistic spectral reconstruction framework involves the following steps:
+
+1. **Principal Component Analysis (PCA) Training**: 
+   - Use a set of reference TNO spectra to perform PCA, extracting principal components that capture the main spectral variations.
+   - Apply Kernel Density Estimation (KDE) to model the latent coefficient distribution, creating a smooth manifold.
+
+2. **Synthetic Photometry Generation**: 
+   - Simulate observed photometry by convolving each augmented spectrum with instrument filter responses (e.g., JWST/NIRCam).
+   - Introduce noise to account for realistic photometric uncertainties.
+
+3. **AutoML Regressor Training**: 
+   - Train an AutoML model (e.g., AutoGluon) using synthetic photometry and latent coefficients to map photometric inputs to latent space coordinates.
+
+4. **Bayesian Spectral Reconstruction**: 
+   - For new photometric observations, use the AutoML model to predict latent coefficients.
+   - Reconstruct the full spectrum by applying inverse PCA, leveraging the physical structure of the training data.
+
+5. **Leave-One-Out Cross-Validation (LOOCV)**: 
+   - Validate the framework by iteratively holding out one spectrum, retraining the model, and assessing reconstruction accuracy and uncertainty coverage.
+
+6. **Taxonomic Classification**: 
+   - Use a secondary classifier trained on latent coefficients to predict taxonomic categories (e.g., H2O, CO2, Organic).
+
+7. **Survey Optimization and Outlier Detection**: 
+   - Determine optimal filter configurations for maximum information content.
+   - Identify outliers by checking if predicted latent coefficients fall outside the training manifold or if reconstructed spectra are inconsistent with input photometry.
+
+**Final Algorithm Steps:**
+
+1. **PCA Training**:
+   - Input: Reference TNO spectra.
+   - Output: Principal components and latent manifold.
+
+2. **Synthetic Photometry Generation**:
+   - Generate photometry by convolving spectra with instrument filters and adding noise.
+
+3. **AutoML Training**:
+   - Train a model to map photometry to latent coefficients.
+
+4. **Spectral Reconstruction**:
+   - Use AutoML predictions to invert PCA for full spectrum reconstruction.
+
+5. **Validation via LOOCV**:
+   - Evaluate reconstruction accuracy and uncertainty coverage.
+
+6. **Taxonomy Prediction**:
+   - Classify objects using latent space coordinates.
+
+7. **Survey Planning and Outlier Detection**:
+   - Optimize filter sets and detect anomalies based on reconstruction discrepancies.

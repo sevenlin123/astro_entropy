@@ -1,0 +1,21 @@
+algorithm:
+
+initialize bayesian parameters and priors.
+
+for each object:
+
+   calculate observed fluxes from sparse photometry.
+
+   apply reddening correction using modeled extinction curve.
+
+   model spectral energy distribution (sed) using gaussian processes.
+
+   sample posterior distributions of sed parameters via mcmc.
+
+compute intrinsic color probability distributions by integrating over all consistent seds.
+
+cluster objects based on intrinsic color distributions to define taxonomic groups.
+
+optimize survey strategy based on color distributions to maximize detection of taxonomic groups.
+
+detect outliers by identifying objects with mismatched intrinsic color distributions compared to the population.

@@ -1,0 +1,11 @@
+1. **Preprocess Training Data**: Convert a sample of near-IR spectra into a principal component (PC) representation using dimensionality reduction techniques (e.g., PCA).
+
+2. **Model Spectral Manifold**: Construct a probabilistic latent-space model based on the preprocessed PCs to represent the spectral manifold of TNOs.
+
+3. **Perform Bayesian Inference**: Use the latent-space model and sparse photometric observations to perform Bayesian inference, reconstructing the full near-IR spectrum in the reduced PC space while accounting for measurement uncertainties.
+
+4. **Determine Optimal Filter Configurations**: Apply the framework to evaluate the information content of different JWST/NIRCam filters, identifying the most informative combinations for TNO taxonomy.
+
+5. **Detect Outliers and Rare Spectral Types**: Utilize the probabilistic framework to constrain photometry and identify objects with unusual spectral characteristics, reconstructing their spectra even when they deviate significantly from the modeled manifold. 
+
+6. **Output Reconstructed Spectra and Uncertainties**: Generate the reconstructed full spectra along with their associated uncertainty estimates for each object.

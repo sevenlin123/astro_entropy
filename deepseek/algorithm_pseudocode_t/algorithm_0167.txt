@@ -1,0 +1,19 @@
+The algorithm begins by initializing the parameters of the Bayesian model, including the number of spectral components and their respective Gaussian distributions. It then employs Markov Chain Monte Carlo (MCMC) sampling to explore the posterior distribution of these parameters. In each iteration, the algorithm calculates the likelihood of the observed photometric data given the current parameter configuration, updates the parameters based on prior distributions, and stores samples of the parameters. After sufficient iterations, the algorithm uses the posterior probabilities to identify the most probable spectral components, reconstruct the full spectral energy distribution (SED), and perform probabilistic outlier detection. The process concludes by comparing the reconstructed SEDs to reference spectra for taxonomic classification.
+
+```python
+Algorithm: Bayesian Spectral Reconstruction of TNOs
+
+1. Initialize the Bayesian model parameters, including the number of spectral components and their Gaussian distributions.
+2. Set up the Markov Chain Monte Carlo (MCMC) sampler with appropriate initial values and hyperparameters.
+3. For each MCMC iteration:
+   a. Calculate the likelihood of the observed photometric measurements given the current model parameters.
+   b. Compute the posterior distribution of the parameters using the prior distributions.
+   c. Update the model parameters based on the posterior distribution.
+   d. Store the updated parameters as part of the MCMC chain.
+4. After sufficient MCMC iterations, analyze the stored parameters to determine the most probable spectral components.
+5. Reconstruct the spectral energy distribution (SED) using the identified components.
+6. Perform probabilistic outlier detection by evaluating the likelihood of each observation under the inferred model and flagging those significantly deviating from the expected distribution.
+7. Compare the reconstructed SEDs with reference spectra to classify the TNOs into spectral types with probabilistic confidence measures.
+
+End Algorithm
+```

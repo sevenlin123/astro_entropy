@@ -1,0 +1,36 @@
+**Algorithm: Probabilistic Spectral Reconstruction of Trans-Neptunian Objects (PSR-TNO)**
+
+1. **Input Data:**
+   - Observed photometric magnitudes of TNOs
+   - Training set of known TNO spectra (templates)
+
+2. **Initialization:**
+   - Set the maximum number of templates to use (e.g., 5)
+   - Initialize an empty list of selected templates
+   - Initialize convergence threshold (e.g., 0.01)
+
+3. **Template Spectrum Selection:**
+   a. For each TNO observation:
+      i. Generate a set of candidate templates from the training library
+      ii. Compute the likelihood of each template matching the observed photometric data
+      iii. Select the template with the highest likelihood and add it to the selected templates list
+      iv. Repeat until the convergence threshold is met or maximum templates are reached
+
+4. **Flux Estimation:**
+   a. Construct the forward model matrix using the selected templates
+   b. Solve the system of linear equations using least-squares minimization with regularization
+   c. Apply a robust statistical prior on the flux distribution based on the training data
+   d. Compute the posterior distribution of the fluxes
+
+5. **Outlier Detection:**
+   a. For each observed magnitude, compute the residual from the reconstructed SED
+   b. Flag observations with residuals exceeding a threshold (e.g., 3σ) as outliers
+   c. Exclude flagged outliers from further analysis
+
+6. **Output:**
+   - Reconstructed spectral energy distribution (SED)
+   - Flagged outlier observations
+
+7. **Return**: The reconstructed SED and outlier flags
+
+**End of Algorithm**

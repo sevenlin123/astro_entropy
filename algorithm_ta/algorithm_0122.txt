@@ -1,0 +1,17 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Preprocess Photometric Data**: Convert observed photometric measurements into normalized reflectance spectra.
+
+2. **Principal Component Analysis (PCA)**:
+   - Train PCA on a set of near-infrared reference spectra.
+   - Extract principal components capturing the dominant spectral variability (e.g., 4-5 for classification, 8-10 for detailed reconstruction).
+
+3. **Bayesian Inference in Reduced Space**:
+   - Represent each spectrum as a linear combination of PCA eigenvectors.
+   - Perform Bayesian inference to estimate the coefficients, incorporating measurement uncertainties and prior distributions.
+
+4. **Spectral Reconstruction**:
+   - Reconstruct the full spectrum using the estimated PCA coefficients and the basis vectors.
+   - Propagate uncertainties through the reconstruction process to provide credible intervals.
+
+5. **Output**: Return reconstructed spectra with associated uncertainties, enabling taxonomic classification and outlier detection.

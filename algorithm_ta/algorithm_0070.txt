@@ -1,0 +1,13 @@
+**Algorithm Steps:**
+
+1. **Preprocess the input data**: Convert all available photometric measurements into a standardized format, ensuring consistency across different instruments and observation times.
+
+2. **Train a Principal Component Analysis (PCA) model**: Use a representative sample of near-IR spectra to extract principal components, capturing the major axes of spectral variability within the dataset.
+
+3. **Construct a latent-space model**: Utilize the PCA-derived components to define a probabilistic latent space where each object's spectrum can be represented as a linear combination of these components plus an intercept term.
+
+4. **Perform Bayesian inference in the latent space**: Employ a probabilistic approach to estimate the posterior distribution of the latent variables given the observed photometric data, incorporating measurement uncertainties.
+
+5. **Reconstruct the full spectra**: Using the posterior distributions of the latent variables, compute the most probable full-spectrum representations for each object.
+
+6. **Validate the reconstruction accuracy**: Compare the reconstructed spectra with the original ones (if available) to assess the fidelity and credibility intervals, ensuring the model's reliability.

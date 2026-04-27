@@ -1,0 +1,15 @@
+**Algorithm for Probabilistic Spectral Reconstruction of TNOs from Sparse Photometry**
+
+1. **Data Preparation**: Gather the seed set of near-IR spectra for TNOs, focusing on dominant taxonomic classes (e.g., Water-type, CO₂-type, Organics-type) while excluding rare or outlier spectral types.
+
+2. **Principal Component Analysis (PCA)**: Apply PCA to the seed spectra to obtain principal components (latent space representation), capturing the dominant modes of spectral variability.
+
+3. **Latent Space Augmentation**: Use Kernel Density Estimation (KDE) to create a smooth probability distribution in the latent space, enhancing the training data for the AutoML regressor.
+
+4. **Model Training**: Train an AutoML regressor (e.g., Gradient Boosted Decision Trees) to map sparse photometric measurements to the latent PCA coefficients.
+
+5. **Spectral Reconstruction**: Use the trained AutoML model to predict latent coefficients from new photometric data and apply the inverse PCA transformation to reconstruct the full high-resolution spectrum.
+
+6. **Classification (Optional)**: Optionally, train a secondary classifier in the latent space to assign taxonomic labels to the reconstructed spectra.
+
+**Steps 1 to 5** outline the core computational method, focusing on the spectral reconstruction process.

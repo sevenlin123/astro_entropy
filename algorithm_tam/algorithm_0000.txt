@@ -1,0 +1,33 @@
+### Core Computational Algorithm for Spectral Reconstruction
+
+1. **Preprocessing**:
+   - Gather a training set of near-infrared TNO spectra.
+   - Apply Principal Component Analysis (PCA) to the training set to extract principal components (latent space).
+
+2. **Data Augmentation**:
+   - Use Kernel Density Estimation (KDE) on the PCA coefficients to generate synthetic latent vectors, expanding the training dataset.
+   - Convolve synthetic spectra with JWST/NIRCam filter responses to create training photometry with added noise (~20% relative uncertainty).
+
+3. **Model Training**:
+   - Train an AutoML regressor (e.g., AutoGluon) to map sparse photometry to latent coefficients.
+   - Train a separate classifier in the latent space for taxonomic prediction.
+
+4. **Reconstruction Pipeline**:
+   - For new photometric observations:
+     - Use the trained AutoML regressor to predict latent coefficients.
+     - Apply inverse PCA transformation to reconstruct the full spectrum.
+     - Propagate uncertainties through MCMC sampling to determine credible intervals.
+
+5. **Validation**:
+   - Perform Leave-One-Out Cross-Validation (LOOCV) to assess reconstruction accuracy and uncertainty coverage.
+   - Validate taxonomic classification accuracy on held-out data.
+
+6. **Applications**:
+   - **Survey Optimization**: Compute Fisher Information Matrix (FIM) for filter configurations.
+   - **Outlier Detection**: Compare new spectra’s latent density to the prior distribution.
+   - **Taxonomic Classification**: Use the latent classifier for probabilistic spectral type assignment.
+
+7. **Output**:
+   - Reconstructed spectrum with uncertainties.
+   - Probabilistic taxonomic classification.
+   - Optimized filter configurations and outlier flags.
