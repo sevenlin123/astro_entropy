@@ -1,0 +1,29 @@
+**Algorithm: Probabilistic Spectral Reconstruction**
+
+1. **Initialize Variables**
+   - Input: Photometric data of TNOs (flux measurements in sparse bands), Basis spectra (Kirkwood gaps template spectra)
+   - Output: Posterior distributions of model parameters
+
+2. **Compute Observed Fluxes**
+   - For each object, calculate flux in each photometric band
+
+3. **Define Model Parameters**
+   - Weights matrix W (dimension: N_objects x N_basis_spectra)
+   - Other parameters P (e.g., scaling factors, offsets)
+
+4. **Set Prior Distributions**
+   - Define priors based on physical properties (e.g., size, composition constraints)
+
+5. **Define Likelihood Function**
+   - Model SED = sum(W * Basis Spectra)
+   - Relate model predictions to flux measurements considering their uncertainties
+
+6. **Perform Bayesian Inference**
+   - Use MCMC or other sampling methods to draw posterior samples of W and P
+
+7. **Extract Posterior Means/Medians and Uncertainties**
+   - Compute representative values and confidence intervals from posterior samples
+
+8. **Output Reconstructed SEDs and Uncertainties**
+
+**End Algorithm**

@@ -1,0 +1,31 @@
+```pseudocode
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+- Photometric measurements of trans-Neptunian objects
+- Training set of near-IR spectra
+- Principal component decomposition (PCD) of spectral data
+
+Output:
+- Reconstructed full spectra with propagated measurement uncertainties
+
+Steps:
+
+1. Perform Principal Component Decomposition (PCD) on the training set of near-IR spectra to obtain principal components (PCs).
+
+2. Represent each object's spectrum in the reduced PC space, where each spectrum is expressed as a linear combination of the PC loadings and their corresponding scores.
+
+3. Apply Bayesian inference in the reduced PC space:
+   a. Treat the PC scores as parameters to infer.
+   b. Use a Gaussian process model conditioned on the spectral manifold to model the relationship between photometric measurements and the PC scores.
+
+4. Reconstruct the original spectra using the inferred PC scores:
+   a. Multiply each inferred PC score by its corresponding PC loading vector.
+   b. Sum the resulting contributions from all PCs to obtain the reconstructed spectrum.
+
+5. Propagate measurement uncertainties through the Gaussian process model to quantify the uncertainties in the reconstructed spectra.
+
+6. Output the reconstructed spectra along with their associated uncertainties.
+
+End Algorithm
+```

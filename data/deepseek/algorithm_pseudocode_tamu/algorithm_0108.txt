@@ -1,0 +1,77 @@
+### Pseudocode for Core Reconstruction Algorithm
+
+```python
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Inputs:
+    - Training Spectra: Set of reference TNO spectra (seed_spectra)
+    - Observed Photometry: Sparse multi-band photometric measurements (obs_photometry)
+    - Number of Principal Components (K)
+
+Outputs:
+    - Reconstructed Spectrum: High-resolution spectrum estimate (reconstructed_S)
+    - Latent Coefficients: Low-dimensional representation (latent_coeffs)
+    - Uncertainty Estimates: Credible intervals for the spectrum (credible_intervals)
+    - Taxonomic Classification: Probabilities of spectral type (taxonomy_probs)
+
+Steps:
+
+1. **Training Phase:**
+    1.1. Perform Principal Component Analysis (PCA) on the seed_spectra to obtain:
+        - PCA Basis (principal_components)
+        - Mean Spectrum (mean_spectrum)
+    1.2. Project seed_spectra onto the principal_components to get latent coefficients (latent_coeffs_real).
+    1.3. Use Kernel Density Estimation (KDE) with Gaussian kernel on latent_coeffs_real to generate synthetic_latent_coeffs, augmenting the training data.
+    1.4. Forward model synthetic_latent_coeffs through the inverse PCA transform to generate synthetic_spectra.
+    1.5. Simulate noisy photometry for synthetic_spectra using NIRCam filter responses and Gaussian noise (relative uncertainty of 20%).
+    1.6. Train an AutoML regressor (e.g., Gradient Boosted Decision Trees) to map observed photometry to latent_coeffs.
+    1.7. Train a separate AutoML classifier to predict taxonomic classes from latent_coeffs.
+
+2. **Reconstruction Phase:**
+    2.1. For each observed photometry in obs_photometry:
+        a. Use the trained regressor to predict latent_coeffs_predicted.
+        b. Apply inverse PCA transform to latent_coeffs_predicted to obtain reconstructed_S.
+        c. Sample from the joint posterior of latent_coeffs_predicted using Gaussian Copula to generate credible_intervals.
+        d. Classify the latent_coeffs_predicted using the trained classifier to get taxonomy_probs.
+
+3. **Validation Phase (Optional):**
+    3.1. For each seed spectrum, perform leave-one-out cross-validation by repeating steps 1.3-2.1 without the held-out spectrum.
+    3.2. Compute reconstruction error metrics (nRMSE) and credible interval coverage.
+
+4. **Applications:**
+    4.1. **Survey Optimization:** Evaluate different NIRCam filter configurations by measuring information content and reconstruction fidelity.
+    4.2. **Outlier Detection:** Flag objects with low taxonomy confidence scores as potential outliers.
+
+```
+
+### Key Computational Steps Explained
+
+1. **Principal Component Analysis (PCA):**
+   - Reduces the dimensionality of the spectral data while retaining the most significant variations.
+   - Outputs orthogonal principal components and mean spectrum for reconstruction.
+
+2. **Kernel Density Estimation (KDE):**
+   - Generates synthetic data points in the latent space to augment training.
+   - Uses a Gaussian kernel for smooth density estimation.
+
+3. **Forward Modeling:**
+   - Simulates photometric measurements from synthetic spectra.
+   - Adds noise to account for observational uncertainties.
+
+4. **AutoML Regression:**
+   - Learns the mapping from sparse photometry to PCA coefficients.
+   - Uses ensemble methods (e.g., XGBoost) for robust predictions.
+
+5. **Inverse PCA Transform:**
+   - Reconstructs the full spectrum from predicted PCA coefficients.
+   - Ensures smooth and physically plausible spectra.
+
+6. **Gaussian Copula Sampling:**
+   - Samples from the joint posterior distribution of latent coefficients.
+   - Preserves physical dependencies between dimensions for credible interval calculation.
+
+7. **Classification in Latent Space:**
+   - Maps reconstructed latent coefficients to taxonomic classes.
+   - Provides probabilistic classification for taxonomy identification.
+
+This algorithm efficiently bridges sparse photometric data to detailed spectral reconstructions, enabling robust analysis of TNO spectra with uncertainty quantification and taxonomic insights.

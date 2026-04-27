@@ -1,0 +1,36 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Input Data Preparation**
+   - Load training spectral dataset `spectra_train` of TNOs.
+   - Load test photometric measurements `photometry_test` to reconstruct.
+
+2. **Principal Component Analysis (PCA)**
+   - Perform PCA on `spectra_train` to reduce dimensionality.
+   - Retain top `k` principal components based on cross-validation (e.g., `k = 4` to `5` for basic reconstruction, up to `k = 10` for enhanced fidelity).
+   - Construct PCA basis matrix `W` where each column represents a principal component.
+
+3. **Probabilistic Model Construction**
+   - Define a probabilistic model in the PCA latent space:
+     - Latent variables `z` correspond to the coefficients of the PCA components.
+     - Observation model links latent variables to photometric measurements, incorporating measurement uncertainties.
+   - Incorporate prior knowledge about the spectral manifold into the model.
+
+4. **Bayesian Inference**
+   - Perform Bayesian inference using the probabilistic model:
+     - Input: Photometric measurements `photometry_test` with associated uncertainties.
+     - Compute posterior distribution `P(z | photometry_test)`.
+
+5. **Spectral Reconstruction**
+   - Project the posterior mean or mode of latent variables `z` back into the original spectral space using the PCA basis `W`.
+   - Reconstructed spectra `reconstructed_spectra` are obtained by linear combination of PCA components.
+
+6. **Uncertainty Propagation**
+   - Propagate uncertainties from photometric measurements through the Bayesian model.
+   - Calculate uncertainty estimates `uncertainty_spectra` for each wavelength in the reconstructed spectra.
+
+7. **Output**
+   - Return reconstructed spectra `reconstructed_spectra` and their uncertainties `uncertainty_spectra`.
+
+---
+
+This algorithm encapsulates the core steps of the probabilistic spectral reconstruction framework described in the paper.

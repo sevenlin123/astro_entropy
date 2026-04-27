@@ -1,0 +1,47 @@
+### Algorithm: Probabilistic Spectral Reconstruction Framework
+
+**Step-by-Step Pseudocode**
+
+1. **Initialization**:
+   - Load the reference TNO spectra dataset (training set).
+   - Define the target instrument's filter set (e.g., JWST/NIRCam).
+   - Set the maximum number of principal components (K).
+
+2. **Principal Component Analysis (PCA)**:
+   - Perform PCA on the training set of reference spectra.
+   - Extract the top K principal components (latent space basis vectors).
+
+3. **Data Augmentation with KDE**:
+   - Project the training spectra onto the K-dimensional PCA latent space.
+   - Use Kernel Density Estimation (KDE) to smooth the latent distribution.
+   - Bandwidth (h) is set to a stable value (e.g., 0.5) after experimentation.
+
+4. **Synthetic Photometry Generation**:
+   - For each augmented latent vector, forward model the spectrum through the target instrument's filter set.
+   - Convolve the spectrum with each filter's throughput curve.
+   - Add Gaussian noise (e.g., 20%) to simulate realistic photometric uncertainties.
+
+5. **Training the AutoML Regressor**:
+   - Use the synthetic photometry (inputs) and corresponding PCA latent vectors (targets) to train an ensemble of gradient-boosted decision trees.
+   - The regressor maps photometric inputs to latent coefficients.
+
+6. **Training the Taxonomic Classifier**:
+   - Train a separate AutoML classifier on the PCA latent vectors, using the predefined spectral type labels (e.g., H₂O, CO₂, Organic types).
+   - The classifier outputs probabilities for each taxonomic group.
+
+7. **Forward Inference Pipeline**:
+   - For new sparse photometric observations:
+     a. Pass the photometry through the trained AutoML regressor to predict latent coefficients.
+     b. Project the predicted latent coefficients back through the inverse PCA transform to reconstruct the full spectrum.
+     c. Simultaneously, pass the predicted latent coefficients through the taxonomic classifier to obtain spectral type probabilities.
+
+8. **Uncertainty Propagation**:
+   - Compute the variance-covariance matrix of the predicted latent coefficients.
+   - Apply the inverse PCA transform to obtain uncertainties on the reconstructed spectrum.
+
+9. **LOOCV Validation**:
+   - For each held-out spectrum in the training set:
+     a. Repeat Steps 4-7, excluding the held-out spectrum from the training set.
+     b. Compare the reconstructed spectrum with the ground truth to assess fidelity and uncertainty calibration.
+
+### End of Algorithm

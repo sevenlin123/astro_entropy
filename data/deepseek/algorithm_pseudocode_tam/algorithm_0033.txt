@@ -1,0 +1,16 @@
+```plaintext
+Algorithm: Probabilistic Spectral Reconstruction Framework
+
+1. Initialize with a set of reference TNO spectra.
+2. Compute Principal Component Analysis (PCA) on the reference spectra to obtain principal components.
+3. Augment the training data by generating synthetic spectra using Kernel Density Estimation (KDE) in the latent space defined by PCA.
+4. Forward-model the synthetic spectra through the NIRCam filter system to compute expected photometric observations.
+5. Introduce Gaussian noise (e.g., 20% relative uncertainty) to the synthetic photometric data to simulate realistic observations.
+6. Train an AutoML regressor (e.g., using AutoGluon) to map the noisy photometric inputs to the latent PCA coefficients.
+7. For each new sparse photometric observation:
+   a. Use the trained regressor to predict the latent PCA coefficients.
+   b. Apply the inverse PCA transform to reconstruct the full spectrum.
+8. Output the reconstructed spectra and associated uncertainties.
+
+End Algorithm
+```

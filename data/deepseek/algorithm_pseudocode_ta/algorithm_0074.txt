@@ -1,0 +1,40 @@
+**Algorithm: Probabilistic Spectral Reconstruction (PSR)**
+
+1. **Precompute Reference Spectra**
+   - Input: Collection of near-IR spectroscopic measurements from TNOs.
+   - Output: Set of reference spectra, each representing the surface composition of a TNO.
+
+2. **Principal Component Analysis (PCA) Training**
+   - Input: Reference spectra.
+   - Output: Trained PCA model with principal components capturing the spectral variability.
+
+3. **Project New Photometric Data into Latent Space**
+   - Input: Broadband photometric measurements (e.g., NIR filters) of a new TNO.
+   - Process: Use the PCA model to map photometric data into the latent space of principal components.
+
+4. **Bayesian Inference in Latent Space**
+   - Input: Projected photometric data and prior knowledge from reference spectra.
+   - Process:
+     - Define a probabilistic model linking photometric measurements to latent principal components.
+     - Perform Bayesian inference to compute posterior distributions over the principal components.
+     - This step accounts for measurement uncertainties and correlations in the spectral manifold.
+
+5. **Reconstruct Spectra from Latent Space**
+   - Input: Posterior distributions of principal components.
+   - Process:
+     - Use the inverse PCA transformation to project back into the original spectral space.
+     - Obtain the reconstructed spectrum for the TNO.
+
+6. **Quantify Uncertainties**
+   - Input: Reconstructed spectrum and posterior variances from Bayesian inference.
+   - Process:
+     - Propagate uncertainties from the latent space back to the spectral space.
+     - Calculate confidence intervals or credible intervals for the reconstructed spectrum.
+
+7. **Taxonomic Classification**
+   - Input: Reconstructed spectrum and reference spectral classes.
+   - Process:
+     - Compare the reconstructed spectrum with known spectral types.
+     - Classify the TNO based on the closest match, considering the uncertainties in the reconstruction.
+
+**End of Algorithm**

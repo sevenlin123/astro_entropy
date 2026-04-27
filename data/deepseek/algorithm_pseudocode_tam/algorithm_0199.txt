@@ -1,0 +1,29 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Preparation of Training Data:**
+   - Gather reference TNO spectra from the DiSCo-TNO sample, excluding outliers and singular cases.
+   - Perform Principal Component Analysis (PCA) on the selected spectra to extract principal components (latent space).
+
+2. **Data Augmentation:**
+   - Use Kernel Density Estimation (KDE) to smooth the latent space, generating synthetic latent vectors that fill gaps between observed spectra.
+   - Choose an appropriate bandwidth for KDE to balance local fidelity and global smoothness.
+
+3. **Synthetic Photometry Generation:**
+   - Forward model the synthetic spectra by convolving them with the throughput curves of the target instrument (e.g., JWST NIRCam).
+   - Add Gaussian noise (e.g., 20% relative reflectance uncertainty) to simulate realistic photometric uncertainties.
+
+4. **Training the Encoder:**
+   - Train an AutoML regressor (e.g., ensemble of Gradient-Boosted Decision Trees) to map sparse photometry to the latent PCA coefficients.
+
+5. **Taxonomic Classification:**
+   - Train a secondary AutoML classifier on the latent space to predict taxonomic labels (e.g., H₂O, CO₂, Organic, Methanol).
+
+6. **Reconstruction Pipeline:**
+   - For new photometric observations:
+     - Pass photometry through the trained encoder to predict latent coefficients.
+     - Project latent coefficients through inverse PCA to reconstruct the full spectrum.
+     - Simultaneously predict taxonomic probabilities.
+
+7. **Validation and Output:**
+   - Evaluate reconstruction accuracy using LOOCV on the original spectral data.
+   - Output reconstructed spectra and taxonomic probabilities for each object.

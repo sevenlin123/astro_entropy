@@ -1,0 +1,39 @@
+```plaintext
+Algorithm: Probabilistic Spectral Reconstruction using MCMC
+
+Variables:
+- Data: Sparse photometric observations (flux measurements at different wavelengths)
+- Parameters: SED coefficients, noise levels, Gaussian Process hyperparameters
+- Hyperparameters: Mean and covariance function parameters of Gaussian Process prior
+
+Initialization:
+1. Set initial values for SED coefficients, noise parameters, and Gaussian Process hyperparameters.
+
+Forward Model Setup:
+2. Define the forward model function F(wavelength, SED_parameters) -> Flux.
+   - F maps the SED coefficients to observed flux at given wavelengths.
+
+Gaussian Process Prior Implementation:
+3. Define Gaussian Process prior Prior(SED_parameters | hyperparameters).
+   - Imposes smoothness on the SED by constraining the covariance matrix.
+
+MCMC Sampling:
+4. Initialize MCMC sampler (e.g., Metropolis-Hastings algorithm).
+5. For each iteration in MCMC:
+   a. Propose new SED parameters, noise levels, and hyperparameters.
+   b. Compute likelihood L = p(Data | proposed_parameters).
+      - Likelihood function incorporates the forward model and accounts for measurement noise.
+   c. Compute prior probability P = p(proposed_parameters).
+      - Includes Gaussian Process prior and other parameter priors.
+   d. Compute the acceptance probability alpha = min(1, L * P / (Current_L * Current_P)).
+   e. Accept the proposal with probability alpha.
+
+Posterior Analysis:
+6. After sufficient iterations, discard initial samples (burn-in period).
+7. Extract posterior samples of SED parameters, compute their mean and uncertainties (e.g., standard deviation).
+
+Output:
+8. Output the mean SED and associated uncertainties.
+```
+
+End of Algorithm

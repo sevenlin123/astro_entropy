@@ -1,0 +1,26 @@
+```plaintext
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. **Input**: Sparse photometric measurements of a TNO object.
+2. **Precompute PCA Basis**:
+   a. Train PCA on reference TNO spectra to obtain principal components.
+   b. Determine optimal number of principal components (K) via validation.
+3. **Construct Latent Manifold**:
+   a. Project reference spectra onto PCA basis to get latent coefficients.
+   b. Use Kernel Density Estimation (KDE) to create smooth probability distribution in latent space.
+4. **Generate Synthetic Training Data**:
+   a. Sample latent coefficients from KDE to form synthetic spectral manifold.
+   b. Forward-model these spectra through target instrument filters (e.g., JWST NIRCam).
+   c. Inject Gaussian noise (20% relative uncertainty) into synthetic photometry.
+5. **Train AutoML Regressor**:
+   a. Use synthetic photometry and corresponding latent coefficients as training data.
+   b. Train ensemble of gradient-boosted decision trees to map photometry to latent space.
+6. **Predict Latent Coefficients**:
+   a. Pass observed photometry through trained regressor to obtain predicted latent coefficients.
+7. **Reconstruct Spectrum**:
+   a. Apply inverse PCA transformation to predicted latent coefficients.
+   b. Obtain full-resolution reconstructed spectrum.
+8. **Output**: Reconstructed spectrum and associated uncertainties.
+
+End of Algorithm
+```

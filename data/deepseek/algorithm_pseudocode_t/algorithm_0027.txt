@@ -1,0 +1,65 @@
+**Algorithm: Probabilistic Spectral Reconstruction**
+
+**Inputs:** Sparse photometric data for multiple trans-Neptunian objects (TNOs).  
+**Outputs:** Reconstructed spectral energy distributions (SEDs) for each TNO, associated uncertainties, and convergence diagnostics from the Markov Chain Monte Carlo (MCMC) sampler.
+
+**Step 1: Preprocessing for Each TNO**
+
+1. **Convert Photometric Data to Flux Measurements:**
+   - Transform raw photometric data (magnitudes) into flux values \( F \) in units of flux density (e.g., erg/s/cm²/Å).
+   
+2. **Estimate Uncertainties:**
+   - Compute measurement uncertainties \( \sigma_F \) for each flux \( F \) using the formula \( \sigma_F = F \times \sqrt{\text{mag}_\text{noise}^2 / 100} \), where `mag_noise` is the uncertainty in magnitudes.
+
+**Step 2: Probabilistic Model Setup for Each TNO**
+
+1. **Define Gaussian Process Prior Over SED:**
+   - Let \( f(\lambda) \) represent the SED, parameterized as a latent function.
+   - Assume \( f(\lambda) \sim \mathcal{GP}(0, k(\lambda, \lambda')) \), where \( k(\lambda, \lambda') \) is the Gaussian process kernel (e.g., squared exponential).
+
+2. **Specify the Likelihood Model:**
+   - For each wavelength band \( \lambda_i \), the observed flux \( F_i \) is modeled as:
+     \[ F_i \sim \mathcal{N}(f(\lambda_i), \sigma_F^2) \]
+     where \( \sigma_F^2 \) is the variance of the flux measurement.
+
+3. **Set Prior Distributions for GP Hyperparameters:**
+   - Length scale \( \ell \sim \mathcal{LogNormal}(\ln(10), 0.2) \)
+   - Signal variance \( \sigma_f^2 \sim \mathcal{InverseGamma}(0.1, 1.0) \)
+   - Noise variance \( \sigma_n^2 \sim \mathcal{InverseGamma}(0.1, 1.0) \)
+
+**Step 3: MCMC Sampling**
+
+1. **Select a Sampling Method:**
+   - Use the No-U-Turn Sampler (NUTS) for efficient MCMC sampling.
+
+2. **Initialize the Sampler:**
+   - Start with initial values for hyperparameters \( \ell, \sigma_f^2, \sigma_n^2 \) set to their prior means.
+
+3. **Run the Sampler:**
+   - Conduct a specified number of MCMC iterations (e.g., 10,000 steps).
+   - Monitor convergence statistics:
+     - Compute the Gelman-Rubin statistic \( \hat{R} \) for each parameter to check mixing.
+     - Calculate the effective sample size \( n_\text{eff} \) to assess bias.
+
+**Step 4: Post-Process MCMC Samples**
+
+1. **Generate Posterior Predictive Distributions:**
+   - For each MCMC sample, evaluate the latent function \( f(\lambda) \) at all wavelengths and predict the flux.
+   
+2. **Average Across Samples:**
+   - Compute the mean flux \( \bar{F}(\lambda) \) and standard deviation \( \sigma_{\bar{F}}(\lambda) \) across all MCMC samples to obtain the final reconstructed SED.
+
+**Step 5: Collect Convergence Diagnostics**
+
+- Record \( \hat{R} \) values for each parameter, ensuring they are close to 1 (e.g., <1.01).
+- Document the effective sample size \( n_\text{eff} \) for each parameter to ensure adequate sampling.
+
+**Step 6: Output Results**
+
+- For each TNO:
+  - Save the reconstructed SED \( \bar{F}(\lambda) \) and its uncertainty \( \sigma_{\bar{F}}(\lambda) \).
+  - Include convergence diagnostics (e.g., \( \hat{R} \), \( n_\text{eff} \)) to assess the reliability of the reconstruction.
+
+---
+
+This algorithm systematically reconstructs the SEDs of TNOs from sparse photometric data using a Bayesian Gaussian process framework, providing both point estimates and uncertainty quantification.

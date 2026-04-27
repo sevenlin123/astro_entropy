@@ -1,0 +1,59 @@
+```pseudocode
+Algorithm: Probabilistic Spectral Reconstruction Framework
+
+Input: 
+- Photometric observations of TNOs
+- Reference spectra for training
+- Instrument response functions (e.g., JWST/NIRCam)
+
+Output: 
+- Reconstructed spectra
+- Taxonomic classification probabilities
+- Uncertainty estimates
+
+Steps:
+
+1. **Principal Component Analysis (PCA):**
+   - Train PCA on reference spectra to define latent space.
+   - Obtain principal components representing spectral variability.
+
+2. **Data Augmentation:**
+   - Use Kernel Density Estimation (KDE) on PCA-reduced latent space to create synthetic training data.
+   - Inject Gaussian noise (20% relative reflectance uncertainty) into synthetic photometry for realism.
+
+3. **Forward Modeling:**
+   - Simulate photometric observations from augmented spectra by convolving with instrument response functions.
+   - Create training set of noisy photometry paired with ground truth PCA coefficients.
+
+4. **Automated Machine Learning (AutoML) Training:**
+   - Train encoder model to regress photometric inputs to latent coefficients.
+   - Train classifier model to assign taxonomic labels to latent states.
+
+5. **Leave-One-Out Cross-Validation (LOOCV):**
+   - For each object in training set:
+     a. Remove object from training data.
+     b. Generate synthetic manifold from remaining objects.
+     c. Forward model synthetic photometry.
+     d. Train encoder and classifier on new synthetic set.
+     e. Predict latent coefficients from held-out photometry.
+     f. Reconstruct spectrum via inverse PCA.
+     g. Evaluate reconstruction quality metrics.
+
+6. **Spectral Reconstruction:**
+   - For new photometric observations:
+     a. Use trained encoder to predict latent coefficients.
+     b. Apply inverse PCA transform to obtain full spectrum.
+
+7. **Taxonomic Classification:**
+   - Use trained classifier to predict taxonomic probabilities from latent coefficients.
+
+8. **Uncertainty Quantification:**
+   - Sample joint posterior of latent coefficients using Gaussian Copula.
+   - Propagate uncertainties to reconstructed spectrum.
+
+9. **Outlier Detection:**
+   - Compute probability of predicted latent state under prior distribution.
+   - Flag objects with low prior probabilities for follow-up.
+
+End Algorithm
+```

@@ -1,0 +1,19 @@
+Initialize the mixture model parameters for each TNO.
+
+For each TNO:
+    Set the number of Gaussian components, K.
+    Initialize the parameters: λ_k, σ_k, A_k, π_k for each component k.
+    Set up the MCMC sampler with a proposal distribution (e.g., Metropolis-Hastings).
+    For each MCMC iteration:
+        Propose new parameters λ'_k, σ'_k, A'_k, π'_k.
+        For each photometric band i:
+            Compute the model flux as sum_{k=1 to K} π'_k * A'_k * exp(-(x_i - λ'_k)^2/(2σ'_k^2)).
+        Calculate the Poisson likelihood for observed flux F_i.
+        Compute the log-likelihood as sum over all bands of (F_i * log(model_flux_i) - model_flux_i).
+        Calculate the log-priors for the proposed parameters.
+        Determine the posterior odds ratio.
+        Accept or reject the proposal based on the ratio.
+        If accepted, update the parameters and store them; otherwise, retain current parameters.
+    After sufficient iterations, extract the stored parameters as the posterior distributions.
+
+This pseudocode outlines the core computational steps of the Bayesian framework for reconstructing the SEDs of trans-Neptunian objects from sparse photometric data.

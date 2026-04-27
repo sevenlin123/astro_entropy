@@ -1,0 +1,20 @@
+**Algorithm: Core Computational Steps for Probabilistic Spectral Reconstruction of TNOs**
+
+1. **Spectral Library Construction**
+   - Input: Collection of observed TNO spectra.
+   - Output: Set of archetypal spectra representing the dataset.
+   - Execute archetypal analysis on the observed spectra to extract representative archetypes.
+   
+2. **Forward Model Training**
+   - Input: Photometric observations (magnitudes, uncertainties) across multiple bands.
+   - Output: Trained Gaussian Process model with posterior hyperparameters.
+   - Initialize Gaussian Process with selected kernel and prior distributions.
+   - Define the likelihood function incorporating photometric uncertainties.
+   - Employ Hamiltonian Monte Carlo to sample posterior distributions of GP hyperparameters.
+   
+3. **Probabilistic Spectrum Recovery**
+   - For each TNO:
+     - Use the trained GP model to predict spectral features from photometric data.
+     - Integrate with spectral library to determine the most probable spectral components.
+     
+**End Algorithm**

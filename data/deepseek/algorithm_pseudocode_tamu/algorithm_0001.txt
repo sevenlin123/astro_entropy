@@ -1,0 +1,43 @@
+```
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+    - Photometric measurements m (sparse observations)
+    - Pre-trained PCA basis (principal components and eigenvectors)
+    - KDE-based latent prior distribution (learned from training data)
+    - Number of latent dimensions K
+    
+Output:
+    - Reconstructed spectrum S
+    - Posterior distribution over latent coefficients
+    - Taxonomic classification probabilities
+
+Steps:
+1. Forward Modeling:
+    a. Simulate synthetic photometry from PCA basis using the target instrument's filter set.
+    b. Inject Gaussian noise with relative uncertainty (e.g., 20%) to account for observational errors.
+
+2. Training:
+    a. Use AutoML regressor (e.g., gradient-boosted decision trees) to learn mapping from photometric inputs to latent coefficients.
+    b. Augment training data using KDE to create continuous manifold of latent vectors.
+
+3. Inference:
+    a. For new photometric observations:
+        i. Pass m through trained regressor to predict latent coefficients.
+        ii. Sample from posterior distribution using Gaussian Copula to preserve physical dependencies.
+    
+4. Reconstruction:
+    a. Project sampled latent coefficients through inverse PCA transform to obtain full spectrum S.
+    b. Compute uncertainties and confidence intervals for each wavelength.
+
+5. Taxonomy Classification:
+    a. Predict taxonomic probabilities using latent coefficients passed through a secondary classifier.
+
+6. Validation (LOOCV):
+    a. Exclude one object from training set.
+    b. Redefine latent space and retrain models using remaining objects.
+    c. Validate reconstruction against excluded object's true spectrum.
+    d. Repeat for all objects.
+
+End
+```

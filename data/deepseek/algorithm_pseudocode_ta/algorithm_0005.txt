@@ -1,0 +1,63 @@
+```
+Algorithm: Probabilistic Spectral Reconstruction from Photometry
+
+Inputs:
+- For each TNO:
+   - Photometric data F with length n
+   - Uncertainties σ_F of each F_i
+   - Filter transmission curves T_1, T_2, ..., T_n
+   - Pre-trained PCA model: μ(λ), Ψ_j(λ), j=1..k, eigenvalues Λ_j
+
+Outputs:
+- Reconstructed spectrum S(λ)
+- Uncertainty on S(λ)
+
+Steps:
+
+For each TNO:
+   Read F, σ_F, filter_transmissions
+
+   Precompute F_mean for each filter:
+      For each filter i:
+          F_mean_i = ∫ (μ(λ) * T_i(λ)) dλ
+
+   Precompute A matrix:
+      For each filter i and PCA component j:
+          A_ij = ∫ (Ψ_j(λ) * T_i(λ)) dλ
+
+   Create matrix A of size n x k.
+
+   Compute system:
+      F_model = F_mean + A * c
+
+   Construct system for Bayesian inference:
+      Compute weights matrix W = diag(1/σ_F^2)
+
+      Construct Σ_prior_inv as diag(1/σ_cj^2), where σ_cj is the prior standard deviation for c_j
+
+   Solve for c_post:
+      denominator = A^T * W * A + Σ_prior_inv
+      numerator = A^T * W * (F - F_mean)
+      c_post = inv(denominator) * numerator
+
+   Compute cov(c_post):
+      cov = inv(denominator)
+
+   Reconstruct spectrum:
+      For each wavelength λ:
+          S(λ) = μ(λ) + sum_{j=1 to k} Ψ_j(λ) * c_post[j]
+
+   Compute uncertainty on S(λ):
+      For each λ:
+          var = 0
+          for j=1 to k:
+              term = Ψ_j(λ) * c_post[j]
+              var += term^2
+          for j=1 to k-1:
+              for l=j+1 to k:
+                  cross_term = 2 * Ψ_j(λ) * Ψ_l(λ) * cov[j,l]
+                  var += cross_term
+          std_S(λ) = sqrt(var)
+
+   Output S(λ) and std_S(λ) for the TNO.
+```

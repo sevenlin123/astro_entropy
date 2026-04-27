@@ -1,0 +1,50 @@
+```python
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. **Initialize Training Data**
+   - Load reference TNO spectra.
+   - Perform Principal Component Analysis (PCA) to obtain principal components (PCs) and latent coefficients.
+
+2. **Construct Latent Space Manifold**
+   - Use Kernel Density Estimation (KDE) to create a smooth probability distribution over the latent coefficients.
+   - Generate synthetic spectra by sampling the latent space and projecting back using inverse PCA.
+
+3. **Generate Synthetic Photometry**
+   - Forward model synthetic spectra through target photometric filters (e.g., JWST/NIRCam).
+   - Add Gaussian noise (20% relative uncertainty) to simulate realistic photometric measurements.
+
+4. **Train AutoML Regressor**
+   - Train an ensemble of gradient-boosted decision trees to map noisy photometry to latent coefficients.
+   - Use synthetic photometry and corresponding latent coefficients for training.
+
+5. **Perform Leave-One-Out Cross-Validation (LOOCV)**
+   - For each object in the training set:
+     a. Remove the object from the training data.
+     b. Augment the remaining data using KDE.
+     c. Retrain the regressor on the augmented data.
+     d. Predict latent coefficients for the held-out object using its photometry.
+     e. Reconstruct the spectrum using inverse PCA.
+     f. Evaluate reconstruction error and credible interval coverage.
+
+6. **Reconstruct Spectrum for New Observation**
+   - Input sparse photometry of a new TNO.
+   - Use trained regressor to predict latent coefficients.
+   - Apply inverse PCA to reconstruct the full spectrum.
+   - Sample posterior distribution using Gaussian Copula to generate credible intervals.
+
+7. **Classify Spectral Type**
+   - Project predicted latent coefficients into taxonomic space.
+   - Use a pre-trained classifier to assign probabilities to spectral types (e.g., H₂O, CO₂, Organic).
+
+8. **Detect Outliers**
+   - For each object, check if reconstructed latent variables fall outside the learned manifold.
+   - Flag objects with significantly low probability density as potential outliers.
+
+9. **Optimize Survey Filters**
+   - For candidate filter configurations, simulate photometric observations.
+   - Measure reduction in posterior uncertainty for representative spectra.
+   - Select optimal filters that minimize uncertainty while maximizing information content.
+
+10. **Output Results**
+    - Provide reconstructed spectrum, credible intervals, taxonomic classification, and outlier status for each object.
+```

@@ -1,0 +1,36 @@
+**Algorithm: Probabilistic Spectral Reconstruction via Bayesian Latent-Space Inference**
+
+1. **Input Data Preparation**
+   - Load training dataset of near-IR spectra.
+   - Extract photometric measurements for target TNOs.
+   
+2. **Principal Component Analysis (PCA)**
+   - Train PCA model on the spectral training set.
+   - Determine optimal number of principal components (e.g., 4-5 for taxonomic classification; 8-10 for high-fidelity reconstruction).
+   
+3. **Probabilistic Latent-Space Model Construction**
+   - Represent spectral manifold using the reduced PCA space.
+   - Define probability distribution over latent factors capturing spectral variability.
+   
+4. **Bayesian Inference in Reduced Space**
+   - Perform Bayesian updating using photometric measurements.
+   - Propagate measurement uncertainties through the posterior distribution.
+   
+5. **Spectral Reconstruction**
+   - Reconstruct full spectra from the posterior latent factors.
+   - Compute credible intervals for the reconstructed spectra.
+   
+6. **Survey Optimization**
+   - Evaluate information content of NIRCam filters (e.g., F090W, F115W).
+   - Select optimal filter combinations for maximal spectral diversity.
+   
+7. **Outlier Detection and Rare Spectral Type Reconstruction**
+   - Apply model to constrain photometry for rare types.
+   - Identify and reconstruct unusual spectral models via intermediate latent-space exploration.
+
+8. **Output**
+   - Provide reconstructed spectra with uncertainty estimates.
+   - Deliver optimized survey configurations.
+   - Highlight outlier cases and their reconstructions.
+
+**End Algorithm**

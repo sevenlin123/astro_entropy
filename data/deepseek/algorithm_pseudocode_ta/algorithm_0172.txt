@@ -1,0 +1,30 @@
+ALGORITHM: Probabilistic Spectral Reconstruction
+
+Initialize parameters:
+    N = number of training spectra
+    D = number of spectral bands (e.g., 1024)
+    K = number of photometric bands (e.g., 4)
+
+Read training data:
+    X_train = matrix of N reference spectra, each of D elements (log reflectance ratios)
+    Y_train = matrix of N reference spectra converted to flux densities in K photometric bands via F(X) = Y
+
+Training phase:
+    1. Perform PCA on X_train to obtain principal components (PCs) with M retained components (e.g., M=5)
+    2. Fit a probabilistic model in the latent space assuming z ~ N(0, I)
+    3. Define the prior for loading coefficients β such that x = β * PC^T + μ
+
+Inference phase:
+    4. For a new object with photometric measurements y:
+        a. Use CAVI to update q(z, β | y) by maximizing the ELBO
+        b. Reconstruct x_recon = E[β] * PC^T + μ
+        c. Sample z and β from q to compute uncertainties
+
+Uncertainty propagation:
+    5. Map the posterior predictive distribution to get the reconstructed spectrum x_recon and its uncertainty sigma_x
+
+Return:
+    x_recon = reconstructed spectrum
+    sigma_x = uncertainty in the reconstructed spectrum
+
+Note: The forward model F is used during training to convert X_train to Y_train and remains fixed.

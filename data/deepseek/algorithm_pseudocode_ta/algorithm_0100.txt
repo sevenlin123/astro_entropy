@@ -1,0 +1,27 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Precompute Principal Component Analysis (PCA):**
+   - Train PCA on a reference spectral library of trans-Neptunian object spectra to capture spectral variability.
+
+2. **Initialize Variables:**
+   - Load sparse photometric flux measurements for each object.
+   - Obtain the reference PCA basis vectors (principal components).
+
+3. **Bayesian Inference in PCA Space:**
+   - For each object:
+     - Represent the spectral reflectance as a linear combination of PCA eigenvectors.
+     - Define prior distributions for the PCA coefficients (e.g., mean and covariance based on training data).
+     - Construct the likelihood function relating photometric fluxes to PCA coefficients.
+     - Perform Bayesian inference to compute the posterior distribution of PCA coefficients given the photometric data.
+
+4. **Reconstruct Full Spectrum:**
+   - Multiply the posterior mean of the PCA coefficients with the PCA eigenvectors.
+   - Concatenate the resulting spectra across all wavelengths to form the full reconstructed spectrum.
+
+5. **Quantify Uncertainties:**
+   - Extract the posterior covariance matrix of the PCA coefficients.
+   - Propagate uncertainties through the linear combination to obtain the uncertainty in the reconstructed spectrum.
+   - Calculate credible intervals for the reconstructed spectrum.
+
+6. **Output:**
+   - Save the reconstructed spectra and associated uncertainties for further analysis or visualization.

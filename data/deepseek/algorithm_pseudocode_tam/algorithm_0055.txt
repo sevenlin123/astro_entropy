@@ -1,0 +1,38 @@
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+**Objective:**  
+Reconstruct high-resolution near-infrared spectra of trans-Neptunian objects (TNOs) using sparse photometric measurements through a Bayesian framework.
+
+**Steps:**
+
+1. **Training Data Preparation:**
+   - **Collect Reference Spectra:** Gather a sample of 51 TNO spectra representing dominant taxonomic classes.
+   - **Principal Component Analysis (PCA):** Apply PCA to the reference spectra to derive principal components (latent space). Use the first 8-10 components for improved fidelity.
+   
+2. **Data Augmentation:**
+   - **Kernel Density Estimation (KDE):** Smooth the latent space using KDE to create synthetic spectra, ensuring a continuous manifold for training.
+   - **Noise Injection:** Add 20% Gaussian noise to synthetic photometry to simulate realistic observational uncertainties.
+
+3. **Forward Modeling:**
+   - **Filter Transmission Curves:** Convolve reference spectra with JWST/NIRCam filter responses to generate synthetic photometric measurements.
+   - **Likelihood Construction:** Define the likelihood function mapping photometry to reconstructed spectra.
+
+4. **Model Training:**
+   - **AutoML Regressor:** Train an ensemble of gradient-boosted decision trees to regress photometric inputs to latent PCA coefficients.
+   - **Classifier Training:** Train a secondary classifier on the latent space to predict taxonomic labels.
+
+5. **Inference Pipeline:**
+   - **Photometric Input:** Accept sparse photometric measurements.
+   - **Regressor Prediction:** Use the trained regressor to predict latent coefficients.
+   - **Inverse PCA Transform:** Convert latent coefficients to full spectra.
+   - **Classification:** Classify the object's taxonomic type using the latent space classifier.
+
+6. **Validation and Performance Metrics:**
+   - **LOOCV:** Validate using leave-one-out cross-validation, ensuring no overlap between training and validation sets.
+   - **Reconstruction Error:** Compute mean absolute error between ground truth and reconstructed spectra.
+   - **Credibility Intervals:** Assess coverage of 68.3% and 95.4% credible intervals.
+   - **Filter Information Content:** Rank filters based on their contribution to PCA components.
+   - **Outlier Detection:** Flag objects with Mahalanobis distance exceeding 3σ.
+
+**End:**  
+Output includes reconstructed spectra, taxonomic classifications, and outlier flags for each object.

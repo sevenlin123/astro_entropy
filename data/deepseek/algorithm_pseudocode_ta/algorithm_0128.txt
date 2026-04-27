@@ -1,0 +1,27 @@
+Here is the pseudocode implementing the core reconstruction framework:
+
+```python
+Algorithm ProbabilisticSpectralReconstruction:
+
+1. Initialize training spectra S_train.
+2. Compute the mean spectrum μ of S_train.
+3. Center the training spectra by subtracting μ from each spectrum.
+4. Compute the covariance matrix C of the centered spectra.
+5. Perform Principal Component Analysis (PCA) on C to obtain eigenvectors V and eigenvalues Λ.
+6. Select the number of principal components NumComponents (e.g., 8).
+7. latent_basis = V[:, 1:NumComponents + 1]
+8. For each object:
+    a. Read sparse photometric measurements P.
+    b. For each measurement in P:
+        i. Retrieve flux F_j and its uncertainty σ_j.
+    c. For each filter band j:
+        i. Obtain the filter response R_j.
+    d. Assemble the system of equations F = R * S.
+    e. Express the spectrum S in terms of the latent basis: S = μ + latent_basis * z.
+    f. Substitute into the system: F = R * μ + R * latent_basis * z.
+    g. Perform Bayesian inference to estimate z given F and uncertainties, resulting in posterior z.
+    h. Reconstruct the spectrum S_recon = μ + latent_basis * z.
+    i. Output S_recon.
+```
+
+This pseudocode outlines the essential steps for reconstructing the spectrum of a trans-Neptunian object using sparse photometric data within a probabilistic latent-space framework.

@@ -1,0 +1,33 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Preprocessing:**
+   - Load training set of near-infrared (NIR) spectra.
+   - Perform Principal Component Analysis (PCA) on the training spectra.
+   - Determine the number of principal components (PCs) for modeling: use 4-5 for taxonomic classification, 8-10 for improved reconstruction fidelity.
+
+2. **Modeling the Spectral Manifold:**
+   - Construct a latent-space representation using the selected number of PCs.
+   - Define a probabilistic model in the reduced PCA space.
+
+3. **Bayesian Inference:**
+   - For each object:
+     - Input sparse photometric measurements.
+     - Perform Bayesian inference in the PCA-reduced latent space to reconstruct the full spectrum.
+     - Propagate measurement uncertainties through the reconstruction process.
+
+4. **Cross-Validation (LOOCV):**
+   - Apply leave-one-out cross-validation to assess reconstruction accuracy and uncertainty calibration.
+
+5. **Survey Optimization:**
+   - Quantify the information content of NIR filters (e.g., JWST/NIRCam).
+   - Identify optimal filter configurations for TNO taxonomy using the framework.
+
+6. **Outlier Detection and Rare Spectral Type Reconstruction:**
+   - Use the probabilistic framework to constrain photometry.
+   - Reconstruct rare spectral types by selecting low-probability intermediate models from the continuous topological manifold.
+
+7. **Output:**
+   - Reconstructed spectra with associated uncertainties.
+   - Optimized filter configurations for future observations.
+
+**End of Algorithm**

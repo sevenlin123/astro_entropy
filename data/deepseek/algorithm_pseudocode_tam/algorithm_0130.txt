@@ -1,0 +1,22 @@
+To implement the core reconstruction framework, follow these steps:
+
+1. **Initialize the PCA Model**:
+   - Train a Principal Component Analysis (PCA) on a reference dataset of TNO spectra to create a low-dimensional latent space.
+
+2. **Generate Synthetic Training Data**:
+   - Project the reference spectra onto the PCA latent space.
+   - Use Kernel Density Estimation (KDE) with a bandwidth of ~0.5 to create a smooth probability distribution of latent coefficients.
+
+3. **Create Synthetic Photometry**:
+   - Convolve each synthetic spectrum with the JWST NIRCam filter response functions to compute the expected photometric magnitudes.
+   - Add 20% Gaussian noise to simulate observational uncertainties.
+
+4. **Train the AutoML Regressor**:
+   - Use the AutoGluon framework to train a gradient-boosted decision tree regressor mapping the noisy photometric measurements to the latent space coordinates.
+
+5. **Define the Bayesian Inference Process**:
+   - For new photometric observations, pass them through the trained regressor to predict latent coefficients.
+   - Apply the inverse PCA transformation to reconstruct the full spectrum.
+   - Calculate the posterior probabilities for each taxonomic class using the latent representation.
+
+**End Algorithm**

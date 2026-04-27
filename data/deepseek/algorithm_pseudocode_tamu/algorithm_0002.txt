@@ -1,0 +1,99 @@
+```python
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input: 
+    - Observed photometric measurements (sparse_multiband)
+    - Pre-trained PCA basis (principal_components)
+    - Pre-trained KDE model (latent_prior)
+    - Training parameters (learning_rate, epochs)
+
+Output:
+    - Reconstructed spectrum (reconstructed_spectrum)
+    - Posterior distribution of latent coefficients (latent_posterior)
+    - Taxonomic classification probabilities (taxonomy_probs)
+
+Steps:
+
+1. **Preprocess Training Data**
+    a. Extract principal components from reference spectra using PCA.
+    b. Train KDE model on the latent coefficients to create a continuous prior distribution.
+
+2. **Generate Synthetic Photometry**
+    a. For each synthetic spectrum, convolve with NIRCam filter curves to simulate photometric measurements.
+    b. Inject Gaussian noise (σ = 0.2 relative reflectance) to account for observational uncertainties.
+
+3. **Train AutoML Regressor**
+    a. Use synthetic photometry and corresponding latent coefficients as training data.
+    b. Train ensemble of gradient-boosted decision trees to map photometry to latent space.
+    c. Validate using 5-fold cross-validation to prevent overfitting.
+
+4. **Leave-One-Out Cross-Validation (LOOCV)**
+    a. For each held-out spectrum:
+        i. Remove the spectrum from training data.
+        ii. Generate synthetic latent space and train regressor.
+        iii. Predict latent coefficients from photometric measurements.
+        iv. Project latent coefficients through inverse PCA to get reconstructed spectrum.
+        v. Compute metrics (NRMSE, FPS, UCP).
+
+5. **Reconstruct Spectrum**
+    a. Pass observed photometry through trained regressor to get predicted latent coefficients.
+    b. Apply inverse PCA transform to obtain full spectrum.
+    c. Sample from joint posterior of latent coefficients using Gaussian Copula to quantify uncertainties.
+
+6. **Taxonomic Classification**
+    a. Project predicted latent coefficients into pre-trained classifier.
+    b. Output probability distribution over taxonomic classes (e.g., H₂O, CO₂, Organic, Methanol).
+
+7. **Outlier Detection**
+    a. Compare reconstructed spectrum to expected manifold.
+    b. Flag if posterior falls outside predefined thresholds.
+
+End.
+```
+
+```python
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+    - Observed photometric measurements (sparse_multiband)
+    - Pre-trained PCA basis (principal_components)
+    - Pre-trained KDE model (latent_prior)
+    - Training parameters (learning_rate, epochs)
+
+Output:
+    - Reconstructed spectrum (reconstructed_spectrum)
+    - Posterior distribution of latent coefficients (latent_posterior)
+    - Taxonomic classification probabilities (taxonomy_probs)
+
+Steps:
+
+1. **Latent Space Definition**
+    a. Apply PCA to reference spectra to obtain principal components.
+    b. Train KDE on PCA coefficients to form continuous latent prior.
+
+2. **Synthetic Data Generation**
+    a. For each latent vector:
+        i. Generate synthetic spectrum.
+        ii. Convolve with NIRCam filter curves to simulate photometry.
+        iii. Add Gaussian noise (σ = 0.2) to account for uncertainties.
+
+3. **Model Training**
+    a. Train AutoML regressor (ensemble of gradient-boosted trees) to map photometry to latent space.
+    b. Validate using 5-fold cross-validation to prevent overfitting.
+
+4. **Inference**
+    a. Given new photometry:
+        i. Predict latent coefficients using trained regressor.
+        ii. Apply inverse PCA to reconstruct full spectrum.
+        iii. Sample posterior using Gaussian Copula for uncertainty quantification.
+
+5. **Classification**
+    a. Classify latent coefficients using pre-trained taxonomic classifier.
+    b. Output probabilities for each spectral type.
+
+6. **Uncertainty Quantification**
+    a. Propagate photometric uncertainties through the model.
+    b. Calculate confidence intervals for reconstructed features.
+
+End.
+```

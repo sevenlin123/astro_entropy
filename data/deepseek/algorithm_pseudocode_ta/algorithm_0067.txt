@@ -1,0 +1,33 @@
+```
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Initialize:
+   Read training spectral data
+   Perform PCA to get mean_spectrum and principal components (PCs)
+
+Precompute for each photometric band j:
+   Compute intercept_j = ∫ mean_spectrum * R_j dλ
+   Compute A_ij = ∫ PC_i * R_j dλ for each i
+
+For each object:
+   Read photometric data F_j, σ_j for each band j
+
+   Set up Bayesian model:
+      Priors on coeff_i (e.g., Gaussian with mean 0 and variance τ^2)
+
+   Define the likelihood:
+      For each band j, F_j ~ Normal(intercept_j + sum(A_ij * coeff_i), σ_j)
+
+   Perform MCMC sampling:
+      Sample coeff_i from the posterior
+
+   Reconstruct spectra:
+      For each sample of coeff_i:
+          f(λ) = mean_spectrum + sum( coeff_i * PC_i(λ) )
+
+   Compute uncertainties:
+      For each λ, calculate the standard deviation of f(λ) across samples
+
+   Output:
+      The posterior mean of f(λ) and its standard deviation
+```

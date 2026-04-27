@@ -1,0 +1,53 @@
+To implement the core reconstruction framework described in the paper, we follow these steps:
+
+1. **Principal Component Analysis (PCA)**: Perform PCA on the reference spectra to derive a low-dimensional latent space, which captures the major variations in the spectral data.
+
+2. **Kernel Density Estimation (KDE)**: Use KDE to smooth the distribution of latent coefficients, creating a continuous manifold that represents plausible spectral variations.
+
+3. **Synthetic Photometry Generation**: For each point in the smoothed latent space, generate synthetic photometric data by simulating the process of observing the spectrum with the given instrument and adding noise to mimic real-world measurements.
+
+4. **Training AutoML Regressor**: Train an automated machine learning regressor to map the noisy photometric data to the latent coefficients, effectively learning the inverse mapping from observations to spectral features.
+
+5. **Reconstructing Spectra**: For new photometric observations, use the trained regressor to predict the latent coefficients and then invert the PCA transformation to reconstruct the high-resolution spectrum.
+
+Here is the algorithm in pseudocode:
+
+```
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+    - Reference spectra S_ref
+    - Instrument filters F (e.g., JWST NIRCam filters)
+    - Noise level σ (e.g., 20% relative uncertainty)
+    
+Output:
+    - Reconstructed spectrum S_recon for new photometry
+
+1. Perform PCA on S_ref:
+    a. Compute principal components PC and eigenvalues EV.
+    b. Project each S_ref onto PC to obtain latent coefficients L_ref.
+
+2. Build KDE model of L_ref:
+    a. Smooth the latent space distribution using a selected bandwidth h.
+
+3. Generate synthetic photometry for training:
+    a. For each latent sample in the KDE-enhanced space:
+        i. Inverse PCA to get synthetic spectrum S_synch.
+        ii. Convolve S_synch with instrument filters F to compute photometry m_synch.
+        iii. Add noise with level σ to m_synch to get m_noise.
+
+4. Train AutoML regressor R:
+    a. Input: m_noise (synthetic photometry with added noise)
+    b. Output: latent coefficients L_synch
+    c. Use R to map photometric inputs to latent space.
+
+5. For new photometry m:
+    a. Predict latent coefficients L_hat = R(m).
+    b. Reconstruct spectrum S_recon by applying inverse PCA to L_hat.
+
+6. Output S_recon.
+
+End of Algorithm.
+```
+
+This algorithm outlines the steps necessary to reconstruct high-resolution spectra from sparse photometric data using a probabilistic framework.

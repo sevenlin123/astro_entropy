@@ -1,0 +1,49 @@
+```
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+- Reference sample of TNO spectra
+- Observed photometric data
+- Number of principal components (K)
+
+Output:
+- Reconstructed spectrum for each object
+- Uncertainty propagation
+- Probabilistic constraints on spectral features
+
+Steps:
+
+1. Preprocess the reference spectra:
+   a. Normalize and align spectra to a common wavelength grid.
+   
+2. Perform Principal Component Analysis (PCA):
+   a. Compute covariance matrix of the reference spectra.
+   b. Calculate eigenvectors and eigenvalues.
+   c. Select top K principal components (based on explained variance).
+
+3. Build the reduced PCA space model:
+   a. Project reference spectra onto the selected K PCA components.
+   b. Store the transformed coefficients as a matrix.
+
+4. Bayesian Inference in the PCA Space:
+   a. Define prior distributions for the PCA coefficients (e.g., Gaussian with mean 0).
+   b. Use observed photometric measurements as likelihood constraints.
+   c. Perform Markov Chain Monte Carlo (MCMC) sampling to estimate posterior distributions of the PCA coefficients.
+   
+5. Reconstruct the original spectrum:
+   a. Use the estimated PCA coefficients from the posterior distribution.
+   b. Multiply by the PCA eigenvectors to project back into the original spectral space.
+   
+6. Propagate uncertainties:
+   a. Compute the covariance matrix of the PCA coefficients from the MCMC samples.
+   b. Transform the covariance matrix using the PCA transformation to obtain the spectral uncertainties.
+   
+7. Posterior analysis and validation (if required):
+   a. Check convergence of MCMC chains.
+   b. Validate reconstructed spectra against reference data (if available).
+   
+8. Output the results:
+   a. Save reconstructed spectra, their uncertainties, and any additional probabilistic constraints.
+   
+End.
+```

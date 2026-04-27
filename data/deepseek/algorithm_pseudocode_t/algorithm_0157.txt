@@ -1,0 +1,35 @@
+```pseudocode
+Algorithm: Probabilistic Spectral Reconstruction of TNOs
+
+1. Initialize variables:
+   - photometric_data: Flux measurements from multiple bands
+   - wavelength_bands: Corresponding wavelength ranges
+   - parameters: Model parameters including basis function coefficients and Gaussian process hyperparameters
+   - uncertainties: Placeholder for parameter uncertainties
+
+2. Define the SED model:
+   - SED(w) = sum_{i} c_i * basis_function_i(w) + GP(w)
+   - c_i: Coefficients of basis functions
+   - GP(w): Gaussian Process smoothness terms
+
+3. Set up the likelihood function:
+   - For each photometric band j:
+      - flux_j ~ Normal(SED evaluated at mean wavelength of band j, σ_j^2)
+      - σ_j: Measurement error for band j
+
+4. Define the prior distribution:
+   - Parameters are drawn from a multivariate normal distribution
+   - Includes basis function coefficients and Gaussian process hyperparameters
+
+5. Perform Bayesian inference:
+   - Use MCMC (e.g., Metropolis-Hastings) to sample posterior distribution of parameters
+   - Update parameters based on photometric data and prior
+
+6. Sample posterior distribution:
+   - After convergence, draw posterior samples of SED and parameters
+   - Calculate uncertainties (credible intervals) for SED components
+
+7. Output:
+   - Reconstructed SED
+   - Parameter uncertainties
+```

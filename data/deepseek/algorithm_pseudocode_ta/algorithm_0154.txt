@@ -1,0 +1,117 @@
+**Pseudocode Algorithm for Probabilistic Spectral Reconstruction of Trans-Neptunian Objects from Sparse Photometry**
+
+**Input:**  
+- Sparse photometric measurements of TNOs  
+- Reference spectral library  
+
+**Output:**  
+- Reconstructed spectra with propagated uncertainties  
+- Optimized NIR filter configurations  
+- Detected outliers  
+
+**Algorithm Steps:**
+
+1. **Preprocessing**  
+   - Read and organize sparse photometric data into a structured format.  
+   - Load the reference spectral library for Principal Component Analysis (PCA).  
+
+2. **Principal Component Analysis (PCA)**  
+   ```python
+   def PCA(reference_spectra):
+       # Compute mean spectrum
+       mean_spectrum = np.mean(reference_spectra, axis=0)
+       # Subtract mean spectrum
+       centered_spectra = reference_spectra - mean_spectrum
+       # Compute covariance matrix
+       cov_matrix = np.cov(centered_spectra, rowvar=False)
+       # Compute eigenvalues and eigenvectors
+       eigenvals, eigenvecs = np.linalg.eigh(cov_matrix)
+       # Sort eigenvals and eigenvecs in descending order
+       idx = eigenvals.argsort()[::-1]
+       eigenvals = eigenvals[idx]
+       eigenvecs = eigenvecs[:, idx]
+       # Explained variance ratio
+       explained_variance = (eigenvals / np.sum(eigenvals)).cumsum()
+       return eigenvecs, explained_variance
+   ```
+   - Apply PCA to the reference spectral library.  
+   - Obtain principal components (eigenvectors) and explained variance ratios.  
+
+3. **Probabilistic Model Construction**  
+   ```python
+   def build_probabilistic_model(photometry, eigenvecs, explained_variance):
+       # Map photometric measurements to latent space
+       latent_space = np.dot(photometry, eigenvecs)
+       # Bayesian inference setup
+       with pm.Model() as model:
+           # Priors
+           mu = pm.Normal('mu', mu=0, sigma=1)
+           sigma = pm.HalfNormal('sigma', 0.1)
+           # Likelihood
+           y_obs = pm.Normal('y_obs', mu=np.dot(latent_space, eigenvecs.T), 
+                             sigma=sigma, observed=photometry)
+           # Inference
+           trace = pm.sample(1000, tune=1000)
+       return trace, model
+   ```
+   - Project photometric data onto the PCA latent space.  
+   - Set up a Bayesian model to infer latent variables.  
+   - Use MCMC sampling to estimate posterior distributions.  
+
+4. **Spectrum Reconstruction**  
+   ```python
+   def reconstruct_spectrum(trace, eigenvecs):
+       # Posterior predictive check
+       predicted_latent = np.random.choice(trace['mu'], size=len(eigenvecs))
+       # Reconstruct full spectrum
+       reconstructed_spectra = np.dot(predicted_latent, eigenvecs.T)
+       return reconstructed_spectra
+   ```
+   - Use posterior samples to generate reconstructed spectra.  
+
+5. **Uncertainty Propagation**  
+   ```python
+   def propagate_uncertainties(trace, reconstructed_spectra):
+       # Calculate standard deviation of reconstructed spectra
+       std_reconstructed = np.std(reconstructed_spectra, axis=0)
+       return std_reconstructed
+   ```
+   - Compute uncertainty estimates from the posterior distribution.  
+
+6. **Leave-One-Out Cross-Validation (LOOCV)**  
+   ```python
+   def loocv_evaluation(reference_spectra, reconstructed_spectra, std_reconstructed):
+       # Compute RMSE
+       rmse = np.sqrt(np.mean((reference_spectra - reconstructed_spectra)**2))
+       # Compute coverage probability
+       coverage = np.mean((std_reconstructed < abs(reference_spectra - reconstructed_spectra)))
+       return rmse, coverage
+   ```
+   - Assess model accuracy and coverage.  
+
+7. **Filter Optimization for Future Surveys**  
+   ```python
+   def optimize_filters(reference_spectra, eigenvecs, explained_variance):
+       # Rank filters based on information content
+       filter_info = {}
+       for filter_config in ['F090W', 'F115W', 'F410M', 'F460M']:
+           info_content = np.sum(explained_variance[:np.searchsorted(filter_config)])
+           filter_info[filter_config] = info_content
+       # Sort filters by information content
+       sorted_filters = sorted(filter_info.items(), key=lambda x: -x[1])
+       return sorted_filters
+   ```
+   - Identify optimally informative NIR filters.  
+
+8. **Outlier Detection**  
+   ```python
+   def detect_outliers(reconstructed_spectra, std_reconstructed):
+       # Calculate z-scores
+       z_scores = (reconstructed_spectra - np.mean(reconstructed_spectra)) / std_reconstructed
+       # Threshold for outliers (e.g., z > 3)
+       outliers = np.where(z_scores > 3)
+       return outliers
+   ```
+   - Identify unusual spectral types.  
+
+**End of Algorithm**

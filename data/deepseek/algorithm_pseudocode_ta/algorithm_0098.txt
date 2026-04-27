@@ -1,0 +1,33 @@
+**Algorithm: Probabilistic Spectral Reconstruction Framework**
+
+**Step-by-Step Pseudocode:**
+
+1. **Training Phase:**
+   - **Input:** Collection of near-IR spectra (training set)
+   - **Compute Principal Components:**
+     - Perform Principal Component Analysis (PCA) on the training set to obtain principal component eigenvectors (basis vectors) and corresponding eigenvalues.
+     - Select the optimal number of principal components (e.g., 4-5 for taxonomic classification, 8-10 for high-fidelity reconstruction).
+   - **Store PCA Results:**
+     - Save the selected principal component eigenvectors and eigenvalues for subsequent use.
+
+2. **Processing Each Object:**
+   - **For each trans-Neptunian object (test case):**
+     - **Input:** Sparse photometric measurements (e.g., magnitudes in specific filters like F090W, F115W, etc.)
+     - **Initialize Bayesian Inference Model:**
+       - Define a Bayesian model where the spectrum is represented as a linear combination of the stored PCA basis vectors.
+       - The coefficients of this linear combination are the latent variables (principal components) to be inferred.
+     - **Set Up Prior Distributions:**
+       - Assign prior distributions to the latent variables (e.g., Gaussian with mean 0 and variance based on PCA eigenvalues).
+       - Consider photometric uncertainties as part of the likelihood model.
+     - **Perform Bayesian Inference:**
+       - Use Markov Chain Monte Carlo (MCMC) sampling or variational inference to estimate the posterior distribution of the latent variables given the photometric data.
+     - **Reconstruct the Spectrum:**
+       - Multiply the posterior means of the latent variables by the PCA eigenvectors and sum them to obtain the reconstructed spectrum.
+     - **Propagate Uncertainties:**
+       - Compute the posterior variances of the latent variables and propagate these variances through the linear combination to estimate the uncertainties in the reconstructed spectrum.
+     - **Output:**
+       - Provide the reconstructed spectrum along with its associated uncertainties.
+     - **Optional:**
+       - Apply Leave-One-Out Cross-Validation (LOOCV) or other validation methods to assess the quality of the reconstructed spectrum.
+
+**End of Algorithm**

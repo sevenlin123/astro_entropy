@@ -1,0 +1,43 @@
+### Algorithm: Probabilistic Spectral Reconstruction Framework
+
+**Step-by-Step Computational Steps:**
+
+1. **Principal Component Analysis (PCA):**
+   - Train PCA on a set of reference TNO spectra.
+   - Obtain principal component (PC) coefficients that capture dominant spectral variations.
+
+2. **Kernel Density Estimation (KDE):**
+   - Apply KDE to the latent PC coefficients derived from PCA.
+   - Create a smooth probability distribution in the latent space.
+
+3. **Synthetic Data Augmentation:**
+   - Generate synthetic spectra by sampling from the smoothed latent manifold.
+   - Convolve each synthetic spectrum with the instrumental response function (e.g., JWST NIRCam filters) to simulate photometric observations.
+
+4. **Data Augmentation with Noise:**
+   - Inject Gaussian noise with relative reflectance uncertainty (e.g., 20%) into synthetic photometry.
+   - Simulate real-world photometric noise for robust model training.
+
+5. **Automated Machine Learning (AutoML) Training:**
+   - Train an AutoML regressor (e.g., Gradient Boosted Decision Trees) to map sparse photometry to latent PC coefficients.
+   - Input: Noisy synthetic photometry; Output: Corresponding latent coefficients.
+
+6. **Taxonomic Classifier Training:**
+   - Train a secondary AutoML classifier on latent PC coefficients to predict taxonomic labels (e.g., H₂O, CO₂, Organics).
+   - Input: Latent coefficients; Output: Probability distribution over taxonomic types.
+
+7. **Forward Inference Pipeline:**
+   - For new photometric observations:
+     - Use the trained AutoML regressor to predict latent coefficients.
+     - Project latent coefficients through inverse PCA transform to reconstruct full spectrum.
+     - Simultaneously classify taxonomic type using the classifier.
+
+8. **Validation and Performance Metrics:**
+   - Perform leave-one-out cross-validation (LOOCV) on the original training set.
+   - Compute spectral RMSE, credible interval coverage, and taxonomic classification accuracy.
+   - Assess information content of photometric data through entropy of posterior probabilities.
+
+**End Result:**
+- Reconstructed high-resolution spectra from sparse photometry.
+- Taxonomic classification probabilities for each object.
+- Quantitative measures of reconstruction accuracy and confidence.

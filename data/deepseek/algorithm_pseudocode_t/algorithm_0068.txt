@@ -1,0 +1,40 @@
+```
+Algorithm:
+
+Initialize the Bayesian mixture model parameters.
+
+For each object:
+
+    Collect observed photometric magnitudes and their uncertainties.
+
+Run MCMC sampling over the model parameters:
+
+    For each iteration:
+
+        Sample the number of spectral types K.
+
+        For each spectral type k:
+
+            Sample SED parameters theta_k.
+
+            For each object o in cluster k:
+
+                Compute expected magnitudes m_o based on theta_k.
+
+                Calculate the likelihood contribution considering observed magnitudes and uncertainties.
+
+        Compute the posterior probability of the current model configuration.
+
+        Update the mixture component weights.
+
+    End of MCMC iterations.
+
+After sampling:
+
+For each object:
+
+    Compute posterior probabilities of belonging to each spectral type.
+
+    Assign to the spectral type with the highest posterior probability.
+
+```

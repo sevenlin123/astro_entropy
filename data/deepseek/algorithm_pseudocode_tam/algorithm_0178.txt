@@ -1,0 +1,22 @@
+```
+Define the spectral manifold via PCA:
+   Train PCA on reference TNO spectra (number of components n_components).
+   Project new photometric data into the latent space.
+
+Generate mock photometry for training:
+   For each augmented spectrum:
+      Convolve with filter transmission curves to compute synthetic photometric fluxes.
+      Add Gaussian noise with standard deviation reflecting photometric uncertainties.
+
+Perform regression training:
+   Use AutoML regressor to model the mapping from noisy photometry to PCA latent coefficients.
+
+For each object:
+   Input photometric data into trained regressor to obtain latent coefficients' posterior distribution.
+   Project latent coefficients through inverse PCA transformation to reconstruct full spectrum.
+
+Classify taxonomic type:
+   Apply pre-trained latent space classifier to determine spectral type probabilities.
+
+Output reconstructed spectrum and taxonomic probability.
+```

@@ -1,0 +1,28 @@
+```
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. Input: Sparse photometric measurements of a trans-Neptunian object (TNO)
+
+2. Initialize:
+   a. Load a pre-trained Principal Component Analysis (PCA) model built on a reference TNO spectral dataset
+   b. Define the latent space based on PCA components
+
+3. Forward Modeling:
+   a. Simulate photometric measurements from synthetic spectra by convolving with the instrument's bandpasses (e.g., JWST/NIRCam)
+   b. Inject Gaussian noise at a relative uncertainty level (e.g., 20%) to account for observational errors
+
+4. Training Phase:
+   a. Augment the training data using Kernel Density Estimation (KDE) on the latent space
+   b. Train an AutoML regressor (e.g., Gradient Boosted Decision Trees) to map sparse photometry to latent coefficients
+   c. Validate the model using leave-one-out cross-validation (LOOCV)
+
+5. Inference Phase:
+   a. Pass the observed sparse photometry through the trained AutoML regressor to predict latent coefficients
+   b. Apply the inverse PCA transform to reconstruct the full spectrum
+   c. Sample the joint posterior distribution of latent coefficients using a Gaussian Copula to quantify uncertainties
+
+6. Output:
+   a. Reconstructed spectrum with credible intervals
+   b. Probabilistic taxonomic classification (e.g., H2O, CO2, Organic, Methanol)
+   c. Diagnostic metrics (e.g., RMSE, credible interval coverage)
+```

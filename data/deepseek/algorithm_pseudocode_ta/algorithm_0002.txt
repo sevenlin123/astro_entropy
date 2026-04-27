@@ -1,0 +1,38 @@
+**Algorithm: Probabilistic Spectral Reconstruction Framework**
+
+1. **Training Principal Component Analysis (PCA) Model**
+   - Input: Set of TNO near-infrared spectra
+   - Output: PCA components representing spectral variability
+   - Steps:
+     - Normalize the input spectra.
+     - Compute the covariance matrix of the normalized spectra.
+     - Perform eigenvalue decomposition on the covariance matrix.
+     - Extract the top N principal components (e.g., 4-5 for taxonomic classification).
+
+2. **Bayesian Inference in Latent Space**
+   - Input: Sparse photometric measurements
+   - Output: Reconstructed full spectrum and uncertainty propagation
+   - Steps:
+     - Represent the photometric measurements in the PCA latent space.
+     - Define a probabilistic model linking photometric measurements to PCA components.
+     - Perform Bayesian inference to estimate posterior distributions of PCA components.
+     - Transform the estimated PCA components back to the original spectral space to reconstruct the full spectrum.
+     - Propagate uncertainties from the photometric measurements through the PCA transformation to the reconstructed spectrum.
+
+3. **Quantification of Filter Information Content**
+   - Input: Photometric filter configurations
+   - Output: Bayesian evidences for each filter configuration
+   - Steps:
+     - For each filter configuration, compute the likelihood of the data under the PCA model.
+     - Integrate the likelihood with the prior distribution of the PCA components to obtain the Bayesian evidence.
+     - Compare the Bayesian evidences across different filter configurations to determine their information content.
+
+4. **Outlier Detection via Latent Space Model Selection**
+   - Input: Reconstructed spectra and PCA components
+   - Output: Identification of outliers
+   - Steps:
+     - Evaluate the posterior probabilities of each object in the PCA latent space.
+     - Compare these probabilities against the expected distribution under the trained PCA model.
+     - Flag objects with significantly lower posterior probabilities as potential outliers.
+
+This algorithm bridges the gap between sparse photometry and detailed spectral reconstruction, enabling robust taxonomic classification and outlier detection for trans-Neptunian objects.

@@ -1,0 +1,41 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+**Input:** Sparse photometric measurements of a trans-Neptunian object  
+**Output:** Reconstructed spectrum, taxonomic classification, uncertainty quantification  
+
+1. **Principal Component Analysis (PCA) Preparation:**
+   - Train PCA using a reference set of TNO spectra.
+   - Determine the number of principal components (e.g., 4-10) based on reconstruction fidelity and taxonomic relevance.
+   - Project the reference spectra onto the principal components to form a latent space.
+
+2. **Kernel Density Estimation (KDE):**
+   - Augment the latent space by estimating the density of the PCA coefficients from the reference spectra.
+   - Use non-parametric KDE to smooth the latent distribution and generate synthetic latent vectors.
+
+3. **Synthetic Photometry Generation:**
+   - Forward model the synthetic spectra through the instrument's filter set (e.g., JWST/NIRCam).
+   - Inject Gaussian noise (e.g., 20% relative uncertainty) into the synthetic photometry to simulate real-world observational noise.
+
+4. **AutoML Regressor Training:**
+   - Train an ensemble of Gradient-Boosted Decision Trees (GBDTs) to map sparse photometry to latent coefficients.
+   - Optimize the regressor using the synthetic photometry and augmented latent space.
+
+5. **Taxonomic Classifier Training:**
+   - Train a separate AutoML classifier to partition the latent space into taxonomic categories (e.g., H₂O, CO₂, Organics, Methanol).
+   - Use the latent mean coefficients of the reference spectra for training.
+
+6. **Forward Inference:**
+   - For new photometric observations:
+     a. Predict latent coefficients using the trained AutoML regressor.
+     b. Project the latent coefficients back into full spectrum via inverse PCA transform.
+     c. Classify the spectrum using the taxonomic classifier.
+
+7. **Uncertainty Quantification:**
+   - Measure the spread of posterior latent coefficient predictions across multiple Monte Carlo simulations.
+   - Derive empirical credible intervals to assess uncertainty in the reconstructed spectra.
+
+8. **Outlier Detection:**
+   - Identify spectra whose latent coefficients fall in the extreme tails of the prior distribution.
+   - Flag potential outliers for further investigation.
+
+**End Algorithm**

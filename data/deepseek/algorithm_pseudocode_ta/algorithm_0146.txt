@@ -1,0 +1,21 @@
+**Algorithm: Probabilistic Spectral Reconstruction**
+
+1. **Principal Component Analysis (PCA):**
+   - Precompute Principal Components (PCs) from a training set of near-infrared spectra.
+   
+2. **Spectral Manifold Modeling:**
+   - Represent the spectral manifold of TNOs using the precomputed PCs.
+
+3. **Bayesian Inference:**
+   - For each object, perform Bayesian inference in the reduced PC space to determine the most probable underlying spectrum coefficients based on photometric data.
+
+4. **Spectral Reconstruction:**
+   - Reconstruct the full near-infrared spectrum using the inferred coefficients of the principal components.
+
+5. **Survey Optimization:**
+   - Assess the information content of each filter configuration (e.g., F090W, F115W, etc.) to identify optimal configurations for TNO taxonomy.
+
+6. **Outlier Detection:**
+   - Identify rare or peculiar spectral types by constraining photometry and detecting low-probability intermediate models.
+
+**End Algorithm**

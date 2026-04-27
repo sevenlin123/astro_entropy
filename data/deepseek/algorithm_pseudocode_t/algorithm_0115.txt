@@ -1,0 +1,32 @@
+**Algorithm: Probabilistic Spectral Reconstruction (PSR) for Trans-Neptunian Objects**
+
+1. **Initialization**:
+   - For each TNO:
+     - Collect sparse photometric flux measurements.
+     - Initialize a Gaussian Mixture Model (GMM) with an unknown number of components (K).
+     - Set prior distributions for GMM parameters: weights (π), means (μ), covariances (Σ).
+
+2. **Bayesian Inference Setup**:
+   - Define the likelihood function based on the sparse flux data and the GMM.
+   - Establish the prior distributions for all mixture parameters.
+
+3. **Markov Chain Monte Carlo (MCMC) Sampling**:
+   - Choose an MCMC method (e.g., Metropolis-Hastings or Gibbs sampler).
+   - Initialize MCMC chains with starting values for π, μ, Σ.
+   - Conduct burn-in period to ensure convergence.
+   - Perform MCMC sampling for a specified number of iterations, updating parameters based on the posterior distribution.
+
+4. **Parameter Estimation**:
+   - After sufficient sampling:
+     - Compute posterior means or medians of π, μ, Σ.
+     - Calculate parameter uncertainties from the posterior covariance or credible intervals.
+
+5. **SED Reconstruction**:
+   - For each TNO:
+     - Using the inferred GMM parameters, reconstruct the SED by combining the Gaussian components weighted by their probabilities.
+     - Optionally, smooth or interpolate the SED for spectral classification purposes.
+
+6. **Output**:
+   - Store the reconstructed SEDs and their associated uncertainties for each TNO.
+
+**End of Algorithm**

@@ -1,0 +1,44 @@
+**Algorithm: Probabilistic Spectral Reconstruction Framework**
+
+1. **Initialize Training Data**:
+   - Select a set of reference TNO spectra (e.g., 51 spectra) representing dominant taxonomic classes (e.g., Water-type, CO₂-type, Organics-type).
+   
+2. **Perform Principal Component Analysis (PCA)**:
+   - Apply PCA to the training spectra to obtain principal components (PCs).
+   - Determine the number of PCs (e.g., 4-5 for taxonomic classification; 8-10 for high-fidelity reconstruction).
+
+3. **Data Augmentation with Kernel Density Estimation (KDE)**:
+   - Project the training spectra onto the PCA latent space.
+   - Use KDE to smooth the latent distribution, generating synthetic spectra to augment the training set.
+   - Set the KDE bandwidth (e.g., h ≈ 0.5) to balance local fidelity and global smoothness.
+
+4. **Generate Synthetic Photometry**:
+   - Convolve the augmented spectra with the filter response functions of the target instrument (e.g., JWST NIRCam).
+   - Inject Gaussian noise (e.g., 20% relative uncertainty) into the synthetic photometry to simulate observational noise.
+
+5. **Train AutoML Regressor**:
+   - Use the synthetic photometry and corresponding latent coefficients as training data.
+   - Train an ensemble of gradient-boosted decision trees (AutoGluon framework) to regress from photometry to latent space coordinates.
+
+6. **LOOCV Validation**:
+   - For each held-out spectrum, remove it from the training set.
+   - Retrain the AutoML regressor and predict latent coefficients.
+   - Project the predicted coefficients back to full spectra using inverse PCA.
+   - Compute RMS error and empirical credible-interval coverage between ground truth and reconstructed spectra.
+
+7. **Reconstruct Spectra from New Photometry**:
+   - For new photometric observations:
+     - Predict latent coefficients using the trained AutoML regressor.
+     - Apply inverse PCA to obtain the reconstructed spectrum.
+
+8. **Taxonomic Classification**:
+   - Classify the reconstructed spectra into predefined taxonomic categories using a secondary AutoML classifier trained on the latent space.
+
+9. **Survey Optimization**:
+   - Evaluate the information content of different filter configurations (e.g., F090W, F115W, F410M, F460M) to identify optimal combinations for TNO taxonomy.
+
+10. **Outlier Detection**:
+    - Identify unusual spectral types by detecting deviations from the main clusters in the latent space.
+    - Reconstruct rare spectral types by sampling low-probability regions of the latent manifold.
+
+**End Algorithm**

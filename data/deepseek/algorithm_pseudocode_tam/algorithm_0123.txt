@@ -1,0 +1,59 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+**1. Initialize Training Data**
+   - **Input:** Set of reference TNO spectra (e.g., 51 observed spectra).
+   - **Output:** PCA basis and latent coefficients.
+
+**2. Construct Latent Space via PCA**
+   - **Step 2.1:** Perform PCA on the reference spectra.
+   - **Step 2.2:** Obtain principal components (latent coefficients) representing spectral variability.
+
+**3. Data Augmentation**
+   - **Step 3.1:** Apply non-parametric Kernel Density Estimation (KDE) on the latent coefficients to generate synthetic latent vectors.
+   - **Step 3.2:** Choose KDE bandwidth (e.g., h ≈ 0.5) to balance smoothness and fidelity.
+
+**4. Forward Model Synthetic Spectra**
+   - **Step 4.1:** Convolve synthetic spectra with NIRCam filter throughput curves to simulate photometry.
+   - **Step 4.2:** Introduce Gaussian noise (e.g., 20% relative uncertainty) to account for observational errors.
+
+**5. Train AutoML Encoder**
+   - **Step 5.1:** Use synthetic photometry and latent coefficients to train an ensemble regressor (e.g., Gradient-Boosted Decision Trees).
+   - **Step 5.2:** Regress from noisy photometry to latent coefficients.
+
+**6. Taxonomic Classification Setup**
+   - **Step 6.1:** Label reference spectra into taxonomic groups (e.g., H₂O, CO₂, Organics, Methanol).
+   - **Step 6.2:** Train a secondary AutoML classifier on latent coefficients to predict taxonomic labels.
+
+**7. Spectral Reconstruction Process**
+   - **Step 7.1:** For new photometry, use the trained encoder to predict latent coefficients.
+   - **Step 7.2:** Apply inverse PCA transform to reconstruct the full spectrum.
+
+**8. Validate via LOOCV**
+   - **Step 8.1:** Iteratively exclude each reference spectrum and validate reconstruction.
+   - **Step 8.2:** Compute metrics (e.g., MSE, ECI coverage) to assess reconstruction accuracy and uncertainty calibration.
+
+**9. Applications**
+   - **Survey Optimization:** Simulate different filter configurations to optimize NIRCam observations.
+   - **Outlier Detection:** Explore latent manifold to identify rare spectral types (e.g., peculiar Neptune Trojans).
+
+**10. Output**
+   - Reconstructed spectrum, taxonomic probabilities, and metrics (e.g., MSE, ECI coverage).
+
+---
+
+**Final Algorithm Steps:**
+
+1. **Initialize Training Data**: Load the reference TNO spectra (e.g., 51 observed spectra).
+2. **Perform PCA**: Decompose the spectra into principal components to create a latent space.
+3. **Data Augmentation**: Use KDE on the latent coefficients to generate synthetic spectra, ensuring a smooth and continuous manifold.
+4. **Simulate Photometry**: Convert synthetic spectra into mock photometric measurements using NIRCam filter responses and add noise (e.g., 20% relative uncertainty).
+5. **Train Encoder**: Develop an AutoML regressor to map noisy photometry to latent coefficients.
+6. **Classify Taxonomic Groups**: Train a classifier on the latent space to assign taxonomic labels to spectra.
+7. **Reconstruct Spectra**: For new photometric data, predict latent coefficients and invert PCA to obtain full spectra.
+8. **Cross-Validation**: Use LOOCV to evaluate reconstruction accuracy and uncertainty calibration.
+9. **Apply to Surveys and Outliers**: Optimize filter configurations and detect unusual spectral types by exploring the latent manifold.
+10. **Output Results**: Provide reconstructed spectra, taxonomic probabilities, and validation metrics.
+
+---
+
+**End of Algorithm**

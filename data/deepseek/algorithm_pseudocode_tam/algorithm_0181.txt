@@ -1,0 +1,33 @@
+```
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input: Sparse photometric measurements of a TNO
+Output: Reconstructed spectrum and taxonomic classification
+
+1. Precompute PCA basis:
+   a. Collect reference TNO spectra (51 objects).
+   b. Perform PCA to derive principal components (K ≈ 4-10).
+
+2. Augment training data:
+   a. Project reference spectra onto PCA latent space.
+   b. Use Kernel Density Estimation (KDE) to create smooth probability distribution in latent space.
+
+3. Train autoML regressor:
+   a. Generate synthetic photometry by convolving reference spectra with JWST NIRCam filter curves.
+   b. Inject 20% Gaussian noise into synthetic photometry.
+   c. Train regressor to map noisy photometry to latent coefficients.
+
+4. Cross-validate:
+   a. Perform LOOCV: For each object, remove its spectrum, augment remaining, retrain regressor.
+   b. Measure reconstruction accuracy and uncertainty calibration.
+
+5. Reconstruct spectrum for new object:
+   a. Pass sparse photometry through trained regressor to get latent coefficients.
+   b. Apply inverse PCA transform to obtain full spectrum.
+
+6. Classify taxonomic type:
+   a. Use latent coefficients as features for trained classifier.
+   b. Output probability distribution over taxonomic categories (Water, CO₂, Organics, Methanol).
+
+Return: Reconstructed spectrum and taxonomic probabilities.
+```

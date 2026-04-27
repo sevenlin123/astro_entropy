@@ -1,0 +1,65 @@
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+#### Inputs:
+- **Sparse Photometric Observations**: `m` (a vector of photometric measurements in specified filters)
+- **Pre-trained PCA Basis**: `PCA_basis` (principal component eigenvectors)
+- **Pre-trained Taxonomic Classifier**: `Classifier`
+
+#### Parameters:
+- **Number of Latent Components**: `K` (typically 4-10)
+- **Photometric Uncertainty**: `sigma` (assumed noise level for forward modeling)
+
+#### Outputs:
+- **Reconstructed Spectrum**: `S_hat` (full spectrum estimated from photometry)
+- **Taxonomic Classification Probabilities**: `class_probs`
+- **Uncertainty Estimates**: `credible_intervals`
+
+#### Steps:
+
+1. **Latent Space Encoding**:
+   - **Input**: Sparse photometry `m`
+   - **Output**: Latent coefficients `z_hat` (predicted by trained AutoML regressor)
+   
+2. **Forward Modeling**:
+   - **Simulate Synthetic Photometry**: Forward model `z_hat` through the inverse PCA transformation to obtain `S_hat`
+   - **Noise Injection**: Add Gaussian noise with uncertainty `sigma` to synthetic photometry to mimic real observations
+
+3. **Spectral Reconstruction**:
+   - **Apply Inverse PCA**: Project `z_hat` through `PCA_basis` to reconstruct `S_hat` as a continuous spectrum
+   - **Ensemble Sampling**: Use Gaussian Copula to generate an ensemble of spectral realizations from the joint posterior of `z_hat`
+
+4. **Taxonomic Classification**:
+   - **Predict Class Probabilities**: Pass `z_hat` through `Classifier` to obtain `class_probs`
+   - **Identify Outliers**: Check if posterior probabilities fall below a confidence threshold
+
+5. **Uncertainty Quantification**:
+   - **Compute Credible Intervals**: Determine the 95% credible intervals for `S_hat` using the ensemble of spectral realizations
+   - **Evaluate Coverage**: Assess the empirical coverage of credible intervals against the true spectrum (during validation)
+
+6. **Output Results**:
+   - Return `S_hat`, `credible_intervals`, and `class_probs`
+
+#### Pseudocode:
+
+```
+Function Probabilistic_Spectral_Reconstruction(m, PCA_basis, Classifier):
+    // Step 1: Encode sparse photometry into latent space
+    z_hat = AutoMLRegressor.predict(m)
+    
+    // Step 2: Forward model to reconstruct spectrum
+    S_hat = inverse_PCA_transform(z_hat, PCA_basis)
+    
+    // Step 3: Generate ensemble for uncertainty
+    ensemble = GaussianCopulaSampling.sample(z_hat)
+    S_ensemble = inverse_PCA_transform(ensemble, PCA_basis)
+    
+    // Step 4: Classify taxonomic type
+    class_probs = Classifier.predict_proba(z_hat)
+    
+    // Step 5: Compute uncertainties and credible intervals
+    credible_intervals = compute_credible_intervals(S_ensemble)
+    
+    // Step 6: Return results
+    return S_hat, credible_intervals, class_probs
+End Function
+```

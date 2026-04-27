@@ -1,0 +1,31 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Principal Component Analysis (PCA) Training**
+   - Train a PCA model on a dataset of near-infrared spectra of trans-Neptunian objects (TNOs).
+   - Determine the number of principal components (e.g., 4-5 for taxonomic classification; 8-10 for improved spectral reconstruction).
+
+2. **Spectral Manifold Modeling**
+   - Map the high-dimensional spectral data into a lower-dimensional space using the trained PCA model.
+   - Represent the spectral manifold in this reduced space.
+
+3. **Bayesian Inference**
+   - Perform Bayesian inference in the reduced PCA space to reconstruct full spectra from photometric data.
+   - Propagate measurement uncertainties through the reconstruction process.
+
+4. **Leave-One-Out Cross-Validation (LOOCV)**
+   - Apply LOOCV to validate the spectral reconstruction framework.
+   - Use the results to refine the number of principal components (e.g., 8-10 components for optimal reconstruction fidelity).
+
+5. **Survey Optimization**
+   - Quantify the information content of JWST/NIRCam filters (e.g., F090W, F115W, F410M, F460M) to identify optimally informative configurations.
+   - Select filters that maximize the retention of spectral information for taxonomic classification.
+
+6. **Outlier Detection**
+   - Allow the reconstruction process to consider low-probability intermediate models within the spectral manifold.
+   - Detect unusual spectral types, such as peculiar Neptune Trojans, by identifying significant deviations in reconstructed spectra.
+
+7. **Credible Interval Validation**
+   - Ensure reconstructed spectra achieve empirical credible-interval coverage (~95%) across all wavelengths.
+   - Validate the accuracy and reliability of propagated measurement uncertainties.
+
+**End of Algorithm**

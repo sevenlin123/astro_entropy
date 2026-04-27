@@ -1,0 +1,26 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Preprocessing:**
+   - Apply Principal Component Analysis (PCA) to the training spectral dataset S to extract principal components (PCs) V and loading coefficients.
+   
+2. **Determine Number of PCs:**
+   - Select the appropriate number of PCs (e.g., 4-5 for taxonomic classification; 8-10 for high-fidelity reconstruction).
+
+3. **Training Phase:**
+   - Develop a probabilistic model linking photometric data P to PCA coefficients. Define a likelihood function connecting photometric fluxes to the spectral shape represented by PCA coefficients.
+   - Establish relationships between photometric bands and PCA space using the spectral dataset.
+
+4. **Inference Phase:**
+   - Project sparse photometric data P into the PCA space using the pre-trained model.
+   - Perform Bayesian inference to estimate the posterior distribution of PCA coefficients given P, possibly using MCMC sampling.
+   - Calculate the mean PCA coefficients from the posterior distributions.
+
+5. **Spectrum Reconstruction:**
+   - Reconstruct the full spectrum R using the estimated PCA coefficients and the PCA basis vectors.
+   - Propagate uncertainties from the posterior distributions to the reconstructed spectrum to obtain uncertainties U.
+
+6. **Validation and Output:**
+   - Verify if the reconstructed spectrum R meets the credible interval coverage (~95%).
+   - Output R and U if coverage is satisfied.
+
+7. **End**

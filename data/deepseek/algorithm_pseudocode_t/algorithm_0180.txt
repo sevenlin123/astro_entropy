@@ -1,0 +1,40 @@
+**Algorithm: Probabilistic Spectral Reconstruction of Trans-Neptunian Objects**
+
+1. **Input Data**
+   - Observed photometric magnitudes: `m_obs`
+   - Corresponding wavelength bands: `λ_bands`
+   - Known physical constraints on TNO spectra: `SED_constraints`
+
+2. **Initialize Gaussian Process Model**
+   - Define the Gaussian process kernel to capture spectral smoothness and variability.
+   - Set initial hyperparameters (e.g., kernel bandwidth, noise level).
+
+3. **Model Setup**
+   - Represent the SED as a latent function `f(λ)` over wavelengths.
+   - Link observations to the SED via a multi-band response function: 
+     - For each band `i`, `m_obs[i]` is modeled as a Poisson count with added Gaussian noise.
+
+4. **Bayesian Inference**
+   - Define the likelihood function considering both photon counts and additive Gaussian noise.
+   - Specify the prior distributions for the Gaussian process hyperparameters.
+   - Perform Markov Chain Monte Carlo (MCMC) sampling or Variational Inference to estimate the posterior distribution of the hyperparameters and latent SED.
+
+5. **Posterior Quantification**
+   - Extract the posterior mean and covariance of the SED from the Gaussian process.
+   - Compute the uncertainty in the reconstructed SED using the posterior covariance matrix.
+
+6. **Predictive SED Inference**
+   - For new objects, use the trained Gaussian process to predict the SED.
+   - Classify the object based on predefined taxonomy using the reconstructed SED.
+   - Optimize survey strategy by evaluating expected information gain from new observations.
+   - Detect outliers by comparing posterior probabilities against defined thresholds.
+
+7. **Output**
+   - Reconstructed SEDs for each object.
+   - Probabilistic classifications.
+   - Optimized survey parameters.
+   - Outlier detection flags.
+
+8. **End**
+
+This algorithm encapsulates the core steps of the probabilistic framework for spectral reconstruction of TNOs from sparse photometric data.

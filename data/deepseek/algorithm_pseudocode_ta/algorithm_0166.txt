@@ -1,0 +1,26 @@
+```pseudocode
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. Input: Sparse photometry measurements of TNOs, pre-trained PCA model
+
+2. Initialize:
+   - Pre-trained PCA model with principal components (latent space)
+   - Define spectral manifold in PCA space
+
+3. For each TNO:
+   a. Obtain sparse photometric measurements
+   b. Project photometric data into PCA latent space
+   c. Perform Bayesian inference in latent space:
+      i. Prior distribution defined over latent variables
+      ii. Compute likelihood based on PCA model
+      iii. Posterior = Likelihood * Prior / Evidence
+   d. Reconstruct full spectrum:
+      i. Map posterior mean (or mode) of latent variables to original spectral space
+   e. Propagate measurement uncertainties:
+      i. Calculate variance in latent space posterior
+      ii. Transform variance back to spectral space
+
+4. Output: Reconstructed spectra with uncertainties, latent space posteriors
+
+End Algorithm
+```

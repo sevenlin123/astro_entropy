@@ -1,0 +1,30 @@
+```
+Algorithm: Probabilistic Spectral Reconstruction Framework
+
+Input: Sparse photometric measurements of TNOs
+Output: Reconstructed spectral energy distribution (SED), Taxonomic classification probabilities
+
+Begin:
+    1. Initialize training set with N = 51 observed TNO spectra.
+    2. Compute principal components (PCs) of the training spectra using PCA. Determine K = 8-10 PCs for high-fidelity reconstruction.
+    3. Apply Kernel Density Estimation (KDE) on the PCA coefficients with bandwidth h = 0.5 to create a smooth latent manifold prior.
+    4. Generate M = 10,000 synthetic spectra from the latent manifold. Convolve each with NIRCam filter profiles to compute synthetic photometry.
+    5. Add 20% Gaussian noise to synthetic photometry to simulate realistic uncertainties.
+    6. Split the combined training data (original + synthetic) into training and validation sets.
+    7. Train AutoML regressor to map noisy photometric inputs to PCA coefficients using mean absolute error (MAE) loss.
+    8. Train secondary AutoML classifier to map latent coefficients to taxonomic labels (Water, CO2, Organics, etc.).
+    9. Perform leave-one-out cross-validation:
+        a. For each spectrum, remove it from training set.
+        b. Generate synthetic photometry with noise.
+        c. Use AutoMLRegressor to predict PCA coefficients from photometry.
+        d. Inverse PCA transform to obtain reconstructed SED.
+        e. Measure reconstruction fidelity and uncertainty coverage.
+        f. Classify reconstructed spectrum into taxonomic categories.
+    10. For new observations:
+        i. Pass sparse photometry through AutoMLRegressor to get predicted latent coefficients.
+        ii. Project coefficients through inverse PCA transform to get SED.
+        iii. Use classifier to assign taxonomic probabilities.
+    11. Output reconstructed SED and taxonomic classification.
+
+End.
+```

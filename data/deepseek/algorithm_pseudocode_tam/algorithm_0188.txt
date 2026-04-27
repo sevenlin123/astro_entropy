@@ -1,0 +1,10 @@
+\begin{algorithm}[h]
+\begin{algorithmic}[1]
+\State Input: Photometric measurements $\mathbf{m}$
+\State Output: Reconstructed spectrum $S$, taxonomic probabilities $\mathbf{p}$
+\State $\mathbf{z} \leftarrow$ \texttt{Encoder}.predict($\mathbf{m}$)
+\State $S \leftarrow$ \texttt{inverse\_PCA}($\mathbf{z}$)
+\State $\mathbf{p} \leftarrow$ \texttt{Classifier}.predict($\mathbf{z}$)
+\State Output $S$, $\mathbf{p}$
+\end{algorithmic}
+\end{algorithm}

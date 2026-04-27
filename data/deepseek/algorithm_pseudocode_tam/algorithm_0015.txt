@@ -1,0 +1,38 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+**1. Initialize Training Data and Define Spectral Manifold**
+   - **Input:** Reference TNO spectra (51 objects), NIRCam filter throughput curves.
+   - Perform Principal Component Analysis (PCA) on the reference spectra to extract principal components (PCs).
+   - Use Kernel Density Estimation (KDE) to smooth the latent space, creating a continuous probability distribution.
+
+**2. Generate Synthetic Photometry**
+   - For each augmented spectrum:
+     - Convolve the spectrum with the filter curves to compute reflectance in each filter band.
+     - Inject Gaussian noise (20% relative uncertainty) to simulate photometric noise.
+
+**3. Train AutoML Regressor (Encoder)**
+   - **Inputs:** Noisy synthetic photometry (sparse measurements).
+   - **Target:** Latent coefficients derived from PCA.
+   - Train an ensemble of Gradient-Boosted Decision Trees using the AutoGluon framework.
+
+**4. Define Taxonomic Labels and Train Classifier**
+   - Assign taxonomic labels (H₂O, CO₂, Organics) to the training spectra.
+   - Train a separate AutoML classifier on the latent coefficients and taxonomic labels.
+
+**5. Spectral Reconstruction Workflow**
+   - **Given:** New photometric observations (sparse measurements).
+   - **Step 1:** Use the trained AutoML regressor to predict latent coefficients.
+   - **Step 2:** Apply inverse PCA transform to reconstruct the full spectrum.
+   - **Output:** High-resolution reflectance spectrum and taxonomic classification probabilities.
+
+**6. Performance Evaluation**
+   - For each held-out spectrum in LOOCV:
+     - Compute RMSE between reconstructed and true spectrum.
+     - Assess credible interval coverage (68%, 95%, 99.7%).
+     - Evaluate taxonomic classification accuracy.
+
+**7. Applications**
+   - **Survey Optimization:** Simulate different filter configurations to find optimal observing strategies.
+   - **Outlier Detection:** Identify unusual spectral types by detecting deviations from the learned manifold.
+
+**End Algorithm**

@@ -1,0 +1,64 @@
+### Algorithm for Probabilistic Spectral Reconstruction of TNOs
+
+**Step-by-Step Pseudocode**
+
+```python
+Function ProbabilisticSpectralReconstruction():
+    Input:
+        - Observed photometric data for Trans-Neptunian Objects (TNOs)
+        - Training set of reference TNO spectra
+        - Filter set for the target instrument (e.g., JWST/NIRCam)
+
+    Output:
+        - Reconstructed full spectra
+        - Probabilistic taxonomic classification
+
+    1. **Prepare Training Data**
+        a. Collect and preprocess the reference spectra into a uniform format.
+        b. Perform Principal Component Analysis (PCA) on the training spectra to obtain principal components (PCs).
+        c. Extract latent coefficients for each reference spectrum using the PCA basis.
+
+    2. **Define the Prior**
+        a. Use Kernel Density Estimation (KDE) on the latent coefficients to create a smooth probability distribution.
+        b. Set the bandwidth of the KDE to achieve a balance between local fidelity and global smoothness (e.g., h ≈ 0.5).
+
+    3. **Generate Synthetic Training Data**
+        a. Sample the latent space using the KDE to create synthetic latent coefficients.
+        b. Forward-model the synthetic spectra through the instrument's filter set to compute synthetic photometry.
+        c. Add Gaussian noise to the synthetic photometry to simulate realistic observational uncertainties.
+
+    4. **Train the AutoML Regressor**
+        a. Use the synthetic photometry as input and corresponding latent coefficients as targets.
+        b. Train an ensemble of Gradient-Boosted Decision Trees (GBDTs) using AutoGluon.
+        c. Validate the regressor using leave-one-out cross-validation (LOOCV).
+
+    5. **Predict Latent Coefficients from Photometry**
+        a. For each observed photometric observation:
+            i. Use the trained regressor to predict the latent coefficients.
+            ii. Apply the inverse PCA transform to obtain the full spectral reconstruction.
+
+    6. **Taxonomic Classification**
+        a. Project the latent coefficients onto the training set's taxonomic labels.
+        b. Use the latent space for probabilistic classification, outputting a probability distribution over taxonomic classes.
+
+    7. **Evaluate and Validate**
+        a. Compute RMSE between reconstructed and true spectra.
+        b. Measure empirical coverage of true spectra within 95% credible intervals.
+        c. Assess taxonomic classification accuracy.
+
+    8. **Output Results**
+        a. Provide reconstructed spectra and taxonomic probabilities for each TNO.
+        b. Include detailed performance metrics from LOOCV validation.
+
+End Function
+```
+
+### Explanation
+
+- **Algorithm Overview**: The algorithm leverages PCA to reduce spectral data into a low-dimensional latent space, trains a regressor to map sparse photometry to this space, and then reconstructs full spectra. It includes probabilistic taxonomic classification and validation steps.
+- **Key Steps**: Data preparation, prior definition, synthetic data generation, model training, prediction, classification, evaluation, and output.
+- **Computational Flow**: Efficiently handles the inverse problem of reconstructing high-resolution spectra from low-resolution photometry, ensuring physically plausible results by constraining the reconstruction to learned spectral manifolds.
+
+### Final Output
+
+The algorithm efficiently reconstructs full spectra from sparse photometry using a Bayesian framework, enabling accurate taxonomic classification and outlier detection for TNOs.

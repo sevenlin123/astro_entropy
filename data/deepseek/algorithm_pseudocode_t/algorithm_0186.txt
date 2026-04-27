@@ -1,0 +1,24 @@
+**Algorithm: Probabilistic Spectral Reconstruction for TNOs**
+
+1. **Preprocess Photometric Data**
+   - Convert raw flux measurements to magnitudes using zero points and corrections.
+   - Convert magnitudes to flux densities using a reference spectrum.
+
+2. **Generate Training Set for Gaussian Process Emulator**
+   - Simulate TNO spectra by:
+     - Drawing parameters from a prior distribution.
+     - Convolving with instrument point-spread functions (PSFs).
+
+3. **Train Gaussian Process Emulator**
+   - Use the generated training set to train the emulator to approximate the likelihood function.
+
+4. **Apply Emulator to Observed Data**
+   - For each observed object:
+     - Perform Markov Chain Monte Carlo (MCMC) sampling guided by the emulator.
+     - Explore parameter space efficiently while accounting for data and model uncertainties.
+
+5. **Cluster Posterior Distributions**
+   - Use an unsupervised, density-based clustering algorithm to group posterior parameter distributions.
+   - Identify taxonomic groups and detect outliers.
+
+**End of Algorithm**

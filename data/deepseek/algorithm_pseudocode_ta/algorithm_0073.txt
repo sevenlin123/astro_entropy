@@ -1,0 +1,33 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Input Data Preparation**
+   - Read training spectral dataset `S` containing known TNO spectra.
+   - Read sparse photometric measurements `P` for target TNOs.
+
+2. **Principal Component Analysis (PCA) Training**
+   - Perform PCA on `S` to obtain principal components (PCs):
+     - Compute covariance matrix of `S`.
+     - Diagonalize to get eigenvectors (loadings) and eigenvalues.
+     - Determine the number of significant PCs (e.g., 4-5 for taxonomy, 8-10 for high-fidelity reconstruction).
+
+3. **Latent Space Representation**
+   - Project each spectrum in `S` onto the PCA basis to form a latent-space representation `L`.
+
+4. **Bayesian Inference Setup**
+   - Define prior distributions for latent variables (e.g., means and variances of PCs).
+   - Set up probabilistic model linking latent space `L` to photometric measurements `P`.
+
+5. **Model Training**
+   - Use Markov Chain Monte Carlo (MCMC) or other Bayesian inference methods to train the model parameters based on `P`.
+
+6. **Spectral Reconstruction**
+   - For each target TNO, use the trained model to infer posterior distributions of latent variables given its photometric data `P`.
+   - Reconstruct the full spectrum using the inferred latent variables and the PCA basis.
+
+7. **Uncertainty Propagation**
+   - Calculate uncertainties in the reconstructed spectrum by propagating the uncertainties from the inferred latent variables.
+
+8. **Output**
+   - Generate reconstructed spectra and their associated uncertainty intervals for each TNO.
+
+**End Algorithm**

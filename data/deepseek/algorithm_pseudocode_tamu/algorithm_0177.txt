@@ -1,0 +1,54 @@
+```pseudocode
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+    - Training spectra (S_train): Set of reference TNO spectra
+    - Observed photometry (m_obs): Sparse photometric measurements of TNOs
+    - Filter set (F): NIRCam filters used for photometry
+    - Uncertainty (σ): Photometric uncertainty estimates
+
+Output:
+    - Reconstructed spectra (S_recon): Full spectral reconstructions
+    - Classification probabilities (C_prob): Probabilistic taxonomic classifications
+    - Uncertainty estimates (U_est): Confidence intervals on spectral features
+
+Steps:
+
+1. **Principal Component Analysis (PCA) Initialization**
+    a. Compute PCA on S_train to obtain principal components (PCs) and loadings.
+    b. Determine optimal number of PCs (K) via cross-validation (e.g., 4-5 for classification, 8-10 for high fidelity).
+
+2. **Latent Space Construction**
+    a. Project S_train onto the top K PCs to get latent coefficients (z_train).
+    b. Augment z_train using Kernel Density Estimation (KDE) to create a continuous latent manifold.
+    c. Set bandwidth (h) empirically (e.g., h ≈ 0.5) to balance smoothing and fidelity.
+
+3. **Forward Modeling and Synthetic Data Generation**
+    a. Simulate photometry (m_syn) for each augmented spectrum by convolving with filter responses.
+    b. Inject Gaussian noise (σ_syn = 20%) into m_syn to mimic real-world uncertainties.
+
+4. **Automated Machine Learning (AutoML) Training**
+    a. Train an ensemble regressor (e.g., XGBoost) on (m_syn, z_train) to map photometry to latent coefficients.
+    b. Use the trained regressor as the "encoder" for new photometry.
+
+5. **Spectral Reconstruction Pipeline**
+    a. For each object:
+        i. Predict latent coefficients (z_pred) using m_obs.
+        ii. Decode z_pred to reconstruct spectrum S_recon via inverse PCA.
+        iii. Generate ensemble reconstructions using Gaussian Copula for uncertainty sampling.
+
+6. **Cross-Validation and Performance Assessment**
+    a. Perform LOOCV: For each object, remove it from training, retrain PCA and regressor, then reconstruct.
+    b. Evaluate using Euclidean Distance, Pearson Correlation, SNR, empirical coverage, and RMSE.
+
+7. **Taxonomic Classification**
+    a. Train a secondary classifier on latent coefficients to predict taxonomic categories.
+    b. Output classification probabilities (C_prob) for each object.
+
+8. **Optional Applications**
+    a. **Survey Optimization**: Identify optimal filter combinations for maximal information gain.
+    b. **Outlier Detection**: Flag objects with photometry inconsistent with the latent manifold.
+    c. **Pipeline Extension**: Adapt framework to other populations using similar steps.
+
+End
+```

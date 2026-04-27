@@ -1,0 +1,47 @@
+ALGORITHM:
+
+TRAINING:
+
+   Initialize Dirichlet Process Gaussian Mixture Model (DP-GMM) with hyperparameters.
+
+   For each spectrum s in the reference library:
+
+      Update the DP-GMM by including s.
+
+      Iterate until convergence.
+
+RECONSTRUCTION:
+
+   For each new object:
+
+      Given observed photometric data d:
+
+         For each Gaussian component c in DP-GMM:
+
+             Compute the likelihood p(d | c) using the transformation between spectrum and photometry.
+
+             Compute the weight w_c = mixing coefficient of component c.
+
+             Contribution to posterior: w_c * p(c) * p(d | c)
+
+         Sum contributions across all components to get posterior p(s | d).
+
+         Sample s from the posterior.
+
+OUTLIER DETECTION:
+
+   For the reconstructed spectrum s:
+
+      Compute the ratio p(s | d) / p(s).
+
+      If ratio < threshold:
+
+          Flag as outlier.
+
+      Else:
+
+          Compute expected photometric magnitudes d' from s.
+
+          If ||d' - d|| > threshold:
+
+              Flag as outlier.

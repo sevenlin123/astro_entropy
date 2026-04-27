@@ -1,0 +1,110 @@
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+#### Inputs:
+- `photometry`: Sparse photometric measurements of a trans-Neptunian object.
+- `training_spectra`: Reference near-infrared spectra used for training the PCA model.
+- `filters`: Spectral response functions of the photometric filters used (e.g., JWST/NIRCam).
+- `noise_level`: Relative noise level (e.g., 20%) to inject into synthetic photometry.
+
+#### Outputs:
+- `reconstructed_spectrum`: Full near-infrared spectrum reconstructed from photometry.
+- `credible_intervals`: Uncertainty estimates for the reconstructed spectrum.
+- `taxonomy_probabilities`: Probabilities of belonging to different spectral taxonomic groups.
+
+---
+
+#### Step 1: Principal Component Analysis (PCA) Initialization
+```python
+# Initialize PCA with the training spectra
+pca = PCA(n_components=K)  # K is determined during cross-validation (4-10)
+pca.fit(training_spectra)
+```
+
+#### Step 2: Generate Synthetic Training Data
+```python
+# Perform Kernel Density Estimation (KDE) on the PCA coefficients of the training spectra
+kde = KDE(bandwidth=h)  # Bandwidth tuned during validation
+synthetic_latents = kde.sample(num_synthetic_samples)
+```
+
+#### Step 3: Forward Modeling and Noisy Photometry
+```python
+# Simulate photometric observations for synthetic spectra
+def forward_model(spectrum, filters):
+    photometry = []
+    for filter in filters:
+        observed_flux = integrate_spectrum(spectrum, filter.transmission_curve)
+        noisy_flux = observed_flux * (1 + np.random.normal(0, noise_level))
+        photometry.append(noisy_flux)
+    return photometry
+
+synthetic_photometry = []
+for synth_latent in synthetic_latents:
+    full_spectrum = pca.inverse_transform(synth_latent)
+    synth_phot = forward_model(full_spectrum, filters)
+    synthetic_photometry.append(synth_phot)
+```
+
+#### Step 4: Train AutoML Regressor
+```python
+# Train the regressor to map photometry to PCA coefficients
+regressor = AutoGluonRegressor()
+regressor.fit(
+    X=synthetic_photometry,
+    y=synthetic_latents
+)
+```
+
+#### Step 5: Validate Using Leave-One-Out Cross-Validation (LOOCV)
+```python
+# Perform LOOCV to assess model performance
+loocv = LeaveOneOut()
+reconstruction_errors = []
+for train_index, test_index in loocv.split(training_spectra):
+    X_train = [synthetic_photometry[i] for i in train_index]
+    y_train = [synthetic_latents[i] for i in train_index]
+    
+    X_test = [synthetic_photometry[i] for i in test_index]
+    y_test = [synthetic_latents[i] for i in test_index]
+    
+    # Predict latent coefficients for test photometry
+    y_pred = regressor.predict(X_test)
+    reconstruction_errors.append(mean_squared_error(y_test, y_pred))
+```
+
+#### Step 6: Reconstruct Spectrum from Photometry
+```python
+# Forward transform photometry to predicted latent coefficients
+predicted_latents = regressor.predict([photometry])
+
+# Inverse PCA transform to get full spectrum
+reconstructed_spectrum = pca.inverse_transform(predicted_latents)
+```
+
+#### Step 7: Quantify Uncertainties Using Gaussian Copula
+```python
+# Sample from joint posterior distribution of latents
+num_samples = 1000
+copula_samples = gaussian_copula_sample(predicted_latents, num_samples)
+
+# Reconstruct multiple spectra and aggregate uncertainties
+reconstructions = []
+for samp in copula_samples:
+    recon_spectrum = pca.inverse_transform(samp)
+    reconstructions.append(recon_spectrum)
+
+credible_intervals = calculate_credible_intervals(reconstructions)
+```
+
+#### Step 8: Classify Taxonomic Group
+```python
+# Use pre-trained classifier to determine spectral type probabilities
+taxonomy_probs = taxonomic_classifier.predict_proba(predicted_latents)
+```
+
+---
+
+### Final Output:
+- **`reconstructed_spectrum`**: High-resolution near-infrared spectrum reconstructed from sparse photometry.
+- **`credible_intervals`**: 95% credible intervals for the reconstructed spectrum.
+- **`taxonomy_probs`**: Probabilities of belonging to Water-type, CO₂-type, Organics-type, etc.

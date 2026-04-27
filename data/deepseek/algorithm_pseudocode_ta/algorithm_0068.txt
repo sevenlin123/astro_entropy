@@ -1,0 +1,32 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Input Data**: 
+   - Sparse photometric measurements of TNOs.
+   - Pre-trained Principal Component (PC) model derived from a sample of near-IR spectra.
+   - Covariance matrix of the PC model.
+
+2. **Initialization**:
+   - Load pre-trained PCs (4-5 for classification, 8-10 for high-fidelity reconstruction).
+   - Define the reduced spectral manifold based on the PCs.
+
+3. **Bayesian Setup**:
+   - Construct the posterior distribution over the latent space parameters using the sparse photometry.
+   - Incorporate measurement uncertainties from the photometric data into the likelihood function.
+
+4. **Inference**:
+   - Perform Bayesian inference in the reduced latent space to estimate the posterior distribution of the spectral parameters.
+   - Use Markov Chain Monte Carlo (MCMC) or variational methods to sample the posterior.
+
+5. **Reconstruction**:
+   - Map the inferred latent parameters back to the full spectrum using the pre-trained PC model.
+   - Propagate the uncertainties from the latent space to the reconstructed spectrum.
+
+6. **Output**:
+   - Reconstructed spectrum for each TNO.
+   - Associated uncertainty estimates across all wavelengths.
+
+7. **Optional Survey Optimization**:
+   - Apply the framework to evaluate the information content of different JWST/NIRCam filters.
+   - Select optimal filter combinations for maximizing spectral reconstruction fidelity.
+
+8. **End**

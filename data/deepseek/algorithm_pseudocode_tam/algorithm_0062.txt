@@ -1,0 +1,43 @@
+```plaintext
+Algorithm for Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. Initialize:
+   - Input: Sparse photometric data of TNOs.
+   - Output: Reconstructed spectral energy distribution and taxonomic classification.
+
+2. Preprocess:
+   a. Convert photometric data into normalized reflectance or flux units.
+   b. Convolve data with telescope filter curves to simulate observed photometry.
+
+3. Training Phase:
+   a. Gather reference spectra of TNOs into a training set (e.g., 51 example spectra).
+   b. Perform Principal Component Analysis (PCA) on the training spectra to derive latent space (e.g., 4-10 principal components).
+   c. Use Kernel Density Estimation (KDE) on the PCA coefficients to create a smooth prior distribution.
+   d. Augment the training data by generating synthetic latent vectors through sampling the KDE.
+
+4. Model Training:
+   a. Train an AutoML regressor (e.g., Gradient Boosted Decision Trees) to map sparse photometry to latent coefficients.
+   b. Train a secondary classifier on the latent space to predict taxonomic labels.
+
+5. Forward Inference:
+   a. For new photometric observations:
+      i. Pass photometric data through the trained regressor to obtain posterior distribution of latent coefficients.
+      ii. Project latent coefficients back into full spectrum via inverse PCA transformation.
+      iii. Generate reconstructed spectrum.
+
+6. Validation:
+   a. Compute Root Mean Square Error (RMSE) between reconstructed and actual spectra.
+   b. Check credible interval coverage to assess uncertainty calibration.
+   c. Evaluate taxonomic classification accuracy using confusion matrix and F1-score.
+
+7. Applications:
+   a. Optimize survey configurations by evaluating information content of NIRCam filters.
+   b. Detect outliers by identifying low-probability regions in latent space.
+
+8. Outputs:
+   - High-resolution reconstructed spectrum.
+   - Probabilistic taxonomic classification.
+   - Quantitative measures of reconstruction fidelity and uncertainty.
+
+End.
+```

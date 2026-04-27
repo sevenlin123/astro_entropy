@@ -1,0 +1,18 @@
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. **Input**: Sparse photometric observations (e.g., magnitudes in selected filters) for a trans-Neptunian object.
+
+2. **Training Phase**:
+   - **Step 1**: Obtain a seed set of reference near-infrared spectra for TNOs.
+   - **Step 2**: Perform Principal Component Analysis (PCA) on the seed spectra to extract principal components (PCs).
+   - **Step 3**: Use Kernel Density Estimation (KDE) on the PCA scores to construct a continuous latent space manifold.
+   - **Step 4**: Generate synthetic spectra by sampling the latent manifold and forward modeling through the instrument's filter response.
+   - **Step 5**: Train an AutoML regressor (e.g., Gradient Boosted Decision Trees) to map sparse photometry to latent PCA coefficients.
+
+3. **Inference Phase**:
+   - **Step 1**: Input sparse photometry of the target object.
+   - **Step 2**: Use the trained regressor to predict latent coefficients.
+   - **Step 3**: Apply inverse PCA transform to reconstruct the full spectrum.
+   - **Step 4**: Quantify uncertainties using a Gaussian Copula framework to sample the joint posterior distribution of the latent coefficients.
+
+4. **Output**: Reconstructed spectrum, uncertainty estimates, and taxonomic classification probabilities.

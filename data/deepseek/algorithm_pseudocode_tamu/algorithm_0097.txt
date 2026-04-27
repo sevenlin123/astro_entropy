@@ -1,0 +1,45 @@
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+**Objective:**  
+Reconstruct high-resolution near-IR spectra of Trans-Neptunian Objects (TNOs) from sparse photometric observations using a Bayesian framework and Principal Component Analysis (PCA).
+
+**Steps:**
+
+1. **Principal Component Analysis (PCA):**
+   - Train PCA on a reference set of near-IR TNO spectra to define a low-dimensional latent space.
+   - The latent space captures the dominant modes of spectral variability.
+
+2. **Data Augmentation via Kernel Density Estimation (KDE):**
+   - Project the reference spectra onto the PCA latent space.
+   - Use Gaussian KDE to smooth the latent distribution and generate synthetic training data.
+
+3. **Forward Modeling for Synthetic Photometry:**
+   - Simulate photometric observations by convolving the reconstructed spectra with the effective filter curves (e.g., JWST/NIRCam).
+   - Inject Gaussian noise (relative uncertainty of ~20%) into the synthetic photometry to account for observational uncertainties.
+
+4. **Training the AutoML Regressor:**
+   - Train an ensemble of gradient-boosted decision trees (AutoML) to regress from noisy photometric observations to latent space coordinates.
+   - Input features: Sparse photometric flux measurements.
+   - Target labels: Smoothed latent coefficients from KDE.
+
+5. **Leave-One-Out Cross-Validation (LOOCV):**
+   - Validate the model by iteratively holding out one spectrum from the training set.
+   - For each held-out object, predict its latent coefficients using the trained regressor.
+   - Reconstruct the full spectrum by applying the inverse PCA transform to the predicted latent coefficients.
+
+6. **Posterior Sampling and Uncertainty Quantification:**
+   - Sample the joint posterior distribution of latent coefficients using a Gaussian Copula framework.
+   - Preserve physical dependencies in the latent space to generate valid spectral realizations.
+   - Compute credible intervals for the reconstructed spectrum.
+
+7. **Taxonomic Classification:**
+   - Train a secondary classifier on the PCA latent space to predict taxonomic labels (e.g., H₂O, CO₂, Organics).
+   - Use the predicted latent coefficients to determine the probability distribution over spectral types.
+
+**Output:**  
+- Reconstructed spectrum for each object, including uncertainties.
+- Probabilistic taxonomic classification.
+
+**Notes:**  
+- The algorithm focuses on the core computational steps, excluding validation and visualization.
+- Computational tools include PCA for dimensionality reduction, AutoML for training regressors, and KDE/Gaussian Copula for handling latent distributions.

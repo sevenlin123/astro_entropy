@@ -1,0 +1,49 @@
+**Algorithm Description**
+
+**Algorithm**: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+**Input**:  
+- Training Set: A collection of reference TNO spectra  
+- Photometric Data: Discrete measurements in specific filters  
+
+**Output**:  
+- Reconstructed Spectrum: Continuous spectral representation  
+- Classification Probabilities: Probabilities of belonging to predefined spectral types  
+
+**Steps**:
+
+1. **Principal Component Analysis (PCA) Training**:
+   - Perform PCA on the training set of reference TNO spectra.
+   - Extract principal components to form a low-dimensional latent space.
+
+2. **Data Augmentation with Kernel Density Estimation (KDE)**:
+   - Project reference spectra onto the PCA latent space.
+   - Use KDE to create a smooth probability distribution over the latent space.
+
+3. **Synthetic Photometry Generation**:
+   - For each point in the augmented latent space, generate synthetic photometric measurements by convolving the spectrum with instrument-specific filter responses (e.g., JWST/NIRCam).
+   - Add Gaussian noise (relative uncertainty ~20%) to simulate realistic photometric errors.
+
+4. **Training of AutoML Regressor**:
+   - Train an ensemble of gradient-boosted decision trees (AutoGluon) to map sparse photometric inputs to latent space coefficients.
+   - Use the synthetic photometry and corresponding latent coefficients as training data.
+
+5. **Taxonomic Classifier Training**:
+   - Train another AutoML classifier on the latent coefficients to predict spectral type probabilities.
+   - Use labels from the training set for supervised learning.
+
+6. **Inference Pipeline**:
+   - For new photometric data:
+     - Use the trained AutoML regressor to predict latent space coefficients.
+     - Apply inverse PCA transformation to reconstruct the full spectrum.
+     - Use the classifier to determine spectral type probabilities.
+
+7. **Validation**:
+   - Perform leave-one-out cross-validation to assess reconstruction fidelity and credible interval coverage.
+   - Measure taxonomic classification accuracy.
+
+**End of Algorithm**
+
+---
+
+**Note**: This algorithm focuses solely on the core computational steps and excludes validation, visualization, and other auxiliary procedures.

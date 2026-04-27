@@ -1,0 +1,52 @@
+### Pseudocode Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+```python
+Function: Probabilistic_Spectral_Reconstruction(Photometry, Filters, Known_Spectra)
+Input:
+    - Photometry: Sparse photometric measurements of TNOs
+    - Filters: Filter bands used for photometric observations
+    - Known_Spectra: Reference spectra for training the reconstruction framework
+
+Output:
+    - Reconstructed_Spectra: High-resolution reconstructed spectra for each object
+    - Classification_Probabilities: Probabilistic taxonomic classification of each object
+    - Uncertainty_Intervals: Empirical credible intervals for spectral features
+
+Algorithm Steps:
+
+1. **Training Phase:**
+    a. **Principal Component Analysis (PCA):**
+        i. Apply PCA to the Known_Spectra to obtain Principal Components (PCs).
+        ii. Determine the optimal number of PCs (K) based on explained variance and cross-validation.
+    
+    b. **Data Augmentation:**
+        i. Use Kernel Density Estimation (KDE) on the latent PCA coefficients to generate synthetic training data.
+        ii. Inject Gaussian noise (relative uncertainty ~20%) into synthetic photometry derived from the augmented spectra.
+    
+    c. **Model Training:**
+        i. Train an AutoML regressor (ensemble of Gradient-Boosted Decision Trees) to map photometric inputs to latent PCA coefficients.
+        ii. Train a secondary classifier to assign taxonomic labels based on the latent space.
+    
+2. **Forward Inference:**
+    a. **Predict Latent Coefficients:**
+        i. For each object, pass its photometry through the trained regressor to obtain predicted latent coefficients.
+    
+    b. **Reconstruct Spectra:**
+        i. Apply inverse PCA transformation to the predicted latent coefficients to obtain full-resolution spectra.
+    
+    c. **Generate Ensembles:**
+        i. Sample from the joint posterior distribution of latent coefficients using a Gaussian Copula to create an ensemble of reconstructed spectra.
+    
+    d. **Classify Taxonomic Type:**
+        i. Pass the predicted latent coefficients through the trained classifier to obtain probability distributions over taxonomic classes.
+    
+3. **Validation and Output:**
+    a. **Leave-One-Out Cross-Validation (LOOCV):**
+        i. For each object, validate the reconstruction by comparing with the known spectrum.
+        ii. Compute RMSE and assess credible interval coverage.
+    
+    b. **Output Results:**
+        i. Return Reconstructed_Spectra, Classification_Probabilities, and Uncertainty_Intervals for each object.
+```
+
+End of Algorithm

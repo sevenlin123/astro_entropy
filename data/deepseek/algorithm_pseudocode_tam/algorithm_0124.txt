@@ -1,0 +1,14 @@
+\boxed{
+\begin{algorithm}[H]
+\caption{Probabilistic Spectral Reconstruction from Photometry}
+\begin{algorithmic}[1]
+\State Read input photometric data $\mathbf{m}$ for the target object
+\State Preprocess $\mathbf{m}$ to obtain normalized flux values $\hat{\mathbf{m}}$
+\State Project $\hat{\mathbf{m}}$ into latent space using trained AutoML regressor to obtain latent coefficients $\boldsymbol{\beta} = f(\hat{\mathbf{m}})$
+\State Reconstruct spectrum $S$ using inverse PCA transform: $S = \sum_{k=1}^{K} \beta_k \cdot \mathbf{v}_k$
+\State Compute uncertainties $\Delta S$ by propagating photometric uncertainties and model variance
+\State \Optional Classify taxonomic type using $\boldsymbol{\beta}$
+\State Output $S$, $\Delta S$, and \Optional taxonomic type
+\end{algorithmic}
+\end{algorithm}
+}

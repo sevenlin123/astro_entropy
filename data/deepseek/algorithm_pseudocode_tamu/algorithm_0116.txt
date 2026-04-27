@@ -1,0 +1,44 @@
+```
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+    Training Spectra: Set of reference TNO spectra S_ref
+    Photometric Filters: Set of NIRCam filters F
+    Number of Components: K (chosen via validation)
+    Photometric Uncertainty: σ (e.g., 20%)
+
+Output:
+    Reconstructed Spectrum: S_recon
+    Latent Coefficients: θ
+    Classification: T (taxonomic type)
+
+1. Initialize PCA:
+    a. Perform PCA on S_ref to obtain principal components V and mean μ.
+    b. Determine the number of components K.
+
+2. Data Augmentation:
+    a. Project S_ref onto V to get latent coefficients θ_ref.
+    b. Generate synthetic θ_syn using Kernel Density Estimation (KDE) with Gaussian kernel.
+    c. Convert θ_syn back to spectra S_syn via inverse PCA.
+
+3. Forward Modeling:
+    a. Simulate photometry m_syn for S_syn using NIRCam filters F.
+    b. Add Gaussian noise with σ to m_syn to create realistic training data.
+
+4. Train AutoML Regressor:
+    a. Split training data into photometry m and latent coefficients θ.
+    b. Use AutoML (e.g., AutoGluon) to train regressor R mapping m -> θ.
+
+5. Train Taxonomy Classifier:
+    a. Use θ_ref to train classifier C to predict taxonomic labels T.
+
+6. Reconstruct Spectrum for New Object:
+    a. Input sparse photometry m_new.
+    b. Predict latent coefficients θ_pred = R(m_new).
+    c. Reconstruct spectrum S_recon = V * θ_pred + μ.
+
+7. Classify Taxonomic Type (optional):
+    a. Predict taxonomic label T = C(θ_pred).
+
+End Algorithm
+```

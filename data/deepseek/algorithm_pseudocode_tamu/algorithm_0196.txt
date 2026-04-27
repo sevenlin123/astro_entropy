@@ -1,0 +1,48 @@
+```
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+- Training Spectra: Set of reference TNO spectra
+- Photometric Observations: Sparse multi-band photometry measurements
+- Filter Responses: Instrument-specific filter throughput curves
+- Noise Levels: Uncertainty estimates for photometric measurements
+
+Output:
+- Reconstructed Spectrum: High-resolution spectral estimate
+- Posterior Distribution: Probability distribution of spectral features
+- Taxonomic Classification: Probabilistic assignment to spectral classes
+
+1. **Principal Component Analysis (PCA)**
+   a. Train PCA on the reference spectra to reduce dimensionality.
+   b. Project reference spectra onto the PCA basis to obtain latent coefficients.
+
+2. **Synthetic Data Generation**
+   a. Apply Kernel Density Estimation (KDE) on the latent coefficients to create a continuous manifold.
+   b. Generate synthetic spectra by sampling from the KDE.
+   c. Forward model synthetic spectra through the instrument response functions to simulate photometric observations.
+   d. Inject Gaussian noise into simulated photometry based on specified uncertainties.
+
+3. **Automated Machine Learning (AutoML) Training**
+   a. Use synthetic photometry and corresponding latent coefficients to train a regression model (e.g., XGBoost).
+   b. Develop a secondary classifier for taxonomic assignments in the latent space.
+
+4. **Leave-One-Out Cross-Validation (LOOCV)**
+   a. For each held-out spectrum:
+      i. Remove the spectrum from the PCA and KDE.
+      ii. Retrain PCA and regenerate synthetic data without the held-out spectrum.
+      iii. Retrain the regression model and classifier.
+      iv. Predict latent coefficients using photometric observations of the held-out spectrum.
+      v. Reconstruct the spectrum using inverse PCA.
+      vi. Evaluate reconstruction quality using RMSE, MAE, and credible interval coverage.
+      vii. Classify the spectrum taxonomically.
+
+5. **Posterior Sampling**
+   a. Use Gaussian Copula to sample from the joint posterior of latent coefficients.
+   b. Generate multiple realizations of the spectrum to quantify uncertainties.
+
+6. **Application Scenarios**
+   a. **Survey Optimization**: Analyze filter configurations for maximizing information content.
+   b. **Outlier Detection**: Identify spectra with low posterior probabilities in the latent manifold.
+
+End.
+```

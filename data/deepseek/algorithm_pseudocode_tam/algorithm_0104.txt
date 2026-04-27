@@ -1,0 +1,92 @@
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+**Step-by-Step Explanation:**
+
+1. **Preprocessing of Reference Spectra**:
+   - Normalize all reference spectra to unit variance to remove brightness differences.
+   - Remove any missing or incomplete data points.
+
+2. **Principal Component Analysis (PCA)**:
+   - Apply PCA on the preprocessed reference spectra.
+   - Determine the optimal number of principal components (typically 4-10) based on variance explained and scree plot analysis.
+
+3. **Data Augmentation with Kernel Density Estimation (KDE)**:
+   - Project the reference spectra onto the PCA latent space.
+   - Use non-parametric KDE to generate synthetic latent vectors, creating a continuous manifold.
+
+4. **Synthetic Photometry Generation**:
+   - Convolve each synthetic spectrum with the instrumental response functions (e.g., JWST NIRCam filters).
+   - Add Gaussian noise (20% relative uncertainty) to simulate realistic photometric measurements.
+
+5. **Training the AutoML Regressor**:
+   - Train an ensemble of Gradient-Boosted Decision Trees (GBDTs) using the synthetic photometry and corresponding PCA latent coefficients as input-output pairs.
+
+6. **Forward Inference for Spectral Reconstruction**:
+   - For new photometric observations, use the trained regressor to predict latent coefficients.
+   - Apply inverse PCA transformation to reconstruct the full spectrum.
+
+7. **LOOCV Validation**:
+   - For each reference spectrum, hold it out during training.
+   - Reconstruct the spectrum using the model and compare with the original.
+   - Compute reconstruction error and check credible interval coverage.
+
+8. **Taxonomic Classification**:
+   - Project the predicted latent coefficients into a secondary classifier.
+   - Classify the spectrum into predefined taxonomic categories (e.g., Water-type, CO₂-type, Organics-type).
+
+### Pseudocode Implementation:
+
+```plaintext
+Algorithm: Probabilistic Spectral Reconstruction
+
+Input:
+- ReferenceSpectra: Collection of normalized TNO spectra
+- FilterResponse: Instrumental response functions (e.g., NIRCam filters)
+- NoiseLevel: Relative uncertainty (e.g., 20%)
+
+Output:
+- ReconstructedSpectra: Set of high-resolution spectral reconstructions
+- TaxonomicLabels: Probabilistic taxonomic classifications
+
+1. Preprocess Reference Spectra:
+   a. Normalize each spectrum to unit variance.
+   b. Remove incomplete data points.
+
+2. Perform PCA on Reference Spectra:
+   a. Compute covariance matrix.
+   b. Determine principal components using eigenvalue decomposition.
+   c. Select optimal number of components (K, typically 4-10).
+
+3. Data Augmentation:
+   a. Project ReferenceSpectra into PCA latent space.
+   b. Use KDE to generate synthetic latent vectors, creating a smooth manifold.
+
+4. Generate Synthetic Photometry:
+   a. For each synthetic spectrum, compute expected photometric magnitudes using FilterResponse.
+   b. Add Gaussian noise with relative uncertainty of NoiseLevel.
+
+5. Train AutoML Regressor:
+   a. Input: Synthetic photometry
+   b. Output: Corresponding PCA latent coefficients
+   c. Use AutoGluon to train an ensemble of GBDTs.
+
+6. Forward Inference:
+   a. For new photometric observations:
+      i. Predict latent coefficients using the trained regressor.
+      ii. Reconstruct full spectrum via inverse PCA transformation.
+
+7. Validate via LOOCV:
+   a. For each reference spectrum:
+      i. Hold out the spectrum during training.
+      ii. Reconstruct using the model.
+      iii. Compare reconstructed with original.
+      iv. Compute reconstruction error and credible interval coverage.
+
+8. Taxonomic Classification:
+   a. Use latent coefficients from step 6a as features.
+   b. Classify using a secondary AutoML classifier trained on taxonomic labels.
+
+Return ReconstructedSpectra and TaxonomicLabels.
+```
+
+**Note:** The above pseudocode outlines the core computational steps, excluding validation loops and visualization steps as per the problem constraints.

@@ -1,0 +1,36 @@
+```
+Initialize inputs:
+   sparse_photometry = array of photometric measurements
+   spectral_model = pre-trained PCA model (principal components)
+
+Begin Algorithm:
+
+1. Transform sparse photometry into latent space:
+   a. For each object in sparse_photometry:
+      i. Project photometric features onto spectral_model's principal components
+      ii. Compute latent representations z = projection_result
+      iii. Store latent representations in a list or array
+
+2. Bayesian inference in latent space:
+   a. For each latent representation z:
+      i. Define prior distributions over the latent variables
+      ii. Compute the likelihood of observed photometry given z
+      iii. Perform MCMC sampling or other Bayesian inference method to estimate posterior distributions of z
+      iv. Record posterior means and credible intervals for each component
+
+3. Uncertainty propagation:
+   a. For each component in the posterior distribution of z:
+      i. Map the posterior uncertainty back through the spectral_model to estimate uncertainties in the full spectrum
+      ii. Combine uncertainties appropriately (e.g., variance addition if independent)
+
+4. Reconstruct full spectrum:
+   a. Use the posterior means of z to project back to the full spectrum via spectral_model
+   b. Attach the propagated uncertainties to the reconstructed spectrum
+
+5. Output:
+   a. For each object:
+      i. Reconstructed spectrum S
+      ii. Uncertainty U in spectrum S
+
+End Algorithm
+```

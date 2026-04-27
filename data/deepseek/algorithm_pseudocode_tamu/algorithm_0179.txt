@@ -1,0 +1,50 @@
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+**Inputs:**
+- `photometry`: Sparse photometric measurements of a TNO.
+- `training_spectra`: Reference near-IR spectra used for PCA basis.
+- `n_components`: Number of principal components to use (e.g., 8-10).
+
+**Outputs:**
+- `reconstructed_spectrum`: Full spectral reconstruction.
+- `credible_intervals`: Uncertainty estimates for the spectrum.
+- `taxonomic_class`: Predicted taxonomic classification.
+
+---
+
+**Step-by-Step Algorithm:**
+
+1. **Precompute PCA Basis:**
+   - Train PCA on `training_spectra` to extract principal components (PCs).
+   - Obtain the principal component coefficients (`latent_coeffs`) for the reference spectra.
+
+2. **Generate Synthetic Training Data:**
+   - Use Kernel Density Estimation (KDE) on the `latent_coeffs` to create a smooth, continuous manifold.
+   - Augment the training set with synthetic spectra to improve regression stability.
+
+3. **Train Photometric-to-Latent Regressor:**
+   - Use an AutoML regressor (e.g., Gradient Boosted Decision Trees) to map sparse photometry to latent coefficients.
+   - Forward-model synthetic photometry using the PCA basis and inject noise (e.g., 20% relative uncertainty).
+
+4. **Predict Latent Coefficients:**
+   - For the input `photometry`, predict the latent coefficients using the trained regressor.
+
+5. **Reconstruct Spectrum:**
+   - Apply the inverse PCA transform to the predicted latent coefficients to obtain the full spectral reconstruction.
+
+6. **Sample Posterior for Uncertainties:**
+   - Use a Gaussian Copula to sample the joint posterior distribution of latent coefficients.
+   - Propagate these samples through the inverse PCA transform to generate multiple realizations of the spectrum.
+
+7. **Classify Taxonomic Type:**
+   - Project the predicted latent coefficients into a pre-trained taxonomic classifier to determine the most likely spectral type.
+
+8. **Output Results:**
+   - Combine the reconstructed spectrum, credible intervals, and taxonomic classification for the target TNO.
+
+---
+
+**Notes:**
+- The algorithm assumes precomputed PCA basis and synthetic data augmentation for training stability.
+- The AutoML regressor handles non-linear mappings and uncertainty propagation.
+- The Gaussian Copula ensures physically plausible posterior sampling in the latent space.

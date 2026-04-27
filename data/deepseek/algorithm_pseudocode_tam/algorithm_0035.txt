@@ -1,0 +1,42 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Initialize Data Collection**
+   - Gather a sample of reference TNO near-IR spectra.
+   - Exclude outliers and rare spectral types to focus on dominant classes.
+
+2. **Principal Component Analysis (PCA)**
+   - Perform PCA on the reference spectra to derive principal components.
+   - Select the number of components (e.g., 4-5 for core reconstruction, up to 10 for fidelity).
+   - Obtain principal component coefficients for each spectrum.
+
+3. **Kernel Density Estimation (KDE) Augmentation**
+   - Project reference spectra onto the PCA latent space.
+   - Use KDE to estimate the probability density of latent coefficients.
+   - Set bandwidth to ensure smooth yet realistic spectral morphologies (e.g., h ≈ 0.5).
+
+4. **Synthetic Photometry Generation**
+   - For each augmented spectrum, convolve with JWST/NIRCam filter curves to compute reflectance in each band.
+   - Introduce Gaussian noise (e.g., 20% relative uncertainty) to simulate realistic photometric measurements.
+
+5. **Training the Encoder**
+   - Use AutoML (e.g., Gradient-Boosted Decision Trees) to regress from photometric data to latent coefficients.
+   - The encoder maps sparse photometry to the latent space defined by PCA and KDE.
+
+6. **Leave-One-Out Cross-Validation (LOOCV)**
+   - For each spectrum in the reference set:
+     - Remove the spectrum from the training data.
+     - Test the encoder on the remaining data.
+     - Measure reconstruction accuracy and uncertainty calibration.
+     - Ensure no synthetic data influences validation.
+
+7. **Spectral Reconstruction**
+   - For new photometric observations:
+     - Use the trained encoder to predict latent coefficients.
+     - Apply inverse PCA transform to reconstruct the full spectrum.
+     - Propagate uncertainties from photometry to the reconstructed spectrum.
+
+8. **Taxonomic Classification**
+   - Train a classifier on the PCA latent space to predict spectral type probabilities.
+   - Classify new objects based on their latent coefficients, identifying their taxonomic group confidently.
+
+**End Algorithm**

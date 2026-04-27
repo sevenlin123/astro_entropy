@@ -1,0 +1,37 @@
+To implement the core computational method described in the paper, follow these steps:
+
+1. **Preprocess the photometric data** by normalizing it to have zero mean and unit variance.
+2. **Train a PCA model** on a set of known spectra to extract principal components.
+3. **Determine the optimal number of PCA components** using leave-one-out cross-validation.
+4. **Build a probabilistic model** in the PCA space, defining the likelihood and prior distributions.
+5. **Perform Bayesian inference** using the probabilistic model and photometric data to infer the hidden variables.
+6. **Propagate uncertainties** to calculate the posterior variances.
+7. **Reconstruct the full spectrum** using the inferred variables and inverse PCA transformation.
+
+Here is the pseudocode implementing these steps:
+
+```python
+def probabilistic_spectral_reconstruction(photometric_data, training_spectra):
+    # Step 1: Preprocess photometric data
+    normalized_photometry = normalize(photometric_data)
+    
+    # Step 2: Train PCA model
+    pca_model = train_pca(training_spectra)
+    
+    # Step 3: Determine number of PCA components
+    num_components = determine_optimal_components(pca_model, normalized_photometry)
+    
+    # Step 4: Build probabilistic model
+    probabilistic_model = build_probabilistic_model(num_components)
+    
+    # Step 5: Bayesian inference
+    posterior_params = perform_bayesian_inference(probabilistic_model, normalized_photometry)
+    
+    # Step 6: Propagate uncertainties
+    uncertainties = calculate_uncertainties(posterior_params)
+    
+    # Step 7: Reconstruct full spectrum
+    reconstructed_spectra = reconstruct_full_spectra(posterior_params, pca_model)
+    
+    return reconstructed_spectra, uncertainties
+```

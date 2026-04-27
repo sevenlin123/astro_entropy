@@ -1,0 +1,161 @@
+### Algorithm: Probabilistic Spectral Reconstruction Framework
+
+#### Step-by-Step Pseudocode
+
+**1. Training Phase:**
+
+- **Input:** Reference TNO spectra (training set), JWST/NIRCam filter characteristics.
+- **Output:** Trained autoML regressor, inverse PCA transform, Gaussian Copula model.
+
+**1.1. Principal Component Analysis (PCA):**
+
+```python
+def PCA(spectra):
+    # Perform PCA on the training spectra to reduce dimensionality
+    pca = PCA(n_components=K)
+    pca.fit(spectra)
+    return pca
+```
+
+**1.2. Latent Space Definition (via Kernel Density Estimation):**
+
+```python
+def KDE(train_latent, bandwidth=0.5):
+    # Fit KDE to the latent space
+    kde = KernelDensity(kernel='gaussian', bandwidth=bandwidth)
+    kde.fit(train_latent)
+    return kde
+```
+
+**1.3. Synthetic Data Augmentation:**
+
+```python
+def augment_data(kde, num_samples=10000):
+    # Generate synthetic latent vectors
+    synthetic_latent = kde.sample(num_samples)
+    return synthetic_latent
+```
+
+**1.4. Forward Modeling (Generate Mock Photometry):**
+
+```python
+def forward_model(synthetic_latent, pca, filters):
+    # Convert synthetic latent to spectra, then to photometry
+    reconstructed_spectra = pca.inverse_transform(synthetic_latent)
+    mock_photometry = calculate_flux(reconstructed_spectra, filters)
+    return mock_photometry
+```
+
+**1.5. Training the AutoML Regressor:**
+
+```python
+def train_auto_ml(mock_photometry, synthetic_latent):
+    # Train regressor to map photometry to latent space
+    regressor = AutoGluon(...)
+    regressor.fit(mock_photometry, synthetic_latent)
+    return regressor
+```
+
+**1.6. Gaussian Copula for Posterior Sampling:**
+
+```python
+def fit_gaussian_copula(train_latent):
+    # Fit copula to preserve dependencies in latent space
+    copula = GaussianCopula()
+    copula.fit(train_latent)
+    return copula
+```
+
+**2. Inference Phase:**
+
+- **Input:** Observed photometry, LOOCV setup.
+- **Output:** Reconstructed spectrum, taxonomic probabilities, outlier flag.
+
+**2.1. Predict Latent Coefficients:**
+
+```python
+def predict_latent(regressor, observed_photometry):
+    # Use regressor to predict latent space coordinates
+    latent_prediction = regressor.predict(observed_photometry)
+    return latent_prediction
+```
+
+**2.2. Reconstruct Spectrum:**
+
+```python
+def inverse_pca(pca, latent_prediction):
+    # Transform latent prediction back to full spectrum
+    reconstructed_spectrum = pca.inverse_transform(latent_prediction)
+    return reconstructed_spectrum
+```
+
+**2.3. Quantify Uncertainties (via Copula Sampling):**
+
+```python
+def sample_posterior(copula, latent_prediction, num_samples=1000):
+    # Sample from joint posterior to get uncertainty estimates
+    posterior_samples = copula.sample(latent_prediction.shape[0], 
+                                      copula.correlation_matrix)
+    return posterior_samples
+```
+
+**2.4. Calculate Credible Intervals:**
+
+```python
+def calculate_credible_intervals(samples):
+    # Compute 95% credible intervals for each wavelength
+    lower, upper = np.percentile(samples, [2.5, 97.5], axis=0)
+    return lower, upper
+```
+
+**2.5. Taxonomic Classification:**
+
+```python
+def classify_taxonomic(latent_mean, classifier):
+    # Classify the object into taxonomic groups
+    taxonomic_probabilities = classifier.predict_proba(latent_mean)
+    return taxonomic_probabilities
+```
+
+**2.6. Outlier Detection:**
+
+```python
+def detect_outliers(latent_mean, copula, threshold=1e-6):
+    # Evaluate probability density in latent space
+    log_density = copula.score(latent_mean)
+    is_outlier = log_density < threshold
+    return is_outlier
+```
+
+**3. Performance Metrics Calculation:**
+
+- **Input:** True spectra, reconstructed spectra, credible intervals.
+- **Output:** NRMSE, Coverage Fraction, Outlier Flag Count.
+
+**3.1. Normalized Root Mean Squared Error (NRMSE):**
+
+```python
+def compute_nrmse(true_spectra, reconstructed_spectra, median_spectra):
+    nrmse = np.sqrt(np.mean((true_spectra - reconstructed_spectra)**2 / (median_spectra**2)))
+    return nrmse
+```
+
+**3.2. Credible Interval Coverage:**
+
+```python
+def compute_coverage(true_values, lower, upper):
+    coverage = np.mean((true_values > lower) & (true_values < upper))
+    return coverage
+```
+
+**3.3. Outlier Rate:**
+
+```python
+def count_outliers(outlier_flags):
+    outlier_count = np.sum(outlier_flags)
+    return outlier_count
+```
+
+### Explanation:
+
+This algorithm outlines the core computational steps for the probabilistic spectral reconstruction framework. It begins by training a machine learning model on a reduced-dimensional latent space derived from PCA, augmented with synthetic data for stability. The trained model is then used to predict latent coefficients from observed photometry, which are transformed back to full spectra using inverse PCA. Uncertainty quantification and taxonomic classification are performed in the latent space, ensuring physically consistent reconstructions. The framework evaluates performance through cross-validation and metrics like NRMSE and credible interval coverage, ensuring reliable spectral reconstructions from sparse photometric data.

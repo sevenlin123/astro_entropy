@@ -1,0 +1,34 @@
+The computational algorithm for the core reconstruction framework is structured as follows:
+
+1. **Data Preparation**:
+   - Gather and preprocess TNO spectra from available datasets.
+   - Normalize and align all spectra to a consistent flux scale.
+
+2. **Dimensionality Reduction via PCA**:
+   - Stack all normalized spectra into a matrix.
+   - Compute PCA to identify latent components, selecting the top 5-10 principal components capturing major variance.
+   - Transform original spectra to obtain latent coefficients.
+
+3. **Data Augmentation using KDE**:
+   - Project seed spectra onto selected PCA components.
+   - Apply KDE to estimate the density of the latent space, choosing an appropriate bandwidth (e.g., 0.5).
+   - Sample synthetic spectra from the estimated density to augment the training dataset.
+
+4. **Training AutoML Regressor and Classifier**:
+   - For each synthetic spectrum, convolve with instrument filter response (e.g., JWST/NIRCam) to generate synthetic photometry.
+   - Inject Gaussian noise (20% relative uncertainty) into synthetic photometry.
+   - Split data into training and validation sets.
+   - Train an ensemble of AutoML regressors (e.g., Gradient-Boosted Decision Trees) to regress latent coefficients from noisy photometry.
+   - Train an AutoML classifier on latent coefficients for taxonomic classification.
+
+5. **Inference Pipeline**:
+   - For new photometric observations, pass through the trained regressor to predict latent coefficients.
+   - Project these coefficients back into high-dimensional spectral space using inverse PCA to obtain reconstructed spectra.
+   - Use latent coefficients for taxonomic classification.
+
+6. **Performance Evaluation**:
+   - Conduct LOOCV by iteratively holding out one spectrum.
+   - Retrain models on remaining data and predict held-out spectrum.
+   - Assess reconstruction accuracy, credible interval coverage, and taxonomic classification accuracy.
+
+This algorithm effectively bridges sparse photometric data to detailed spectral reconstructions, enabling taxonomic classification and analysis.

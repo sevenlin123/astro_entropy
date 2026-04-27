@@ -1,0 +1,24 @@
+To implement the described probabilistic spectral reconstruction method, we follow these steps in pseudocode:
+
+```pseudocode
+procedure ProbabilisticSpectralReconstruction():
+    input: list of TNOs with photometric data
+    output: reconstructed spectra, clusters, optimal wavelengths
+
+    spectra = empty list
+    hyperparams = empty list
+
+    for each TNO in TNOs:
+        X = wavelengths of photometric bands
+        Y = observed magnitudes
+        train Gaussian Process (GP) with Bayesian inference on hyperparameters
+            using MCMC to sample posterior hyperparameters
+        predict reflectivity spectrum S using GP
+        append S to spectra
+        append hyperparameters to hyperparams
+
+    cluster the spectra into groups using clustering algorithm
+    determine optimal wavelengths by minimizing expected uncertainty
+
+    return spectra, clusters, optimal_wavelengths
+```

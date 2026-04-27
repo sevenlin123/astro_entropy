@@ -1,0 +1,47 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Input Data Preparation**
+   - **Training Spectra**: Obtain a representative sample of reference TNO spectra.
+   - **Photometric Observations**: Sparse multi-band photometry of TNOs.
+
+2. **Principal Component Analysis (PCA)**
+   - Apply PCA to the training spectra to extract principal components (eigenvectors) and latent coefficients (scores).
+   - Determine the optimal number of principal components (K) based on explained variance and cross-validation.
+
+3. **Kernel Density Estimation (KDE) Augmentation**
+   - Train a KDE on the latent coefficients derived from the PCA to create a smooth probability distribution in the latent space.
+   - Use the KDE to generate synthetic latent vectors, expanding the training dataset for robust regression.
+
+4. **Forward Modeling and Synthetic Photometry**
+   - For each synthetic latent vector, simulate photometric observations by convolving the reconstructed spectrum with the instrument's filter response curves (e.g., JWST/NIRCam).
+   - Add Gaussian noise to the synthetic photometry to account for measurement uncertainties.
+
+5. **Automated Machine Learning (AutoML) Training**
+   - Train an AutoML regressor (ensemble of gradient-boosted decision trees) to map synthetic photometry to latent coefficients.
+   - Simultaneously train a classifier to predict taxonomic labels using the latent coefficients.
+
+6. **Leave-One-Out Cross-Validation (LOOCV)**
+   - For each object in the training set:
+     - Remove the object from the training data.
+     - Generate synthetic data using the remaining objects.
+     - Validate the model by reconstructing the removed object's spectrum and comparing it to the true spectrum.
+
+7. **Spectral Reconstruction**
+   - For new photometric observations:
+     - Use the trained regressor to predict latent coefficients.
+     - Apply inverse PCA transformation to obtain the full spectrum.
+     - Sample the posterior distribution of latent coefficients to generate confidence intervals.
+
+8. **Taxonomic Classification**
+   - Predict taxonomic labels (e.g., H₂O, CO₂, Organic, Methanol) using the latent coefficients.
+   - Provide confidence scores for each taxonomic category.
+
+9. **Optimal Filter Configuration**
+   - Compute the Fisher Information Matrix (FIM) for different photometric filter configurations.
+   - Select the configuration that maximizes information content for spectral reconstruction.
+
+10. **Outlier Detection**
+    - Compare the posterior probabilities of new observations against the latent manifold distribution.
+    - Identify objects with low posterior probabilities as potential outliers.
+
+**End of Algorithm**

@@ -1,0 +1,55 @@
+### Algorithm for Probabilistic Spectral Reconstruction of TNOs from Sparse Photometry
+
+**Step-by-Step Explanation:**
+
+1. **Preprocessing and PCA:**
+   - Collect training spectral data of TNOs.
+   - Perform PCA to reduce spectral dimensions into latent components.
+   - Determine optimal number of PCA components (e.g., 4-5 for classification, 8-10 for detailed reconstruction).
+
+2. **Data Augmentation:**
+   - Use Kernel Density Estimation (KDE) to generate synthetic latent points, expanding the training set to improve model generalization.
+
+3. **Model Training:**
+   - Train an AutoML regressor to map sparse photometry to latent PCA coefficients.
+   - Train a classifier on the latent space to predict spectral taxonomic classes.
+
+4. **Inference Pipeline:**
+   - For new photometric data, apply the trained regressor to get latent coefficients.
+   - Use inverse PCA to reconstruct the full spectrum.
+   - Classify the spectrum using the trained classifier.
+
+5. **Validation and Post-Processing:**
+   - Evaluate reconstruction accuracy using metrics like RMSE and credible interval coverage.
+   - Check for outliers by assessing latent density.
+
+---
+
+### Pseudocode:
+
+```python
+def spectral_reconstruction_framework():
+    # Training Phase
+    1. Read and preprocess TNO spectral data.
+    2. Perform PCA to extract principal components.
+    3. Determine optimal number of PCA components based on explained variance or cross-validation.
+    4. Generate synthetic training data using KDE on the PCA latent space.
+    5. Train AutoML regressor to map photometric inputs to PCA coefficients.
+    6. Train taxonomic classifier using latent coordinates.
+
+    # Inference Phase
+    1. For new photometric observations:
+        a. Normalize photometric data.
+        b. Apply AutoML regressor to predict latent coefficients.
+        c. Use inverse PCA to reconstruct full spectrum.
+        d. Use taxonomic classifier to predict spectral type.
+
+    # Post-Processing
+    1. Calculate reconstruction metrics (RMSE, correlation, credible interval coverage).
+    2. Detect outliers based on latent space probability density.
+    3. Adjust KDE bandwidth if necessary for improved calibration.
+
+    return reconstructed_spectra, taxonomic_classifications
+```
+
+This pseudocode outlines the core computational steps of the probabilistic spectral reconstruction framework for TNOs.

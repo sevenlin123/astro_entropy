@@ -1,0 +1,38 @@
+```
+Algorithm for Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. Initialize:
+   - Train a PCA model on a set of reference TNO spectra to create a low-dimensional latent space (principal components).
+   - Augment the latent space using Kernel Density Estimation (KDE) to smooth the probability distribution, ensuring a continuous manifold.
+
+2. Generate Synthetic Photometry:
+   - For each augmented spectrum, convolve it with the effective throughput curves of the target instrument (e.g., JWST NIRCam) to compute the synthetic photometric measurements.
+   - Inject Gaussian noise with a relative reflectance uncertainty (e.g., 20%) into the synthetic photometry to simulate real-world observational noise.
+
+3. Train AutoMLRegressor:
+   - Use the synthetic photometry and corresponding PCA coefficients as input-output pairs to train an ensemble of Gradient Boosted Decision Trees (GBDTs) via AutoML.
+   - The regressor maps sparse photometric inputs to latent coefficients, stabilizing the inverse PCA problem.
+
+4. Perform Leave-One-Out Cross-Validation (LOOCV):
+   - For each held-out spectrum:
+     a. Remove it from the training set.
+     b. Generate synthetic data using the remaining spectra.
+     c. Use the trained regressor to predict latent coefficients from the held-out photometry.
+     d. Apply inverse PCA to obtain the reconstructed spectrum.
+     e. Compute the Root Mean Square Error (RMSE) between the reconstructed and true spectrum.
+
+5. Propagate Uncertainties:
+   - Sample the posterior distribution of latent coefficients from the regressor.
+   - Decode multiple samples into spectra and compute variance to assess reconstruction uncertainty.
+
+6. Detect Outliers:
+   - Quantify the divergence of predicted latent states from the KDE prior.
+   - Flag objects with high divergence as outliers for further spectroscopic study.
+
+7. Taxonomic Classification:
+   - Train a secondary classifier on the latent coefficients to classify spectra into predefined taxonomic groups (e.g., H₂O, CO₂, Organics, Methanol).
+
+8. Optimize Survey Filters:
+   - Evaluate the information content of different NIRCam filter configurations by assessing their ability to recover latent spectral coefficients.
+   - Select configurations that maximize spectral reconstruction fidelity and taxonomic classification accuracy.
+```

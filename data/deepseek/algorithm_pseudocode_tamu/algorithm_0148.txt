@@ -1,0 +1,28 @@
+```
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. Preprocessing:
+   a. Obtain a sample of reference near-infrared spectra of TNOs.
+   b. Perform Principal Component Analysis (PCA) on the sample to derive principal components (latent space).
+   
+2. Training:
+   a. Use Kernel Density Estimation (KDE) with a Gaussian kernel on the PCA coefficients to create a smooth probability distribution in the latent space.
+   b. Generate synthetic photometry by convolving the reference spectra with the instrument response functions (e.g., JWST/NIRCam filters) and adding 20% Gaussian noise.
+   c. Train an AutoML regressor (e.g., ensemble of gradient-boosted decision trees) to map sparse photometry to latent PCA coefficients.
+   
+3. Inference:
+   a. For new photometric observations:
+      i. Use the trained regressor to predict latent coefficients.
+      ii. Apply inverse PCA transform to reconstruct the full spectrum.
+      iii. Sample the joint posterior of latent coefficients using Gaussian Copula to generate confidence intervals.
+   b. Perform taxonomic classification by predicting class probabilities in the latent space.
+   
+4. Validation:
+   a. Conduct Leave-One-Out Cross-Validation (LOOCV) to assess reconstruction fidelity and uncertainty calibration.
+   
+5. Applications:
+   a. For survey optimization:
+      i. Evaluate information content of different filter configurations.
+   b. For outlier detection:
+      i. Identify objects with posterior probabilities outside typical distributions.
+```

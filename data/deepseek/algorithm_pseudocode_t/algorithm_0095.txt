@@ -1,0 +1,60 @@
+Here is the structured algorithm implementing the core reconstruction framework:
+
+```pseudocode
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+    Observed photometric magnitudes m_obs[ν]
+    Measurement uncertainties sigma_m[ν]
+    Basis functions ϕ_i(λ)
+    Gaussian Process kernel parameters (e.g., length scale l, variance σ_f)
+
+Output:
+    Reconstructed SED coefficients c_i
+    Uncertainty estimates for c_i
+    List of outliers
+
+Begin
+
+1. Read input data and initialize variables:
+    Read m_obs, sigma_m, and define basis functions ϕ_i.
+
+2. Set up the basis functions and Gaussian Process parameters:
+    Select ϕ_i(λ) (e.g., polynomials or exponentials) and initialize l, σ_f.
+
+3. Construct the forward model:
+    For each filter ν:
+        a. Integrate the SED(λ) over the filter's effective wavelength range to compute the flux F_model(ν).
+        b. Convert F_model(ν) to predicted magnitude m_model(ν).
+
+4. Define the likelihood function:
+    For each filter ν:
+        L_ν = Normal(m_model(ν), sigma_m(ν))
+    Total likelihood = product of all L_ν.
+
+5. Define priors:
+    For each basis coefficient c_i:
+        Prior = Gaussian(0, large variance)
+    For Gaussian Process hyperparameters l, σ_f:
+        Set appropriate priors (e.g., log-normal for l, Gaussian for σ_f).
+
+6. Perform Bayesian inference using MCMC:
+    Sample the posterior distribution of c_i, l, σ_f.
+    Store the samples.
+
+7. Detect outliers:
+    For each data point:
+        Compute the probability of it being an outlier.
+        If probability > threshold (e.g., 0.05), flag as outlier.
+
+8. Reconstruct the SED:
+    Compute the mean SED using the posterior mean of c_i.
+    Calculate SED uncertainty from posterior variances.
+
+9. Output:
+    Output the mean SED, its uncertainty, and the list of outliers.
+
+End
+```
+
+This algorithm encapsulates the core computational steps needed for reconstructing the spectral energy distribution of trans-Neptunian objects from sparse photometric data.

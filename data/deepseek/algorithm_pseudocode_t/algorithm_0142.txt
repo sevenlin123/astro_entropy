@@ -1,0 +1,55 @@
+```
+Algorithm: Probabilistic Spectral Reconstruction of TNOs from Sparse Photometry
+
+Input: 
+- Observed photometric data for each object
+- Pretrained Gaussian process models for each photometric band
+- Spectral priors from established TNO spectral libraries
+
+Output:
+- Reconstructed spectral energy distributions (SEDs)
+- Bayesian evidence for each SED
+- Outlier detection flags
+- Visualization plots for taxonomy and survey optimization
+
+Steps:
+
+1. Initialize Gaussian Process Models:
+   - For each photometric band j (j = 1 to J):
+     - Load pretrained Gaussian process model GPM_j
+     - Set hyperparameters based on training data from spectral libraries
+
+2. For each observed object k (k = 1 to K):
+   - Initialize variables for SED reconstruction
+
+3. For each object k:
+   a. For each photometric band j:
+      i. Use GPM_j to predict the expected SED at the wavelengths corresponding to band j
+      ii. Sample from the posterior distribution of the SED given the observed flux F_kj
+      iii. Store the sampled SEDs as SED_samples_kj
+
+   b. For each SED sample in SED_samples_kj:
+      i. Calculate the likelihood of the observed flux F_kj given the SED sample
+      ii. Compute the Bayesian evidence Z_kj = ∫ P(F_kj | SED) P(SED) dSED
+      iii. Sum Z_kj across all bands to get the total Bayesian evidence
+
+   c. Apply Rejection Sampling:
+      i. For each SED sample, check if it satisfies all photometric measurements within their uncertainties
+      ii. Retain only those SED samples that pass the consistency check across all bands
+
+   d. Analyze Bayesian evidence distribution:
+      i. Identify SED samples with significantly lower Bayesian evidence compared to others
+      ii. Flag potential outliers based on evidence distribution
+
+   e. Visualize the SEDs:
+      i. Plot the posterior distributions of the SEDs
+      ii. Compare with spectral templates for taxonomic classification
+
+   f. Determine survey optimizations:
+      i. Identify wavelength ranges where SED reconstruction has high uncertainty
+      ii. Suggest additional observations in these ranges to improve constraints
+
+4. Output the reconstructed SEDs, Bayesian evidence, outlier flags, and visualization plots
+
+End Algorithm
+```

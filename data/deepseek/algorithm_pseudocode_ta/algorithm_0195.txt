@@ -1,0 +1,113 @@
+The algorithm implements the Probabilistic Spectral Reconstruction (PSR) framework to reconstruct spectra from sparse photometry using a pre-trained PCA model. Here is the pseudocode:
+
+---
+
+**Algorithm: Probabilistic Spectral Reconstruction (PSR)**
+
+**Input:**
+- `S_train`: Training set of near-IR spectra
+- `F_obs`: Observed photometric fluxes for each TNO
+- `T_1, ..., T_M`: Filter transmission curves
+- `K`: Number of PCA components
+- `λ`: Prior variance hyperparameter
+- `σ²`: Noise variance hyperparameter
+
+**Output:**
+- `S_recon`: Reconstructed spectra
+- `U_recon`: Uncertainty estimates
+- Spectral classifications
+
+**1. Precompute PCA Model:**
+
+**a. Compute Mean Spectrum:**
+```python
+mean_S = mean(S_train, axis=0)
+```
+
+**b. Center Training Spectra:**
+```python
+S_centered = S_train - mean_S
+```
+
+**c. Compute Covariance Matrix:**
+```python
+Σ = np.cov(S_centered.T)
+```
+
+**d. Diagonalize Covariance Matrix:**
+```python
+V, Λ = np.linalg.eigh(Σ)
+```
+
+**e. Select Top K Eigenvectors:**
+```python
+V_k = V[:, -K:].T
+```
+
+**2. For Each TNO:**
+
+**a. Input Photometric Fluxes:**
+```python
+F_obs  # Shape: (M,)
+```
+
+**b. Compute Flux Contributions from Mean Spectrum:**
+```python
+C = []
+for j in range(M):
+    C_j = integrate(mean_S * T_j, λ_min, λ_max)
+    C.append(C_j)
+C = np.array(C)  # Shape: (M,)
+```
+
+**c. Compute Matrix D:**
+```python
+D = []
+for j in range(M):
+    D_j = []
+    for i in range(K):
+        D_ji = integrate(V_k[i] * T_j, λ_min, λ_max)
+        D_j.append(D_ji)
+    D.append(D_j)
+D = np.array(D)  # Shape: (M, K)
+```
+
+**d. Adjust Observed Fluxes:**
+```python
+F_adj = F_obs - C  # Shape: (M,)
+```
+
+**e. Solve for PCA Coefficients:**
+```python
+# Compute scaled matrices
+DD = (D.T @ D) * λ**2
+DD += np.eye(K) * σ²
+
+# Invert the scaled matrix
+inv_DD = np.linalg.inv(DD)
+
+# Compute coefficients
+a = inv_DD @ (D.T @ F_adj) * λ**2
+```
+
+**f. Reconstruct Spectrum:**
+```python
+S_recon = mean_S + V_k @ a  # Shape: (N_lambda,)
+```
+
+**g. Compute Uncertainties:**
+```python
+Var_a = inv_DD  # Variance of coefficients
+Var_S = V_k @ Var_a @ V_k.T  # Variance of spectrum
+U_recon = np.sqrt(np.diag(Var_S))  # Shape: (N_lambda,)
+```
+
+**h. Classify Spectral Type:**
+```python
+# Compare S_recon with reference templates
+spectral_type = classify(S_recon, reference_templates)
+```
+
+---
+
+This algorithm reconstructs full near-IR spectra from sparse photometric measurements using Bayesian inference in the PCA space, enabling classification of TNO spectral types.

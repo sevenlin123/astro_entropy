@@ -1,0 +1,62 @@
+```pseudocode
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+    - Training Spectra Set: {S_1, S_2, ..., S_N} (N = 51)
+    - Photometric Observations: {m_1, m_2, ..., m_T}
+    - Filter Set: {F_1, F_2, ..., F_k} (k = 4-5)
+
+Output:
+    - Reconstructed Spectra: {R_1, R_2, ..., R_T}
+    - Uncertainty Quantification: {C_1, C_2, ..., C_T}
+    - Taxonomic Classifications: {C_class_1, ..., C_class_T}
+
+Procedure:
+
+1. **Latent Space Definition**:
+    a. Perform Principal Component Analysis (PCA) on the Training Spectra Set.
+    b. Determine the number of principal components (K) through validation (4-5 for classification, 8-10 for fidelity).
+    c. Construct a latent space using the PCA coefficients.
+
+2. **Data Augmentation**:
+    a. Apply Kernel Density Estimation (KDE) with Gaussian kernels to the latent space of the training spectra.
+    b. Generate synthetic latent vectors (M = 10,000) to augment the training data.
+
+3. **Forward Modeling**:
+    a. Simulate photometric observations for each synthetic latent vector using the NIRCam filter set.
+    b. Introduce Gaussian noise (20% relative uncertainty) to simulate observational errors.
+
+4. **Training theRegressor**:
+    a. Use AutoML (e.g., XGBoost) to train a regressor mapping photometric observations to latent coefficients.
+    b. Construct the training dataset from synthetic photometry and corresponding latent coefficients.
+
+5. **Leave-One-Out Cross-Validation (LOOCV)**:
+    a. For each held-out spectrum S_i:
+        i. Remove S_i from the training set.
+        ii. Perform PCA on the remaining N-1 spectra.
+        iii. Generate synthetic data using KDE.
+        iv. Retrain the regressor and classifier.
+        v. Predict latent coefficients for m_i.
+        vi. Reconstruct the spectrum R_i via inverse PCA.
+        vii. Compute metrics: MSE, RMSE, R², credible interval coverage.
+
+6. **Spectral Reconstruction**:
+    a. For new photometric observations m_j:
+        i. Predict latent coefficients using the trained regressor.
+        ii. Project to full spectrum via inverse PCA.
+        iii. Sample posterior uncertainty using Gaussian Copula.
+
+7. **Classification**:
+    a. Train a classifier on the latent manifold to predict taxonomic classes.
+    b. Assign probabilities for each class based on latent coefficients.
+
+8. **Survey Optimization**:
+    a. Evaluate information content of different filter configurations.
+    b. Select optimal filters based on reconstruction fidelity.
+
+9. **Outlier Detection**:
+    a. Flag objects whose photometry lies outside the latent manifold.
+    b. Assess confidence in outlier status via posterior probabilities.
+
+End
+```

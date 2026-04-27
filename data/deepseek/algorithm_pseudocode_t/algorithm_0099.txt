@@ -1,0 +1,55 @@
+ALGORITHM SpectralReconstruction(TNOs):
+
+    Initialize base_SED and individual deviations for each TNO.
+
+    For each TNO i:
+
+        For each flux measurement j:
+
+            expected_flux = base_SED[j] + deviation_i[j]
+
+            observed_flux ~ Poisson(expected_flux)
+
+            Compute likelihood term for Poisson distribution at observed_flux.
+
+        End
+
+    End
+
+    Train GaussianProcess on all deviations across TNOs.
+
+    For each TNO i:
+
+        For each wavelength j:
+
+            detection_probability[i,j] = GaussianProcess.predict(j)
+
+        End
+
+    End
+
+    Run MCMCSampler combining Poisson likelihoods and detection_probabilities.
+
+    Posterior_means = compute mean of MCMC samples.
+
+    For each TNO i:
+
+        For each wavelength j:
+
+            reconstructedSED[i,j] = posterior_means[j] + deviation_i[j]
+
+            If |reconstructedSED[i,j] - posterior_means[j]| > outlier_threshold:
+
+                outlier_flag[i] = True
+
+            Else:
+
+                outlier_flag[i] = False
+
+        End
+
+    End
+
+    Return reconstructedSED, outlier_flag.
+
+END

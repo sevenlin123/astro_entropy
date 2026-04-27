@@ -1,0 +1,38 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+**Input:** Sparse photometric observations of a Trans-Neptunian Object (TNO)
+
+**Output:** Reconstructed full spectrum and taxonomic classification
+
+**Steps:**
+
+1. **Principal Component Analysis (PCA) Initialization:**
+   - Train PCA on a reference set of TNO spectra (51 objects) using near-infrared data.
+   - Extract principal components (PCs) capturing dominant spectral variations (4-5 PCs for classification, 8-10 PCs for detailed reconstruction).
+
+2. **Data Augmentation (Optional):**
+   - Project reference spectra onto PCA latent space.
+   - Apply Kernel Density Estimation (KDE) with optimal bandwidth (~0.5) to generate synthetic latent coefficients, expanding the training dataset.
+
+3. **Forward Modeling of Photometry:**
+   - For each synthetic spectrum, convolve with NIRCam filter responses to simulate observed photometric magnitudes.
+   - Inject Gaussian noise (20% relative uncertainty) to simulate realistic photon noise.
+
+4. **Training the Encoder (Regressor):**
+   - Use AutoML (e.g., AutoGluon) to train a model that maps noisy photometric inputs to latent PCA coefficients.
+   - Model architecture employs Gradient Boosted Decision Trees (GBDTs) due to their robust performance on sparse data.
+
+5. **LOOCV Validation (Not part of core reconstruction):**
+   - For each object, remove its real spectrum from the training set.
+   - Use the trained encoder to predict latent coefficients from the observed photometry.
+   - Decode these coefficients into a full spectrum using inverse PCA.
+
+6. **Reconstruct Spectrum:**
+   - Apply inverse PCA transformation to predicted latent coefficients to obtain the full spectrum.
+   - Propagate uncertainties from photometric noise to reconstructed spectrum.
+
+7. **Taxonomic Classification (Optional):**
+   - Project the latent coefficients of the reconstructed spectrum into a pre-trained classifier.
+   - Determine the probability distribution over spectral types (e.g., H₂O, CO₂, Organics, Methanol).
+
+**End Algorithm**

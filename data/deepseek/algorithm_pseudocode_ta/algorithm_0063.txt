@@ -1,0 +1,40 @@
+```pseudocode
+Algorithm ProbabilisticSpectralReconstruction:
+    Input:
+        photometric_data: list of objects, each with photometric measurements
+        uncertainties: measurement uncertainties for each photometric band
+        PCA_model: pre-trained Principal Component Analysis model
+
+    Output:
+        reconstructed_spectra: list of reconstructed spectral energy distributions
+        uncertainties: list of corresponding uncertainty estimates
+
+    1. Initialize PCA Model:
+        - PCA_model is pre-trained on a set of reference near-infrared spectra of TNOs.
+
+    2. For each object in photometric_data:
+        a. Preprocess photometric measurements:
+            i. Normalize the photometric features to have zero mean and unit variance.
+            ii. Extract relevant spectral response features from the normalized data.
+
+        b. Project features into PCA space:
+            i. Use the PCA_model to transform the spectral response features into latent variables.
+
+        c. Perform Bayesian Inference:
+            i. Compute posterior distributions of latent variables given the observed features and the PCA_model.
+            ii. Obtain posterior means and variances of the latent variables.
+
+        d. Reconstruct Spectrum:
+            i. Expand the posterior mean latent variables through the PCA basis vectors to obtain the reconstructed spectrum.
+
+        e. Propagate Uncertainties:
+            i. Calculate the uncertainty in the reconstructed spectrum by considering the variances of the latent variables and the linear transformation defined by the PCA_model.
+
+    3. Collect all reconstructed spectra and their uncertainties.
+
+    4. Return reconstructed_spectra and uncertainties.
+
+    End For
+
+    Return results
+```

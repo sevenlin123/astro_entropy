@@ -1,0 +1,25 @@
+**Pseudocode Algorithm for Probabilistic Spectral Reconstruction**
+
+**Initialization:**
+- Set initial mixture weights for each emission line component.
+- Define Gaussian process parameters (covariance functions, hyperparameters) for each potential emission line.
+
+**Iteration Steps:**
+1. **Amplitude Inference:**
+   - For each emission line component:
+     - Compute the posterior distribution of the amplitude given the current mixture weights and data.
+     - Update the amplitude parameters using maximum a posteriori estimation.
+
+2. **Mixture Weight Update:**
+   - Calculate the responsibilities for each component based on the inferred amplitudes.
+   - Recompute the mixture weights using the variational approximation to approximate the posterior probabilities.
+
+3. **Convergence Check:**
+   - Compare the current and previous iteration's mixture weights and amplitudes.
+   - If changes are below a specified threshold, terminate the loop.
+
+**Termination:**
+- Once converged, the inferred amplitudes and mixture weights are used to reconstruct the spectrum.
+
+**Final Output:**
+- Construct the reconstructed spectrum by combining the emission lines weighted by their mixture probabilities.

@@ -1,0 +1,33 @@
+**Algorithm: Probabilistic Spectral Reconstruction of TNOs from Sparse Photometry**
+
+**Step 1: Prepare Training Data**
+1. **Collect Reference Spectra**: Gather a set of 51 near-IR TNO spectra classified into dominant taxonomic groups (Water, CO₂, Organics, Methanol).
+2. **Apply PCA**: Perform Principal Component Analysis (PCA) on the collected spectra to extract principal components (eigenvectors and eigenvalues), reducing the spectral data to a low-dimensional latent space (e.g., 5-10 components).
+
+**Step 2: Generate Synthetic Training Data**
+3. **Density Estimation**: Use Kernel Density Estimation (KDE) on the PCA-derived latent space to create a smooth probability distribution, augmenting the training set with synthetic latent vectors.
+4. **Determine Optimal Bandwidth**: Select a bandwidth (e.g., 0.5) that balances local fidelity and global smoothness, ensuring physically plausible spectra without overfitting.
+
+**Step 3: Create Synthetic Photometry**
+5. **Convolve with Instrument Filters**: Simulate photometric measurements by convolving the augmented spectra with the instrument's filter responses (e.g., JWST NIRCam).
+6. **Introduce Noise**: Add Gaussian noise (e.g., 20% relative uncertainty) to the synthetic photometry to simulate observational uncertainties.
+
+**Step 4: Train AutoML Regressor**
+7. **Set Up Model**: Use an ensemble of Gradient-Boosted Decision Trees (GBDTs) from AutoGluon to regress from sparse photometry to PCA latent coefficients.
+8. **Training**: Fit the regressor using the noisy synthetic photometry and corresponding latent coefficients.
+
+**Step 5: Build Taxonomic Classifier**
+9. **Prepare Latent Features**: Extract PCA latent coefficients from the training data for each spectral type.
+10. **Train Classifier**: Use AutoML to train a classifier on the latent space, predicting taxonomic labels (e.g., Water, CO₂, Organics, Methanol).
+
+**Step 6: Reconstruct Spectra and Classify**
+11. **Forward Inference**: For new photometric observations:
+    - Pass photometry through the trained regressor to predict latent coefficients.
+    - Apply inverse PCA transform to recover the full spectrum.
+12. **Taxonomic Classification**: Use the trained classifier to determine the probability distribution of taxonomic types based on the latent coefficients.
+
+**Step 7: Validate and Calibrate**
+13. **Leave-One-Out Cross-Validation**: Evaluate reconstruction accuracy and uncertainty calibration by iteratively holding out each reference spectrum during training and testing the model on it.
+14. **Adjust Hyperparameters**: Fine-tune bandwidth and model parameters to optimize performance without compromising physical plausibility.
+
+**End Algorithm**

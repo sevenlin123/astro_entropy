@@ -1,0 +1,24 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Training Principal Component Analysis (PCA)**
+   - Input: Reference Near-Infrared Spectra Dataset
+   - Output: Trained PCA Model with Principal Components (PCs)
+
+2. **Project Sparse Photometric Data into PCA Space**
+   - Input: Observed Photometric Data (Sparse Measurements)
+   - Output: Mapped PCA Scores (Latent Variables)
+
+3. **Perform Bayesian Inference in Reduced Space**
+   - Define Likelihood Function Relating Photometric Data to PCA Scores
+   - Incorporate Uncertainties in Photometric Data
+   - Infer Posterior Distributions of PCA Latent Variables
+
+4. **Reconstruct Full Spectra from Inferred Latent Variables**
+   - Use Posterior Means/Medians of PCA Scores
+   - Apply Trained PCA Model to Generate Full Spectral Reconstruction
+
+5. **Propagate Uncertainties to Reconstructed Spectra**
+   - Calculate Variance/Standard Deviation in PCA Space
+   - Transform Uncertainties Through PCA Model to Obtain Spectral Measurement Uncertainties
+
+**End Algorithm**

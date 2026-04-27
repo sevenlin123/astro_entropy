@@ -1,0 +1,40 @@
+**Algorithm: PSR-TNO**
+
+**Input:** Observed photometric fluxes \( f_i \), uncertainties \( \sigma_i \) for each band \( i = 1 \ldots N \)
+
+**Output:** Posterior distribution of SED parameters
+
+**Steps:**
+
+1. **Preprocess Data:**
+   - Remove outlier flux measurements.
+   - Calibrate flux measurements to a common zero-point system.
+   - Compute weights \( w_i = 1 / \sigma_i^2 \).
+
+2. **Define the SED Model:**
+   - Place nodes at each photometric band \( i \).
+   - Assign Gaussian priors to each node parameter \( \mu_i \sim N(0, \tau^2) \), where \( \tau \) is a hyperparameter.
+   - For each band \( i \), model the observed flux as \( f_i \sim N(w_i \cdot \mu_i, \sigma_i^2) \).
+
+3. **Set Up the MCMC Sampler:**
+   - Choose appropriate parameters (node means \( \mu_i \), hyperparameters \( \tau \)).
+   - Define the likelihood and prior distributions.
+   - Initialize the sampler with starting values.
+   - Run the sampler for a sufficient number of iterations.
+
+4. **Analyze the Posterior Samples:**
+   - Check for convergence using trace plots and Gelman-Rubin statistic.
+   - Compute posterior means and credible intervals.
+   - Perform Bayesian model comparison between different SED models.
+
+5. **Detect Outliers:**
+   - For each observation, compute the posterior predictive probability \( P(f_i | \text{model}) \).
+   - Identify observations with \( P(f_i) < \theta \), where \( \theta \) is a threshold (e.g., 0.05).
+   - Flag these as outliers.
+
+6. **Output the Results:**
+   - Posterior mean SED and credible intervals.
+   - Model comparison results.
+   - List of outlier observations.
+
+**End Algorithm**

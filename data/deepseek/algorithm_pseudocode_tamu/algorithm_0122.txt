@@ -1,0 +1,42 @@
+```
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input: Sparse photometric measurements of a trans-Neptunian object (TNO)
+Output: Reconstructed full spectrum with uncertainties, taxonomic classification
+
+Steps:
+1. Preprocessing:
+   - Normalize and align the input photometric data to match filter response curves.
+   
+2. Latent Space Definition:
+   - Apply Principal Component Analysis (PCA) on a training set of reference TNO spectra.
+   - Compute principal components to capture dominant spectral variations.
+
+3. Data Augmentation:
+   - Use Kernel Density Estimation (KDE) on the PCA latent space to generate synthetic training data.
+   - Inject Gaussian noise (relative uncertainty ~20%) to simulate real photometric conditions.
+
+4. Forward Modeling:
+   - Simulate sparse photometric observations from synthetic spectra by convolving with instrument filter curves.
+   
+5. Model Training:
+   - Train an AutoML regressor (ensemble of gradient-boosted decision trees) to map photometric inputs to latent PCA coefficients.
+   - Simultaneously train a taxonomic classifier on the latent space for spectral type prediction.
+
+6. Posterior Sampling:
+   - For the input photometry, predict latent coefficients using the trained regressor.
+   - Perform Gaussian Copula sampling to account for dependencies in latent space, generating an ensemble of reconstructions.
+
+7. Spectral Reconstruction:
+   - Apply inverse PCA transformation to the predicted latent coefficients to obtain the full spectrum.
+   - Propagate uncertainties through the reconstruction process to provide credible intervals.
+
+8. Taxonomic Classification:
+   - Project the predicted latent coefficients to classify the object into spectral types (e.g., H₂O, CO₂, Organic).
+
+9. Outlier Detection (Optional):
+   - Assess the probability of the predicted latent state within the trained manifold.
+   - Flag objects with low posterior probabilities as potential outliers.
+
+End
+```

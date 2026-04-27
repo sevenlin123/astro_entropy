@@ -1,0 +1,98 @@
+### Algorithm: Probabilistic Spectral Reconstruction Framework
+
+1. **Initialize Training Data**:
+   - Collect a set of reference TNO spectra (e.g., 51 observed spectra).
+   
+2. **Perform Principal Component Analysis (PCA)**:
+   - Compute PCA on the reference spectra to reduce dimensionality.
+   - Retain K principal components (e.g., 4-5 for classification; 8-10 for detailed reconstruction).
+
+3. **Data Augmentation Using Kernel Density Estimation (KDE)**:
+   - Project reference spectra onto PCA latent space.
+   - Use KDE to generate synthetic latent vectors, creating a smooth manifold.
+   - Set KDE bandwidth (e.g., h ≈ 0.5) to balance smoothing and fidelity.
+
+4. **Generate Synthetic Photometry**:
+   - Convolve each augmented spectrum with NIRCam filter curves.
+   - Inject noise (e.g., 20% relative reflectance uncertainty) to simulate realistic photometric measurements.
+
+5. **Train AutoML Regressor**:
+   - Use synthetic photometry and corresponding latent coefficients as training data.
+   - Train an ensemble model (e.g., Gradient Boosted Decision Trees) to map photometric inputs to latent space.
+
+6. **LOOCV Evaluation**:
+   - For each spectrum, remove it from the training set.
+   - Use the trained model to predict latent coefficients from synthetic photometry.
+   - Apply inverse PCA transform to reconstruct the spectrum.
+   - Compare reconstructed spectrum with the held-out real spectrum.
+
+7. **Posterior Sampling**:
+   - For new photometric observations, predict latent coefficients using the trained AutoML model.
+   - Apply inverse PCA to generate the reconstructed spectrum.
+   - Propagate uncertainties to assess credible interval coverage.
+
+8. **Taxonomic Classification**:
+   - Classify the object based on its latent position using a pre-trained classifier.
+   - Output probability distribution over spectral types.
+
+9. **Survey Optimization**:
+   - Evaluate each NIRCam filter's contribution to information content.
+   - Use a greedy algorithm to select optimal filter combinations.
+
+10. **Outlier Detection**:
+    - Identify objects where latent coefficients fall outside the training manifold.
+    - Flag significant deviations in the posterior predictive distribution.
+
+### Pseudocode:
+
+```plaintext
+function spectral_reconstruction(spectra, filters):
+    # Initialize PCA
+    pca = PCA(spectra)
+    
+    # Determine optimal K (principal components)
+    k = select_k(pca, validation_criteria)
+    
+    # Augment latent space with KDE
+    latent_real = pca.transform(spectra)
+    latent_synthetic = generate_synthetic_latents(latent_real, h=0.5)
+    
+    # Generate synthetic photometry
+    synthetic_photometry = []
+    for s in latent_synthetic:
+        spectrum = inverse_pca(s, pca)
+        convolve with filters
+        add noise
+        append to synthetic_photometry
+    
+    # Train AutoML regressor
+    regressor = AutoMLRegressor()
+    regressor.fit(synthetic_photometry, latent_synthetic)
+    
+    # Perform LOOCV
+    cv_scores = []
+    for i in 0..n_spectra-1:
+        hold_out = spectra[i]
+        test_photometry = generate_photometry(hold_out, filters)
+        predicted_latent = regressor.predict(test_photometry)
+        reconstructed = inverse_pca(predicted_latent, pca)
+        score = compare(reconstructed, hold_out)
+        cv_scores.append(score)
+    
+    # Classify taxonomic type
+    classifier = AutoMLClassifier()
+    classifier.fit(latent_real, taxonomic_labels)
+    taxonomic_prediction = classifier.predict(latent_synthetic)
+    
+    # Optimize filters
+    optimal_filters = select_optimal_filters(filters, regressor)
+    
+    # Detect outliers
+    outliers = find_outliers(reconstructed_spectra, taxonomic_prediction)
+    
+    return reconstructed_spectra, taxonomic_prediction, optimal_filters, outliers
+```
+
+### Explanation:
+
+This algorithm outlines the core computational steps of the probabilistic spectral reconstruction framework. It leverages PCA for dimensionality reduction, uses AutoML for robust regression, and employs Bayesian inference to reconstruct high-resolution spectra from sparse photometric data. The method includes steps for data augmentation, model training, validation, and application to real-world scenarios, providing a comprehensive approach to spectral analysis of TNOs.

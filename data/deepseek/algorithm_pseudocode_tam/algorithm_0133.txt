@@ -1,0 +1,60 @@
+**Algorithm: Spectral Reconstruction from Photometry**
+
+**Step-by-Step Pseudocode:**
+
+1. **Training the Latent Space (Principal Component Analysis):**
+   - Input: Reference Spectra of TNOs
+   - Output: Principal Components (Latent Space)
+   - Process:
+     ``` 
+     1.1. Perform PCA on the reference spectra to extract principal components.
+     1.2. Determine the appropriate number of principal components (e.g., 4 to 5 for basic reconstruction, up to 10 for higher fidelity).
+     ```
+
+2. **Data Augmentation:**
+   - Input: Reference Spectra, Instrument Filters (e.g., JWST NIRCam)
+   - Output: Synthetic Photometry with Noise
+   - Process:
+     ```
+     2.1. Convolve each reference spectrum with the instrument filter curves to generate synthetic photometric measurements.
+     2.2. Inject Gaussian noise (e.g., 20% relative uncertainty) into the synthetic photometry to simulate real-world observational uncertainties.
+     ```
+
+3. **Training the Encoder:**
+   - Input: Synthetic Photometry with Noise
+   - Output: Trained AutoML Regressor
+   - Process:
+     ```
+     3.1. Train an AutoML model (e.g., Gradient Boosted Decision Trees) to map the synthetic photometry to the PCA latent coefficients.
+     ```
+
+4. **Reconstructing Spectra:**
+   - Input: Observed Photometric Data of New Objects
+   - Output: Reconstructed Spectra
+   - Process:
+     ```
+     4.1. For each object:
+          a. Use the trained AutoML regressor to predict the latent coefficients from the observed photometry.
+          b. Apply the inverse PCA transform to these coefficients to reconstruct the full spectrum.
+     ```
+
+5. **Taxonomic Classification (Optional):**
+   - Input: Predicted Latent Coefficients
+   - Output: Probabilistic Taxonomic Classification
+   - Process:
+     ```
+     5.1. Train a classifier within the latent space to classify the spectral type (e.g., H₂O, CO₂, Organics).
+     5.2. For each object, use the latent coefficients to predict the taxonomic type and associated probabilities.
+     ```
+
+6. **Validation (Optional):**
+   - Input: Reference Spectra, Reconstructed Spectra
+   - Output: Performance Metrics
+   - Process:
+     ```
+     6.1. Perform leave-one-out cross-validation to assess reconstruction accuracy.
+     6.2. Compute metrics such as Euclidean distance between reconstructed and reference spectra.
+     6.3. Evaluate empirical credible interval coverage to assess uncertainty calibration.
+     ```
+
+**End of Algorithm**

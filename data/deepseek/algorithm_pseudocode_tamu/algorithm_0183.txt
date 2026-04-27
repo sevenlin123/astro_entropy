@@ -1,0 +1,37 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Principal Component Analysis (PCA) Initialization**
+   - Input: Reference TNO spectra (training set).
+   - Perform PCA to extract principal components (eigenvectors and eigenvalues).
+   - Determine the number of principal components (K) based on explained variance and cross-validation results.
+
+2. **Latent Space Definition**
+   - Project the reference spectra onto the PCA basis to obtain latent coefficients.
+   - Apply Kernel Density Estimation (KDE) to the latent coefficients to create a smooth probability distribution.
+   - Use the KDE to generate synthetic latent vectors, augmenting the training data for robust regression.
+
+3. **Forward Modeling**
+   - Simulate photometric observations for each augmented spectrum by convolving with filter transmission curves (e.g., JWST/NIRCam).
+   - Inject Gaussian noise (relative uncertainty ~20%) into the synthetic photometry to account for observational uncertainties.
+
+4. **Automated Machine Learning (AutoML) Training**
+   - Train an ensemble regressor (e.g., XGBoost) to map sparse photometry to latent coefficients using synthetic and real training data.
+   - Validate the regressor using repeated k-fold cross-validation on the augmented dataset.
+
+5. **Posterior Sampling**
+   - For new photometric observations, predict latent coefficients using the trained regressor.
+   - Apply inverse PCA transform to reconstruct the full spectrum.
+   - Sample the joint posterior distribution of latent coefficients using a Gaussian Copula to generate credible intervals.
+
+6. **Taxonomic Classification**
+   - Train a secondary classifier on the latent manifold to predict taxonomic categories (e.g., H₂O, CO₂, Organic, Methanol).
+   - Provide classification probabilities alongside spectral reconstructions.
+
+7. **Leave-One-Out Cross-Validation (LOOCV)**
+   - Evaluate model performance by iteratively removing one spectrum from the training set, generating synthetic data, and testing reconstruction accuracy and uncertainty calibration.
+
+8. **Output**
+   - Reconstructed spectrum with uncertainty intervals.
+   - Probabilistic taxonomic classification.
+
+**End of Algorithm**

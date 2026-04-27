@@ -1,0 +1,43 @@
+**Algorithm: Probabilistic Spectral Reconstruction of TNOs from Sparse Photometry**
+
+**1. Define the Prior (Latent Space):**
+   - Train PCA on a reference set of TNO spectra to obtain principal components (PCs).
+   - Use Kernel Density Estimation (KDE) to smooth the latent manifold, creating a continuous probability distribution.
+
+**2. Set Up the Likelihood (Observational Model):**
+   - Convert the reference spectra into synthetic photometry using the target instrument's filter curves (e.g., JWST/NIRCam).
+   - Introduce Gaussian noise (e.g., 20% uncertainty) to simulate realistic photometric measurements.
+
+**3. Construct the AutoML Regressor:**
+   - Train an AutoML regressor (e.g., Gradient Boosted Decision Trees) to map sparse photometric data to PCA latent coefficients.
+   - Augment the training set with synthetic spectra generated from the latent manifold to stabilize the model.
+
+**4. Reconstruct Spectra:**
+   - For new photometric observations, predict the latent coefficients using the trained regressor.
+   - Invert the PCA transformation to reconstruct the full spectral energy distribution (SED).
+
+**5. Validate Using LOOCV:**
+   - Iteratively hold out each spectrum, reconstruct it, and compare with the true spectrum.
+   - Calculate RMSE for each wavelength bin and assess credible interval coverage.
+
+**6. Classify Taxonomic Types:**
+   - Use the latent space to train a classifier for taxonomic identification (e.g., water-type, CO2-type, organics-type).
+   - Evaluate classification accuracy through LOOCV.
+
+**7. Optimize Survey Filters:**
+   - Assess the information content of different NIRCam filter combinations.
+   - Select filters that maximize the fidelity of spectral reconstruction and taxonomic separation.
+
+**8. Detect Outliers:**
+   - Flag objects whose reconstructed spectra fall outside the predefined spectral manifold.
+   - Use Mahalanobis distance to identify unusual spectral types.
+
+**9. Probabilistic Uncertainty Quantification:**
+   - Employ probabilistic programming to propagate photometric uncertainties through the reconstruction process.
+   - Generate credible intervals for each spectral feature to assess confidence.
+
+**10. Finalize and Apply the Framework:**
+   - Ensure the algorithm is implemented using tools like AutoGluon for robust and scalable performance.
+   - Publish the code and documentation for community use and collaboration.
+
+This algorithm effectively bridges the gap between sparse photometric data and detailed spectroscopic information, enabling comprehensive compositional mapping of TNO populations in upcoming surveys.

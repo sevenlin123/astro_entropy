@@ -1,0 +1,28 @@
+**Algorithm: Probabilistic Spectral Reconstruction for TNOs**
+
+1. **Initialize Hyperparameters**
+   - Set μ_A, σ_A, μ_β, σ_β based on the population of TNOs.
+
+2. **Define Prior Distributions**
+   - A ~ Log-Normal(μ_A, σ_A)
+   - β ~ Log-Normal(μ_β, σ_β)
+
+3. **Grid Search for Parameters**
+   - For each possible A in the grid:
+     - For each possible β in the grid:
+       - Compute the likelihood of the observed fluxes given (A, β)
+       - Store the likelihood value
+
+4. **Determine Posterior Distributions**
+   - For each (A, β):
+     - Update the posterior probability based on the computed likelihoods
+
+5. **Predict Complete SED**
+   - For each (A, β) with non-zero posterior probability:
+     - Extrapolate Fλ = A * λ^β across all wavelengths of interest
+
+6. **Calculate Colors and Magnitudes**
+   - From the predicted SED, compute derived photometric quantities
+   - Output the colors and magnitudes for classification
+
+This pseudocode captures the essential steps of the reconstruction framework, focusing solely on the computational algorithm.

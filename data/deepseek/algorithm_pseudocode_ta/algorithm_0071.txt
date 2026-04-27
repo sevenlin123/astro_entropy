@@ -1,0 +1,29 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+**Step 1: Training of the Spectral Manifold via PCA**
+
+1. Collect a set of reference spectra.
+2. Standardize the reference spectra.
+3. Compute the covariance matrix of the reference spectra.
+4. Perform Principal Component Analysis (PCA) on the covariance matrix to obtain principal components (PCs).
+5. Store the eigenvalues and eigenvectors from PCA.
+
+**Step 2: Bayesian Inference for Each Object**
+
+1. For each target object:
+   - Obtain photometric measurements and their uncertainties.
+   - Use the known response functions of the photometric bands.
+   - Perform Bayesian inference in the reduced PCA space to estimate the object's PC coefficients.
+   - This involves solving the inverse problem to find the posterior distribution of the PC coefficients given the photometric data.
+
+**Step 3: Posterior Sampling for Spectral Reconstruction**
+
+1. Draw samples from the posterior distribution of the PC coefficients.
+2. Using the PC coefficients and the PCA basis, reconstruct the full spectrum for each sample.
+3. Calculate the uncertainties and credible intervals for the reconstructed spectra.
+
+**End of Algorithm**
+
+---
+
+This pseudocode describes the core computational steps of the algorithm used in the paper to reconstruct spectra from sparse photometric data using PCA and Bayesian inference.

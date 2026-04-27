@@ -1,0 +1,45 @@
+```
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+- Sparse photometric observations (m)
+- Training set of reference spectra (S_train)
+- Filter response curves (F)
+- Uncertainty levels (σ)
+
+Output:
+- Reconstructed spectrum (S_recon)
+- Classification probabilities (C)
+- Credible intervals (CI)
+
+1. Preprocessing:
+   a. Normalize photometric observations m using filter responses F.
+   b. Convert photometric data to relative reflectance units.
+
+2. Latent Space Definition:
+   a. Perform PCA on S_train to obtain principal components (PCs).
+   b. Compute latent coefficients (z) for S_train.
+   c. Apply KDE to z to construct a continuous latent manifold.
+
+3. Model Training:
+   a. Generate synthetic photometry from latent manifold by forward modeling through F.
+   b. Add Gaussian noise to synthetic photometry with σ=20%.
+   c. Train AutoML regressor to map photometric inputs to latent coefficients.
+
+4. Inference:
+   a. Use trained regressor to predict latent coefficients (z_hat) from input photometry m.
+   b. Decode z_hat to full spectrum S_recon via inverse PCA.
+
+5. Uncertainty Quantification:
+   a. Sample joint posterior of z_hat using Gaussian Copula.
+   b. Propagate uncertainties through inverse PCA to obtain CI for S_recon.
+
+6. Taxonomic Classification:
+   a. Project z_hat into pre-trained latent classifier.
+   b. Obtain probabilities C for each taxonomic class.
+
+7. Output:
+   a. Return S_recon, C, and CI.
+```
+
+This algorithm outlines the core computational steps of the probabilistic framework described in the paper, focusing on the reconstruction of TNO spectra from sparse photometric data.

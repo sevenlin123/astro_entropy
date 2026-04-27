@@ -1,0 +1,94 @@
+**Algorithm for Probabilistic Spectral Reconstruction of TNOs from Sparse Photometry**
+
+**Step-by-Step Explanation:**
+
+1. **Preprocessing**
+   - Gather near-infrared spectra of TNOs from the DiSCo-TNO survey.
+   - Exclude rare spectral types to focus on dominant taxonomic classes.
+
+2. **Principal Component Analysis (PCA)**
+   - Apply PCA to the collected spectra to derive principal components (latent space).
+   - Determine the number of components (K ≈ 4-10) based on explained variance and cross-validation.
+
+3. **Latent Space Construction**
+   - Use Kernel Density Estimation (KDE) with a bandwidth of 0.5 to create a smooth probability distribution in the latent space.
+   - This step augments the training data, enabling stable regression despite sparse samples.
+
+4. **Forward Modeling**
+   - For each spectrum in the latent space, compute mock photometric measurements by integrating over JWST/NIRCam filter curves.
+   - Introduce 20% Gaussian noise to simulate realistic photometric uncertainties.
+
+5. **Training the Regressor**
+   - Train an ensemble of gradient-boosted decision trees (using AutoML) to map noisy photometry to latent coefficients.
+   - The regressor learns the mapping from sparse photometric inputs to PCA coefficients.
+
+6. **Leave-One-Out Cross-Validation (LOOCV)**
+   - For each spectrum, remove it from the training set.
+   - Use the regressor to predict latent coefficients from the remaining photometric data.
+   - Reconstruct the spectrum using inverse PCA and compare with the original.
+
+7. **Reconstruction and Uncertainty Quantification**
+   - For each object, apply the regressor to observed photometry to get latent coefficients.
+   - Transform coefficients to full spectrum using inverse PCA.
+   - Propagate photometric uncertainties to quantify reconstruction uncertainty.
+
+8. **Taxonomic Classification**
+   - Use a secondary classifier trained on latent space to predict taxonomic class (Water, CO₂, Organic, Methanol).
+   - Classify based on the latent coefficients from the regressor.
+
+9. **Survey Optimization and Outlier Detection**
+   - Analyze filter configurations to maximize information content for spectral reconstruction.
+   - Flag objects with low probability latent states as outliers.
+
+**Pseudocode Representation:**
+
+```python
+function probabilistic_spectral_reconstruction():
+
+    1. Input: TNO_spectra, NIRCam_filters, photometric_noise
+
+    2. Perform PCA on TNO_spectra:
+        a. PCA = PrincipalComponentAnalysis(n_components=K)
+        b. PCA.fit(TNO_spectra)
+
+    3. Construct latent space:
+        a. latent_mean, latent_basis = PCA.components_, PCA.explained_variance_ratio_
+
+    4. Generate synthetic data:
+        a. For each spectrum in TNO_spectra:
+            i. Compute mock_photometry by integrating spectrum with NIRCam_filters
+            ii. Add Gaussian noise (std = photometric_noise) to mock_photometry
+
+    5. Augment training data with synthetic spectra:
+        a. Use KDE with bandwidth=0.5 to create smooth distribution in latent space
+        b. Sample synthetic_latent from KDE distribution
+
+    6. Train AutoML regressor:
+        a. Regressor = AutoMLRegressor(target_column='latent_coefficients')
+        b. Regressor.train(train_data=synthetic_photometry + mock_photometry)
+
+    7. Validate using LOOCV:
+        a. For each spectrum:
+            i. Hold_out_spectrum = remove from TNO_spectra
+            ii. predict_latent = Regressor.predict(hold_out_photometry)
+            iii. reconstructed_spectrum = PCA.inverse_transform(predict_latent)
+            iv. compute reconstruction_error between hold_out_spectrum and reconstructed_spectrum
+
+    8. Apply regressor to new observations:
+        a. observed_photometry = input_photometry
+        b. predicted_latent = Regressor.predict(observed_photometry)
+        c. reconstructed_spectrum = PCA.inverse_transform(predicted_latent)
+        d. compute spectral_uncertainty from propagated photometric uncertainties
+
+    9. Taxonomic classification:
+        a.Classifier = AutoMLClassifier(target_column='taxonomic_class')
+        b.Classifier.train(train_data=latent_space_features)
+        c. taxonomic_probabilities = Classifier.predict_proba(predicted_latent)
+        d. identify spectral outliers based on low probability in latent space
+
+    10. Output: reconstructed_spectrum, spectral_uncertainty, taxonomic_probabilities, outliers
+
+return reconstructed results
+```
+
+**End of Algorithm**

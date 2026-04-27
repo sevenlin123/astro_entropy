@@ -1,0 +1,38 @@
+```
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. Input: Sparse photometric measurements of a trans-Neptunian object (TNO)
+
+2. Precompute:
+   a. Train a Principal Component Analysis (PCA) model on a reference set of TNO spectra.
+   b. Determine the optimal number of principal components (K) through cross-validation.
+
+3. Forward Modeling:
+   a. Simulate photometric observations by convolving reference spectra with instrument-specific filter responses.
+   b. Inject Gaussian noise (relative uncertainty ~20%) into simulated photometry to account for observational uncertainties.
+
+4. Data Augmentation:
+   a. Use Kernel Density Estimation (KDE) on the PCA latent space to generate synthetic training data.
+   b. Ensure synthetic data maintains physical plausibility and fills intermediate regions of the spectral manifold.
+
+5. Training Phase:
+   a. Train an AutoML regressor (ensemble of gradient-boosted decision trees) to map sparse photometry to latent PCA coefficients.
+   b. Apply early stopping and model averaging to prevent overfitting.
+
+6. Inference Phase:
+   a. Use the trained regressor to predict latent coefficients from new photometric observations.
+   b. Project the latent coefficients back to the full spectrum using the inverse PCA transform.
+
+7. Uncertainty Quantification:
+   a. Sample the joint posterior distribution of latent coefficients using a Gaussian Copula framework.
+   b. Generate an ensemble of reconstructed spectra to compute credible intervals.
+
+8. Taxonomic Classification:
+   a. Classify the latent coefficients into predefined spectral types (e.g., H₂O, CO₂, Organic).
+   b. Output probability distribution over taxonomic categories.
+
+9. Output: 
+   a. Reconstructed spectrum with uncertainties.
+   b. Probabilistic taxonomic classification.
+   c. Identification of outliers based on posterior probabilities.
+```

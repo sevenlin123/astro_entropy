@@ -1,0 +1,21 @@
+```pseudocode
+Initialize Gaussian Process Latent Variable Model (GPLVM) with hyperparameters.
+
+For each trans-neptunian object (TNO):
+    Collect sparse multi-band photometric data across various bands.
+    Project the data into a lower-dimensional latent space using GPLVM to capture the underlying spectral structure.
+
+For all TNOs:
+    Initialize a mixture of K Gaussian components.
+    Perform iterative Expectation-Maximization (EM) algorithm:
+        E-step:
+            Compute the posterior probability of each TNO belonging to each Gaussian component using current model parameters.
+        M-step:
+            Update Gaussian component parameters based on computed posteriors and observed data.
+
+For each TNO:
+    Use the trained mixture model to sample and infer the complete Spectral Energy Distribution (SED).
+    Calculate probabilistic confidence measures for each inferred pixel in the SED.
+
+Output reconstructed SEDs and their confidence measures.
+```

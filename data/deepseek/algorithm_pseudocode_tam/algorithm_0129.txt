@@ -1,0 +1,42 @@
+```
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input: 
+    - Set of reference spectra (training data)
+    - Instrument-specific filter curves (e.g., JWST/NIRCam)
+    - Noise level parameters
+
+Output:
+    - Reconstructed spectra from photometric inputs
+    - Taxonomic classification probabilities
+
+1. Prepare Training Data:
+    1.1. Load reference spectra into a dataset.
+    1.2. Perform PCA on the spectra to obtain principal components (PCs).
+    1.3. Use Kernel Density Estimation (KDE) to create a smooth latent space distribution.
+        - Parameters: Bandwidth 'h' for KDE smoothing.
+
+2. Generate Synthetic Photometry:
+    2.1. For each spectrum in the latent space:
+        a. Convolve the spectrum with the instrument filter curves to compute photometric magnitudes.
+        b. Add Gaussian noise with specified relative uncertainty (e.g., 20%).
+
+3. Train the AutoML Regressor:
+    3.1. Input: Noisy synthetic photometry and corresponding latent coefficients.
+    3.2. Output: Trained model mapping photometry to latent coefficients.
+
+4. Perform Spectral Reconstruction:
+    4.1. For new photometric observations:
+        a. Use the trained regressor to predict latent coefficients.
+        b. Apply inverse PCA transformation to reconstruct the full spectrum.
+
+5. Taxonomic Classification:
+    5.1. Train a secondary classifier on the latent coefficients.
+    5.2. For each reconstructed spectrum:
+        a. Project onto the latent space.
+        b. Classify taxonomic type (e.g., H₂O, CO₂, Organics, Methanol).
+
+Output: 
+    - Reconstructed spectra
+    - Taxonomic classification probabilities
+```

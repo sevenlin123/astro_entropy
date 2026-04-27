@@ -1,0 +1,21 @@
+```plaintext
+Algorithm: Probabilistic Spectral Reconstruction
+
+1. Initialize the probabilistic model parameters.
+2. Set up Gaussian process regression for spectral features.
+3. Perform Bayesian inference to compute posterior distribution of spectra.
+4. Calculate model evidence for each bandpass configuration.
+5. Determine optimal bandpasses by comparing model evidence.
+6. Output the reconstructed spectrum and optimal bandpasses.
+```
+
+```python
+Initialize parameters of probabilistic model.
+Set up Gaussian process regression for spectral features.
+Perform Bayesian inference to derive posterior distribution.
+Compute model evidence for each bandpass configuration.
+Select optimal bandpasses based on highest model evidence.
+Output reconstructed spectrum and optimal bandpasses.
+``` 
+
+Note: The actual implementation would require specific statistical libraries and detailed parameter tuning not shown here.

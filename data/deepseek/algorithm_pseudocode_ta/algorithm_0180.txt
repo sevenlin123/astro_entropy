@@ -1,0 +1,25 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Preprocess Spectral Data**:
+   - Initialize PCA on the training set of near-IR spectra.
+   - Extract principal components (PCs) representing the spectral manifold of TNOs.
+
+2. **Build Probabilistic Model**:
+   - Construct a latent-space model linking photometric measurements to PCA components.
+   - Define the probabilistic relationship between photometric data and the reduced PCA representation.
+
+3. **Perform Bayesian Inference**:
+   - For each object, use available photometric measurements.
+   - Compute posterior distributions of the latent (PCA) variables through Bayesian inference.
+   - Quantify uncertainties in the inferred PCA coefficients.
+
+4. **Reconstruct Full Spectra**:
+   - Utilize the posterior means of the PCA coefficients.
+   - Project back to the original spectral space to obtain the reconstructed spectrum.
+   - Calculate the uncertainty propagation from the PCA posteriors to the spectral reconstruction.
+
+5. **Output Results**:
+   - Provide reconstructed spectra along with their associated uncertainties.
+   - Ensure credible interval coverage for validation purposes (as described in the paper).
+
+This algorithm efficiently bridges sparse photometric data to detailed spectral reconstructions, enabling taxonomic studies and survey optimizations for trans-Neptunian objects.

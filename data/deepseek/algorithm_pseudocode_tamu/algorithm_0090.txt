@@ -1,0 +1,87 @@
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+#### Inputs:
+- `observed_photometry`: A dictionary of observed photometric fluxes in specific filters.
+- `training_spectra`: A list of reference near-infrared spectra used for PCA.
+- `filter_curves`: The effective throughput curves for the NIRCam filters.
+
+#### Outputs:
+- `reconstructed_spectrum`: A high-resolution spectrum reconstructed from the observed photometry.
+- `taxonomy_probability`: A dictionary of probabilities for each taxonomic classification.
+- `credible_intervals`: Confidence intervals for the reconstructed spectral features.
+
+#### Steps:
+
+1. **Precompute Principal Component Analysis (PCA) Basis**:
+   - Train PCA on `training_spectra` to obtain principal components (PCs) and loadings.
+   - Select the optimal number of PCs (e.g., 4–5 for taxonomy, 8–10 for fidelity).
+
+2. **Synthetic Data Augmentation**:
+   - Use Kernel Density Estimation (KDE) on the PCA coefficients derived from `training_spectra`.
+   - Generate synthetic latent vectors to augment the training data, ensuring a smooth manifold.
+
+3. **Forward Modeling**:
+   - Simulate photometric fluxes for each synthetic spectrum by convolving with `filter_curves`.
+   - Inject Gaussian noise (e.g., 20% relative uncertainty) to mimic real observations.
+
+4. **Train AutoML Regressor**:
+   - Use the augmented synthetic data to train an ensemble of gradient-boosted decision trees.
+   - The regressor maps observed photometry to latent PCA coefficients.
+
+5. **Reconstruct Spectrum**:
+   - Apply the trained regressor to `observed_photometry` to predict latent coefficients.
+   - Project these coefficients back to the full spectrum using the inverse PCA transformation.
+
+6. **Generate Posterior Samples**:
+   - Sample from the joint posterior of latent coefficients using a Gaussian Copula.
+   - Ensure physical plausibility by preserving intrinsic dependencies in the latent space.
+
+7. **Calculate Taxonomy Probabilities**:
+   - Use a pre-trained classifier on the latent manifold to predict taxonomic probabilities.
+
+8. **Compute Uncertainty Quantification**:
+   - Determine credible intervals for spectral features using the posterior samples.
+
+#### Pseudocode:
+
+```pseudocode
+procedure ProbabilisticSpectralReconstruction(observed_photometry, training_spectra, filter_curves):
+    // Step 1: Precompute PCA Basis
+    Compute PCA on training_spectra to get PCs (principal_components) and loadings (loadings_matrix).
+    Select optimal number of PCs (e.g., 4–5 or 8–10).
+    
+    // Step 2: Synthetic Data Augmentation
+    Project training_spectra onto principal_components to get latent_coefficients.
+    Perform KDE on latent_coefficients with Gaussian kernel.
+    Generate synthetic_latent = sample(KDE, n_samples=10000).
+    
+    // Step 3: Forward Modeling
+    Simulated_fluxes = []
+    for each synthetic_spectrum in Synthetic_data:
+        flux = convolve(synthetic_spectrum, filter_curves)
+        add noise(flux, sigma=0.2 * flux) // 20% relative uncertainty
+        append to Simulated_fluxes
+    end
+    
+    // Step 4: Train AutoML Regressor
+    regressor = AutoGluonRegressor.train(input_features=simulated_fluxes, target=latent_coefficients)
+    
+    // Step 5: Reconstruct Spectrum
+    predicted_latent = regressor.predict(observed_photometry)
+    reconstructed_spectrum = inverse_PCA(predicted_latent, principal_components, loadings_matrix)
+    
+    // Step 6: Generate Posterior Samples
+    sample_posterior = GaussianCopula.sample(predicted_latent, n_samples=100)
+    posterior_spectra = inverse_PCA(sample_posterior, principal_components, loadings_matrix)
+    
+    // Step 7: Calculate Taxonomy Probabilities
+    taxonomy_probabilities = classifier.predict_proba(reconstructed_spectrum)
+    
+    // Step 8: Compute Uncertainty Quantification
+    credible_intervals = calculate_credible_intervals(posterior_spectra)
+    
+    return reconstructed_spectrum, taxonomy_probabilities, credible_intervals
+end
+```
+
+This algorithm outlines the core computational steps for reconstructing TNO spectra from sparse photometry using a probabilistic latent-space framework.

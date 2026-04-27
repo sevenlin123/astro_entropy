@@ -1,0 +1,31 @@
+**Algorithm: Probabilistic Spectral Reconstruction Framework**
+
+1. **Input**:
+   - Photometric data for TNOs (flux values across various bands).
+   - Training set of near-IR spectra.
+   - Noise estimates or covariance matrix for photometric data.
+
+2. **Preprocessing**:
+   - **Step 2a**: Normalize photometric fluxes by dividing each flux by its corresponding noise level, ensuring all measurements have unit variance.
+   - **Step 2b**: Perform Principal Component Analysis (PCA) on the training spectra to derive principal components (PCs). Determine the number of PCs to retain by evaluating the cumulative explained variance; retain until it reaches a threshold (e.g., 95%).
+   - **Step 2c**: Project the training spectra onto the selected PCs, establishing a mapping from spectral space to the latent PC space.
+
+3. **Bayesian Inference in Latent Space**:
+   - **Step 3a**: Define a probabilistic forward model linking photometric fluxes to latent PC coefficients, incorporating the spectral response functions of the photometric bands.
+   - **Step 3b**: Conduct Bayesian inference to estimate the posterior distribution of the PC coefficients using the observed photometric data. Specify priors for the coefficients and calculate the likelihood based on projected fluxes and their uncertainties.
+   - **Step 3c**: Compute uncertainties on the PC coefficients by propagating the photometric measurement uncertainties through the Bayesian model.
+
+4. **Spectral Reconstruction**:
+   - **Step 4a**: Utilize the posterior distributions of the PC coefficients to reconstruct the full spectra by mapping from the latent PC space back to the original spectral space.
+   - **Step 4b**: Calculate uncertainties on the reconstructed spectra by propagating the uncertainties from the PC coefficient posteriors.
+
+5. **Outlier Detection**:
+   - **Step 5a**: For each TNO, determine the posterior probability of its latent PC coefficients under the inferred model.
+   - **Step 5b**: Identify outliers as those with posterior probabilities significantly below the expected value, indicating they deviate from the spectral manifold modeled by the training set.
+
+6. **Output**:
+   - Reconstructed spectra for each TNO along with their uncertainties.
+   - Posterior probabilities for outlier detection.
+   - Recommended filter configurations for optimal spectral information retrieval in surveys.
+
+**End of Algorithm**

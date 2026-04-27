@@ -1,0 +1,88 @@
+### Algorithm
+
+1. **Principal Component Analysis (PCA)**  
+   - Perform PCA on the training set of reference TNO spectra to derive principal components capturing dominant spectral variations.
+
+2. **Latent Space Augmentation**  
+   - Apply Kernel Density Estimation (KDE) to the PCA coefficients to create a continuous probability distribution in the latent space, enabling interpolation of synthetic spectra.
+
+3. **Synthetic Photometry Generation**  
+   - Convolve augmented spectra with JWST NIRCam filter curves to compute expected reflectance in each band.  
+   - Add 20% Gaussian noise to simulate photometric uncertainties.
+
+4. **AutoML Regression Training**  
+   - Train an AutoML regressor (ensemble of Gradient Boosted Decision Trees) to map synthetic photometry to PCA latent coefficients.
+
+5. **Leave-One-Out Cross-Validation (LOOCV)**  
+   - Validate the model using LOOCV by iteratively holding out one spectrum, assessing reconstruction accuracy and credibility interval coverage.
+
+6. **Taxonomic Classifier Training**  
+   - Train a classifier on the latent space to predict taxonomic labels (e.g., H₂O, CO₂, Organics).
+
+7. **Forward Inference for Spectral Reconstruction**  
+   - Given new sparse photometry, use the regressor to predict latent coefficients, then invert PCA to reconstruct the full spectrum.
+
+8. **Outlier Detection**  
+   - Identify objects with reconstructed spectra deviating significantly from expected credible intervals, flagging rare spectral types.
+
+### Pseudocode
+
+```python
+def spectral_reconstruction_framework():
+    # Step 1: PCA on training spectra
+    training_spectra = load_reference_spectra()
+    pca = PCA(n_components=10)
+    pca.fit(training_spectra)
+    principal_components = pca.transform(training_spectra)
+
+    # Step 2: KDE for latent space augmentation
+    kde = KernelDensity(bandwidth=0.5).fit(principal_components)
+    synthetic_latent = kde.sample(10000)
+
+    # Step 3: Generate synthetic photometry
+    def generate_photometry(spectra):
+        photometry = []
+        for spec in spectra:
+            # Simulate JWST NIRCam filter response
+            observed = np.convolve(spec, filter_transmission, mode='same')
+            # Add noise
+            observed += np.random.normal(0, 0.2 * np.mean(observed))
+            photometry.append(observed)
+        return photometry
+
+    synthetic_photometry = generate_photometry([inverse_pca(latent) for latent in synthetic_latent])
+
+    # Step 4: AutoML regression training
+    regressor = AutoGluonRegressor()
+    regressor.fit(synthetic_photometry, synthetic_latent)
+
+    # Step 5: LOOCV validation
+    loocv_accuracy = []
+    for i in range(len(training_spectra)):
+        holdout_spec = training_spectra[i]
+        predicted_latent = regressor.predict([holdout_spec])
+        reconstructed = inverse_pca(predicted_latent)
+        accuracy = compute_reconstruction_accuracy(holdout_spec, reconstructed)
+        loocv_accuracy.append(accuracy)
+    average_accuracy = np.mean(loocv_accuracy)
+
+    # Step 6: Taxonomic classifier training
+    taxonomic_labels = get_labels(training_spectra)
+    classifier = AutoGluonClassifier().fit(principal_components, taxonomic_labels)
+
+    # Step 7: Forward inference
+    new_photometry = load_observation()
+    predicted_latent = regressor.predict(new_photometry)
+    reconstructed_spectrum = inverse_pca(predicted_latent)
+
+    # Step 8: Outlier detection
+    credible_intervals = calculate_credible_intervals(reconstructed_spectrum)
+    if not within_intervals(reconstructed_spectrum, credible_intervals):
+        mark_as_outlier()
+
+    return reconstructed_spectrum
+```
+
+### Explanation
+
+The algorithm systematically reduces spectral data dimensionality using PCA, generates synthetic data to enhance model training, and employs advanced machine learning to reconstruct spectra from sparse photometry. It validates through LOOCV and detects outliers, enabling comprehensive analysis of TNO spectral diversity.

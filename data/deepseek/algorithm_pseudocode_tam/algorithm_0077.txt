@@ -1,0 +1,43 @@
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+**Input:**  
+- Sparse photometric measurements (m)  
+- Pre-trained PCA basis (principal_components)  
+- Known taxonomic classes (taxonomy_labels)  
+
+**Output:**  
+- Reconstructed spectrum (S)  
+- Probabilistic taxonomic classification  
+
+**Steps:**  
+
+1. **Define the Latent Space:**  
+   - Project the reference spectra into a PCA basis to form a low-dimensional latent space.  
+   - Ensure the latent space captures the dominant spectral variability modes (e.g., 4-5 components for taxonomy, 8-10 for detailed reconstruction).  
+
+2. **Prepare Training Data:**  
+   - Use the reference spectra to generate synthetic photometric data by convolving with instrument filter responses.  
+   - Inject noise (e.g., 20% relative uncertainty) to simulate realistic photometric measurements.  
+
+3. **Train the AutoML Regressor:**  
+   - Use the synthetic photometric data as inputs and the corresponding latent coefficients as outputs.  
+   - Train an ensemble of gradient-boosted decision trees (AutoML) to regress from photometry to latent coefficients.  
+
+4. **Train the Taxonomic Classifier:**  
+   - Project the reference spectra into the latent space.  
+   - Train another AutoML classifier to predict taxonomic labels from the latent coefficients.  
+
+5. **Reconstruct Spectra and Classify Taxonomy:**  
+   - For new photometric observations:  
+     a. Use the trained regressor to predict latent coefficients.  
+     b. Apply the inverse PCA transform to obtain the reconstructed spectrum (S).  
+     c. Use the classifier to predict the taxonomic class probabilities.  
+
+6. **Leave-One-Out Cross-Validation (LOOCV):**  
+   - For validation:  
+     a. Remove one reference spectrum from the training set.  
+     b. Generate synthetic photometry for the removed spectrum.  
+     c. Predict latent coefficients using the regressor.  
+     d. Compare predicted latent coefficients with the true values to assess reconstruction accuracy.  
+
+**End Algorithm**

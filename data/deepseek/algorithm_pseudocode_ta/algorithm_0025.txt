@@ -1,0 +1,24 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Precompute the Spectral Manifold using PCA**
+   - Read reference near-IR spectra of TNOs.
+   - Apply PCA to the reference spectra to derive eigenvalues and eigenvectors.
+   - Store the top k principal components (determined via LOO-CV, e.g., k=4 or k=5) as manifold parameters.
+
+2. **Bayesian Inference for Each Object**
+   - For each object:
+     - Load sparse photometric measurements (fluxes at specific wavelengths).
+     - Represent the spectral shape using the first k PCA coefficients (latent variables).
+     - Define a forward model to compute expected fluxes from PCA coefficients.
+     - Assume Gaussian likelihood between observed fluxes and model predictions.
+     - Set priors on PCA coefficients based on their distribution in the training set.
+     - Perform MCMC sampling to estimate posterior distributions of PCA coefficients.
+
+3. **Reconstruct Full Spectrum**
+   - For each object:
+     - Use the posterior samples of PCA coefficients.
+     - Transform each coefficient into the spectral dimension using PCA eigenvectors.
+     - Compute the mean spectrum as the expectation over all contributions from PCA modes.
+     - Derive uncertainties from the posterior covariance matrix of the PCA coefficients.
+
+**End of Algorithm**

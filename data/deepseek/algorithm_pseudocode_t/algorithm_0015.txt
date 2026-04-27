@@ -1,0 +1,22 @@
+```
+Algorithm: Probabilistic Spectral Reconstruction and Classification
+
+1. Input: Photometric measurements for each object across multiple bands.
+
+2. Forward Model Setup:
+   a. Define the probabilistic forward model mapping spectrum to observed fluxes.
+
+3. Bayesian Inference:
+   a. Initialize parameters for MCMC and ABC methods.
+   b. Perform MCMC sampling to approximate the posterior distribution over spectral parameters.
+   c. Apply ABC to refine the posterior distribution.
+
+4. Posterior Processing:
+   a. Extract spectral parameters from the posterior distribution.
+
+5. Classification:
+   a. Train a multinomial logistic regression model using extracted spectral features.
+   b. Use the trained model to predict taxonomic classes of the objects.
+
+Output: Posterior spectral parameters and taxonomic class predictions for each object.
+```

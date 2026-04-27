@@ -1,0 +1,46 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Data Preprocessing**
+   - Input: Sparse photometric measurements of TNOs.
+   - Output: Preprocessed data ready for model training.
+
+2. **Principal Component Analysis (PCA)**
+   - Train PCA on a reference set of near-IR spectra to define a low-dimensional latent space.
+   - Parameters: Number of principal components (K) determined via validation (typically 4-10).
+   - Output: Latent representation of reference spectra.
+
+3. **Kernel Density Estimation (KDE)**
+   - Augment the latent space using KDE to create a continuous probability distribution.
+   - Parameters: Bandwidth (h) optimized to ensure smooth manifold (e.g., h ~ 0.5).
+   - Output: Synthetic latent vectors for training.
+
+4. **Forward Modeling**
+   - Simulate photometric observations from augmented spectra using target instrument filters (e.g., JWST/NIRCam).
+   - Inject Gaussian noise (e.g., 20% relative uncertainty) to account for observational errors.
+   - Output: Training dataset of noisy photometry paired with ground truth PCA targets.
+
+5. **Automated Machine Learning (AutoML) Training**
+   - Train an ensemble regressor (e.g., Gradient Boosted Decision Trees) to map photometry to latent coefficients.
+   - Output: Trained encoder model.
+
+6. **Bayesian Inference**
+   - For new photometric observations:
+     a. Use the trained encoder to predict latent coefficients.
+     b. Apply inverse PCA transform to reconstruct the full spectrum.
+     c. Sample from the posterior distribution using Gaussian Copula to quantify uncertainties.
+
+7. **Taxonomic Classification**
+   - Train a secondary classifier on the latent manifold to predict taxonomic categories (e.g., H₂O, CO₂, Organics).
+   - Input: Predicted latent coefficients.
+   - Output: Probability distribution over spectral types.
+
+8. **Validation and Uncertainty Quantification**
+   - Perform leave-one-out cross-validation (LOOCV) to assess reconstruction accuracy and credible interval coverage.
+   - Metrics: RMSE, correlation coefficient, and empirical coverage of 95% credible intervals.
+
+9. **Applications**
+   - **Survey Optimization**: Evaluate filter configurations to maximize information content.
+   - **Outlier Detection**: Identify objects unlikely to belong to the learned manifold.
+   - **Information Content Analysis**: Determine the contribution of each filter to spectral reconstruction fidelity.
+
+**End Algorithm**

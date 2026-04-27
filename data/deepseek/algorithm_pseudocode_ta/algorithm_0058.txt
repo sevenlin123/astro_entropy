@@ -1,0 +1,42 @@
+```pseudocode
+algorithm CoreSpectralReconstructionAlgorithm {
+    input:
+        spectral_data: Matrix of near-IR spectra of TNOs
+        photometric_fluxes: Vector of observed photometric flux measurements
+    
+    output:
+        reconstructed_spectra: Matrix of reconstructed spectral curves
+        uncertainties: Matrix of uncertainties for each spectral pixel
+    
+    steps:
+    1. Preprocess the spectral dataset {
+        a. Remove outliers and corrupted data points.
+        b. Standardize the spectral data if necessary.
+    }
+    2. Extract Principal Components {
+        a. Perform PCA on the spectral_data to obtain principal_components.
+        b. Select number_of_pc principal components (e.g., 4 to 5).
+    }
+    3. Construct the spectral basis matrix X {
+        a. Create matrix X where each column is a principal component.
+    }
+    4. Set up the probabilistic model {
+        a. Define y = X * β + ε, where ε ~ N(0, σ²).
+    }
+    5. Bayesian Inference using MCMC {
+        a. Define prior distributions for β and σ.
+        b. Use MCMC sampling (e.g., PyMC3) to draw posterior samples.
+        c. Calculate posterior means and uncertainties for β.
+    }
+    6. Reconstruct full spectral curves {
+        a. Multiply each principal component by its inferred β coefficient.
+        b. Sum the products to get reconstructed_spectra.
+    }
+    7. Compute uncertainties for each spectral pixel {
+        a. Propagate uncertainties from β to reconstructed_spectra.
+    }
+    8. Output reconstructed_spectra and uncertainties.
+}
+```
+
+This algorithm outlines the core steps for reconstructing full spectra from sparse photometric data using a probabilistic latent-space framework.

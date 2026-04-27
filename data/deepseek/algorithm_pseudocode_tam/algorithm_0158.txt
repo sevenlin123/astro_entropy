@@ -1,0 +1,45 @@
+```
+Algorithm: Probabilistic Spectral Reconstruction Framework for TNOs
+
+Input:
+    - Reference spectra: Set of known TNO near-IR spectra
+    - Photometric data: Sparse photometric measurements of target objects
+    - Instrument response: Filter profiles for NIRCam on JWST
+
+Output:
+    - Reconstructed spectra: Full spectral energy distributions for each object
+    - Taxonomic classification: Probabilistic labels for each object's spectral type
+
+1. Data Preparation:
+    1.1 Collect and preprocess reference TNO spectra.
+    1.2 Exclude outlier and minority spectral types.
+    1.3 Select a clean sample of N=51 representative spectra.
+
+2. Latent Space Construction:
+    2.1 Perform Principal Component Analysis (PCA) on the cleaned reference spectra.
+    2.2 Determine the number of principal components (K=4-10) based on explained variance and cross-validation.
+    2.3 Construct a latent space using the PCA coefficients.
+    2.4 Augment the latent space using Kernel Density Estimation (KDE) to create a continuous probability distribution.
+
+3. Forward Modeling:
+    3.1 Simulate synthetic photometric measurements by convolving the synthetic spectra with NIRCam filter responses.
+    3.2 Add Gaussian noise (20% relative uncertainty) to the synthetic photometry to account for observational errors.
+
+4. Model Training:
+    4.1 Split the data into training and validation sets.
+    4.2 Train an AutoML regressor (e.g., Gradient Boosted Decision Trees) to map sparse photometry to latent PCA coefficients.
+    4.3 Train a secondary AutoML classifier to partition the latent space into taxonomic classes (e.g., H2O, CO2, Organics).
+
+5. Inference Pipeline:
+    5.1 For new photometric observations:
+        5.1.1 Use the trained encoder to predict the latent space coordinates.
+        5.1.2 Decode the latent coordinates into a full spectrum using inverse PCA.
+        5.1.3 Classify the spectral type using the latent space classifier.
+
+6. Validation:
+    6.1 Perform leave-one-out cross-validation (LOOCV) to assess reconstruction accuracy and taxonomic classification.
+    6.2 Calculate reconstruction error and coverage metrics.
+    6.3 Validate the probabilistic taxonomic labels against known spectral types.
+
+End
+```

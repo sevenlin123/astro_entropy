@@ -1,0 +1,47 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Training Phase:**
+   - **Input:** Reference TNO spectra dataset, NIRCam filter response curves, photometric uncertainties.
+   - **Preprocessing:** 
+     - Normalize the reference spectra to reflectance units.
+     - Extract spectral features corresponding to the NIRCam filter bands.
+   - **Dimensionality Reduction:**
+     - Apply PCA to the reference spectra to obtain principal components (PCs).
+     - Determine the optimal number of PCs (K) via cross-validation (e.g., LOOCV).
+   - **Latent Space Construction:**
+     - Project reference spectra onto the PCA basis to get latent coefficients.
+     - Perform Kernel Density Estimation (KDE) on the latent coefficients to create a continuous prior distribution.
+   - **Forward Modeling:**
+     - Simulate synthetic photometry for each reference spectrum by convolving with NIRCam filter curves.
+     - Add Gaussian noise (e.g., 20%) to synthetic photometry to account for observational uncertainties.
+   - **Training AutoML Regressor:**
+     - Train an ensemble of gradient-boosted decision trees to map noisy synthetic photometry to latent coefficients.
+     - Validate using LOOCV to ensure generalization.
+
+2. **Inference Phase:**
+   - **Input:** Sparse photometric observations of a new TNO.
+   - **Encoding:**
+     - Pass the photometric observations through the trained AutoML regressor to predict latent coefficients.
+   - **Decoding:**
+     - Apply inverse PCA transform to reconstruct the full spectrum.
+   - **Uncertainty Quantification:**
+     - Sample the joint posterior distribution of latent coefficients using Gaussian Copula.
+     - Generate multiple realizations of the spectrum to compute credible intervals.
+   - **Taxonomic Classification:**
+     - Use a trained classifier on the latent manifold to predict the probability distribution over spectral types.
+
+3. **Survey Optimization:**
+   - **Simulate Filter Configurations:** 
+     - Generate synthetic photometry for various filter combinations.
+     - Evaluate the information content by measuring reconstruction fidelity and uncertainty.
+   - **Filter Selection:**
+     - Choose configurations that maximize spectral reconstruction quality and taxonomic separation.
+
+4. **Outlier Detection:**
+   - **Latent Space Projection:**
+     - Project new observations into the latent space.
+     - Assess compatibility with the learned prior distribution.
+   - **Flagging:**
+     - Identify objects with low posterior probabilities as potential outliers.
+
+**Output:** Reconstructed high-resolution spectrum, taxonomic probabilities, and credible intervals for each object.

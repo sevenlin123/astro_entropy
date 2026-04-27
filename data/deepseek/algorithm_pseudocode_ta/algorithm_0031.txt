@@ -1,0 +1,26 @@
+```python
+Algorithm: ProbabilisticSpectralReconstruction
+
+Input: 
+    - Training spectra S
+    - Photometric measurements P
+
+Output:
+    - Reconstructed spectrum R
+
+1. Preprocessing:
+    a. Center the training spectra S by subtracting the mean spectrum.
+
+2. Principal Component Analysis (PCA):
+    a. Compute the covariance matrix of the centered spectra.
+    b. Compute the eigenvalues (D) and eigenvectors (V) of the covariance matrix.
+    c. Select the top K eigenvectors (V_pca) and eigenvalues (D_pca), where K is chosen based on prior validation (e.g., K=4-5).
+
+3. Bayesian Inference:
+    a. For each test object with photometric data P, perform Bayesian inference to estimate the posterior distribution of the PCA coefficients θ.
+
+4. Spectrum Reconstruction:
+    a. Use the posterior mean of θ to project back into the original spectral space.
+    b. Multiply each selected PCA vector by the corresponding θ to obtain spectral contributions.
+    c. Sum all contributions and add back the mean spectrum to obtain the reconstructed spectrum R.
+```

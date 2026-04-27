@@ -1,0 +1,21 @@
+**Algorithm: Probabilistic Spectral Reconstruction**
+
+1. Initialize photometric measurements from multiple surveys, along with their respective zero points.
+
+2. Define prior distributions for model parameters, such as albedo (uniform distribution between 0.05 and 0.5), phase amplitude (normal distribution centered around 0.1 with small variance), and scaling factors for each eigenspectrum (multivariate normal distribution reflecting PCA weights).
+
+3. Decompose the SED into a linear combination of eigenspectra derived from PCA of an astrophysical spectral library.
+
+4. For each survey:
+   - Convert observed magnitudes to flux densities using the survey's zero points.
+   - Calculate the likelihood contribution based on flux densities, accounting for Poisson noise, background noise, and zero-point uncertainties.
+
+5. Construct the posterior distribution using the combined likelihood contributions from all surveys.
+
+6. Sample the posterior distribution using Markov Chain Monte Carlo (MCMC) methods.
+
+7. Determine the maximum a posteriori (MAP) solution or posterior mean to characterize the reconstructed SED.
+
+8. Compute taxonomic indicators (e.g., color indices) using the inferred SED parameters.
+
+**End Algorithm**

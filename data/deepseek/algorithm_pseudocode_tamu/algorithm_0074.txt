@@ -1,0 +1,36 @@
+```plaintext
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+    - Observed photometric measurements (m)
+    - Pre-trained Principal Component Analysis (PCA) model
+    - Training data with corresponding labels (taxonomic classes)
+
+Output:
+    - Reconstructed spectrum (S)
+    - Posterior probabilities over taxonomic classes
+
+Steps:
+
+1. **Latent Space Definition**:
+    a. Project the photometric measurements (m) into the pre-trained PCA latent space to obtain latent coefficients (z).
+    b. Use an AutoML regressor (trained on augmented synthetic data) to predict the latent coefficients given the photometry.
+
+2. **Spectral Reconstruction**:
+    a. Apply the inverse PCA transform to the predicted latent coefficients to reconstruct the full spectrum (S).
+    b. Generate an ensemble of reconstructions by sampling the joint posterior distribution of the latent coefficients using a Gaussian Copula framework to capture uncertainties.
+
+3. **Taxonomic Classification**:
+    a. Pass the latent coefficients (z) to a pre-trained taxonomic classifier to obtain posterior probabilities over taxonomic classes (e.g., H2O, CO2, Organic, Methanol).
+
+4. **Validation Metrics**:
+    a. Compute Root Mean Squared Error (RMSE) and Pearson Correlation Coefficient (PCC) between reconstructed and true spectra.
+    b. Assess credible interval coverage to evaluate uncertainty calibration.
+    c. Measure taxonomic classification accuracy.
+
+5. **Output**:
+    a. Return the reconstructed spectrum (S) along with its uncertainties.
+    b. Provide the taxonomic classification probabilities.
+
+End.
+```

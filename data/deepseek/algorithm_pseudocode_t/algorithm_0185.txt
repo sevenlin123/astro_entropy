@@ -1,0 +1,19 @@
+Algorithm: Probabilistic SED Reconstruction  
+Inputs:  
+- Observed photometric magnitudes (m) with uncertainties (σ_m)  
+- Extinction curve parameters (Aλ)  
+- Instrument response functions (Rλ)  
+- Prior distributions for SED and extinction parameters  
+
+Outputs:  
+- Posterior distributions of the SED components (fλ)  
+- Posterior distributions of extinction parameters (Aλ)  
+- Uncertainty quantification on the reconstructed SED  
+
+Steps:  
+1. Define the SED model (e.g., spline basis or component-based decomposition).  
+2. Initialize the extinction curve parameters based on the reddening law.  
+3. Forward model: Compute the expected observed magnitudes (m_hat) by integrating the SED through the interstellar medium, applying extinction at each wavelength.  
+4. Invert the forward model using Bayesian inference to update the SED and extinction parameters based on observed data and prior distributions.  
+5. Propagate uncertainties from the observed magnitudes through the forward model to quantify uncertainties on the reconstructed SED.  
+6. Identify outliers by comparing the posterior predictive distributions with the observed data.

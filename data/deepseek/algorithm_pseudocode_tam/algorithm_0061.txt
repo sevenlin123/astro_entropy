@@ -1,0 +1,16 @@
+```python
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. Initialize with a training set of N reference TNO spectra.
+2. Perform Principal Component Analysis (PCA) on the training spectra to derive principal components (PCs).
+3. Train a Kernel Density Estimator (KDE) on the latent coefficients derived from the PCA to create a continuous probability distribution.
+4. Generate synthetic photometry by convolving each synthetic spectrum with the instrument's filter response curves.
+5. Augment the training data with synthetic photometry containing Gaussian noise at 20% relative uncertainty.
+6. Train an AutoML regressor (e.g., Gradient Boosted Decision Trees) to map sparse photometry to PCA latent coefficients.
+7. For new photometric observations:
+   a. Use the trained regressor to predict latent coefficients.
+   b. Project the latent coefficients back through the inverse PCA transform to reconstruct the full spectrum.
+   c. Optionally, classify the spectrum using a secondary classifier trained on the latent space.
+8. Validate reconstruction fidelity using metrics like RMSE and credible interval coverage.
+9. Apply the framework for survey optimization, outlier detection, and spectral analysis from sparse data.
+```

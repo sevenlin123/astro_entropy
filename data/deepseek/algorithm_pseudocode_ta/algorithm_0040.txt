@@ -1,0 +1,26 @@
+**Algorithm: Probabilistic Spectral Reconstruction Framework**
+
+1. **Principal Component Analysis (PCA) Training:**
+   - Input: Dataset of near-infrared (near-IR) spectra.
+   - Perform PCA on the spectral data to obtain principal components.
+   - Output: Trained PCA model with principal components representing the spectral manifold.
+
+2. **Bayesian Inference Setup:**
+   - Define a probabilistic model linking photometric measurements to spectral reconstructions using the latent principal components.
+   - Incorporate prior distributions over the latent variables based on the PCA model.
+   - Set up likelihood functions that relate observed photometry to reconstructed spectra.
+
+3. **Bayesian Inference:**
+   - Perform Markov Chain Monte Carlo (MCMC) sampling to estimate posterior distributions of the latent variables given photometric data.
+   - Propagate measurement uncertainties through the model to reconstruct full spectra and associated uncertainties.
+
+4. **Optimal Filter Configuration Selection:**
+   - Evaluate the information content of each NIRCam filter configuration.
+   - Rank configurations based on their effectiveness in improving spectral reconstruction fidelity.
+   - Identify the most informative filter combinations for future observations.
+
+5. **Outlier Detection and Rare Spectral Type Reconstruction:**
+   - Assess posterior probabilities of latent variables to identify objects inconsistent with the modeled spectral manifold.
+   - Allow constrained photometry to select low-probability intermediate models for detecting rare spectral types.
+
+This algorithm efficiently reconstructs spectra from sparse photometry using a reduced PCA space and Bayesian methods, ensuring propagation of uncertainties and optimal filter selection for future surveys.

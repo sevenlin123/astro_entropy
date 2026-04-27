@@ -1,0 +1,45 @@
+**Pseudocode for Core Computational Algorithm**
+
+1. **Preprocessing**:
+   - Input: Sparse photometric data of a TNO.
+   - Output: Corrected photometric measurements.
+   ```plaintext
+   corrected_fluxes = preprocess(photometric_data)
+   ```
+
+2. **Interstellar Reddening Model**:
+   - Input: Corrected fluxes.
+   - Output: Probabilistic extinction-corrected fluxes.
+   ```plaintext
+   probabilistic_extinction_model(corrected_fluxes, extinction_distribution) -> extinction_corrected_fluxes
+   ```
+
+3. **Bayesian Inference for SED Reconstruction**:
+   - Input: Extinction-corrected fluxes and prior spectral information.
+   - Output: Posterior distribution of the spectral energy distribution (SED).
+   ```plaintext
+   posterior_SED = bayesian_inference(extinction_corrected_fluxes, prior_SED_info, measurement_uncertainties)
+   ```
+
+4. **Mixture Model Clustering**:
+   - Input: Posterior SEDs.
+   - Output: Clustered taxonomic groups.
+   ```plaintext
+   clusters = mixture_model_clustering(posterior_SED)
+   ```
+
+5. **Survey Utility Evaluation**:
+   - Input: Cluster assignments and survey parameters.
+   - Output: Contribution scores for each survey.
+   ```plaintext
+   survey_contributions = evaluate_survey_utility(clusters, survey_design_parameters)
+   ```
+
+6. **Outlier Detection**:
+   - Input: Reconstructed SEDs and clusters.
+   - Output: Identified outliers.
+   ```plaintext
+   outliers = robust_outlier_detection(reconstructed_SEDs, clusters)
+   ```
+
+**End of Algorithm**

@@ -1,0 +1,37 @@
+```pseudocode
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. Input:
+   - Photometric measurements (m) of a TNO object
+   - Pre-trained PCA model capturing spectral variability of TNOs
+   - Pre-trained AutoML regressor mapping photometry to PCA coefficients
+
+2. Initialize:
+   - latent_coeffs = empty array
+   - reconstructed_spectrum = empty array
+   - uncertainty_intervals = empty array
+
+3. Forward Modeling:
+   a. Simulate photometric measurements by convolving PCA-derived reference spectra with the instrument response functions (JWST/NIRCam filters).
+   b. Inject Gaussian noise (relative uncertainty ~20%) into simulated photometry to account for observational errors.
+
+4. Training Phase:
+   a. Project reference spectra onto PCA to obtain latent coefficients (training data).
+   b. Augment training data using Kernel Density Estimation (KDE) to create a smooth, continuous manifold in latent space.
+   c. Train AutoML regressor (e.g., XGBoost) to map sparse photometry to latent coefficients.
+
+5. Inference:
+   a. Use trained regressor to predict latent coefficients (mean and variance) given observed photometry.
+   b. Apply inverse PCA transform to latent coefficients to reconstruct full spectrum.
+
+6. Uncertainty Quantification:
+   a. Sample joint posterior distribution of latent coefficients using Gaussian Copula to preserve physical dependencies.
+   b. Reconstruct multiple spectra from sampled coefficients to generate confidence intervals.
+
+7. Output:
+   - Reconstructed spectrum
+   - Empirical credible intervals
+   - Probabilistic taxonomic classification (optional)
+
+8. End
+```

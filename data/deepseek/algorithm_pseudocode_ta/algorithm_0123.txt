@@ -1,0 +1,44 @@
+```
+Algorithm Probabilistic Spectral Reconstruction (PSR)
+
+1. Initialize parameters:
+   - Input: Sparse photometric data of TNOs
+   - Output: Reconstructed spectra, uncertainty estimates, and taxonomic classifications
+   - PrincipalComponentSpace = Pre-trained PCA model on a sample of near-IR spectra
+   - BayesianInferenceParameters = Settings for probabilistic inference in reduced space
+
+2. Load training data:
+   - TrainingSpectra = Sample of near-IR spectra used to train PrincipalComponentSpace
+
+3. Compute principal components:
+   - Extract principal components using PrincipalComponentSpace:
+     - PCs = Apply PCA transformation to TrainingSpectra
+     - Determine number of principal components (e.g., 4-5 for taxonomic classification, 8-10 for high-fidelity reconstruction)
+
+4. Perform Bayesian inference in reduced space:
+   - For each TNO:
+     a. Convert sparse photometric data into latent space representation
+     b. Use Bayesian framework to infer underlying spectral properties in reduced space
+     c. Propagate measurement uncertainties from photometric data to inferred spectra
+
+5. Reconstruct full spectra:
+   - Map inferred latent space representations back to full spectral space
+   - Apply uncertainty propagation to reconstructed spectra
+
+6. Validate reconstruction fidelity:
+   - Compare reconstructed spectra with original spectra (if available)
+   - Check credible interval coverage (e.g., ~95% across wavelengths)
+
+7. Apply to survey optimization:
+   - Quantify information content of NIRCam filters
+   - Identify optimal filter combinations for future observations
+
+8. Detect rare spectral types:
+   - Allow constrained photometry to select low-probability intermediate models
+   - Reconstruct and classify peculiar spectral types (e.g., Neptune Trojans)
+
+9. Classify and output results:
+   - Assign taxonomic classes based on reconstructed spectra
+   - Provide uncertainty estimates for each spectral feature
+   - Output final taxonomic classifications and uncertainty metrics
+```

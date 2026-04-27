@@ -1,0 +1,15 @@
+```
+Algorithm:
+    1. Input: Reference spectral library S (NxM), where N is number of TNO spectra, M wavelengths.
+    2. Compute principal components (PCs) via PCA on S.
+    3. Determine the optimal number of PCs (k) based on some criterion.
+    4. Build a spectral manifold model using k PCs.
+    5. For each object o:
+        a. Obtain its sparse photometric measurements P_o.
+        b. Perform Bayesian inference using the manifold model to reconstruct spectrum S_o.
+        c. Compute posterior uncertainties U_o.
+    6. Validate reconstruction fidelity, e.g., check credible intervals.
+    7. Optimize photometric bands based on information content.
+    8. Detect outliers by identifying objects with photometry not well-explained by the manifold.
+    9. Output: Reconstructed spectra {S_o}, uncertainties {U_o}, optimized bands, and outlier list.
+```

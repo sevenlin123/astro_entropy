@@ -1,0 +1,26 @@
+To implement the core reconstruction framework described in the paper, follow these steps:
+
+1. **Load Pre-trained PCA Model**: Utilize a principal component analysis (PCA) model constructed from a dataset of known trans-Neptunian object (TNO) spectra. This model captures the essential spectral variability.
+
+2. **Input Photometric Data**: For the target object, input its observed photometric fluxes.
+
+3. **Project Photometry into PCA Space**: Transform the photometric data into the PCA latent space using the pre-trained model, generating latent variable estimates.
+
+4. **Perform Bayesian Inference**: Conduct Bayesian inference in the latent space to determine the posterior distribution of the principal components. This step accounts for measurement uncertainties and leverages the structure of known spectra.
+
+5. **Reconstruct Spectrum**: Using the inferred latent variables, map back to the original spectral space to obtain the reconstructed spectrum.
+
+6. **Output Reconstructed Spectrum**: Deliver the spectrum along with associated uncertainties and credible intervals.
+
+**Algorithm Steps**:
+
+```
+Initialize with pre-trained PCA model from reference spectra.
+
+For each target object:
+    Input photometric flux measurements.
+    Project fluxes into PCA latent space.
+    Perform Bayesian inference to estimate latent variables.
+    Reconstruct full spectrum using inferred latent variables.
+    Output reconstructed spectrum with uncertainties.
+```

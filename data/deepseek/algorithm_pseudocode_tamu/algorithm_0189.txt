@@ -1,0 +1,41 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Data Preparation**
+   - Collect a training set of reference TNO spectra.
+   - Exclude outliers and rare spectral types to focus on dominant taxonomic classes.
+
+2. **Principal Component Analysis (PCA)**
+   - Perform PCA on the training spectra to obtain principal components (PCs).
+   - The PCs represent the latent space capturing spectral variability.
+
+3. **Latent Space Augmentation**
+   - Use Kernel Density Estimation (KDE) with a Gaussian kernel to generate synthetic latent vectors.
+   - Adjust KDE bandwidth (h) to balance smoothness and fidelity.
+
+4. **Forward Modeling**
+   - Simulate photometric observations by convolving spectra with NIRCam filter curves.
+   - Add Gaussian noise (20% relative uncertainty) to simulate real-world photometric errors.
+
+5. **Training the AutoML Regressor**
+   - Train an ensemble of gradient-boosted decision trees (e.g., XGBoost) to regress from photometric inputs to latent coefficients.
+   - Use synthetic and real training data for robust learning.
+
+6. **Bayesian Inference**
+   - For new photometric observations:
+     - Predict latent coefficients using the trained regressor.
+     - Sample from the joint posterior of latent variables using Gaussian Copula to account for correlations.
+
+7. **Spectral Reconstruction**
+   - Apply inverse PCA transform to the latent coefficients to reconstruct the full spectrum.
+   - Generate credible intervals for the reconstructed spectrum.
+
+8. **Taxonomic Classification**
+   - Use a secondary classifier trained on latent space to predict taxonomic labels.
+   - Provide probability distributions over spectral types.
+
+9. **Performance Evaluation**
+   - Measure reconstruction error (NRMSE), credible interval coverage, classification accuracy, and filter information content via LOOCV.
+
+10. **Survey Optimization and Outlier Detection**
+    - Quantify filter information content to optimize NIRCam band selections.
+    - Flag outliers based on credible intervals, classification probabilities, or distance from the latent manifold.

@@ -1,0 +1,37 @@
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+**Input:**  
+- Sparse photometric measurements of a trans-Neptunian object (TNO).  
+- Pre-trained principal component (PC) basis derived from a sample of TNO spectra.  
+- Instrument-specific filter responses (e.g., JWST/NIRCam).  
+
+**Output:**  
+- Reconstructed high-resolution spectrum of the TNO.  
+- Probabilistic constraints on the spectral features (e.g., water, CO₂, organics).  
+
+**Steps:**  
+
+1. **Data Preparation:**  
+   - Convert the sparse photometric measurements into reflectance units or flux densities.  
+
+2. **Dimensionality Reduction (PCA Basis):**  
+   - Project the photometric data into the pre-trained principal component space.  
+   - Each spectrum is represented by a set of latent coefficients corresponding to the principal components.  
+
+3. **Bayesian Inference:**  
+   - Use the pre-trained auto-machine learning (AutoML) regressor to predict the latent coefficients from the sparse photometric inputs.  
+   - The regressor was trained on synthetic photometry generated from the PCA basis.  
+
+4. **Spectral Reconstruction:**  
+   - Inverse transform the predicted latent coefficients using the PCA basis to reconstruct the high-resolution spectrum.  
+
+5. **Error Propagation:**  
+   - Calculate uncertainties in the reconstructed spectrum by propagating the uncertainties in the photometric measurements.  
+
+6. **Taxonomic Classification (Optional):**  
+   - Classify the spectrum into taxonomic categories (e.g., water, CO₂, organics) based on the latent coefficients.  
+
+7. **Outlier Detection (Optional):**  
+   - Check if the reconstructed spectrum lies outside the typical range of known spectral types.  
+
+**End.**

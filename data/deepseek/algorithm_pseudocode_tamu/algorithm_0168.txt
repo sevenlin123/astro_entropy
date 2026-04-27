@@ -1,0 +1,49 @@
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+**Step-by-Step Pseudocode:**
+
+1. **Data Preparation**
+   - Input: Sparse photometric measurements for TNOs.
+   - Output: Training dataset for spectral reconstruction.
+
+2. **Principal Component Analysis (PCA)**
+   - Perform PCA on a reference set of near-IR spectra to define a low-dimensional latent space.
+   - Determine the number of principal components (K) based on validation (e.g., LOOCV).
+
+3. **Kernel Density Estimation (KDE)**
+   - Use the latent coefficients from PCA to fit a non-parametric KDE, creating a smooth manifold.
+   - Bandwidth (h) is optimized to balance smoothness and fidelity to the data.
+
+4. **Forward Modeling**
+   - Simulate synthetic photometry by convolving spectra with the instrument's filter response curves (e.g., JWST NIRCam).
+   - Inject Gaussian noise (relative uncertainty ~20%) into synthetic photometry to account for observational errors.
+
+5. **Training AutoML Regressor**
+   - Train an ensemble of gradient-boosted decision trees (e.g., XGBoost) to map sparse photometry to latent coefficients.
+   - Utilize synthetic data augmented via KDE to enhance model generalization in low-sample scenarios.
+
+6. **Leave-One-Out Cross-Validation (LOOCV)**
+   - Iteratively hold out one spectrum, train the model on the remaining data, and validate the reconstruction.
+   - Measure reconstruction fidelity (RMSE, NRMSE, Pearson correlation) and uncertainty coverage (credible intervals).
+
+7. **Spectral Reconstruction**
+   - For new photometric observations, use the trained regressor to predict latent coefficients.
+   - Apply inverse PCA transform to reconstruct the full spectrum.
+
+8. **Uncertainty Quantification**
+   - Sample the joint posterior distribution of latent coefficients using a Gaussian Copula to preserve physical correlations.
+   - Generate confidence intervals for the reconstructed spectrum.
+
+9. **Taxonomic Classification**
+   - Train a secondary classifier on the latent manifold to assign probabilities to spectral types (e.g., H₂O, CO₂, Organic, Methanol).
+   - Output the probability distribution over taxonomic labels for each object.
+
+10. **Survey Optimization**
+    - Evaluate the information content of filter configurations by simulating their impact on reconstruction uncertainty.
+    - Identify optimal filter sets for maximizing spectral discovery.
+
+11. **Outlier Detection**
+    - Flag objects whose posterior distributions in the latent space fall outside predefined thresholds.
+    - Use photometric consistency checks to identify rare spectral types or anomalies.
+
+**End of Algorithm**

@@ -1,0 +1,31 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Input:** Reference spectra dataset (training data), photometric filter responses, noise level.
+
+2. **Compute PCA Basis:**
+   - Apply PCA to the reference spectra to derive principal components.
+   - Obtain principal component coefficients (latent variables) for each spectrum.
+
+3. **Define Latent Space Prior:**
+   - Project reference spectra onto the computed PCA basis.
+   - Use Kernel Density Estimation (KDE) to create a smooth probability distribution in the latent space.
+
+4. **Generate Synthetic Photometry:**
+   - For each spectrum in the latent space:
+     - Convolve the spectrum with photometric filter responses to compute the expected reflectance.
+     - Add Gaussian noise (specified by relative reflectance uncertainty) to simulate observational noise.
+
+5. **Prepare Training Dataset:**
+   - Pair each spectrum's latent coefficients with its corresponding synthetic photometric data.
+
+6. **Train AutoML Regressor:**
+   - Use the AutoML framework to train a regressor (e.g., Gradient Boosted Decision Trees) to map photometric data to latent coefficients.
+
+7. **Reconstruct Spectrum from Photometry:**
+   - For new photometric observations:
+     - Predict the latent coefficients using the trained regressor.
+     - Apply the inverse PCA transform to reconstruct the full spectrum.
+
+8. **Output:** Reconstructed spectrum and associated uncertainties.
+
+**End Algorithm**

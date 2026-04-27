@@ -1,0 +1,41 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Input Data Preparation**
+   - Obtain a training set of reference Near-Infrared ( NIR ) spectra of Trans-Neptunian Objects ( TNOs ), denoted as \( S_{\text{train}} \).
+   - Collect sparse photometric measurements for these TNOs, denoted as \( \mathbf{m}_{\text{train}} \).
+
+2. **Principal Component Analysis ( PCA )**
+   - Perform PCA on \( S_{\text{train}} \) to derive principal components ( eigenvectors ) and corresponding latent coefficients ( scores ).
+   - The number of principal components \( K \) is determined through validation (e.g., LOOCV), typically \( K = 4 \) to \( K = 10 \).
+
+3. **Latent Space Construction**
+   - Use Kernel Density Estimation ( KDE ) with a Gaussian kernel to construct a continuous probability distribution over the latent space defined by the PCA components.
+   - This generates synthetic latent vectors, expanding the training dataset while preserving physical plausibility.
+
+4. **Synthetic Photometry Generation**
+   - For each synthetic latent vector, forward model the corresponding spectrum through the PCA transform to obtain a full spectrum.
+   - Convolve these spectra with the filter responses of the target instrument (e.g., JWST/NIRCam) to simulate observed photometry.
+   - Inject Gaussian noise with a relative reflectance uncertainty (e.g., 20%) into the synthetic photometry to mimic real-world observational conditions.
+
+5. **Training the AutoML Regressor**
+   - Train an ensemble of gradient-boosted decision trees ( AutoML framework, e.g., AutoGluon ) to regress from sparse photometry \( \mathbf{m} \) to latent coefficients.
+   - The training dataset consists of pairs of synthetic photometry and their corresponding latent vectors.
+
+6. **Forward Inference Pipeline**
+   - **Encoding Step**: For new photometric observations \( \mathbf{m}_{\text{new}} \), use the trained AutoML regressor to predict the latent coefficients \( z_{\text{pred}} \).
+   - **Decoding Step**: Project \( z_{\text{pred}} \) back through the inverse PCA transform to reconstruct the full spectrum \( S_{\text{recon}} \).
+   - **Uncertainty Quantification**: Sample the joint posterior distribution of \( z \) using a Gaussian Copula to generate an ensemble of reconstructions, providing credible intervals.
+
+7. **Taxonomic Classification**
+   - Train a secondary AutoML classifier on the latent space to predict taxonomic labels (e.g., H₂O, CO₂, Organic, Methanol ) from latent coefficients.
+   - For each prediction, output a probability distribution over spectral types.
+
+8. **Validation and Performance Metrics**
+   - Apply Leave-One-Out Cross-Validation ( LOOCV ) to assess reconstruction accuracy and credible interval coverage.
+   - Compute metrics such as Normalized Root Mean Squared Error ( NRMSE ), integrated reconstruction error, and empirical coverage of credible intervals.
+
+9. **Application Scenarios**
+   - **Survey Optimization**: Evaluate the information content of different filter configurations to identify optimal setups for future surveys.
+   - **Outlier Detection**: Identify rare spectral types by constraining photometry to select low-probability intermediate models from the latent manifold.
+
+**End of Algorithm**

@@ -1,0 +1,47 @@
+ALGORITHM Probabilistic Spectral Reconstruction  
+    INPUT: Training data X, number of classes K, hyperparams θ, GMM parameters  
+    OUTPUT: Classified spectral classes, outlier flags  
+
+    1. PREPROCESS DATA  
+        a. Normalize each feature in X  
+        b. Standardize each feature in X  
+
+    2. INITIALIZE GAUSSIAN PROCESSES FOR EACH CLASS  
+        FOR k = 1 TO K DO  
+            a. SET KERNEL HYPERPARAMETERS θ_k  
+            b. DEFINE COVARIANCE MATRIX K_k = σ² * exp(-||x_i - x_j||² / θ_k²)  
+            c. COMPUTE CHOLESKY DECOMPOSITION OF K_k + ε*I (ε is a small jitter to ensure positive definiteness)  
+            d. MEAN FUNCTION SET TO ZERO  
+
+    3. TRAIN GAUSSIAN MIXTURE MODEL  
+        a. FOR EACH CLASS k:  
+            i. FIT GP TO TRAINING DATA IN CLASS k  
+            ii. CALCULATE LOG LIKELIHOODS FOR EACH DATA POINT IN CLASS k  
+            iii. SUM LOG LIKELIHOODS TO GET CLASS EVIDENCE E_k  
+
+        b. NORMALIZE CLASS EVIDENCES E_k TO OBTAIN Mixture Weights π_k = E_k / ΣE_k  
+
+        c. STORE CLASS COVARIANCES AND MEANS FROM EACH GP  
+
+    4. INFERENCE PHASE  
+        FOR EACH TEST OBJECT x:  
+            a. INITIALIZE CLASS PROBABILITIES p(k | x) = π_k * GP_k.pdf(x)  
+
+            b. SUM OVER ALL CLASSES TO GET P(x) = Σ π_k * GP_k.pdf(x)  
+
+            c. FIND CLASS argmax p(k | x)  
+
+            d. RECONSTRUCT SPECTRAL PROPERTIES BASED ON argmax class  
+
+            e. CALCULATE LIKELIHOOD UNDER GMM: p(x) = Σ π_k * GP_k.pdf(x)  
+
+            f. IF p(x) < OUTLIER_THRESHOLD THEN FLAG AS OUTLIER ELSE CLASSIFY INTO argmax class  
+
+    5. OUTLIER DETECTION  
+        a. COMPUTE p(x) as above  
+        b. COMPARE WITH PREDEFINED THRESHOLD  
+        c. OUTPUT OUTLIER FLAG  
+
+    6. RETURN CLASSIFICATIONS AND OUTLIER FLAGS  
+
+End Algorithm

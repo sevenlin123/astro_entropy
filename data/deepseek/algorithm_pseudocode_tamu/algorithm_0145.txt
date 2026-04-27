@@ -1,0 +1,57 @@
+```pseudocode
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+    - Training Spectra: Set of reference TNO spectra
+    - Photometric Observations: Sparse photometry measurements for target objects
+    - NIRCam Filter Set: Predefined set of filters (F090W, F115W, F410M, F460M)
+
+Output:
+    - Reconstructed High-Resolution Spectra
+    - Probabilistic Taxonomic Classification
+    - Uncertainty Quantification
+
+Steps:
+
+1. Latent Space Definition:
+    a. Perform Principal Component Analysis (PCA) on the Training Spectra.
+    b. Select optimal number of Principal Components (K) through validation (e.g., LOOCV).
+    c. Construct a manifold using Kernel Density Estimation (KDE) on the PCA coefficients.
+
+2. Forward Modeling:
+    a. For each spectrum in the Training Set:
+        i. Generate synthetic photometry by convolving the spectrum with NIRCam filter transmission curves.
+        ii. Inject Gaussian noise (e.g., 20% relative uncertainty) to simulate realistic photometric uncertainties.
+    b. Create a training database of noisy photometry paired with corresponding PCA coefficients.
+
+3. AutoML Regression Training:
+    a. Train an ensemble of Gradient-Boosted Decision Trees (e.g., XGBoost) using the training database.
+    b. The model learns the mapping from photometric observations to PCA coefficients.
+
+4. Inference Pipeline:
+    a. For new photometric observations:
+        i. Pass the photometry through the trained AutoML regressor to predict latent PCA coefficients.
+        ii. Apply the inverse PCA transform to reconstruct the full high-resolution spectrum.
+        iii. Sample the posterior distribution of the latent coefficients using a Gaussian Copula to quantify uncertainties.
+
+5. Taxonomic Classification:
+    a. Train a secondary classifier on the PCA manifold to predict taxonomic probabilities.
+    b. For each reconstructed spectrum, obtain a probability distribution over spectral types.
+
+6. Validation and Uncertainty Assessment:
+    a. Perform Leave-One-Out Cross-Validation (LOOCV) to evaluate reconstruction accuracy.
+    b. Calculate metrics such as RMSE and PCC for each wavelength bin.
+    c. Assess taxonomic classification accuracy.
+
+7. Applications:
+    a. Survey Optimization:
+        i. Evaluate different NIRCam filter configurations to identify optimal sets.
+    b. Outlier Detection:
+        i. Flag objects whose reconstructed spectra lie outside the learned manifold.
+    c. Rare Spectral Type Identification:
+        i. Detect intermediate or novel spectral morphologies through manifold analysis.
+
+End
+```
+
+This algorithm outlines the core computational steps for the probabilistic spectral reconstruction framework described in the paper, focusing on the principal components analysis, forward modeling, machine learning regression, and uncertainty quantification.

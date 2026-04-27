@@ -1,0 +1,43 @@
+```
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+- Training spectra S_train: Set of reference near-IR spectra
+- Photometric observations m_test: Sparse photometric measurements for objects of interest
+
+Output:
+- Reconstructed spectrum S_recon: High-resolution spectrum estimates for each object
+- Uncertainty quantification: Credible intervals for the reconstructed spectra
+- Taxonomic classification: Probabilistic assignments of spectral types
+
+Steps:
+
+1. Preprocessing:
+   a. Normalize training spectra S_train to unit variance.
+   b. Select appropriate filter responses for forward modeling.
+
+2. Latent Space Definition:
+   a. Perform Principal Component Analysis (PCA) on S_train to obtain principal components (eigenvectors) and scores.
+   b. Construct latent manifold using Kernel Density Estimation (KDE) on the PCA scores.
+   
+3. Training Phase:
+   a. Generate synthetic photometry by forward modeling through the chosen filters using the PCA basis.
+   b. Augment training data with synthetic spectra and corresponding noisy photometry (relative noise level ~20%).
+   c. Train an Automated Machine Learning (AutoML) regressor (ensemble of gradient-boosted decision trees) to map photometry to latent coefficients.
+
+4. Inference Phase:
+   a. For each test object:
+      i. Use the trained regressor to predict latent coefficients z_hat from m_test.
+      ii. Project z_hat through the inverse PCA transform to obtain S_recon.
+      iii. Sample the posterior distribution of z using Gaussian Copula to generate multiple realizations.
+      iv. Compute point estimates and credible intervals from the posterior samples.
+   
+5. Taxonomy Classification:
+   a. Train a secondary AutoML classifier on the latent manifold using labels from S_train.
+   b. For each test object, predict the probability distribution over spectral types using the latent coefficients.
+
+6. Performance Evaluation (optional):
+   a. Compute reconstruction metrics (nRMSE, credible interval coverage, KL divergence) against ground truth for validation.
+
+End
+```

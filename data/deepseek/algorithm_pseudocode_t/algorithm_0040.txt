@@ -1,0 +1,29 @@
+**Algorithm: Probabilistic Spectral Reconstruction via MCMC and PCA**
+
+1. **Input Data**: Raw photometric data matrix `D` of size `M x P`, where `M` is the number of objects and `P` is the number of photometric bands.
+
+2. **Data Preprocessing**:
+   - Convert `D` into a matrix format suitable for PCA.
+   - Perform PCA on `D` to obtain principal components.
+   - Retain top `N` principal components, where `N` is chosen based on explained variance.
+
+3. **Forward Model Setup**:
+   - Define the forward model function `F(theta)` that maps physical parameters `theta` to observed photometric features.
+   - Implement the likelihood function `L(theta | D)` using the forward model.
+
+4. **MCMC Initialization**:
+   - Choose prior distributions for each parameter `theta_i`.
+   - Set initial parameter values `theta0` and tuning parameters for the proposal distribution.
+
+5. **MCMC Sampling**:
+   - For `I` iterations:
+     - Propose new parameter values `theta_new` from the current state `theta_current` using a proposal distribution (e.g., Gaussian).
+     - Compute the likelihood `L(theta_new | D)` using the forward model.
+     - Calculate the acceptance ratio `alpha = min(L(theta_new)/L(theta_current), 1)`.
+     - Accept `theta_new` with probability `alpha`; otherwise, retain `theta_current`.
+     - Record the accepted parameter values.
+
+6. **Posterior Analysis**:
+   - Analyze the recorded parameter values to compute posterior statistics (mean, median, credibility intervals).
+
+**End Algorithm**

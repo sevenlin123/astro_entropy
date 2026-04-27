@@ -1,0 +1,27 @@
+**Algorithm for Probabilistic Spectral Reconstruction of Trans-Neptunian Objects**
+
+1. **Initialize Data Collection**: For each TNO, gather all available photometric measurements from various surveys.
+
+2. **Data Preprocessing**: 
+    - Clean the data by removing outliers and correcting for instrumental biases.
+    - Standardize the photometric measurements to a common flux scale.
+
+3. **Define Gaussian Process (GP)**:
+    - Select an appropriate kernel (e.g., Matérn kernel) suitable for spectral data.
+    - Set initial hyperparameters for the GP, including length scale and variance.
+
+4. **GP Parameter Sampling via MCMC**:
+    - Use MCMC (e.g., Metropolis-Hastings) to sample hyperparameters of the GP.
+    - Iterate over the chain until convergence, adjusting parameters to best fit the observed data.
+
+5. **Reconstruct Spectral Energy Distribution (SED)**:
+    - Utilize the GP to predict the SED at all wavelengths, incorporating measurement noise.
+    - Generate posterior distributions of the SED components using the sampled GP parameters.
+
+6. **Outlier Detection**:
+    - Compare the reconstructed SED posteriors with theoretical models or known spectral classifications.
+    - Flag objects whose SEDs deviate significantly from expected patterns as outliers.
+
+7. **Output Results**:
+    - Provide reconstructed SEDs with associated uncertainties.
+    - Deliver outlier flags and metrics for survey optimization.

@@ -1,0 +1,26 @@
+**Algorithm: Probabilistic Spectral Reconstruction of Trans-Neptunian Objects**
+
+1. **Training Phase:**
+   - Extract template SEDs from the training set of TNOs with known spectra.
+
+2. **Initialization for Test Object:**
+   - Set mixing coefficients to a uniform Dirichlet distribution (α = 1).
+
+3. **Optimizing Mixing Coefficients:**
+   - Apply Maximum Likelihood Estimation (MLE) to adjust the mixing coefficients based on observed photometric data and uncertainties.
+   - Regularize using a Dirichlet prior to ensure the sum of coefficients equals 1.
+
+4. **Posterior Predictive Distribution:**
+   - Compute the distribution by integrating over all possible mixing distributions to determine the confidence in the reconstructed SED.
+
+5. **Classification Probabilities:**
+   - Calculate the posterior probability of each template SED given the data and mixing distribution.
+   - Rank the spectral classifications by their posterior probabilities.
+
+6. **Outlier Detection:**
+   - Identify outliers by comparing the probability of each object's SED under the mixture distribution to a threshold.
+
+7. **Output:**
+   - Provide the reconstructed SED with confidence intervals.
+   - Deliver a ranked list of spectral classifications.
+   - Include outlier flags for objects not meeting the threshold.

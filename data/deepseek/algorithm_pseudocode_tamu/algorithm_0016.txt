@@ -1,0 +1,55 @@
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+#### Inputs:
+1. **Sparse Photometry**: Input vector containing observed photometric measurements in specific filters.
+2. **Training Spectra**: Reference spectra used to train the PCA model.
+3. **Filter Throughput Curves**: Spectral response functions of the observing instrument (e.g., JWST NIRCam).
+4. **Photometric Uncertainty**: Noise level (e.g., 20%) to inject into synthetic photometry during training.
+
+#### Outputs:
+1. **Reconstructed Spectrum**: High-resolution spectrum derived from the input photometry.
+2. **Taxonomic Classification**: Probabilistic assignment of the object to known spectral types (e.g., Water-type, CO₂-type, Organic-type).
+3. **Uncertainty Estimates**: Quantified uncertainties on the reconstructed spectral features.
+
+---
+
+### Step-by-Step Pseudocode:
+
+1. **Preprocessing:**
+   - **Train PCA Model**:
+     - Perform Principal Component Analysis (PCA) on the training spectra to obtain principal component (PC) coefficients and eigenvectors.
+     - Select the number of PCs (e.g., K=8–10) based on explained variance and cross-validation results.
+
+   - **Kernel Density Estimation (KDE)**:
+     - Project the training spectra onto the PCA latent space.
+     - Fit a Gaussian KDE to the latent coefficients to create a smooth probability distribution over the latent space.
+
+2. **Synthetic Data Generation**:
+   - For each spectrum in the training set:
+     - Sample synthetic latent coefficients from the KDE.
+     - Forward-model the corresponding spectrum through the instrument's filter throughput curves to compute synthetic photometry.
+     - Inject Gaussian noise (e.g., 20%) into the synthetic photometry to simulate observational uncertainties.
+
+3. **AutoML Regressor Training**:
+   - Train an ensemble of gradient-boosted decision trees (e.g., XGBoost) to regress from the noisy synthetic photometry to the latent coefficients.
+   - Ensure the regressor captures the mapping from sparse photometric inputs to the low-dimensional latent space.
+
+4. **Forward Inference Pipeline**:
+   - **Input Photometry**: Pass the observed sparse photometry through the trained AutoML regressor to predict latent coefficients.
+   - **Reconstruct Spectrum**:
+     - Apply the inverse PCA transform to the predicted latent coefficients to obtain the full-resolution reconstructed spectrum.
+     - Optionally, sample the joint posterior distribution of latent coefficients using a Gaussian Copula to generate uncertainty estimates.
+
+5. **Taxonomic Classification**:
+   - Project the predicted latent coefficients into a pre-trained classifier (e.g., another AutoML model) to determine the probability distribution over spectral types.
+
+6. **Validation and Uncertainty Quantification**:
+   - Compare the reconstructed spectrum to the ground truth (if available) to assess fidelity.
+   - Calculate credible intervals for the reconstructed spectrum using the sampled posterior distribution.
+
+---
+
+### Final Output:
+- **Reconstructed Spectrum**: Continuous spectral estimate derived from sparse photometry.
+- **Classification Probabilities**: Probabilities of belonging to different taxonomic classes.
+- **Uncertainty Bounds**: Error estimates on the spectral features, providing a quantitative measure of confidence.

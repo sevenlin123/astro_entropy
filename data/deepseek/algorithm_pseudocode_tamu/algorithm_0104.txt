@@ -1,0 +1,62 @@
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+```plaintext
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+    - Sparse photometric observations (m)
+    - Training set of reference spectra (S_train)
+    - Precomputed PCA basis (U, explained variance ratio)
+    - Synthetic photometry with noise (m_synthetic)
+    - AutoML regressor (Encoder)
+
+Output:
+    - Reconstructed spectrum (S_reconstructed)
+    - Uncertainty estimates
+    - Taxonomic classification probabilities
+
+1. **Latent Space Definition**:
+    a. Perform PCA on S_train to obtain principal components (U).
+    b. Determine the number of principal components (K) based on explained variance.
+
+2. **Data Augmentation**:
+    a. Use Kernel Density Estimation (KDE) on the PCA coefficients to generate synthetic latent vectors.
+    b. Apply Gaussian noise (20% relative) to synthetic photometry to simulate real-world uncertainties.
+
+3. **Training Phase**:
+    a. Train AutoML regressor (Encoder) using synthetic photometry (m_synthetic) and corresponding PCA coefficients (z_synthetic).
+    b. Retrain the regressor for each LOOCV iteration, excluding the held-out spectrum.
+
+4. **Forward Inference**:
+    a. For new photometric observations (m_new):
+        i. Predict latent coefficients (z_pred) using the trained Encoder.
+        ii. Sample from the joint posterior distribution of z_pred using Gaussian Copula.
+        iii. Project z_pred through inverse PCA transform to reconstruct the full spectrum (S_reconstructed).
+    
+5. **Uncertainty Quantification**:
+    a. Generate an ensemble of reconstructions by sampling the joint posterior.
+    b. Compute credible intervals and confidence metrics.
+
+6. **Taxonomic Classification**:
+    a. Use a pre-trained classifier on the latent space to predict taxonomic probabilities.
+    b. Classify the spectrum into predefined categories (e.g., H₂O, CO₂, Organics).
+
+7. **Output**:
+    a. Return S_reconstructed, uncertainty estimates, and taxonomic probabilities.
+```
+
+### Explanation of Steps:
+
+1. **Latent Space Definition**: Reduces the spectral data into a low-dimensional PCA space to capture the main variations in the training spectra.
+
+2. **Data Augmentation**: Creates synthetic data to expand the training set, ensuring smoother and more robust learning despite limited real spectra.
+
+3. **Training Phase**: The AutoML regressor learns the mapping from photometric data to PCA coefficients, incorporating realistic noise levels.
+
+4. **Forward Inference**: Maps new photometric observations through the learned model to reconstruct the full spectrum, considering uncertainties and physical constraints.
+
+5. **Uncertainty Quantification**: Provides probabilistic estimates of the reconstructed spectrum, ensuring reliable confidence intervals.
+
+6. **Taxonomic Classification**: Uses the latent space representation to classify the spectrum into known taxonomic groups, aiding in categorical analysis.
+
+7. **Output**: Delivers the reconstructed spectrum, associated uncertainties, and taxonomic information for further analysis.

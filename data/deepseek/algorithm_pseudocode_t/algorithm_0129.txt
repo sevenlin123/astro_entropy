@@ -1,0 +1,31 @@
+The algorithm initializes parameters based on prior knowledge about TNO colors and albedos. It then iterates using the EM algorithm, where in each E-step it computes expected color and albedo estimates from the observed photometric data and current parameters. In each M-step, it updates the parameters based on these expected values. This loop continues until the parameters stabilize, at which point it predicts missing flux measurements.
+
+```pseudocode
+Initialize:
+    mean_color = prior_mean_color
+    cov_color = prior_covariance_color
+    mean_albedo = prior_mean_albedo
+    cov_albedo = prior_covariance_albedo
+    max_iterations = 1000
+    tolerance = 1e-6
+
+Loop:
+    Initialize change = infinity
+    For iteration from 1 to max_iterations:
+        For each TNO in dataset:
+            Use observed photometric data and current parameters to compute:
+                expected_intrinsic_color, expected_albedo
+        Update parameters:
+            mean_color = average of all expected_intrinsic_colors
+            cov_color = covariance of all expected_intrinsic_colors
+            mean_albedo = average of all expected_albedos
+            cov_albedo = covariance of all expected_albedos
+        Compute change as the difference between current and previous parameters
+        If change < tolerance:
+            Break loop
+    Once converged:
+        For each band where flux is missing:
+            Predict flux using mean_color and mean_albedo estimates
+
+End Algorithm
+```

@@ -1,0 +1,39 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Input Data:**
+   - Training Set: A collection of reference TNO spectra (51 objects) categorized into dominant taxonomic classes (Water, CO₂, Organics).
+   - NIRCam Filter Set: Defined filter responses used to simulate photometric measurements.
+   - Observed Photometry: Sparse multi-band measurements of TNOs.
+
+2. **Training Phase:**
+   - **Step 1:** Apply Principal Component Analysis (PCA) to the training set of reference spectra to derive principal components (latent space).
+   - **Step 2:** Generate synthetic latent vectors using Kernel Density Estimation (KDE) to smooth the latent manifold.
+   - **Step 3:** Forward model the synthetic spectra through the NIRCam filter set to generate noisy photometric measurements, simulating real observations with added 20% Gaussian noise.
+
+3. **Model Training:**
+   - **Step 4:** Train an AutoML regressor (e.g., Gradient Boosted Decision Trees) to map the noisy photometric inputs to the latent coefficients.
+   - **Step 5:** Train a secondary AutoML classifier to partition the latent space into taxonomic classes based on the true labels.
+
+4. **Reconstruction Process:**
+   - **Step 6:** For each object, simulate photometric measurements using the true spectrum convolved with the NIRCam filter responses and add noise.
+   - **Step 7:** Pass the noisy photometry through the trained regressor to predict latent coefficients.
+   - **Step 8:** Project the latent coefficients back to the full spectrum via inverse PCA transformation.
+   - **Step 9:** Classify the object into taxonomic categories using the latent coefficients.
+
+5. **Validation and Uncertainty Quantification:**
+   - Perform leave-one-out cross-validation (LOOCV):
+     - For each object, remove it from the training set.
+     - Recompute PCA and KDE using the remaining objects.
+     - Simulate photometry, add noise, and reconstruct the spectrum.
+     - Compare the reconstructed spectrum to the true spectrum to compute RMSE.
+     - Evaluate the credible interval coverage to assess uncertainty calibration.
+     - Assess taxonomic classification accuracy.
+
+**Output:**
+- Reconstructed high-resolution spectra for each object.
+- Probabilistic taxonomic classification results.
+- Root Mean Square Error (RMSE) for each reconstruction.
+- Empirical coverage of credible intervals.
+- Taxonomic classification accuracy.
+
+**Note:** This algorithm focuses on the core computational steps of the probabilistic spectral reconstruction framework, omitting validation and visualization steps as per the instructions.

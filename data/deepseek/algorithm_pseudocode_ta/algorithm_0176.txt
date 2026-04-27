@@ -1,0 +1,40 @@
+```plaintext
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+- Sparse photometric measurements of TNOs
+- Pre-trained PCA model on near-IR spectra
+- Reference spectral dataset for latent-space modeling
+
+Output:
+- Reconstructed full spectra with propagated uncertainties
+
+Steps:
+
+1. Initialize the PCA model with the reference spectral dataset.
+   - PCA dimensions: 4 to 5 principal components for taxonomic classification.
+   - Additional dimensions (8 to 10): improve reconstruction fidelity and uncertainty calibration.
+
+2. Transform the sparse photometric data into the latent-space representation using the PCA model.
+   - Each photometric measurement corresponds to a point in the reduced dimensional space.
+
+3. Perform Bayesian inference in the latent-space:
+   - Model the spectral manifold of TNOs.
+   - Propagate measurement uncertainties through the latent-space model.
+   - Use Markov Chain Monte Carlo (MCMC) or similar methods for posterior distribution estimation.
+
+4. Reconstruct the full spectra from the posterior distributions of the latent-space variables.
+   - Map the latent-space representation back to the original spectral space.
+   - Apply any necessary transformations (e.g., inverse PCA transformation).
+
+5. Calculate confidence intervals for the reconstructed spectra.
+   - Ensure empirical credible-interval coverage across wavelengths (~95%).
+
+6. Optionally, apply constraints to detect rare spectral types:
+   - Use low-probability intermediate models if constrained photometry is available.
+   - Adjust the reconstruction to account for peculiar spectral features.
+
+7. Output the reconstructed spectra along with their uncertainties and confidence intervals.
+
+End.
+```

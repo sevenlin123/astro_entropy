@@ -1,0 +1,27 @@
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Initialize Variables**
+   - Input: Sparse photometric measurements of TNOs.
+   - Output: Reconstructed spectra with uncertainties.
+
+2. **Principal Component Analysis (PCA)**
+   - Decompose the spectral dataset into principal components.
+     - Each component represents a mode of spectral variability.
+
+3. **Bayesian Inference Setup**
+   - Define a probabilistic model in the latent space (principal components).
+   - Model parameters include coefficients for each principal component.
+
+4. **Perform Bayesian Inference**
+   - Use photometric data to estimate posterior distributions of the latent space parameters.
+   - Propagate measurement uncertainties from photometry into the latent space.
+
+5. **Spectral Reconstruction**
+   - Reconstruct full spectra by projecting the inferred latent space parameters back into the original spectral space.
+   - Combine contributions from each principal component.
+
+6. **Uncertainty Propagation**
+   - Calculate uncertainties in the reconstructed spectra by propagating the uncertainties from the latent space estimates.
+   - Ensure uncertainties reflect the reliability of the reconstruction.
+
+**End Algorithm**

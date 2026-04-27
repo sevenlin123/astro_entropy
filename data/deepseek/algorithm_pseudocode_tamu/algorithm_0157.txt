@@ -1,0 +1,43 @@
+```pseudocode
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+    - Training Spectra: Set of reference TNO spectra
+    - Photometric Observations: Sparse photometric measurements for target objects
+    - Filter Set: NIRCam filters to simulate photometric response
+
+Output:
+    - Reconstructed Spectra: Full-resolution spectra for each target
+    - Taxonomic Classification: Probabilistic assignment to spectral types
+    - Uncertainty Estimates: Credible intervals for spectral features
+
+1. Initialize Principal Component Analysis (PCA):
+    a. Train PCA on the Training Spectra to obtain principal components (PCs) and loadings.
+    b. Determine the optimal number of PCs (K) via validation (e.g., LOOCV).
+
+2. Construct Latent Space:
+    a. Project Training Spectra onto the PCA basis to get latent coefficients.
+    b. Augment the latent space using Kernel Density Estimation (KDE) to create a smooth probability distribution.
+
+3. Training Phase:
+    a. Simulate photometric observations for each augmented spectrum using the filter set.
+    b. Add Gaussian noise (relative uncertainty ~20%) to the simulated photometry.
+    c. Train an AutoML regressor (e.g., Gradient Boosted Decision Trees) to map noisy photometry to latent coefficients.
+
+4. Inference Phase:
+    a. For each target object:
+        i. Pass photometric observations through the trained AutoML regressor to predict latent coefficients.
+        ii. Apply inverse PCA transform to reconstruct the full-resolution spectrum.
+        iii. Sample the posterior distribution using Gaussian Copula to obtain uncertainty estimates.
+    b. Classify the spectrum into taxonomic groups using a latent-space classifier.
+
+5. Performance Evaluation:
+    a. Validate using LOOCV: Remove one spectrum, train, and evaluate reconstruction.
+    b. Compute metrics: L2 distance, Cosine Similarity, PCC, Empirical Coverage.
+
+6. Applications:
+    a. Optimize filter configurations by evaluating Fisher Information Matrix.
+    b. Detect outliers by clustering in latent space.
+```
+
+This algorithm outlines the core computational steps for the probabilistic spectral reconstruction framework, focusing on dimensionality reduction, Bayesian inference, and machine learning integration.

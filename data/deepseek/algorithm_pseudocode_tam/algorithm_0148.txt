@@ -1,0 +1,41 @@
+### Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. **Initialize Training Data**:
+   - Select a representative training set of TNO spectra, focusing on dominant taxonomic classes (e.g., Water-type, CO₂-type, Organics-type).
+   - Exclude rare or outlier spectra to ensure a robust PCA basis.
+
+2. **Principal Component Analysis (PCA)**:
+   - Apply PCA to the training spectra to extract principal components (PCs).
+   - PCs represent the dominant modes of spectral variability, capturing the essential structure for taxonomic classification and spectral reconstruction.
+
+3. **Density Estimation with KDE**:
+   - Use Kernel Density Estimation (KDE) to create a smooth probability distribution in the PCA latent space.
+   - This distribution serves as the prior for Bayesian inference, ensuring a continuous manifold for spectral reconstruction.
+
+4. **Synthetic Photometry Generation**:
+   - For each augmented spectrum in the latent space, generate synthetic photometric measurements by convolving the spectrum with the throughput curves of the target instrument (e.g., JWST/NIRCam filters).
+   - Inject Gaussian noise (relative uncertainty ~20%) into the synthetic photometry to simulate realistic observational uncertainties.
+
+5. **AutoML Regression Training**:
+   - Train an ensemble of gradient-boosted decision trees using the synthetic photometry and corresponding PCA coefficients.
+   - The model learns the mapping from sparse photometry to PCA latent coefficients, stabilizing the regression in the low-sample regime.
+
+6. **Reconstruct Spectra**:
+   - For new photometric observations, use the trained AutoML regressor to predict PCA latent coefficients.
+   - Apply the inverse PCA transform to these coefficients to reconstruct the full spectrum, inheriting the physical smoothness and absorption features of the training population.
+
+7. **Uncertainty Propagation**:
+   - Calculate posterior variances of the latent coefficients to quantify uncertainty in the reconstructed spectra.
+   - Evaluate credible interval coverage across the spectrum to assess the reliability of the uncertainty estimates.
+
+8. **Taxonomic Classification**:
+   - Project the reconstructed spectra onto the PCA latent space.
+   - Classify the latent coordinates using a secondary AutoML classifier trained on taxonomic labels.
+   - Output posterior probabilities for each spectral type, enabling confident taxonomic identification.
+
+9. **Validation and Application**:
+   - Perform leave-one-out cross-validation to assess reconstruction fidelity (NRMSE), uncertainty calibration, and taxonomic accuracy.
+   - Use the framework for survey optimization by evaluating the information content of different filter configurations.
+   - Detect spectral outliers by identifying objects with posterior distributions diverging from the established taxonomic framework.
+
+This algorithm provides a robust, statistically rigorous method to reconstruct TNO spectra from sparse photometry, enabling accurate taxonomic classification and outlier detection while propagating measurement uncertainties.

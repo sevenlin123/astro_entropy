@@ -1,0 +1,48 @@
+**Algorithm for Probabilistic Spectral Reconstruction of TNOs from Sparse Photometry**
+
+**Phase 1: Preprocessing**
+
+1. **Collect Reference Spectra**  
+   - Retrieve TNO spectra from the DiSCo-TNO sample, JWST Cycle 3, and Cycle 4 programs.
+
+2. **Assign Taxonomic Labels**  
+   - Classify each spectrum into taxonomic categories (H₂O, CO₂, Organic, Methanol) based on absorption features.
+
+3. **Perform PCA Analysis**  
+   - Apply PCA to the spectral dataset. Retain top 10 principal components to capture 95% of variance.
+
+4. **Extract Latent Coordinates**  
+   - Represent each spectrum as a vector of latent coordinates derived from the PCA.
+
+**Phase 2: Training**
+
+1. **Data Augmentation with KDE**  
+   - Use Kernel Density Estimation (KDE) with a bandwidth of 0.5 to generate synthetic latent points from the reference spectra.
+
+2. **Forward Modeling and Noise Injection**  
+   - Compute photometry for each augmented spectrum using JWST NIRCam filters. Add 20% Gaussian noise to simulate realistic photometric uncertainties.
+
+3. **Train AutoML Regressor and Classifier**  
+   - Train an ensemble AutoML model (e.g., AutoGluon) to map augmented latent coordinates to photometry. Simultaneously, train a classifier to predict taxonomic labels using the latent space.
+
+**Phase 3: Inference**
+
+1. **Input Sparse Photometry**  
+   - Obtain new photometric measurements of a TNO.
+
+2. **Predict Latent Coordinates**  
+   - Use the trained regressor to determine latent coordinates from the input photometry.
+
+3. **Reconstruct Full Spectrum**  
+   - Apply inverse PCA transformation to the predicted latent coordinates to generate the full reflectance spectrum.
+
+4. **Classify Taxonomic Type**  
+   - Utilize the latent coordinates to predict the taxonomic category and associated confidence levels.
+
+5. **Propagate Uncertainties**  
+   - Calculate uncertainties in the reconstructed spectrum and taxonomic classification by assessing posterior variance in the latent space.
+
+6. **Output Results**  
+   - Deliver the reconstructed spectrum, taxonomic classification, and associated uncertainties.
+
+**End of Algorithm**

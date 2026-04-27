@@ -1,0 +1,22 @@
+```pseudocode
+1. Initialize Gaussian Process (GP) with hyperparameters θ (e.g., length scale, variance).
+2. Define the likelihood function incorporating observed fluxes in each band, considering reliability weights w_i for each band.
+3. Set up hierarchical model:
+   a. Introduce hyperparameters α and β controlling measurement error variance and GP covariance parameters, respectively.
+   b. Prior distributions are assigned to θ, α, and β.
+4. Implement MCMC sampling:
+   a. Propose new parameters (spectrum parameters S, hyperparameters θ, α, β) using an adaptive proposal distribution.
+   b. Compute posterior probabilities using the hierarchical model.
+   c. Update the proposal distribution based on the sampled parameters to improve mixing and convergence.
+   d. Repeat for N iterations, discarding initial burn-in period.
+5. Post-process MCMC samples:
+   a. Compute the reconstructed spectrum mean and uncertainties.
+   b. Analyze the correlation between bands to capture spectral variability.
+6. Perform outlier detection:
+   a. For each data point, compute the probability of being an outlier.
+   b. Flag points exceeding a threshold probability as outliers.
+7. Output the reconstructed spectrum and identified outliers.
+
+```
+
+This pseudocode captures the core steps of the probabilistic spectral reconstruction framework, focusing on the computational implementation described in the abstract.

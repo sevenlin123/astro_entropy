@@ -1,0 +1,31 @@
+**Algorithm: Probabilistic Spectral Reconstruction of Trans-Neptunian Objects**
+
+**Input:** Sparse photometric data of TNOs (magnitudes and colors)
+
+**Output:** Reconstructed SEDs for each TNO, uncertainty estimates, and identified outliers
+
+1. **Preprocessing:**
+   - Normalize photometric data for exposure time and instrument response.
+   - Remove data points exceeding artifact or error thresholds.
+
+2. **Mixture Model Construction:**
+   - Assume data follows a finite Gaussian mixture model.
+   - Determine number of components (K) using Bayesian Information Criterion.
+   - Initialize Gaussian parameters (means, covariances).
+
+3. **Expectation-Maximization (EM) Algorithm:**
+   - **Expectation Step:** Compute posterior probabilities of each data point belonging to every Gaussian component.
+   - **Maximization Step:** Update Gaussian parameters using responsibilities from expectation step.
+   - Repeat until convergence.
+
+4. **Outlier Detection:**
+   - Calculate Color Excess Variance (CEV) for each Gaussian component.
+   - Identify and remove outlier components based on CEV thresholds.
+
+5. **Posterior Inference:**
+   - Assign each TNO to its most probable Gaussian component.
+   - Reconstruct SEDs using Gaussian components and their posterior probabilities.
+
+**Output:** Reconstructed SEDs, uncertainties, and outlier identification.
+
+**End of Algorithm**

@@ -1,0 +1,22 @@
+```
+Algorithm Probabilistic Spectral Reconstruction (PSR)
+
+Input: Sparse photometric measurements D for a TNO
+Output: Reconstructed SED S, Uncertainty U, Confidence C
+
+1. Precompute PCA basis vectors B from a library of known SEDs
+2. For each object:
+   a. Normalize photometric measurements
+   b. Extract features f from D
+   c. Project features f onto PCA basis B to obtain scores
+3. Initialize mixture model parameters Θ (weights, means, covariances)
+4. EM algorithm:
+   a. Iterate until convergence:
+      i. E-step: Compute posterior probabilities P(z | scores, Θ)
+      ii. M-step: Update Θ based on P(z)
+5. Reconstruct S using B and Θ
+6. Compute Uncertainty U and Confidence C
+7. Output S, U, C
+
+Return S, U, C
+```

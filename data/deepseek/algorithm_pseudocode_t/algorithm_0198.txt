@@ -1,0 +1,43 @@
+**Pseudocode Algorithm**
+
+**Initialization:**
+- Input: Collection of sparse photometric observations for TNOs, each observation includes flux, uncertainty, and band information.
+- Parameters: Predefined covariance function for Gaussian processes, prior distributions for mixture weights and Gaussian process parameters.
+
+**For each TNO:**
+1. **Data Handling:**
+   - For each photometric band, check if a measurement exists.
+   - Record flux and uncertainty where available.
+   
+2. **Model Setup:**
+   - Assume an initial number of mixture components, K.
+   - For each component i (1 to K):
+     - Initialize Gaussian process parameters, including covariance function and hyperparameters.
+   
+3. **Bayesian Inference:**
+   - For each component i:
+     - Compute the likelihood of the data given the current Gaussian process parameters.
+     - Use Markov Chain Monte Carlo (MCMC) sampling to update the parameters based on the data.
+   - Calculate posterior probabilities of the TNO belonging to each component.
+   - Adjust the number of components automatically based on the evidence (e.g., using Akaike Information Criterion or Bayesian Information Criterion).
+   
+4. **Posterior Analysis:**
+   - Extract the most probable spectral component for the TNO.
+   - Quantify uncertainties in the reconstructed spectral energy distribution (SED) using the posterior distributions.
+   - Identify potential spectral outliers based on low posterior probabilities across all components.
+
+**Population-level Analysis:**
+1. **Characterization:**
+   - Aggregate posterior distributions across all TNOs to characterize the overall spectral diversity.
+   - Determine the optimal number of mixture components by evaluating the marginal likelihood for each possible K.
+   
+2. **Outlier Detection:**
+   - Identify TNOs with significantly low posterior probabilities across all components as outliers.
+
+**Output:**
+- For each TNO:
+  - Reconstructed SED with associated uncertainties.
+  - Assigned spectral component.
+  - Flag indicating if it's a spectral outlier.
+
+**End of Algorithm**

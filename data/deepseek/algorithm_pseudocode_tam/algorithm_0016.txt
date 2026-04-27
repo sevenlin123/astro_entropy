@@ -1,0 +1,30 @@
+```python
+Algorithm: Probabilistic Spectral Reconstruction Framework
+
+1. Input: Sparse photometric observations of TNOs
+
+2. Initialize:
+   - Train PCA on reference spectra to define latent space (principal components)
+
+3. Generate synthetic photometry:
+   - Forward model reference spectra through instrument filters
+   - Add noise (e.g., 20% relative uncertainty)
+
+4. Augment training data:
+   - Use Kernel Density Estimation (KDE) on PCA coefficients to create continuous latent manifold
+
+5. Train AutoML regressor:
+   - Map noisy synthetic photometry to latent coefficients
+
+6. Bayesian Inference:
+   - Reconstruct full spectra via inverse PCA transform from predicted coefficients
+   - Propagate uncertainties to reconstructed spectra
+
+7. Validate performance:
+   - Compute LOOCV metrics (RMSE, credible interval coverage, misclassification rate)
+
+8. Output:
+   - Reconstructed spectra with uncertainties
+   - Probabilistic taxonomic classifications
+   - Identified outliers (if applicable)
+```

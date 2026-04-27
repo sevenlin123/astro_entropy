@@ -1,0 +1,26 @@
+```plaintext
+Initialize parameters:
+    Load training NIR spectra dataset
+    Preprocess data
+    Compute Principal Components (PCs) via PCA
+    Select number of PCs (e.g., 4-5)
+    Build probabilistic latent-space model using selected PCs
+    Define prior distributions for model parameters
+
+For each object to reconstruct:
+    Input: Sparse photometric measurements
+    Forward model:
+        Project photometric measurements into latent space
+        Perform Bayesian inference in latent space to estimate posterior distributions
+        Reconstruct full spectrum from posterior means of latent variables
+    Uncertainty propagation:
+        Compute uncertainties in reconstructed spectrum
+    Diagnostics:
+        Check convergence
+        Validate reconstructed spectrum
+
+Output:
+    Reconstructed spectrum
+    Associated uncertainties
+    Diagnostics
+```

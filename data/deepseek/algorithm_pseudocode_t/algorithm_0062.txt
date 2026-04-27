@@ -1,0 +1,23 @@
+**Algorithm: Probabilistic Spectral Reconstruction Framework**
+
+1. **Initialization**  
+   - Define hyperparameters and priors for Bayesian inference.
+   - Set up hierarchical clustering parameters for extracting basis spectra.
+
+2. **Hierarchical Agglomerative Clustering**  
+   - Apply clustering to the training set to derive basis spectra.
+   - Determine the minimal number of basis spectra required to represent the training set.
+
+3. **Coefficient Estimation for Each Test Object**  
+   - For each object:
+     - Use the extracted basis spectra to model the SED.
+     - Implement a variational Bayesian method to compute the coefficients that express the SED as a linear combination of the basis spectra.
+
+4. **Probabilistic Mixture Model for Outlier Detection**  
+   - Utilize the reconstructed colors (fluxes in photometric bands) as input features.
+   - Fit a mixture model to these colors to identify improbable groups, serving as an outlier detection mechanism.
+
+5. **Outlier Identification**  
+   - Analyze results from the mixture model to detect and flag outliers in the dataset.
+
+**End of Algorithm**

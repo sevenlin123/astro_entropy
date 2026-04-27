@@ -1,0 +1,32 @@
+**Algorithm: Probabilistic Spectral Reconstruction Framework**
+
+1. **Probabilistic Model Setup:**
+   - Define Bayesian network structure with nodes representing SED, phase curve parameters, rotational period, and observed photometric data.
+   - Assign prior distributions to all latent variables (e.g., SED components, phase curve amplitudes, rotation period).
+   - Construct likelihood function based on observed photometric measurements, linking SED, phase curve, and rotation period to observations.
+
+2. **Inference:**
+   - Choose inference method: Utilize Markov Chain Monte Carlo (MCMC) sampling for posterior distribution estimation.
+   - Implement MCMC chains to estimate latent variables, including SED components, phase curve parameters, and rotational period.
+   - For each iteration, compute posterior probabilities using Bayes' theorem: P(latent | data) ∝ P(data | latent) × P(latent).
+
+3. **Learning the GMM:**
+   - Initialize GMM parameters (means, covariances, mixing coefficients) based on initial estimates from data.
+   - Apply Expectation-Maximization (EM) algorithm to iteratively update GMM parameters:
+     - E-step: Compute responsibilities for each data point belonging to each Gaussian component.
+     - M-step: Update GMM parameters by maximizing the expected complete log-likelihood.
+
+4. **Generating Outputs:**
+   - Extract most probable SEDs by identifying the dominant Gaussian components in the GMM.
+   - Calculate classification probabilities for each spectral feature based on GMM membership.
+
+5. **Efficiency Considerations:**
+   - Optimize MCMC chains by setting appropriate burn-in periods and thinning factors.
+   - Precompute necessary matrices and vectors to speed up likelihood evaluations.
+   - Parallelize computations across multiple chains and components for scalability.
+
+6. **Final Steps:**
+   - Combine inferred SEDs, phase curves, and rotational periods to form comprehensive models for each object.
+   - Output reconstructed SEDs and associated classification probabilities for further analysis.
+
+**End of Algorithm**

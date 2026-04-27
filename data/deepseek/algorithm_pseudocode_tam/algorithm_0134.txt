@@ -1,0 +1,38 @@
+**Algorithm: Probabilistic Spectral Reconstruction Framework**
+
+**Step 1: Data Preparation**
+- **Input:** Sparse photometric measurements of trans-Neptunian objects (TNOs).
+- **Output:** Reduced-dimensional representation for spectral reconstruction.
+
+**Step 2: Principal Component Analysis (PCA)**
+- Apply PCA to a reference set of TNO spectra to extract principal components (latent space).
+- Determine the number of principal components (K) based on variance explained (~4-5 for taxonomy, ~8-10 for detailed reconstruction).
+
+**Step 3: Synthetic Data Generation**
+- Use Kernel Density Estimation (KDE) on the PCA latent space to create synthetic spectra, expanding the training dataset.
+- Convolve synthetic spectra with instrumental response functions (e.g., JWST/NIRCam filters) to generate synthetic photometry.
+
+**Step 4: AutoML Model Training**
+- Train an ensemble of gradient-boosted decision trees (AutoML regressor) to map synthetic photometry to PCA latent coefficients.
+- Inject noise (~20% relative) into synthetic photometry to simulate real observational uncertainties.
+
+**Step 5: Bayesian Inference**
+- For each object, predict latent coefficients using the trained AutoML model from sparse photometry.
+- Transform latent coefficients back to full spectrum via inverse PCA.
+- Compute posterior uncertainties by sampling from the latent space distribution.
+
+**Step 6: Taxonomy Classification**
+- Classify objects based on latent coefficients using a secondary AutoML classifier trained on known spectral types.
+- Output probabilistic taxonomic classification (e.g., Water-type, CO₂-type, Organics-type).
+
+**Step 7: Outlier Detection**
+- Flag objects with latent coefficients outside the convex hull of the training manifold.
+- Detect peculiar spectral types like Neptune Trojans through constrained photometry analysis.
+
+**Step 8: Performance Evaluation**
+- Validate using leave-one-out cross-validation (LOOCV):
+  - Reconstruct spectra and compare with true values.
+  - Assess credible interval coverage (~95% for most objects).
+  - Measure reconstruction fidelity across wavelengths.
+
+**End Algorithm**

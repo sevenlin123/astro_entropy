@@ -1,0 +1,39 @@
+**Algorithm: Probabilistic Spectral Reconstruction of Trans-Neptunian Objects**
+
+1. **Input Data**: Obtain photometric time series for each object, including magnitude measurements and their associated uncertainties.
+
+2. **Initialize Gaussian Process (GP) Model**:
+   - Define the GP with initial hyperparameters.
+   - The GP models the SED parameters: effective temperature (T_eff), radius (R), and albedo (α).
+   - Establish the covariance matrix to reflect dependencies among T_eff, R, and α.
+
+3. **Initialize Bayesian Blocks Model**:
+   - Set up the Bayesian Blocks to handle periods of constant flux in the light curve.
+   - This model is designed to manage sparse and noisy data effectively.
+
+4. **Combine Models**:
+   - Merge the GP and Bayesian Blocks into a unified probabilistic model for the light curve.
+   - The combined model captures both smooth variations and regions of constant flux.
+
+5. **Define Likelihood Function**:
+   - Develop the likelihood function to compute the probability of observing the photometric data given the model parameters.
+   - Incorporate measurement uncertainties and data sparsity.
+
+6. **Set Prior Distributions**:
+   - Assign prior distributions to all model parameters, including GP hyperparameters and SED parameters.
+
+7. **Markov Chain Monte Carlo (MCMC) Sampling**:
+   - Utilize an MCMC sampler to draw samples from the joint posterior distribution of the model parameters.
+   - Update parameters based on likelihood and prior distributions.
+
+8. **Posterior Analysis**:
+   - Calculate posterior means and credible intervals for each parameter.
+   - Determine point estimates and uncertainty measures.
+
+9. **Convergence Check**:
+   - Perform checks to ensure MCMC chains have sufficiently explored the parameter space.
+
+10. **Output Results**:
+    - Provide estimated SED parameters (T_eff, R, α) with uncertainties and derived quantities.
+
+**End Algorithm**

@@ -1,0 +1,33 @@
+```
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. Initialize:
+   - Preprocess training spectral data into a PCA basis.
+   - Select the number of principal components (K) based on validation (e.g., 4-5 for classification, 8-10 for high fidelity).
+   
+2. Train the Latent Space Model:
+   a. Perform PCA on the training spectral dataset to obtain principal components.
+   b. Use Kernel Density Estimation (KDE) on the PCA coefficients to create a continuous latent manifold.
+   
+3. Generate Synthetic Training Data:
+   a. For each augmented spectrum, compute synthetic photometry by convolving with JWST/NIRCam filter throughput curves.
+   b. Inject Gaussian noise (relative uncertainty ~20%) into the synthetic photometry.
+   
+4. Train the AutoML Regressor:
+   a. Use the synthetic photometry and corresponding PCA coefficients to train an ensemble of gradient-boosted decision trees.
+   
+5. Forward Inference for New Observations:
+   a. Input sparse photometric measurements into the trained regressor to predict latent coefficients.
+   b. Apply inverse PCA transform to reconstruct the full spectrum.
+   
+6. Quantify Uncertainties:
+   a. Sample the joint posterior distribution of latent coefficients using a Gaussian Copula framework.
+   b. Propagate uncertainties through the inverse PCA transform to obtain credible intervals.
+   
+7. Taxonomic Classification:
+   a. Project the predicted latent coefficients into a trained classifier to determine spectral type probabilities.
+   
+8. Output:
+   - Reconstructed spectrum with uncertainties.
+   - Probabilistic taxonomic classification.
+```

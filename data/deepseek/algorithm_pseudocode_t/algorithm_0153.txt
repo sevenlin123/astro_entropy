@@ -1,0 +1,28 @@
+**Algorithm: Probabilistic Spectral Reconstruction of Trans-Neptunian Objects**
+
+1. **Initialization**
+   - Input: Sparse photometric data points for each TNO.
+   - Initialize Gaussian Process (GP) hyperparameters (e.g., kernel parameters).
+   - Set up Dirichlet Process (DP) parameters to model the number of spectral components.
+
+2. **Model Setup**
+   - For each TNO, represent the SED as a sum of components.
+   - Each component is modeled using a GP, capturing smoothness and uncertainty.
+   - Use a DP prior to determine the number of components, allowing an unbounded number of features with a preference for sparsity.
+
+3. **Markov Chain Monte Carlo (MCMC) Sampling**
+   - Perform MCMC to infer GP hyperparameters and inclusion probabilities of each spectral component.
+   - Update the model parameters iteratively:
+     a. Sample GP hyperparameters.
+     b. Sample the inclusion probability of each potential spectral component.
+     c. Sum the active components to form the reconstructed SED.
+
+4. **Reconstruction**
+   - For each iteration of MCMC, compute the posterior distribution of the SED.
+   - Combine all sampled SEDs to obtain the probabilistic reconstruction.
+
+5. **Output**
+   - Generate the reconstructed SED for each TNO.
+   - Store the uncertainty associated with the reconstruction.
+
+**Note:** This algorithm focuses solely on the core reconstruction framework, omitting validation procedures, visualization, survey optimization, and outlier detection.

@@ -1,0 +1,40 @@
+```plaintext
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. Initialize the PCA Basis:
+   - Collect a reference set of TNO spectra (e.g., 51 high-quality near-IR spectra).
+   - Perform Principal Component Analysis (PCA) on the reference spectra to extract principal components (PCs).
+   - Determine the optimal number of PCs (e.g., 8-10) that best represent spectral variability for high-fidelity reconstruction.
+
+2. Construct the Latent Space:
+   - Project the reference spectra onto the extracted PCs to obtain latent coefficients.
+   - Apply Kernel Density Estimation (KDE) to smooth the latent coefficient distribution, creating a continuous manifold.
+
+3. Prepare Synthetic Photometry:
+   - For each augmented spectrum, convolve with the instrument's filter transmission curves (e.g., JWST/NIRCam) to compute synthetic photometric magnitudes.
+   - Introduce Gaussian noise (e.g., 20% relative uncertainty) to simulate realistic observational conditions.
+
+4. Train the AutoML Regressor:
+   - Use the prepared photometric data and corresponding latent coefficients as training inputs.
+   - Train an ensemble of gradient-boosted decision trees to regress from sparse photometry to latent space coordinates.
+
+5. Perform Leave-One-Out Cross-Validation (LOOCV):
+   - For each object, remove it from the training set.
+   - Reconstruct its latent coefficients using the trained regressor.
+   - Project the latent coefficients back to full spectra using inverse PCA transformation.
+   - Assess reconstruction accuracy via metrics like RMSE and coverage probability.
+
+6. Classify Taxonomic Spectral Types:
+   - Train a secondary classifier on the latent coefficients to predict spectral types (e.g., H2O, CO2, Organics, Methanol).
+   - Use the trained classifier to assign taxonomic probabilities to new objects.
+
+7. Detect Outliers and Rare Spectral Types:
+   - Identify objects whose latent coefficients fall outside the main manifold, indicating unusual spectral features.
+   - Use the framework to constrain photometry to detect low-probability spectral models.
+
+8. Optimize Survey Filters:
+   - Evaluate each filter's contribution to spectral reconstruction fidelity and taxonomic resolution.
+   - Rank filters based on their information content to prioritize observations for maximum scientific return.
+
+End Algorithm
+```

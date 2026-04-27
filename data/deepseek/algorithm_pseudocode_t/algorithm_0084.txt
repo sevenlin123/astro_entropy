@@ -1,0 +1,13 @@
+1. For each object, extract photometric measurements and their associated uncertainties.
+2. Construct the covariance matrix Σ based on the measurement uncertainties.
+3. Discretize the SED into a set of basis functions B.
+4. Formulate the forward model M relating the SED to observed photometry.
+5. Initialize iterative algorithm with initial weights for least squares solution.
+6. Begin IRLS iteration:
+   6.1. Invert matrix M^T Σ^{-1} M to estimate SED coefficients.
+   6.2. Compute residuals between observed photometry and predicted values.
+   6.3. Update weights based on residuals to handle outliers.
+7. Continue IRLS iterations until convergence.
+8. After convergence, compute posterior covariance of SED coefficients.
+9. Sample from posterior distribution to obtain multiple SED estimates.
+10. Output reconstructed SED and its uncertainties.

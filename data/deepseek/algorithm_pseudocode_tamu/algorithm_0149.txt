@@ -1,0 +1,47 @@
+```python
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+Input:
+    - Photometric measurements (m) for a trans-Neptunian object
+    - Pre-trained Principal Component Analysis (PCA) model with eigencomponents
+    - Synthetic photometry generated from forward modeling with added noise
+
+Output:
+    - Reconstructed high-resolution spectrum (S)
+    - Probabilistic taxonomic classification
+    - Uncertainty quantification for spectral features
+
+Steps:
+
+1. **Latent Space Definition**:
+    a. Apply PCA to reference TNO spectra to obtain principal components.
+    b. Use Kernel Density Estimation (KDE) to model the probability distribution of latent coefficients.
+    c. Augment training data with synthetic samples from the continuous manifold.
+
+2. **Forward Modeling**:
+    a. Simulate photometric measurements for each augmented spectrum using target instrument filtersthroughput curves.
+    b. Inject Gaussian noise (relative reflectance uncertainty ~20%) to mimic observational uncertainties.
+    c. Construct implicit likelihood mapping between photometry and latent space.
+
+3. **Training Phase**:
+    a. Train an AutoML regressor (ensemble of gradient-boosted decision trees) to map sparse photometry to latent coefficients.
+    b. Validate using Leave-One-Out Cross-Validation (LOOCV) to determine optimal number of principal components (k=8).
+
+4. **Inference**:
+    a. For new photometric data, predict latent coefficients using the trained regressor.
+    b. Project latent coefficients through inverse PCA transform to reconstruct full spectrum.
+    c. Sample joint posterior distribution of latent variables using Gaussian Copula to quantify uncertainties.
+
+5. **Taxonomic Classification**:
+    a. Classify predicted latent coefficients using a pre-trained classifier within the manifold.
+    b. Assign probability distribution over spectral types (e.g., H2O, CO2, Organic, Methanol).
+
+6. **Survey Optimization**:
+    a. Evaluate sensitivity of latent components to different filters.
+    b. Identify optimal filter combinations (e.g., F090W, F115W, F410M, F460M) for maximizing spectral information content.
+
+7. **Outlier Detection**:
+    a. Monitor posterior distribution of latent coefficients during reconstruction.
+    b. Detect objects whose posterior falls outside high-density regions of the manifold.
+    c. Constrain photometry to select low-probability intermediate models for rare spectral types.
+```

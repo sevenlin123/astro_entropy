@@ -1,0 +1,31 @@
+To implement the core reconstruction framework described in the paper, we outline the following algorithm:
+
+**Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry**
+
+1. **Pre-training Phase**
+   - **Step 1:** Collect and compile a set of reference TNO spectra (training set) along with their taxonomic labels.
+   - **Step 2:** Perform Principal Component Analysis (PCA) on the training spectra to define a low-dimensional latent space. Retain the top K principal components (where K is determined based on LOOCV validation).
+   - **Step 3:** Use Kernel Density Estimation (KDE) to generate synthetic spectra by sampling the latent space, creating an augmented training set.
+   - **Step 4:** For each synthetic spectrum, compute the expected photometry using the target instrument's filter response functions.
+
+2. **Model Training**
+   - **Step 5:** Train an AutoML regressor (e.g., Gradient Boosted Decision Trees) to map sparse photometric inputs to the latent space coordinates.
+   - **Step 6:** Train a secondary AutoML classifier to partition the latent space into taxonomic classes based on the training labels.
+
+3. **Forward Inference (for new observations)**
+   - **Step 7:** For new photometric observations:
+     - **Step 7a:** Use the trained regressor to predict the latent space coordinates from the sparse photometry.
+     - **Step 7b:** Apply the inverse PCA transform to reconstruct the full spectrum.
+     - **Step 7c:** Project the latent variables into the classifier to estimate the probability distribution over taxonomic classes.
+
+4. **LOOCV Validation (optional)**
+   - **Step 8:** For each spectrum in the training set:
+     - **Step 8a:** Remove the spectrum from the training set.
+     - **Step 8b:** Augment the training set using the synthetic spectra via KDE.
+     - **Step 8c:** Use the forward model to compute photometry, add noise, and retrain the regressor and classifier.
+     - **Step 8d:** Predict the latent coefficients from the true photometry, reconstruct the spectrum, and compare it to the original.
+     - **Step 8e:** Classify the spectrum and evaluate accuracy.
+
+**End of Algorithm**
+
+This algorithm captures the essence of the framework, focusing on the core computational steps necessary for spectral reconstruction from sparse photometry.

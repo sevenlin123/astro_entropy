@@ -1,0 +1,63 @@
+```pseudocode
+Algorithm Probabilistic Spectral Reconstruction (PSR)
+
+Input:
+  - Sparse photometric observations (flux measurements) across multiple bands for each TNO
+  - Prior distributions for parameters related to SED (albedo, roughness, scale heights)
+  - Gaussian process kernel for modeling band correlations
+
+Output:
+  - Reconstructed SED for each TNO
+  - Posterior distributions of parameters
+  - Classification into spectral taxonomic groups
+  - Optimized survey design recommendations
+
+Begin:
+
+For each TNO in dataset:
+    1. Preprocessing:
+        a. Collect all available photometric flux measurements across different bands
+        b. Normalize flux measurements to account for exposure time and instrumental effects
+        c. Convert flux measurements to magnitudes where applicable
+        d. Identify and flag missing or incomplete data points
+
+    2. Bayesian Setup:
+        a. Define prior distributions for albedo, roughness, scale heights, and other relevant parameters informed by statistical properties of known TNOs
+        b. Set up Gaussian process to model the covariance between different photometric bands
+        c. Initialize MCMC sampler with appropriate initial values and proposal distributions
+
+    3. Likelihood Construction:
+        a. Formulate physical model linking SED to observed photometric fluxes
+        b. Write likelihood function that quantifies the probability of observing the data given the SED parameters
+        c. Incorporate noise models for each band
+
+    4. Inference:
+        a. Run MCMC sampler to generate posterior samples of SED parameters
+        b. Diagnose convergence of chains (e.g., via Rhat, effective sample size)
+        c. Summarize posterior distributions (e.g., mean, median, credible intervals)
+
+    5. Posterior Processing:
+        a. Extract most probable SED by taking point estimates from posterior distributions
+        b. Compute uncertainties on SED components using posterior variances
+        c. Generate confidence intervals or prediction bands for SED
+
+    6. Outlier Detection:
+        a. For each TNO, compute posterior predictive checks against observed data
+        b. Calculate discrepancy metric (e.g., chi-squared statistic) between observed and predicted magnitudes
+        c. Compare discrepancy to expected distribution under model
+        d. Flag TNOs with discrepancies exceeding a threshold as potential outliers
+
+    7. Taxonomy Assignment:
+        a. Cluster reconstructed SEDs into spectral groups using hierarchical clustering or other classification methods
+        b. Assign each TNO to the nearest spectral group
+        c. Validate group assignments using internal consistency and known spectral features
+
+    8. Survey Optimization:
+        a. Analyze posterior distributions to determine which bands provide the most constraining information about SED
+        b. Predict information gain for adding new observations in different bands
+        c. Recommend optimal set of bands and observation frequencies for future surveys
+
+End
+
+Return all outputs for further analysis and reporting
+```

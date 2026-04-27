@@ -1,0 +1,35 @@
+**Algorithm: Probabilistic Spectral Reconstruction (PSR)**
+
+**Input:** Observations \( D = \{y_i, x_i\} \) where \( y_i \) are flux measurements and \( x_i \) are wavelengths.
+
+**Output:** Reconstructed spectrum \( S \), outlier flags \( O \)
+
+1. **Initialization:**
+   - Set parameters: kernel parameters \( \theta \), noise variance \( \sigma^2 \), mixture components \( K \).
+
+2. **For each object:**
+   - **Data Preprocessing:**
+     - Normalize flux measurements.
+     - Correct for exposure times.
+     - Adjust for background noise.
+     - Remove obvious artifacts.
+   
+   - **Gaussian Process Setup:**
+     - Define kernel function: \( K(x, x') = \theta^2 \exp(-\gamma (x - x')^2) \), where \( \gamma \) controls spectral smoothness.
+     - Construct covariance matrix \( C \) using the kernel: \( C = K(X, X) + \sigma^2 I \), where \( I \) is the identity matrix.
+   
+   - **Spectrum Prediction:**
+     - Compute target wavelengths \( X^* \).
+     - Calculate mean prediction \( \mu \) using: \( \mu = K(X, X^*) \inv(C) y \).
+     - Compute predictive variance \( \Sigma \) using: \( \Sigma = \inv(C) - K(X, X^*) \inv(C) K(X^*, X^*) \).
+     - Sample reconstructed spectrum \( S \) from \( N(\mu, \Sigma) \).
+   
+   - **Outlier Detection:**
+     - Fit a mixture of Gaussian Processes to the data.
+     - For each observation, calculate the probability of belonging to each GP component.
+     - Classify as outlier if probability \( < \epsilon \), mark \( O = 1 \); else \( O = 0 \).
+
+3. **Output:**
+   - Return reconstructed spectrum \( S \) and outlier flags \( O \).
+
+**End Algorithm**

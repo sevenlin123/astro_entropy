@@ -1,0 +1,46 @@
+```
+Algorithm: Probabilistic Spectral Reconstruction from Sparse Photometry
+
+1. Initialize:
+   - TrainSet: Collection of reference TNO spectra (51 objects).
+   - FilterResponse: NIRCam filter throughput curves.
+   - PrincipalComponents: Number of PCA components (K).
+   
+2. Perform Principal Component Analysis (PCA):
+   - Decompose TrainSet into K principal components.
+   - Obtain latent coefficients for each spectrum.
+
+3. Generate Synthetic Training Data:
+   - Use Kernel Density Estimation (KDE) on latent coefficients of TrainSet.
+   - Sample N synthetic spectra from the estimated density.
+   
+4. Convolve Synthetic Spectra with Instrument Response:
+   - For each synthetic spectrum, compute photometric measurements using FilterResponse.
+   - Apply Gaussian noise (20% relative uncertainty) to simulate real observations.
+
+5. Train Encoder Model:
+   - Input: Noisy photometric measurements from synthetic data.
+   - Output: Latent coefficients corresponding to synthetic spectra.
+   - Use AutoGluon to select and train optimal regression model.
+
+6. Set Up Taxonomic Classifier:
+   - Label Training Set spectra into taxonomic classes (Water, CO2, Organics, Methanol).
+   - Train classifier on latent coefficients using AutoGluon.
+
+7. For New Object:
+   a. Acquire sparse photometry.
+   b. Pass photometry through Encoder to predict latent coefficients.
+   c. Transform latent coefficients back to full spectrum via inverse PCA.
+   d. Classify taxonomic type using latent coefficients.
+
+8. Validate via LOOCV:
+   a. For each object in TrainSet, remove from training data.
+   b. Generate synthetic photometry using remaining data.
+   c. Train Encoder and Classifier without held-out object.
+   d. Reconstruct spectrum and compare with original.
+   e. Measure reconstruction accuracy and uncertainty.
+
+9. Detect Outliers:
+   a. Flag objects with latent coefficients outside main manifold.
+   b. Investigate as potential new spectral types or anomalies.
+```

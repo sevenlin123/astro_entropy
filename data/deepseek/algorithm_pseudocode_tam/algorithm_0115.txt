@@ -1,0 +1,31 @@
+```
+algorithm spectral_reconstruction_framework():
+    1. Input: Reference spectra S, NIRCam filter set F, photometric noise σ
+    
+    2. Perform PCA on S to obtain principal components PC:
+        a. Center and normalize S
+        b. Compute covariance matrix C of S
+        c. Diagonalize C to get eigenvalues λ and eigenvectors v
+        d. Select top K eigenvectors based on cumulative variance ≥ 95%
+        e. Set PC = S * v
+    
+    3. Generate synthetic photometry from PC:
+        a. For each latent vector l in PC:
+            i. Project l onto inverse PCA to reconstruct spectrum s Recon
+            ii. Convolve s Recon with each filter in F to compute photometric magnitudes m
+            iii. Add Gaussian noise with std σ to m to simulate observational uncertainty
+    
+    4. Train AutoML regressor to map m to latent space:
+        a. Split data into training set m_train and labels l_train
+        b. Use AutoGluon to train regressor R with m_train and l_train
+        c. Optimize hyperparameters via grid search to minimize RMSE
+    
+    5. Perform leave-one-out cross-validation:
+        a. For each spectrum s_i in S:
+            i. Remove s_i from training set
+            ii. Predict latent vector l_i' using R with photometry m_i
+            iii. Reconstruct spectrum s_i' via inverse PCA from l_i'
+            iv. Compute RMS error between s_i and s_i'
+    
+    6. Output: Trained AutoML regressor R, PCA basis PC, and RMS error distribution
+```
