@@ -147,7 +147,7 @@ def main():
     all_texts = []
 
     # Ground Truth Data
-    gt_gpt_path = 'algorithm_ground_truth.txt'
+    gt_gpt_path = 'data/ground_truth/algorithm_ground_truth.txt'
     gt_gpt_text = clean_text(open(gt_gpt_path, 'r').read()) if os.path.exists(gt_gpt_path) else ""
     
     if gt_gpt_text:
@@ -160,11 +160,11 @@ def main():
         corpus_dict[model] = {'T': [], 'TA': [], 'TAM': []}
         for state in ['T', 'TA', 'TAM']:
             if model in ['gpt-oss', 'deepseek']:
-                paths = sorted(glob.glob(f'{model}/algorithm_pseudocode_{state.lower()}/*txt'))
+                paths = sorted(glob.glob(f'data/{model}/algorithm_pseudocode_{state.lower()}/*txt'))
             else:
                 api_map = {'Gemini': 'gemini', 'GPT-5': 'gpt', 'Claude': 'claude'}
                 prefix = api_map[model]
-                paths = [f'api_results/{prefix}_{state}_algo.txt']
+                paths = [f'data/api_results/{prefix}_{state}_algo.txt']
                 
             for p in paths:
                 if os.path.exists(p):

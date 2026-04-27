@@ -182,7 +182,7 @@ def main():
             print("Extracting algorithm...")
             algorithm = extract_algorithm(paper)
             clear_algorithm = clean_stage1_algorithm(algorithm)
-            with open(f"algorithm_pseudocode_{t}/algorithm_{i:04d}.txt","w") as f:
+            with open(f"data/deepseek/algorithm_pseudocode_{t}/algorithm_{i:04d}.txt","w") as f:
                 f.write(clear_algorithm)
 
             #print("Generating codes...")

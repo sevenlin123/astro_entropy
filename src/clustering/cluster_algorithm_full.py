@@ -353,7 +353,7 @@ def main():
     source_labels = []
 
     # 1. Load Ground Truth First
-    gt_path = 'algorithm_ground_truth.txt'
+    gt_path = 'data/ground_truth/algorithm_ground_truth.txt'
     if os.path.exists(gt_path):
         algor_names.append(gt_path)
         source_labels.append('Ground_Truth')
@@ -364,7 +364,7 @@ def main():
     local_models = ['gpt-oss', 'deepseek'] 
     for l_model in local_models:
         for state, folder in [('T', 'algorithm_pseudocode_t'), ('TA', 'algorithm_pseudocode_ta'), ('TAM', 'algorithm_pseudocode_tam')]:
-            files = sorted(glob.glob(f'{l_model}/{folder}/*txt'))
+            files = sorted(glob.glob(f'data/{l_model}/{folder}/*txt'))
             for f in files:
                 algor_names.append(f)
                 source_labels.append(f'{l_model}_{state}')
@@ -379,7 +379,7 @@ def main():
     # 4. Append API Models data
     for api_name, states_map in api_map.items():
         for state in ['T', 'TA', 'TAM']:
-            fpath = os.path.join('api_results', states_map[state])
+            fpath = os.path.join('data/api_results', states_map[state])
             if os.path.exists(fpath):
                 algor_names.append(fpath)
                 source_labels.append(f'{api_name}_{state}')
