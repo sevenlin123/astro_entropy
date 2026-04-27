@@ -1,39 +1,48 @@
-# Astro-Entropy: Quantifying Information in Astrophysics Research
+# Astro-Entropy: Semantic Information Metrics for Paper Reconstruction
 
-A project to measure the information content and "entropy" of a research paper by reconstructing its computational core using Large Language Models (LLMs).
+A research project quantifying the information content of astrophysics literature by measuring the entropy and divergence of computational reconstructions performed by Large Language Models (LLMs).
 
-## Project Goal
+## Research Framework
 
-The primary objective of this project is to apply Information Theory to a specific astrophysics paper: **"Probabilistic Spectral Reconstruction of Trans-Neptunian Objects from Sparse Photometry"**.
+This project applies Information Theory to evaluate the "reproducibility density" of a target astrophysics paper: *"Probabilistic Spectral Reconstruction of Trans-Neptunian Objects from Sparse Photometry"*.
 
-By using LLMs (DeepSeek-R1) to extract algorithms and generate Python implementations across different information states, we quantify how much information is required to successfully reproduce the paper's computational framework.
+We test how the semantic uncertainty (entropy) of a reconstructed algorithm decreases as the LLM is provided with increasing levels of prior information (Information States).
 
-## Methodology
+### Information States (Conditions)
+- **Condition T (Title Only)**: High entropy state; model must speculate core logic from the title.
+- **Condition TA (Title + Abstract)**: Intermediate state; core objectives and methods are defined.
+- **Condition TAM (Full Text)**: Low entropy state; full technical details are available for reconstruction.
+- **Condition TAMU**: (Title + Abstract + Methods) [Experimental]
 
-1. **Algorithm Extraction**: Using LLMs to distill the core computational steps from the paper text.
-2. **Code Reconstruction**: Generating functional Python code from the extracted algorithms.
-3. **Entropy Measurement**: Measuring the "Astro-Entropy"—the uncertainty and information gain involved in the reconstruction process across different levels of prior knowledge.
-4. **Semantic Analysis**: Using UMAP and embeddings to visualize the semantic stability and convergence of the generated algorithms.
+## Quantitative Metrics
+
+The project calculates several semantic metrics using `jina-embeddings-v2-base-code` and UMAP dimensionality reduction:
+- **Semantic Entropy {emb}(Y|X)*: Measures the uncertainty/diversity of algorithm generations within a single condition.
+- **Jensen-Shannon Divergence (JSD)**: Quantifies the semantic shift/information gain between states (e.g.,  \rightarrow TA$).
+- **Cosine Distance to Ground Truth**: Measures the alignment accuracy between LLM reconstructions and the actual paper logic.
 
 ## Repository Structure
 
 ```text
 astro_entropy/
-├── src/                        # Code for the reconstruction experiment
-│   ├── clustering/             # Semantic analysis and clustering of generated outputs
-│   ├── generation/             # LLM pipelines for algorithm extraction and code generation
-│   ├── analysis/               # Information theory and entropy estimation metrics
-│   └── visualization/          # Tools for plotting semantic manifolds and results
-├── data/                       # Experimental data
-│   ├── ground_truth/           # The source paper text and reference data
-│   ├── algorithms/             # LLM-extracted algorithms (experimental samples)
-│   ├── codes/                  # LLM-generated Python implementations
-│   └── deepseek/               # Specific results using the DeepSeek-R1 model
-├── prompts/                    # Prompts used to control the LLM during reconstruction
-└── paper/                      # Research context and drafts
+├── src/
+│   ├── generation/             # LLM pipelines (DeepSeek-R1) for algorithm & code extraction
+│   └── clustering/             # Information theory metrics, Bootstrapping, and UMAP visualization
+├── data/
+│   ├── ground_truth/           # The reference algorithm for comparison
+│   ├── deepseek/               # Reconstructions from DeepSeek-R1 Distill Qwen 14B
+│   └── gpt-oss/                # Reconstructions from Open-Source GPT models
+├── prompts/                    # The target paper text segmented by Information State
+└── scripts/                    # Utility scripts for data processing
 ```
 
-## Citation
+## Key Scripts
 
-This research measures the information content of:
-> *Probabilistic Spectral Reconstruction of Trans-Neptunian Objects from Sparse Photometry: A Framework for Taxonomy, Survey Optimization, and Outlier Detection*
+- `src/generation/generate_codes.py`: Automated extraction loop using DeepSeek-R1.
+- `src/clustering/cluster_algorithm_full.py`: Core analysis engine calculating Entropy, JSD, and generating Unified Semantic Space plots.
+
+## Requirements
+
+- `transformers`, `sentence-transformers`
+- `umap-learn`, `scikit-learn`
+- `matplotlib`, `numpy`, `scipy`
