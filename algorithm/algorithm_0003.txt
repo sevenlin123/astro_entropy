@@ -1,7 +1,0 @@
-1. Initialize the probabilistic model with parameters representing the spectral energy distribution (SED) of a trans-neptunian object (TNO), including emission across various wavelengths.
-2. Incorporate sparse photometric measurements as observations within the model.
-3. Define prior distributions based on known characteristics of TNO SEDs, such as typical shapes and compositional constraints.
-4. Set up a hierarchical structure that connects the SED parameters to the observed photometric data, considering potential measurement uncertainties.
-5. Implement a Markov Chain Monte Carlo (MCMC) sampling algorithm to explore the parameter space.
-6. Use the MCMC sampler to generate posterior distributions of the SED parameters, conditioned on the observed data and prior knowledge.
-7. Analyze the posterior distributions to quantify uncertainties in the reconstructed SEDs and derive statistical properties of the TNO population.

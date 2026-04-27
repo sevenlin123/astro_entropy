@@ -1,6 +1,0 @@
-Algorithm:
-
-1. Preprocess the spectral data.
-2. Apply Principal Component Analysis (PCA) to obtain principal components.
-3. Conduct Bayesian inference in the latent space defined by the principal components.
-4. Propagate measurement uncertainties through the reconstruction process.

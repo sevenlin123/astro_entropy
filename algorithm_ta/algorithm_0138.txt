@@ -1,3 +1,0 @@
-The computational algorithm involves preprocessing photometric data, performing PCA to generate principal components, building a spectral manifold model, Bayesian inference in latent space, error propagation, validation, applying the framework to new objects, optimizing survey configurations, detecting rare spectral types, and outputting results. 
-
-Steps include converting photometric data into flux densities, applying logarithmic transformations, generating a training set with PCA, constructing the manifold model, Bayesian inference, uncertainty propagation, validation against metrics, applying to new data, optimizing filters, identifying outliers, and producing outputs with spectra, uncertainties, and outliers detected.

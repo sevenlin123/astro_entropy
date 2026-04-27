@@ -1,7 +1,0 @@
-- Step 1: Initialize with a set of training spectra.  
-- Step 2: Preprocess the training spectra by normalizing, aligning to a common wavelength grid, and removing outliers.  
-- Step 3: Perform PCA on the preprocessed spectra to derive principal components, forming a latent space.  
-- Step 4: Use Kernel Density Estimation (KDE) on the PCA latent coefficients to generate synthetic latent points, creating a smooth manifold.  
-- Step 5: Train an AutoML regressor to map synthetic photometry (derived from the latent space) to the latent coefficients.  
-- Step 6: For each object, use its photometry to predict latent coefficients via the trained AutoML model.  
-- Step 7: Apply the inverse PCA transform to the predicted latent coefficients to reconstruct the full spectrum.

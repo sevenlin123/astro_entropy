@@ -1,9 +1,0 @@
-Algorithm 1: Core Reconstruction Framework
-    Inputs: Photometric data of TNOs
-    Outputs: Reconstructed spectral flux and uncertainties
-    Initialize Gaussian Process (GP) model using the photometric data
-    While not converged:
-        Update GP hyperparameters by maximizing the data likelihood
-        Compute posterior predictive distribution of spectral flux
-    End While
-    Output spectral flux and uncertainty estimates

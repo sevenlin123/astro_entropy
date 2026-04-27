@@ -1,8 +1,0 @@
-1. Initialize dataset containing photometric data for all TNOs.  
-2. For each object, preprocess photometric data by filtering out invalid measurements and normalizing flux values.  
-3. Construct a Gaussian Process (GP) model where the covariance matrix is defined by hyperparameters (e.g., length scale, noise variance).  
-4. Apply Bayesian inference to estimate GP hyperparameters by maximizing the marginal likelihood using data.  
-5. Use the trained GP to predict the complete SED for each object at all wavelengths.  
-6. Calculate uncertainty estimates (e.g., variance) for each predicted SED feature.  
-7. Classify each object based on the reconstructed SED and its uncertainty by comparing with reference spectral templates.  
-8. Flag objects whose SEDs significantly deviate from the modeled spectral variability as outliers.

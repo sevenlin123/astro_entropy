@@ -1,9 +1,0 @@
-Algorithm Steps:
-
-1. Preprocess the photometric data.
-2. Obtain a set of training near-IR spectra.
-3. Perform Principal Component Analysis (PCA) on the training spectra to create a basis.
-4. Represent each spectrum using the PCA basis.
-5. Utilize Bayesian inference within the PCA-reduced space to reconstruct the original spectra from photometric measurements.
-6. Propagate measurement uncertainties from the photometric data to the reconstructed spectra.
-7. Apply the framework to analyze and classify new trans-Neptunian objects.

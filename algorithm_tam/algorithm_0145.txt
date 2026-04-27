@@ -1,7 +1,0 @@
-- Perform Principal Component Analysis (PCA) on a set of reference TNO spectra to create a low-dimensional latent space representation.
-- Augment the latent space using Kernel Density Estimation (KDE) to create a smooth, continuous probability distribution.
-- Train an automated machine learning (AutoML) regressor to map sparse photometric inputs to the latent space coefficients.
-- Generate synthetic photometric data by convolving spectra with instrument-specific filter curves and introducing noise.
-- Use the trained AutoML model to predict latent coefficients from new photometric observations.
-- Apply inverse PCA transformation to the predicted latent coefficients to reconstruct the full spectrum.
-- Optionally, use a trained classifier on the latent space to determine taxonomic classification probabilities.

@@ -1,9 +1,0 @@
-The core computational algorithm is a Probabilistic Spectral Reconstruction using a latent-space model. It involves training a principal component analysis (PCA) model on existing near-infrared spectra, then using Bayesian inference in the latent space to reconstruct full spectra from sparse photometric data. The process includes measuring uncertainty propagation and identifying optimal observation strategies. 
-
-**Answer:**
-1. **PCA Training**: Train a PCA model on a set of near-infrared spectra to capture the dominant spectral variability modes.
-2. **Latent Space Inference**: Use Bayesian methods in the PCA latent space to reconstruct full spectra from sparse photometric measurements.
-3. **Uncertainty Propagation**: Quantify and propagate measurement uncertainties through the reconstruction process.
-4. **Dimensionality Selection**: Select optimal number of PCA components (e.g., 4-5 for classification, 8-10 for detailed reconstruction) based on information content and fidelity.
-5. **Survey Optimization**: Apply the framework to determine optimal filter configurations for maximizing spectral information in future observations.
-6. **Outlier Detection**: Use the model to identify and reconstruct rare spectral types by constraining photometry to select low-probability intermediate models.
