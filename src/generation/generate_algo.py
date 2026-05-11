@@ -1,9 +1,14 @@
-import os
 import random
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig, Mxfp4Config
 from tqdm import tqdm
 import re
+from pathlib import Path
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DATA_DIR = PROJECT_ROOT / "data"
+PROMPTS_DIR = PROJECT_ROOT / "prompts"
 
 '''
 MODEL_NAME = "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B"
@@ -170,20 +175,24 @@ Return only the code.
 
 def main():
 
-    os.makedirs("algorithm", exist_ok=True)
-    os.makedirs("codes", exist_ok=True)
-
     N = 200
     types = ['tam']
-    paper_file = {'t':"paper/paper_T.txt", 'ta': "paper/paper_TA.txt", 'tam':"paper/paper.txt"}
+    paper_file = {
+        't': PROMPTS_DIR / "paper_T.txt",
+        'ta': PROMPTS_DIR / "paper_TA.txt",
+        'tam': PROMPTS_DIR / "paper.txt",
+    }
     for t in types:
-        paper = open(paper_file[t]).read()
+        output_dir = DATA_DIR / "deepseek" / f"algorithm_pseudocode_{t}"
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        paper = paper_file[t].read_text()
         for i in tqdm(range(N)):
             print("Extracting algorithm...")
             algorithm = extract_algorithm(paper)
             clear_algorithm = clean_stage1_algorithm(algorithm)
-            with open(f"data/deepseek/algorithm_pseudocode_{t}/algorithm_{i:04d}.txt","w") as f:
-                f.write(clear_algorithm)
+            output_path = output_dir / f"algorithm_{i:04d}.txt"
+            output_path.write_text(clear_algorithm)
 
             #print("Generating codes...")
             #code = generate_code(clear_algorithm)

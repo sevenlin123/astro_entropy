@@ -1,15 +1,14 @@
 import re
-import glob
+from pathlib import Path
 
-Fs = glob.glob('*tam/*txt')
+SCRIPT_DIR = Path(__file__).resolve().parent
 
-file_path = 'your_file.txt'  # Change this to your filename
+files = sorted((SCRIPT_DIR / 'algorithm_pseudocode_tam').glob('*.txt'))
 
-for file_path in Fs:
+for file_path in files:
     try:
         # 1. Read the existing content
-        with open(file_path, 'r', encoding='utf-8') as f:
-            content = f.read()
+        content = file_path.read_text(encoding='utf-8')
 
         # 2. Extract the text between ''' and '''
         # Using re.DOTALL to capture multi-line content
@@ -21,8 +20,7 @@ for file_path in Fs:
         output_data = "\n\n".join([m.strip() for m in matches])
 
         # 4. Overwrite the file with the extracted content
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(output_data)
+        file_path.write_text(output_data, encoding='utf-8')
             
         print(f"Success! {file_path} has been updated with the extracted content.")
 

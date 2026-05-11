@@ -1,6 +1,5 @@
-import os
 import re
-import glob
+from pathlib import Path
 import numpy as np
 import umap
 from sentence_transformers import SentenceTransformer
@@ -12,6 +11,10 @@ import itertools
 from sklearn.cluster import KMeans
 from scipy.stats import entropy
 from scipy.spatial.distance import jensenshannon, cosine
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DATA_DIR = PROJECT_ROOT / "data"
 
 def standardize_algorithm_text(text):
     """
@@ -345,7 +348,7 @@ def visualize_unified_semantic_space(cleaned_algorithms, source_labels):
     ax.legend(handles=handles_conds, loc='upper left', bbox_to_anchor=(0.07, -0.25), ncol=3, frameon=False, title="Marker Color = Information State", title_fontsize=12, fontsize=11)
 
     plt.subplots_adjust(bottom=0.25, right=0.85)
-    plt.savefig('unified_model_cluster_publication.pdf', bbox_inches='tight') 
+    plt.savefig(PROJECT_ROOT / 'unified_model_cluster_publication.pdf', bbox_inches='tight')
     plt.show()
 
 def main():
@@ -353,8 +356,8 @@ def main():
     source_labels = []
 
     # 1. Load Ground Truth First
-    gt_path = 'data/ground_truth/algorithm_ground_truth.txt'
-    if os.path.exists(gt_path):
+    gt_path = DATA_DIR / 'ground_truth' / 'algorithm_ground_truth.txt'
+    if gt_path.exists():
         algor_names.append(gt_path)
         source_labels.append('Ground_Truth')
     else:
@@ -364,7 +367,7 @@ def main():
     local_models = ['gpt-oss', 'deepseek'] 
     for l_model in local_models:
         for state, folder in [('T', 'algorithm_pseudocode_t'), ('TA', 'algorithm_pseudocode_ta'), ('TAM', 'algorithm_pseudocode_tam')]:
-            files = sorted(glob.glob(f'data/{l_model}/{folder}/*txt'))
+            files = sorted((DATA_DIR / l_model / folder).glob('*.txt'))
             for f in files:
                 algor_names.append(f)
                 source_labels.append(f'{l_model}_{state}')
@@ -379,13 +382,13 @@ def main():
     # 4. Append API Models data
     for api_name, states_map in api_map.items():
         for state in ['T', 'TA', 'TAM']:
-            fpath = os.path.join('data/api_results', states_map[state])
-            if os.path.exists(fpath):
+            fpath = DATA_DIR / 'api_results' / states_map[state]
+            if fpath.exists():
                 algor_names.append(fpath)
                 source_labels.append(f'{api_name}_{state}')
     
     # 5. Load standard text
-    algorithms = [standardize_algorithm_text(open(i, 'r').read()) for i in algor_names]
+    algorithms = [standardize_algorithm_text(Path(i).read_text()) for i in algor_names]
     
     if not algorithms:
         print("No text files found.")

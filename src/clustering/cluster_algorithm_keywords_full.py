@@ -1,6 +1,5 @@
-import os
 import re
-import glob
+from pathlib import Path
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 from sklearn.decomposition import PCA
@@ -10,6 +9,10 @@ import matplotlib.lines as mlines
 # NEW IMPORTS FOR INFORMATION THEORY METRICS
 from scipy.stats import entropy
 from scipy.spatial.distance import jensenshannon, cosine
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DATA_DIR = PROJECT_ROOT / "data"
 
 # ==========================================
 # THE DOMAIN WHITELIST
@@ -147,8 +150,8 @@ def main():
     all_texts = []
 
     # Ground Truth Data
-    gt_gpt_path = 'data/ground_truth/algorithm_ground_truth.txt'
-    gt_gpt_text = clean_text(open(gt_gpt_path, 'r').read()) if os.path.exists(gt_gpt_path) else ""
+    gt_gpt_path = DATA_DIR / 'ground_truth' / 'algorithm_ground_truth.txt'
+    gt_gpt_text = clean_text(gt_gpt_path.read_text()) if gt_gpt_path.exists() else ""
     
     if gt_gpt_text:
        all_texts.append(gt_gpt_text)
@@ -160,15 +163,15 @@ def main():
         corpus_dict[model] = {'T': [], 'TA': [], 'TAM': []}
         for state in ['T', 'TA', 'TAM']:
             if model in ['gpt-oss', 'deepseek']:
-                paths = sorted(glob.glob(f'data/{model}/algorithm_pseudocode_{state.lower()}/*txt'))
+                paths = sorted((DATA_DIR / model / f'algorithm_pseudocode_{state.lower()}').glob('*.txt'))
             else:
                 api_map = {'Gemini': 'gemini', 'GPT-5': 'gpt', 'Claude': 'claude'}
                 prefix = api_map[model]
-                paths = [f'data/api_results/{prefix}_{state}_algo.txt']
+                paths = [DATA_DIR / 'api_results' / f'{prefix}_{state}_algo.txt']
                 
             for p in paths:
-                if os.path.exists(p):
-                    txt = clean_text(open(p, 'r').read())
+                if p.exists():
+                    txt = clean_text(p.read_text())
                     corpus_dict[model][state].append(txt)
                     all_texts.append(txt)
                     source_labels.append(f'{model}_{state}')
@@ -449,7 +452,7 @@ def main():
 
     print("="*60 + "\n")
 
-    plt.savefig('lexical_state_grouped_hero.pdf', bbox_inches='tight')
+    plt.savefig(PROJECT_ROOT / 'lexical_state_grouped_hero.pdf', bbox_inches='tight')
     plt.show()
 
 if __name__ == "__main__":
